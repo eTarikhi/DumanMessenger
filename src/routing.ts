@@ -1,7 +1,7 @@
 import type { MeshMessage, MeshNode, MsgType, NodeId, QueuedMessage, TransportType } from "./types";
 import type { RfParams } from "./rf";
 import { canReach, peersInRange } from "./rf";
-import { getNextHop } from "./election";
+import { getNextHop, relaysCoverPeers } from "./election";
 
 /**
  * Data plane (docs/03 §6, docs/05 §2.1).
@@ -94,6 +94,11 @@ export function pruneSeenCache(node: MeshNode, nowMs: number): void {
     if (nowMs - ts > SEEN_CACHE_TTL_MS) node.seenCache.delete(id);
   }
   if (node.mprHeardSuper.size > SEEN_CACHE_MAX) node.mprHeardSuper.clear();
+  // Relay evidence is only useful while the message itself is dedup-relevant.
+  for (const key of Array.from(node.heardRelays.keys())) {
+    if (!node.seenCache.has(key)) node.heardRelays.delete(key);
+  }
+  if (node.heardRelays.size > SEEN_CACHE_MAX) node.heardRelays.clear();
 }
 
 // --- delivery ----------------------------------------------------------------
@@ -178,9 +183,18 @@ export function decideForward(
 }
 
 /**
- * Apply the MPR decision once the 300 ms wait has elapsed: if a SUPER neighbour
- * retransmitted this message in the meantime, this node stays quiet. That single
- * rule is where the "overhead down >= 30 % vs naive flood" win comes from.
+ * Apply the MPR decision once the 300 ms wait has elapsed.
+ *
+ * docs/03 §6 says: "wait 300 ms; if no retransmit from SUPER heard: forward".
+ * Taken literally that is unsafe, because hearing a SUPER says nothing about
+ * whether that SUPER reaches *this node's* neighbours — measured on a 60-node
+ * crowd it cut relays by 68-79% but cost 16-29 points of delivery.
+ *
+ * docs/01 and docs/03 §1 define MPR properly as a relay set "covering 2-hop
+ * neighbors", so the suppression is gated on coverage: stay quiet only when the
+ * relays actually heard retransmitting cover every 1-hop neighbour. Otherwise
+ * forward. Same overhead win where coverage genuinely overlaps, no holes where
+ * it does not.
  */
 export function resolveMprWait(
   node: MeshNode,
@@ -188,13 +202,24 @@ export function resolveMprWait(
   allNodes: MeshNode[],
   rf: RfParams
 ): ForwardDecision {
-  if (node.mprHeardSuper.has(msg.id)) {
-    node.mprSuppressed++;
-    return { mode: "drop", targets: [], reason: "MPR: SUPER already retransmitted" };
-  }
   const peers = peersInRange(node, allNodes, rf);
   if (peers.length === 0) return { mode: "queue", targets: [], reason: "no peers in range" };
-  return { mode: "flood", targets: peers.map((p) => p.id), reason: "MPR fallback: no SUPER heard" };
+  if (relaysCoverPeers(node, seenKey(msg))) {
+    node.mprSuppressed++;
+    return {
+      mode: "drop",
+      targets: [],
+      reason: "MPR: heard relays cover all my neighbours",
+    };
+  }
+  const heardSuper = node.mprHeardSuper.has(msg.id);
+  return {
+    mode: "flood",
+    targets: peers.map((p) => p.id),
+    reason: heardSuper
+      ? "MPR fallback: SUPER heard but my neighbours are not covered"
+      : "MPR fallback: no relay heard",
+  };
 }
 
 /** Spray-and-wait over the OppQueue when peers are discovered (docs/03 §8). */

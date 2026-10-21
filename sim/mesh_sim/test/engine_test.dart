@@ -205,6 +205,7 @@ void main() {
     test('records hop distance from the beacon, not the sender role', () {
       final me = makeNode('me', 0, 0);
       final origin = makeNode('x', 0, 0, seq: 1);
+      origin.peerIds = <String>['me', 'q'];
       final ogm = buildOgm(origin)..hopCount = 2;
       receiveOgm(me, ogm, 'relay-1', 1000);
       expect(me.nextHopTable['x']!.hopCount, equals(3));
@@ -226,6 +227,36 @@ void main() {
       final ogm = buildOgm(makeNode('x', 0, 0))..hopCount = 3;
       expect(ogmToGossip(ogm, 5)!.hopCount, equals(4));
       expect(ogmToGossip(ogm..hopCount = 4, 5), isNull);
+    });
+
+    test('builds a 2-hop view only from beacons heard directly', () {
+      final me = makeNode('me', 0, 0);
+      final origin = makeNode('x', 0, 0, seq: 1)..peerIds = <String>['me', 'q'];
+      receiveOgm(me, buildOgm(origin), 'x', 1000);
+      expect(me.twoHopView['x'], equals(<String>['me', 'q']));
+
+      // A gossiped copy describes a node several hops away: must not populate it.
+      final gossip = ogmToGossip(buildOgm(origin), 5)!;
+      final other = makeNode('other', 0, 0)..peerIds = <String>['w'];
+      receiveOgm(me, gossip, 'x', 2000);
+      expect(me.twoHopView.containsKey('other'), isFalse);
+      expect(other, isNotNull);
+    });
+
+    test('caps the advertised neighbour list to protect the beacon budget', () {
+      final n = makeNode('a', 0, 0)
+        ..peerIds = List<String>.generate(40, (i) => 'p$i');
+      expect(buildOgm(n).neighborIds, hasLength(mprNeighborAdvertiseLimit));
+    });
+
+    test('drops 2-hop views for nodes that stopped being neighbours', () {
+      final me = makeNode('me', 0, 0)..peerIds = <String>['x'];
+      me.twoHopView['x'] = <String>['y'];
+      me.twoHopView['gone'] = <String>['z'];
+      receiveOgm(me, buildOgm(makeNode('x', 0, 0, seq: 1)), 'x', 1000);
+      pruneStaleEntries(me, 1000, neighborScoreTtlMs);
+      expect(me.twoHopView.containsKey('x'), isTrue);
+      expect(me.twoHopView.containsKey('gone'), isFalse);
     });
 
     test('expires soft state that has not been refreshed', () {
@@ -337,14 +368,50 @@ void main() {
       expect(d.targets, isEmpty);
     });
 
-    test('suppresses a NORMAL relay that overheard a SUPER', () {
+    test('suppresses only when the heard relays cover its neighbours', () {
       final a = makeNode('a', 0, 0);
-      final peers = <MeshNode>[a, makeNode('b', 10, 0)];
+      final b = makeNode('b', 10, 0);
+      final c = makeNode('c', 0, 10);
+      final peers = <MeshNode>[a, b, c];
+      a.peerIds = <String>['b', 'c'];
       final msg = createMessage('m', 0, 'x', 'far', 'hi');
+
+      // Nothing heard yet: forward.
       expect(resolveMprWait(a, msg, peers, rf).mode, equals(ForwardMode.flood));
+
+      // Heard one relay that reaches only itself -> coverage hole -> forward.
+      a.heardRelays[seenKey(msg)] = <String>{'b'};
+      a.twoHopView['b'] = <String>[];
       a.mprHeardSuper.add(msg.id);
-      expect(resolveMprWait(a, msg, peers, rf).mode, equals(ForwardMode.drop));
+      final hole = resolveMprWait(a, msg, peers, rf);
+      expect(hole.mode, equals(ForwardMode.flood));
+      expect(hole.reason, contains('not covered'));
+
+      // That relay also covers c, so every neighbour is reached: stay quiet.
+      a.twoHopView['b'] = <String>['c'];
+      final out = resolveMprWait(a, msg, peers, rf);
+      expect(out.mode, equals(ForwardMode.drop));
+      expect(out.reason, contains('cover all my neighbours'));
       expect(a.mprSuppressed, equals(1));
+    });
+
+    test('selects a minimal relay set covering the 2-hop neighbourhood', () {
+      // b covers e,f,g (greedy first pick); c covers g,h (1 new); d covers none.
+      final a = makeNode('a', 0, 0);
+      a.peerIds = <String>['b', 'c', 'd'];
+      a.twoHopView['b'] = <String>['e', 'f', 'g'];
+      a.twoHopView['c'] = <String>['g', 'h'];
+      a.twoHopView['d'] = <String>['e'];
+      expect(selectMprSet(a), equals(<String>['b', 'c']));
+    });
+
+    test('prefers a SUPER relay when coverage gains tie', () {
+      final a = makeNode('a', 0, 0);
+      a.peerIds = <String>['n1', 's1'];
+      a.twoHopView['n1'] = <String>['z'];
+      a.twoHopView['s1'] = <String>['z'];
+      a.ogmTable['s1'] = buildOgm(makeNode('s1', 0, 0, role: Role.superNode));
+      expect(selectMprSet(a), equals(<String>['s1']));
     });
 
     test('caps the OppQueue at the spray limit and keeps the bundle', () {

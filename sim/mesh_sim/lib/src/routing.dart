@@ -89,6 +89,9 @@ void markSeen(MeshNode node, String key, double nowMs) {
 void pruneSeenCache(MeshNode node, double nowMs) {
   node.seenCache.removeWhere((_, ts) => nowMs - ts > seenCacheTtlMs);
   if (node.mprHeardSuper.length > seenCacheMax) node.mprHeardSuper.clear();
+  // Relay evidence is only useful while the message itself is dedup-relevant.
+  node.heardRelays.removeWhere((key, _) => !node.seenCache.containsKey(key));
+  if (node.heardRelays.length > seenCacheMax) node.heardRelays.clear();
 }
 
 // --- delivery ----------------------------------------------------------------
@@ -186,26 +189,40 @@ ForwardDecision decideForward(
       'NORMAL waiting 300ms for SUPER');
 }
 
-/// Apply the MPR decision once the 300 ms wait has elapsed: if a SUPER neighbour
-/// retransmitted this message in the meantime, this node stays quiet. That single
-/// rule is where the "overhead down >= 30 % vs naive flood" win comes from.
+/// Apply the MPR decision once the 300 ms wait has elapsed.
+///
+/// docs/03 §6 says: "wait 300 ms; if no retransmit from SUPER heard: forward".
+/// Taken literally that is unsafe, because hearing a SUPER says nothing about
+/// whether that SUPER reaches *this node's* neighbours — measured on a 60-node
+/// crowd it cut relays by 68-79 % but cost 16-29 points of delivery.
+///
+/// docs/01 and docs/03 §1 define MPR properly as a relay set "covering 2-hop
+/// neighbors", so suppression is gated on coverage: stay quiet only when the
+/// neighbours already heard from cover every 1-hop neighbour. Otherwise forward.
+/// Same overhead win where coverage genuinely overlaps, no holes where it does
+/// not.
 ForwardDecision resolveMprWait(
   MeshNode node,
   MeshMessage msg,
   List<MeshNode> allNodes,
   RfParams rf,
 ) {
-  if (node.mprHeardSuper.contains(msg.id)) {
-    node.mprSuppressed++;
-    return const ForwardDecision(
-        ForwardMode.drop, <NodeId>[], 'MPR: SUPER already retransmitted');
-  }
   final peers = peersInRange(node, allNodes, rf);
   if (peers.isEmpty) {
     return const ForwardDecision(ForwardMode.queue, <NodeId>[], 'no peers in range');
   }
-  return ForwardDecision(ForwardMode.flood, peers.map((p) => p.id).toList(),
-      'MPR fallback: no SUPER heard');
+  if (relaysCoverPeers(node, seenKey(msg))) {
+    node.mprSuppressed++;
+    return const ForwardDecision(ForwardMode.drop, <NodeId>[],
+        'MPR: heard relays cover all my neighbours');
+  }
+  final heardSuper = node.mprHeardSuper.contains(msg.id);
+  return ForwardDecision(
+      ForwardMode.flood,
+      peers.map((p) => p.id).toList(),
+      heardSuper
+          ? 'MPR fallback: SUPER heard but my neighbours are not covered'
+          : 'MPR fallback: no relay heard');
 }
 
 /// Spray-and-wait over the OppQueue when peers are discovered (docs/03 §8).

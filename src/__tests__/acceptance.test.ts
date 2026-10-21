@@ -79,6 +79,7 @@ interface RunResult {
   superRatio: number;
   relayTx: number;
   overheadVsFlood: number;
+  floodDeliveryRatio: number;
   avgHops: number;
   flapPerNodeMin: number;
   p50: number;
@@ -97,12 +98,15 @@ function measure(cfg: SimConfig, withFloodBaseline = true): RunResult {
   const withinFiveHops = uni.filter((d) => d.hops <= 5).length;
 
   let baselineRelays = sim.stats.totalForwarded;
+  let floodDeliveryRatio = uni.length / Math.max(1, sent);
   if (withFloodBaseline) {
     // Same seed, same world, same traffic — only the relay policy differs.
     const flood = new MeshSimulation({ ...cfg, relayPolicy: "flood-all" });
     replay(flood, plan);
     baselineRelays = flood.stats.totalForwarded;
     expect(baselineRelays).toBeGreaterThan(0);
+    const floodUni = flood.deliveries.filter((d) => d.type !== "ack" && d.type !== "broadcast");
+    floodDeliveryRatio = floodUni.length / Math.max(1, sent);
   }
 
   // Per-hop transport budget (docs/04 §5) applies to first-attempt deliveries:
@@ -123,6 +127,7 @@ function measure(cfg: SimConfig, withFloodBaseline = true): RunResult {
     superRatio: sim.stats.superRatio,
     relayTx: sim.stats.totalForwarded,
     overheadVsFlood: sim.stats.totalForwarded / Math.max(1, baselineRelays),
+    floodDeliveryRatio,
     avgHops: sim.stats.avgHops,
     flapPerNodeMin: sim.stats.roleChangesPerNodeMin,
     p50: sim.stats.p50LatencyMs,
@@ -188,15 +193,22 @@ describe("dense crowd (docs/02 §6: 50+ nodes)", () => {
     expect(r.superRatio).toBeGreaterThanOrEqual(0.1);
     expect(r.superRatio).toBeLessThanOrEqual(0.3);
     expect(r.flapPerNodeMin).toBeLessThanOrEqual(1);
-    expect(r.overheadVsFlood).toBeLessThanOrEqual(0.7);
     expect(r.avgHops).toBeLessThanOrEqual(4);
-    // Known limitation, documented in findings: the doc-literal MPR rule
-    // ("suppress if I heard a SUPER retransmit") costs delivery in dense mobile
-    // crowds because suppression never checks whether that SUPER actually
-    // covers the suppressing node's own neighbours. True OLSR-style MPR
-    // selection is the Phase 2 fix; until then the crowd scenario is asserted
-    // at the level it genuinely achieves rather than at the 20-node target.
-    expect(r.deliveryRatio).toBeGreaterThanOrEqual(0.7);
+    expect(r.deliveryRatio).toBeGreaterThanOrEqual(0.85);
+  });
+
+  it("matches naive flood-all delivery while roughly halving the relays", () => {
+    // docs/05 §"Duman's hybrid selection": MPR suppression must cut redundant
+    // transmissions without costing delivery. Suppression gated on *coverage*
+    // (does a relay I heard actually reach my neighbours?) is what makes that
+    // hold: the doc-literal "heard any SUPER" rule lost 16-29 delivery points
+    // here, because a SUPER three clusters away still silenced this node.
+    for (const seed of [42, 7]) {
+      const r = measure(festivalCrowd(seed));
+      expect(r.deliveryRatio).toBeGreaterThanOrEqual(r.floodDeliveryRatio - 0.05);
+      expect(r.overheadVsFlood).toBeLessThanOrEqual(0.7);
+      expect(r.sim.stats.mprSuppressed).toBeGreaterThan(1000);
+    }
   });
 });
 

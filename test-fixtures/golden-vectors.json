@@ -257,21 +257,21 @@
     "gapMs": 1500,
     "expect": {
       "onlineNodes": 20,
-      "superNodes": 4,
+      "superNodes": 5,
       "sentUnicast": 20,
-      "deliveredUnicast": 20,
-      "relayTx": 507,
-      "ogmTx": 17154,
-      "retriesSent": 0,
-      "acksReceived": 20,
-      "roleTransitions": 4,
+      "deliveredUnicast": 18,
+      "relayTx": 383,
+      "ogmTx": 16385,
+      "retriesSent": 1,
+      "acksReceived": 18,
+      "roleTransitions": 5,
       "totalQueued": 0,
-      "sumHopCounts": 29,
+      "sumHopCounts": 31,
       "simTimeMs": 38000,
-      "avgScore": 0.631486,
-      "avgHops": 1.45,
-      "avgLatencyMs": 441.012,
-      "p95LatencyMs": 1054.939
+      "avgScore": 0.629994,
+      "avgHops": 1.722222,
+      "avgLatencyMs": 579.408,
+      "p95LatencyMs": 1363.449
     }
   }
 }

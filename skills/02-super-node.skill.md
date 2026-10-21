@@ -15,6 +15,7 @@
 - Eligibility: battery ≥25%, ≥3 peers
 - Election: self rank in top 20% of 2-hop neighborhood + score>0.60 → SUPER; demote if <0.50 ×2 cycles (hysteresis)
 - Proximity guard: suppress SUPER within ~30m / RSSI>-60 if another SUPER 0.1 score higher
+  - ⚠ derive the threshold from tx power (`tx − 20·log10(30)`), don't hard-code −60 dBm: at the calibrated −55 dBm that means 3 m and the guard never fires. See `docs/03` §5 note.
 
 See `docs/03-smart-router-algorithm.md` for full pseudocode.
 
@@ -25,7 +26,9 @@ See `docs/03-smart-router-algorithm.md` for full pseudocode.
 - DON'T force WiFi GO if already one nearby; sniff via `requestGroupInfo`
 
 ### Acceptance
-- [ ] Simulator 20 nodes: SUPER ratio 15-25%, delivery ≥90% at 3 hops, overhead ≤70% of flood-all
+- [x] Simulator 20 nodes: SUPER ratio 15-25%, delivery ≥90% at 3 hops, overhead ≤70% of flood-all
+  - **Met** (`campus_quad`, 150 msgs, seeds 42/7/1234/99/2026/555): SUPER **20-25%**, delivery **98.7-100%**, every message ≤5 hops, **54-68%** of the flood-all relay budget, ≤0.14 role changes/node/min. Enforced by `src/__tests__/acceptance.test.ts` and `sim/mesh_sim/test/acceptance_test.dart` in CI.
+  - Pitfalls that decide this metric: rank over `self + 1-hop` (§4, not §3's 2-hop); boot nodes with realistic `uptimeMin` or the stability term never saturates; spawn by waypoint cluster, not uniformly.
 - [ ] 10-phone field: atrium node elects SUPER, classroom corners stay NORMAL; no flapping >1 change/min
 - [ ] Battery: SUPER opt-out respected; NORMAL never auto-promoted if battery saver on
 

@@ -686,7 +686,7 @@ class MeshSimulation {
   void _onOgm(String nodeId) {
     final node = _byId(nodeId);
     if (node == null || !node.isOnline) return;
-    node.peerCount = peersInRange(node, nodes, rf).length;
+    _refreshPeerList(node);
     node.score = computeScore(node, nodes, rf);
     node.seq++;
     _beacon(node, buildOgm(node));
@@ -750,8 +750,7 @@ class MeshSimulation {
   void _onScan(String nodeId) {
     final node = _byId(nodeId);
     if (node == null || !node.isOnline) return;
-    final peers = peersInRange(node, nodes, rf);
-    node.peerCount = peers.length;
+    final peers = _refreshPeerList(node);
     if (peers.isNotEmpty) {
       var sum = 0.0;
       for (final p in peers) {
@@ -762,6 +761,7 @@ class MeshSimulation {
     pruneSeenCache(node, now);
     pruneStaleEntries(node, now, neighborScoreTtlMs);
     pruneOppQueue(node, now);
+    node.mprSet = selectMprSet(node);
 
     if (config.enableDtn && node.oppQueue.isNotEmpty) {
       final scan = scanOppQueue(node, nodes, rf, now);
@@ -790,6 +790,15 @@ class MeshSimulation {
   }
 
   // --- sending ---------------------------------------------------------------
+
+  /// Recompute the 1-hop neighbour list. Sorted, so OGM advertisements and the
+  /// MPR set are deterministic across runs and across both language engines.
+  List<MeshNode> _refreshPeerList(MeshNode node) {
+    final peers = peersInRange(node, nodes, rf);
+    node.peerCount = peers.length;
+    node.peerIds = peers.map((p) => p.id).toList()..sort();
+    return peers;
+  }
 
   String _nextMsgId() {
     _msgCounter++;
@@ -989,6 +998,17 @@ class MeshSimulation {
     final msg = payload.msg;
     final via = payload.via;
     final sender = _byId(via);
+
+    // Coverage evidence for the MPR gate. Any neighbour we receive a copy from
+    // already holds the message, so it never needs covering again; and that
+    // neighbour's own advertised list tells us who else is reached. Recorded for
+    // duplicates too, since a second relay covering a different neighbour is
+    // exactly what closes a hole.
+    if (sender != null) {
+      final key = seenKey(msg);
+      final relays = node.heardRelays.putIfAbsent(key, () => <NodeId>{});
+      relays.add(sender.id);
+    }
 
     if (isSeen(node, seenKey(msg))) {
       // A duplicate copy still carries information: it tells this node that a

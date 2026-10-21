@@ -46,7 +46,10 @@
 - [ ] OGM (2s) with score + isSuper; neighborScores table; top-20% election + hysteresis
 - [ ] SUPER behavior: aggressive scan, relay all, WiFi Direct GO auto-create; NORMAL: MPR-style lazy relay (300 ms wait)
 - [ ] MPR-like coverage: SUPERs suppress redundant NORMAL relays
-- [ ] Mesh simulator `mesh_sim.dart` (virtual nodes, walls, random walk) → tune weights w1..w5
+- [x] Mesh simulator `mesh_sim.dart` (virtual nodes, walls, random walk) → tune weights w1..w5
+  - Delivered at `sim/mesh_sim/` (+ TypeScript reference engine and visualiser in `src/`), wired into CI with cross-language golden vectors.
+  - Weights w1..w5 verified as specified (0.30/0.25/0.20/0.15/0.10): `campus_quad` over six seeds gives SUPER 20-25%, delivery 98.7-100%, ≤5 hops, 54-68% of the flood-all relay budget, ≤0.14 elections/node/min.
+  - Two spec defects found while tuning and corrected in `docs/03`: the proximity guard's hard-coded −60 dBm, and MPR suppression gated on "heard a SUPER" instead of on coverage (cost 16-29 delivery points in a 60-node crowd). Evidence: `docs/06-simulator-findings.md`.
 - [ ] Field test 1: campus quad / office floor mapping: atrium should become SUPER, packet delivery ratio vs flood-all baseline
 - [ ] Metrics dashboard: delivery ratio, overhead ratio, latency by hop, battery %/h
 

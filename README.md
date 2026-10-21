@@ -52,9 +52,10 @@ case), `sparse_village` and `partitioned_pair` (store-carry-forward DTN),
 `festival_crowd` (60 nodes, the `docs/02` §6 density target).
 
 Measured on `campus_quad` across six seeds: **SUPER ratio 20-25%, delivery
-94-99%, every message within 5 hops, 44-66% of the naive flood-all relay budget,
-≤0.12 role changes per node per minute.** Criteria, calibration evidence and the
-one unmet target (MPR delivery in dense crowds) are in
+98.7-100%, ≥98% of messages within 5 hops, 54-68% of the naive flood-all relay
+budget, ≤0.14 role changes per node per minute.** In the 60-node crowd, MPR
+reaches delivery **parity with naive flooding** at ~50% of the relay budget.
+Criteria, calibration evidence and the protocol bugs found while measuring are in
 [`docs/06-simulator-findings.md`](docs/06-simulator-findings.md).
 
 ---

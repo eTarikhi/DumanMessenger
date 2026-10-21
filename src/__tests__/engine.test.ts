@@ -25,6 +25,8 @@ import {
   ogmToGossip,
   pruneStaleEntries,
   receiveOGM,
+  selectMprSet,
+  MPR_NEIGHBOR_ADVERTISE_LIMIT,
   WEIGHTS,
 } from "../election";
 import {
@@ -329,10 +331,12 @@ describe("OGM handling (docs/03 §4, §7)", () => {
     n.nextHopTable["z"] = {
       bestNeighbor: "b", tq: 0.9, lastSeq: 3, hopCount: 2, lastSeen: 0, window: [1], windowNeighbor: "b",
     };
+    n.peerIds = ["p1", "p2", "p3"];
     const ogm = buildOGM(n);
     expect(ogm).toMatchObject({ nodeId: "a", seq: 5, score: 0.7, isSuper: true, peerCount: 9, hopCount: 0 });
     expect(ogm.batteryBucket).toBe(4);
     expect(ogm.bestHopTo["z"]).toBe(2);
+    expect(ogm.neighborIds).toEqual(["p1", "p2", "p3"]);
   });
 
   it("records hop distance from the beacon, not from the sender's role", () => {
@@ -369,6 +373,37 @@ describe("OGM handling (docs/03 §4, §7)", () => {
     receiveOGM(me, buildOGM(origin), "x", 12000);
     expect(me.nextHopTable["x"].tq).toBeLessThan(1);
     expect(me.nextHopTable["x"].window.length).toBeLessThanOrEqual(32);
+  });
+
+  it("builds a 2-hop view only from beacons heard directly", () => {
+    const me = makeNode("me", 0, 0);
+    const origin = makeNode("x", 0, 0, { seq: 1 });
+    origin.peerIds = ["me", "q"];
+    // Heard straight from the originator: its neighbour list is 2-hop evidence.
+    receiveOGM(me, buildOGM(origin), "x", 1000);
+    expect(me.twoHopView["x"]).toEqual(["me", "q"]);
+
+    // A gossiped copy describes a node several hops away: must not populate it.
+    const gossip = ogmToGossip(buildOGM(origin), 5)!;
+    receiveOGM(me, { ...gossip, nodeId: "other", neighborIds: ["w"] }, "x", 2000);
+    expect(me.twoHopView["other"]).toBeUndefined();
+  });
+
+  it("caps the advertised neighbour list to protect the beacon budget", () => {
+    const n = makeNode("a", 0, 0);
+    n.peerIds = Array.from({ length: 40 }, (_, i) => `p${i}`);
+    expect(buildOGM(n).neighborIds).toHaveLength(MPR_NEIGHBOR_ADVERTISE_LIMIT);
+  });
+
+  it("drops 2-hop views for nodes that stopped being neighbours", () => {
+    const me = makeNode("me", 0, 0);
+    me.peerIds = ["x"];
+    me.twoHopView["x"] = ["y"];
+    me.twoHopView["gone"] = ["z"];
+    receiveOGM(me, buildOGM(makeNode("x", 0, 0, { seq: 1 })), "x", 1000);
+    pruneStaleEntries(me, 1000, 30000);
+    expect(me.twoHopView["x"]).toBeDefined();
+    expect(me.twoHopView["gone"]).toBeUndefined();
   });
 
   it("learns routes to nodes it has never heard a beacon from", () => {
@@ -481,15 +516,62 @@ describe("data plane (docs/03 §6, §8)", () => {
     expect(d.targets).toEqual([]);
   });
 
-  it("suppresses a NORMAL relay that overheard a SUPER retransmission", () => {
+  it("suppresses a NORMAL relay only when the heard relays cover its neighbours", () => {
     const a = makeNode("a", 0, 0);
-    const peers = [a, makeNode("b", 10, 0)];
+    const b = makeNode("b", 10, 0);
+    const c = makeNode("c", 0, 10);
+    const peers = [a, b, c];
+    a.peerIds = ["b", "c"];
     const msg = createMessage("m", 0, "x", "far", "hi");
+
+    // Nothing heard yet: forward.
     expect(resolveMprWait(a, msg, peers, rf).mode).toBe("flood");
+
+    // Heard one relay, but it reaches only itself -> coverage hole -> forward.
+    a.heardRelays.set(seenKey(msg), new Set(["b"]));
+    a.twoHopView["b"] = [];
     a.mprHeardSuper.add(msg.id);
+    const hole = resolveMprWait(a, msg, peers, rf);
+    expect(hole.mode).toBe("flood");
+    expect(hole.reason).toMatch(/not covered/);
+
+    // That relay also covers c, so every neighbour of `a` is reached: stay quiet.
+    a.twoHopView["b"] = ["c"];
     const out = resolveMprWait(a, msg, peers, rf);
     expect(out.mode).toBe("drop");
+    expect(out.reason).toMatch(/cover all my neighbours/);
     expect(a.mprSuppressed).toBe(1);
+  });
+
+  it("selects a minimal relay set covering the 2-hop neighbourhood", () => {
+    // a's neighbours: b, c, d. 2-hop targets e, f, g, h.
+    //   b covers e, f, g   (3)  <- greedy first pick
+    //   c covers g, h      (1 new)
+    //   d covers e         (0 new)
+    // Minimal cover = {b, c}; d must not be selected.
+    const a = makeNode("a", 0, 0);
+    a.peerIds = ["b", "c", "d"];
+    a.twoHopView["b"] = ["e", "f", "g"];
+    a.twoHopView["c"] = ["g", "h"];
+    a.twoHopView["d"] = ["e"];
+    const set = selectMprSet(a);
+    expect(set).toEqual(["b", "c"]);
+  });
+
+  it("prefers a SUPER relay when coverage gains tie", () => {
+    const a = makeNode("a", 0, 0);
+    a.peerIds = ["n1", "s1"];
+    a.twoHopView["n1"] = ["z"];
+    a.twoHopView["s1"] = ["z"];
+    a.ogmTable["s1"] = { ...buildOGM(makeNode("s1", 0, 0)), isSuper: true };
+    expect(selectMprSet(a)).toEqual(["s1"]);
+  });
+
+  it("returns an empty MPR set when there is nothing to cover", () => {
+    const a = makeNode("a", 0, 0);
+    a.peerIds = ["b"];
+    a.twoHopView["b"] = ["a"]; // only advertises us back
+    expect(selectMprSet(a)).toEqual([]);
   });
 
   it("caps the OppQueue at the spray-and-wait limit and expires bundles", () => {

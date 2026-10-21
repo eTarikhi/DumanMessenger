@@ -14,7 +14,7 @@ OppQueue {max=500, expiry=7days}
 - If `nextHop(dest) == unknown` and msg is unicast DM (not broadcast), enqueue.
 - On `peerDiscovered`:
   - if peer == dest OR peer.knowsRouteTo(dest): forward 1 copy (spray limit 3) [1](https://link.springer.com/article/10.1007/s11277-016-3323-8)
-  - increment copyCount; lower priority after 3
+  - increment copyCount; lower priority after 3 (**keep** the bundle — dropping it at the limit loses the copy that could still be handed to the destination; `docs/03` §8)
 - On `ackReceived` from dest: remove + gossip ACK (so relays can prune)
 - Periodic sweeper: drop expired; keep newest 500 (LRU by priority)
 

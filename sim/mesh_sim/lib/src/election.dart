@@ -50,6 +50,17 @@ const int demoteCycles = 2;
 /// tq below this makes a route unusable, so the router falls back to flood.
 const double tqUsable = 0.60;
 const int tqWindow = 32;
+
+/// Bound on the neighbour list carried in an OGM.
+///
+/// OLSR HELLOs advertise the full 1-hop set. The cap must sit above the peer
+/// count a scenario can actually produce, or the coverage gate can never be
+/// satisfied and nothing is ever suppressed: at 12 entries a 60-node crowd with
+/// 15-18 peers each truncated its advertisement, suppression collapsed from
+/// 1772 to 110 and overhead went *up*. 30 matches the "local sort, k <= 30"
+/// budget docs/03 §3 sets. A real deployment advertises 2-byte aliases, so 30
+/// neighbours cost ~60 B per beacon.
+const int mprNeighborAdvertiseLimit = 30;
 const double neighborScoreTtlMs = 30000;
 
 /// Entries advertised in an OGM so peers can learn routes to non-neighbours.
@@ -109,7 +120,81 @@ Ogm buildOgm(MeshNode node, [int hopCount = 0]) {
     batteryBucket: (node.battery * 10).floor(),
     bestHopTo: bestHopTo,
     hopCount: hopCount,
+    neighborIds: node.peerIds.take(mprNeighborAdvertiseLimit).toList(),
   );
+}
+
+/// Minimal relay set covering this node's 2-hop neighbourhood — the MPR
+/// selection OLSR defines and docs/03 §1 asks Duman to borrow ("each node picks
+/// minimal relays covering 2-hop neighbors").
+///
+/// Greedy set cover over the advertised neighbour lists: repeatedly take the
+/// neighbour covering the most still-uncovered 2-hop nodes, preferring SUPERs,
+/// then better tq, then id so the result is deterministic. O(k^2) with k <= 30,
+/// the "no Dijkstra on phones, just local sort" budget docs/03 §3 sets.
+List<NodeId> selectMprSet(MeshNode node) {
+  final peers = node.peerIds;
+  final direct = peers.toSet();
+  final uncovered = <NodeId>{};
+  for (final p in peers) {
+    for (final q in node.twoHopView[p] ?? const <NodeId>[]) {
+      if (q != node.id && !direct.contains(q)) uncovered.add(q);
+    }
+  }
+
+  final selected = <NodeId>[];
+  while (uncovered.isNotEmpty) {
+    NodeId? best;
+    var bestGain = 0;
+    var bestSuper = false;
+    var bestTq = -1.0;
+    for (final p in peers) {
+      if (selected.contains(p)) continue;
+      var gain = 0;
+      for (final q in node.twoHopView[p] ?? const <NodeId>[]) {
+        if (uncovered.contains(q)) gain++;
+      }
+      if (gain == 0) continue;
+      final isSuper = node.ogmTable[p]?.isSuper ?? false;
+      final tq = node.nextHopTable[p]?.tq ?? 0.0;
+      final better = gain > bestGain ||
+          (gain == bestGain && isSuper && !bestSuper) ||
+          (gain == bestGain && isSuper == bestSuper && tq > bestTq) ||
+          (gain == bestGain &&
+              isSuper == bestSuper &&
+              tq == bestTq &&
+              (best == null || p.compareTo(best) < 0));
+      if (better) {
+        best = p;
+        bestGain = gain;
+        bestSuper = isSuper;
+        bestTq = tq;
+      }
+    }
+    if (best == null) break; // nobody advertises the remainder
+    selected.add(best);
+    for (final q in node.twoHopView[best] ?? const <NodeId>[]) {
+      uncovered.remove(q);
+    }
+  }
+  return selected;
+}
+
+/// Do the neighbours this node heard the message from cover all of its own
+/// 1-hop neighbours? If yes, staying quiet is safe. If no, there is a coverage
+/// hole and this node must forward — the check whose absence made the
+/// doc-literal "heard a SUPER" rule lose 16-29 points of delivery in crowds.
+bool relaysCoverPeers(MeshNode node, String key) {
+  final relays = node.heardRelays[key];
+  if (relays == null || relays.isEmpty) return false;
+  final covered = relays.toSet();
+  for (final r in relays) {
+    covered.addAll(node.twoHopView[r] ?? const <NodeId>[]);
+  }
+  for (final p in node.peerIds) {
+    if (!covered.contains(p)) return false;
+  }
+  return true;
 }
 
 /// Consume one OGM copy. [via] is the neighbour that handed it over and [nowMs]
@@ -124,6 +209,14 @@ bool receiveOgm(MeshNode node, Ogm ogm, NodeId via, double nowMs) {
   final isNewer = existing == null || ogm.seq > existing.seq;
   if (isNewer) node.ogmTable[ogm.nodeId] = ogm;
   node.neighborScores[ogm.nodeId] = ogm.score;
+
+  // A beacon heard straight from its originator (hopCount 0) tells us that
+  // originator's own neighbour list, which is what MPR coverage is computed
+  // from. Gossiped copies describe a node that may be several hops away, so they
+  // must not populate the 2-hop view.
+  if (ogm.hopCount == 0 && via == ogm.nodeId) {
+    node.twoHopView[ogm.nodeId] = List<NodeId>.of(ogm.neighborIds);
+  }
 
   final prev = node.nextHopTable[ogm.nodeId];
   final hopCount = ogm.hopCount + 1;
@@ -285,6 +378,9 @@ ElectionOutcome electRole(MeshNode node, List<MeshNode> allNodes, RfParams rf) {
 
 /// Drop routes and scores that have not been refreshed (soft state, docs/05 §1.4).
 void pruneStaleEntries(MeshNode node, double nowMs, double maxAgeMs) {
+  // Drop 2-hop views for nodes that are no longer direct neighbours.
+  final peers = node.peerIds.toSet();
+  node.twoHopView.removeWhere((id, _) => !peers.contains(id));
   node.nextHopTable.removeWhere((_, e) => nowMs - e.lastSeen > maxAgeMs);
   final orphaned = node.ogmTable.keys
       .where((id) => !node.nextHopTable.containsKey(id))

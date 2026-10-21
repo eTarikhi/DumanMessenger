@@ -26,6 +26,7 @@ import {
   buildOGM,
   computeScore,
   electRole,
+  selectMprSet,
   NEIGHBOR_SCORE_TTL_MS,
   ogmToGossip,
   pruneStaleEntries,
@@ -303,6 +304,10 @@ export function createNode(
     neighborScores: {},
     seenCache: new Map(),
     mprHeardSuper: new Set(),
+    heardRelays: new Map(),
+    twoHopView: {},
+    mprSet: [],
+    peerIds: [],
     oppQueue: [],
     inbox: [],
     sentLog: [],
@@ -596,7 +601,7 @@ export class MeshSimulation {
   private onOgm(nodeId: string): void {
     const node = this.byId(nodeId);
     if (!node || !node.isOnline) return;
-    node.peerCount = peersInRange(node, this.nodes, this.rf).length;
+    this.refreshPeerList(node);
     node.score = computeScore(node, this.nodes, this.rf);
     node.seq++;
     const ogm = buildOGM(node);
@@ -663,8 +668,7 @@ export class MeshSimulation {
   private onScan(nodeId: string): void {
     const node = this.byId(nodeId);
     if (!node || !node.isOnline) return;
-    const peers = peersInRange(node, this.nodes, this.rf);
-    node.peerCount = peers.length;
+    const peers = this.refreshPeerList(node);
     if (peers.length > 0) {
       let sum = 0;
       for (const p of peers) sum += rssiModel(node, p, this.rf);
@@ -673,6 +677,7 @@ export class MeshSimulation {
     pruneSeenCache(node, this.now);
     pruneStaleEntries(node, this.now, NEIGHBOR_SCORE_TTL_MS);
     pruneOppQueue(node, this.now);
+    node.mprSet = selectMprSet(node);
 
     if (this.config.enableDtn && node.oppQueue.length > 0) {
       const scan = scanOppQueue(node, this.nodes, this.rf, this.now);
@@ -698,6 +703,15 @@ export class MeshSimulation {
   }
 
   // --- sending ---------------------------------------------------------------
+
+  /** Recompute the 1-hop neighbour list. Sorted, so OGM advertisements and the
+   *  MPR set are deterministic across runs and across both language engines. */
+  private refreshPeerList(node: MeshNode): MeshNode[] {
+    const peers = peersInRange(node, this.nodes, this.rf);
+    node.peerCount = peers.length;
+    node.peerIds = peers.map((p) => p.id).sort();
+    return peers;
+  }
 
   private nextMsgId(): string {
     this.msgCounter++;
@@ -909,6 +923,21 @@ export class MeshSimulation {
     if (!node || !node.isOnline) return;
     const { msg, via } = payload;
     const sender = this.byId(via);
+
+    // Coverage evidence for the MPR gate. Any neighbour we receive a copy from
+    // already holds the message, so it never needs covering again; and that
+    // neighbour's own advertised list tells us who else is reached. Recorded for
+    // duplicates too, since a second relay covering a different neighbour is
+    // exactly what closes a hole.
+    if (sender) {
+      const key = seenKey(msg);
+      let relays = node.heardRelays.get(key);
+      if (!relays) {
+        relays = new Set<NodeId>();
+        node.heardRelays.set(key, relays);
+      }
+      relays.add(sender.id);
+    }
 
     if (isSeen(node, seenKey(msg))) {
       // A duplicate copy still carries information: it tells this node that a

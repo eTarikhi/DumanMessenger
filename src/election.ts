@@ -46,6 +46,18 @@ export const DEMOTE_CYCLES = 2;
 /** tq below this makes a route unusable, so the router falls back to flood. */
 export const TQ_USABLE = 0.6;
 export const TQ_WINDOW = 32;
+/**
+ * Bound on the neighbour list carried in an OGM.
+ *
+ * OLSR HELLOs advertise the full 1-hop set. The cap has to sit above the peer
+ * count a scenario can actually produce, or the coverage gate can never be
+ * satisfied and nothing is ever suppressed: at 12 entries a 60-node crowd with
+ * 15-18 peers each truncated its advertisement, suppression collapsed from 1772
+ * to 110 and overhead went *up*. 30 matches the "local sort, k <= 30" budget
+ * docs/03 §3 already sets. A real deployment advertises 2-byte aliases, so 30
+ * neighbours cost ~60 B per beacon.
+ */
+export const MPR_NEIGHBOR_ADVERTISE_LIMIT = 30;
 export const NEIGHBOR_SCORE_TTL_MS = 30_000;
 
 function normPeers(count: number): number {
@@ -101,7 +113,78 @@ export function buildOGM(node: MeshNode, hopCount = 0): OGM {
     batteryBucket: Math.floor(node.battery * 10),
     bestHopTo,
     hopCount,
+    neighborIds: node.peerIds.slice(0, MPR_NEIGHBOR_ADVERTISE_LIMIT),
   };
+}
+
+/**
+ * Minimal relay set covering this node's 2-hop neighbourhood — the MPR selection
+ * OLSR defines and docs/03 §1 asks Duman to borrow ("each node picks minimal
+ * relays covering 2-hop neighbors").
+ *
+ * Greedy set cover over the advertised neighbour lists: repeatedly take the
+ * neighbour that covers the most still-uncovered 2-hop nodes, preferring SUPERs,
+ * then better tq, then id so the result is deterministic. O(k^2) with k <= 30,
+ * which is the "no Dijkstra on phones, just local sort" budget docs/03 §3 sets.
+ */
+export function selectMprSet(node: MeshNode): NodeId[] {
+  const peers = node.peerIds;
+  const direct = new Set<NodeId>(peers);
+  const uncovered = new Set<NodeId>();
+  for (const p of peers) {
+    for (const q of node.twoHopView[p] ?? []) {
+      if (q !== node.id && !direct.has(q)) uncovered.add(q);
+    }
+  }
+
+  const selected: NodeId[] = [];
+  while (uncovered.size > 0) {
+    let best: NodeId | null = null;
+    let bestGain = 0;
+    let bestSuper = false;
+    let bestTq = -1;
+    for (const p of peers) {
+      if (selected.includes(p)) continue;
+      let gain = 0;
+      for (const q of node.twoHopView[p] ?? []) if (uncovered.has(q)) gain++;
+      if (gain === 0) continue;
+      const isSuper = node.ogmTable[p]?.isSuper === true;
+      const tq = node.nextHopTable[p]?.tq ?? 0;
+      const better =
+        gain > bestGain ||
+        (gain === bestGain && isSuper && !bestSuper) ||
+        (gain === bestGain && isSuper === bestSuper && tq > bestTq) ||
+        (gain === bestGain && isSuper === bestSuper && tq === bestTq && (best === null || p < best));
+      if (better) {
+        best = p;
+        bestGain = gain;
+        bestSuper = isSuper;
+        bestTq = tq;
+      }
+    }
+    if (best === null) break; // nobody advertises the remainder
+    selected.push(best);
+    for (const q of node.twoHopView[best] ?? []) uncovered.delete(q);
+  }
+  return selected;
+}
+
+/**
+ * Does the set of relays this node actually heard retransmitting cover all of
+ * its own 1-hop neighbours? If yes, staying quiet is safe. If no, there is a
+ * coverage hole and this node must forward — this is the check whose absence
+ * made the doc-literal "heard a SUPER" rule lose 16-29 points of delivery in
+ * dense crowds.
+ */
+export function relaysCoverPeers(node: MeshNode, key: string): boolean {
+  const relays = node.heardRelays.get(key);
+  if (!relays || relays.size === 0) return false;
+  const covered = new Set<NodeId>(relays);
+  for (const r of relays) {
+    for (const q of node.twoHopView[r] ?? []) covered.add(q);
+  }
+  for (const p of node.peerIds) if (!covered.has(p)) return false;
+  return true;
 }
 
 /**
@@ -123,6 +206,14 @@ export function receiveOGM(
   const isNewer = !existing || ogm.seq > existing.seq;
   if (isNewer) node.ogmTable[ogm.nodeId] = ogm;
   node.neighborScores[ogm.nodeId] = ogm.score;
+
+  // A beacon heard straight from its originator (hopCount 0) tells us that
+  // originator's own neighbour list, which is what MPR coverage is computed
+  // from. Gossiped copies describe a node that may be several hops away, so
+  // they must not populate the 2-hop view.
+  if (ogm.hopCount === 0 && via === ogm.nodeId) {
+    node.twoHopView[ogm.nodeId] = ogm.neighborIds.slice();
+  }
 
   const prev = node.nextHopTable[ogm.nodeId];
   const hopCount = ogm.hopCount + 1;
@@ -270,6 +361,11 @@ export function electRole(node: MeshNode, allNodes: MeshNode[], rf: RfParams): E
 
 /** Drop routes and scores that have not been refreshed (soft state, docs/05 §1.4). */
 export function pruneStaleEntries(node: MeshNode, nowMs: number, maxAgeMs: number): void {
+  // Drop 2-hop views for nodes that are no longer direct neighbours.
+  const peers = new Set<NodeId>(node.peerIds);
+  for (const id of Object.keys(node.twoHopView)) {
+    if (!peers.has(id)) delete node.twoHopView[id];
+  }
   for (const id of Object.keys(node.nextHopTable)) {
     if (nowMs - node.nextHopTable[id].lastSeen > maxAgeMs) delete node.nextHopTable[id];
   }

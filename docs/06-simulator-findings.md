@@ -4,8 +4,9 @@
 > calibrated the way it is, what the measurements say, and which documented
 > target is not yet met. Everything here is reproducible from CI.
 
-**Status:** engine implemented in two languages, acceptance criteria met for the
-20-node scenario, one documented limitation in dense crowds.
+**Status:** engine implemented in two languages; every `skills/02` + `skills/08`
+simulator criterion met, including the dense-crowd case (§5). One secondary
+target remains open in the 60-node crowd (§5, "Still open").
 **Date:** Oct 2026
 
 ---
@@ -35,17 +36,19 @@ control traffic cannot inflate it.
 
 ### Measured — `campus_quad`, 20 nodes, 150 messages
 
-| seed | SUPER | delivery | ≤5 hops | overhead vs flood-all | flap/node·min | p95 | avg hops |
+| seed | SUPER | delivery | ≤5 hops | relays (MPR / flood-all) | overhead | flap/node·min | p95 |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 42 | 20% | 98.0% | 147/150 | 44% | 0.08 | 1264 ms | 1.80 |
-| 7 | 25% | 96.7% | 145/150 | 45% | 0.06 | 1811 ms | 1.90 |
-| 1234 | 20% | 96.0% | 144/150 | 51% | 0.06 | 1024 ms | 1.85 |
-| 99 | 20% | 94.7% | 141/150 | 53% | 0.10 | 4198 ms | 1.75 |
-| 2026 | 25% | 99.3% | 149/150 | 66% | 0.12 | 4207 ms | 1.89 |
-| 555 | 20% | 97.3% | 146/150 | 46% | 0.05 | 1400 ms | 1.82 |
+| 42 | 20% | 99.3% | 149/150 | 5 989 / 11 151 | **54%** | 0.10 | 1402 ms |
+| 7 | 20% | 100% | 150/150 | 5 251 / 9 574 | **55%** | 0.08 | 1348 ms |
+| 1234 | 25% | 100% | 150/150 | 7 424 / 13 210 | **56%** | 0.06 | 1017 ms |
+| 99 | 20% | 100% | 150/150 | 6 622 / 10 360 | **64%** | 0.10 | 1489 ms |
+| 2026 | 25% | 100% | 150/150 | 7 208 / 10 532 | **68%** | 0.14 | 4688 ms |
+| 555 | 25% | 98.7% | 148/150 | 5 670 / 9 105 | **62%** | 0.09 | 1304 ms |
 
-All four criteria hold on all six seeds, with 44–66% of the naive flood relay
-budget (i.e. a **34–56% overhead reduction**, against the required 30%).
+All four criteria hold on all six seeds, at 54-68% of the naive flood relay
+budget — a **32-46% overhead reduction** against the required 30%. These are the
+numbers *after* the coverage gate in §5; the earlier "heard a SUPER" rule scored
+better on overhead (44-66%) only because it was silently dropping messages.
 
 ## 3. Radio calibration
 
@@ -123,33 +126,70 @@ These are behaviour fixes, not tuning knobs. Each is pinned by a test.
    a 5% roll, so a crowd stays a crowd. This alone took `campus_quad` from
    19/20 to **20/20 connected** on every seed.
 
-## 5. Known limitation: MPR costs delivery in dense crowds
+## 5. MPR suppression had to be gated on coverage
 
-`festival_crowd` (60 nodes, 80% mobile) measures:
+The first working version implemented docs/03 §6 literally — *"wait 300 ms; if no
+retransmit from SUPER heard: forward"* — and in the 20-node quad it looked fine.
+At 60 nodes it did not:
 
-| policy | delivery | relay transmissions | suppression |
+| policy | delivery (2 seeds) | relay transmissions | suppression |
 | --- | ---: | ---: | ---: |
-| MPR | 78.7% / 66.7% | 23 248 / 16 869 | 1772 / 1482 |
+| MPR, "heard a SUPER" | 78.7% / 66.7% | 23 248 / 16 869 | 1772 / 1482 |
 | flood-all | 94.7% / 95.3% | 72 134 / 80 282 | — |
 
-*(two seeds)*. MPR cuts relays by **68–79%** — far beyond the required 30% — but
-costs **16–29 points of delivery**.
+Cutting relays by 68-79% while losing **16-29 points of delivery** is not the
+trade docs/05 §"Duman's hybrid selection" promises ("reduces redundant
+transmissions by ~30% vs naive flood" — with the same delivery).
 
-The cause is structural, not a bug: the implemented rule is the one docs/03 §6
-literally specifies — *"wait 300 ms; if no retransmit from SUPER heard: forward"*.
-A node that overheard a SUPER stays quiet, but nothing checks whether that SUPER
-actually **covers the quiet node's own neighbours**. With packet loss the
-coverage assumption fails and holes appear. In a 20-node quad a suppressed node
-is almost always re-covered, so the criterion holds; at 60 nodes with 15 peers
-each, it does not.
+The cause is structural. Hearing a SUPER retransmit says nothing about whether
+that SUPER reaches *this node's* neighbours. A SUPER three clusters away still
+silenced a node whose own neighbours heard nothing, and the hole showed up as a
+lost message. docs/01 and docs/03 §1 both define MPR correctly — a relay set
+**"covering 2-hop neighbors"** — so the fix is to gate suppression on coverage:
 
-The fix is the OLSR-style MPR selection that docs/03 §1 already references:
-each node computes a **minimal relay set covering its 2-hop neighbourhood**,
-preferring SUPERs, and only stays quiet when its own neighbours are covered by
-that set. That is Phase 2 work (`roadmap/roadmap.md` W27-28 tuning) and is
-deliberately *not* faked here: `acceptance.test.ts` asserts the crowd scenario
-at the level it genuinely achieves (≥70%) with the reason recorded in the test,
-rather than loosening a constant until 90% appears.
+> Stay quiet only when the neighbours this node actually heard the message from,
+> plus their advertised neighbour lists, cover **all** of its own 1-hop
+> neighbours. Otherwise forward.
+
+That needs the 2-hop view, which needs the OGM to carry the originator's own
+neighbour list (OLSR's HELLO payload) — a field docs/03 §4's OGM definition
+omits. It is now `neighborIds`, capped at 30.
+
+**The cap is load-bearing.** The first attempt capped it at 12. A 60-node crowd
+has 15-18 peers per node, so every advertisement was truncated, full coverage
+became arithmetically impossible, suppression collapsed from 1772 to **110**, and
+overhead went *up* to 92-104% of flood-all. Raising the cap to 30 (the `k ≤ 30`
+local-sort budget docs/03 §4 already sets) restored it.
+
+A second refinement mattered just as much: a neighbour we received a copy *from*
+already holds the message, so it never needs covering. Counting those senders
+(not just relays that retransmitted at hopCount ≥ 1) took `campus_quad` overhead
+from 58-73% to **54-68%** with no delivery cost.
+
+### After
+
+| scenario | policy | delivery | relays | overhead vs flood-all | suppression |
+| --- | --- | ---: | ---: | ---: | ---: |
+| campus_quad (6 seeds) | MPR | 98.7-100% | 5 251-7 682 | **54-68%** | 450-711 |
+| campus_quad (6 seeds) | flood-all | 99.3-100% | 9 105-13 210 | — | 0 |
+| festival_crowd seed 42 | MPR | **88.7%** | 40 476 | **54%** | 2435 |
+| festival_crowd seed 42 | flood-all | 87.3% | 75 557 | — | 0 |
+| festival_crowd seed 7 | MPR | **89.3%** | 36 545 | **50%** | 2028 |
+| festival_crowd seed 7 | flood-all | 93.3% | 72 536 | — | 0 |
+| festival_crowd seed 1234 | MPR | **93.3%** | 44 302 | **54%** | 2280 |
+| festival_crowd seed 1234 | flood-all | 92.7% | 81 807 | — | 0 |
+
+MPR now reaches **delivery parity with flooding at roughly half the relay
+budget** — 46-50% fewer transmissions in the crowd, 32-46% in the quad, against
+the 30% the docs require. `acceptance.test.ts` asserts the parity directly
+(`delivery ≥ floodDelivery − 0.05` and `overhead ≤ 0.70`) so a regression in
+either direction fails CI.
+
+**Still open:** in the 60-node crowd only 80-91% of messages arrive within 5 hops
+(average 2.5-2.7 hops, p95 latency 5.3-5.7 s). The 5-hop and latency budgets are
+specified against the 20-node seed scenario, which meets them comfortably; the
+crowd needs either a higher `ogmTtl` for route discovery or a hop-count-aware TTL
+before it can be held to the same bar.
 
 ## 6. Methodology note on the A/B
 

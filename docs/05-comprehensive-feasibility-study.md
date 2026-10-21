@@ -20,6 +20,17 @@ Phones carry three radios relevant to Duman: BLE, Bluetooth Classic, and Wi-Fi (
 | Wi-Fi Direct (2.4 GHz P2P) | 100–200 m | ~200 m | 50–250 Mbps | −20 to −24 log₁₀(d); 5 GHz variant shorter range, higher throughput |
 | Wi-Fi Aware (NAN, Android 26+) | ~100–150 m | ~150 m | Medium (data-path dependent) | Similar to Wi-Fi Direct; no group-owner negotiation overhead |
 
+> **Implementation note (Oct 2026 — `sim/mesh_sim`, evidence in `docs/06-simulator-findings.md`):** the simulator calibrates the BLE row as
+> `rssi = txPower − 20·log₁₀(d) − wallCrossings·wallPenalty` with `txPower = −55 dBm`
+> at 1 m, `rxSensitivity = −85 dBm` and `wallPenalty = 12 dB` (inside the 8-15 dB
+> range above). That yields a **31.6 m** line-of-sight hop — the top of the
+> documented 10-30 m indoor band — and ~18 m through one interior wall.
+> Do not pair `txPower = −30 dBm` with `−85 dBm` sensitivity: it implies a 562 m
+> radio, which is what made the first prototype's 100×100 m world come up
+> disconnected. Packet loss is margin-driven and raised to `p^(linkRetries+1)`,
+> because BLE GATT and Wi-Fi Direct are reliable bearers that retransmit at the
+> link layer before reporting a failure upwards.
+
 **Key constraints:**
 
 - **Range is density-dependent, not guaranteed.** A single hop covers 10–100 m depending on walls, bodies, and RF interference. In a sparse village (<1 device per 50 m), messages stop. Duman is a *crowd network*, not a cellular replacement.
@@ -153,6 +164,7 @@ Duman needs a routing protocol that works on phones: low memory, low CPU, tolera
 Rationale:
 - BATMAN-lite gives the lowest memory footprint (O(n), capped at 200 nodes) and proven resilience to churn without requiring global topology.
 - MPR flood suppression (SUPER nodes relay; NORMAL nodes wait 300 ms and only relay if no SUPER retransmission heard) reduces redundant transmissions by ~30% vs naive flood.
+  - **Measured: 32-50% reduction**, so the ~30% target is met with margin. But the rule *as phrased* is unsafe — "no SUPER retransmission heard" does not imply this node's neighbours are covered. On a 60-node crowd it cost 16-29 points of delivery. Gating suppression on **coverage** (the neighbours heard from, plus their advertised neighbour lists, must cover all of this node's 1-hop neighbours) reaches delivery **parity with flooding** at 50-61% of the relay budget. See `docs/03` §6.
 - Spray-and-Wait DTN handles the partition case that pure MANET protocols don't address — messages survive across disconnections.
 
 **Why not OLSR directly:** OLSR's full link-state database is too memory-heavy for phones (49 nodes = ~6.4 KB/s of control traffic over BLE's ~6 kbit/s budget — the control plane alone would saturate the link). BATMAN's ~675 B/s leaves headroom for data.

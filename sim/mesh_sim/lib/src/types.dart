@@ -132,6 +132,7 @@ class Ogm {
     required this.batteryBucket,
     required this.bestHopTo,
     this.hopCount = 0,
+    this.neighborIds = const <NodeId>[],
   });
 
   final NodeId nodeId;
@@ -148,6 +149,12 @@ class Ogm {
   /// How many gossip hops this copy has travelled.
   int hopCount;
 
+  /// The originator's own 1-hop neighbours, bounded and deterministically
+  /// ordered. This is the OLSR HELLO payload (docs/01): without it a node cannot
+  /// know whether a relay it overheard actually *covers* its own neighbours,
+  /// which is the whole point of MPR selection.
+  final List<NodeId> neighborIds;
+
   Ogm copyWith({int? hopCount}) => Ogm(
         nodeId: nodeId,
         seq: seq,
@@ -157,6 +164,7 @@ class Ogm {
         batteryBucket: batteryBucket,
         bestHopTo: Map<NodeId, int>.of(bestHopTo),
         hopCount: hopCount ?? this.hopCount,
+        neighborIds: List<NodeId>.of(neighborIds),
       );
 }
 
@@ -262,6 +270,20 @@ class MeshNode {
 
   /// msgIds for which a SUPER retransmission was overheard (MPR suppression).
   final Set<String> mprHeardSuper = <String>{};
+
+  /// seenKey -> the neighbours we heard the message from. Coverage evidence for
+  /// the MPR gate: a neighbour we received a copy from already holds it, and its
+  /// advertised list tells us who else is reached.
+  final Map<String, Set<NodeId>> heardRelays = <String, Set<NodeId>>{};
+
+  /// neighbour id -> that neighbour's advertised 1-hop list (2-hop view).
+  final Map<NodeId, List<NodeId>> twoHopView = <NodeId, List<NodeId>>{};
+
+  /// Minimal relay set covering this node's 2-hop neighbourhood (docs/03 §1).
+  List<NodeId> mprSet = <NodeId>[];
+
+  /// This node's own 1-hop neighbours, sorted; advertised in its OGM.
+  List<NodeId> peerIds = <NodeId>[];
   final List<QueuedMessage> oppQueue = <QueuedMessage>[];
   final List<MeshMessage> inbox = <MeshMessage>[];
   final List<MeshMessage> sentLog = <MeshMessage>[];

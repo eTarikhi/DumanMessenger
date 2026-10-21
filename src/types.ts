@@ -66,6 +66,13 @@ export interface OGM {
   bestHopTo: Record<string, number>;
   /** How many gossip hops this copy has travelled. */
   hopCount: number;
+  /**
+   * The originator's own 1-hop neighbours, bounded and deterministically
+   * ordered. This is the OLSR HELLO payload (docs/01 §"OLSR's MPR"): without it
+   * a node cannot know whether a relay it overheard actually *covers* its own
+   * neighbours, which is the whole point of MPR selection.
+   */
+  neighborIds: NodeId[];
 }
 
 export interface NextHopEntry {
@@ -124,6 +131,14 @@ export interface MeshNode {
   seenCache: Map<string, number>;
   /** msgIds for which a SUPER retransmission was overheard (MPR suppression). */
   mprHeardSuper: Set<string>;
+  /** msgId -> the neighbours actually heard retransmitting it. Coverage evidence. */
+  heardRelays: Map<string, Set<string>>;
+  /** neighbour id -> that neighbour's advertised 1-hop list (2-hop view). */
+  twoHopView: Record<string, NodeId[]>;
+  /** Minimal relay set covering this node's 2-hop neighbourhood (docs/03 §1). */
+  mprSet: NodeId[];
+  /** This node's own 1-hop neighbours, sorted; advertised in its OGM. */
+  peerIds: NodeId[];
   oppQueue: QueuedMessage[];
   inbox: MeshMessage[];
   sentLog: MeshMessage[];
