@@ -42,7 +42,7 @@ dart run bin/mesh_sim.dart --scenario festival_crowd --nodes 80 --json
 
 ```bash
 npm ci
-npm test          # 106 tests: RF, election, routing, DTN, regressions, acceptance
+npm test          # 117 tests: RF, election, routing, DTN, regressions, acceptance
 npm run dev       # canvas: watch SUPERs get elected, MPR suppress floods, bundles wait for a contact
 npm run golden    # regenerate test-fixtures/golden-vectors.json after an engine change
 ```
@@ -52,9 +52,10 @@ case), `sparse_village` and `partitioned_pair` (store-carry-forward DTN),
 `festival_crowd` (60 nodes, the `docs/02` §6 density target).
 
 Measured on `campus_quad` across six seeds: **SUPER ratio 20-25%, delivery
-98.7-100%, ≥98% of messages within 5 hops, 54-68% of the naive flood-all relay
-budget, ≤0.14 role changes per node per minute.** In the 60-node crowd, MPR
-reaches delivery **parity with naive flooding** at ~50% of the relay budget.
+97.3-100%, 97.3-100% of messages within 5 hops, 7-9% of the naive flood-all
+relay budget, ≤0.22 role changes per node per minute.** In the 60-node crowd the
+engine delivers **91.3-95.3%** at 12-14% of naive flood's relays — naive flooding
+does reach 100% there, for 7-9× the transmissions.
 Criteria, calibration evidence and the protocol bugs found while measuring are in
 [`docs/06-simulator-findings.md`](docs/06-simulator-findings.md).
 

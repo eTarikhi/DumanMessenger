@@ -290,7 +290,7 @@ export function receiveOGM(
   // always land after the direct copy, so the zero was the steady state — the
   // 20-node quad measured tq 0.11 for direct neighbours whose real receipt rate
   // was ~0.8, the window never grew past one sample, and getNextHop's
-  // tq > 0.6 gate rejected almost every route (docs/06 §5).
+  // tq > 0.6 gate rejected almost every route (docs/06 §6).
   const sample = recordTqSample(node, ogm.nodeId, via, ogm.seq);
 
   // Fewest hops wins, ties go to the better link. Whichever copy arrives last,

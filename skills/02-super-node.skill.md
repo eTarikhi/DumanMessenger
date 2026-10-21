@@ -27,7 +27,7 @@ See `docs/03-smart-router-algorithm.md` for full pseudocode.
 
 ### Acceptance
 - [x] Simulator 20 nodes: SUPER ratio 15-25%, delivery ≥90% at 3 hops, overhead ≤70% of flood-all
-  - **Met** (`campus_quad`, 150 msgs, seeds 42/7/1234/99/2026/555): SUPER **20-25%**, delivery **98.7-100%**, every message ≤5 hops, **54-68%** of the flood-all relay budget, ≤0.14 role changes/node/min. Enforced by `src/__tests__/acceptance.test.ts` and `sim/mesh_sim/test/acceptance_test.dart` in CI.
+  - **Met** (`campus_quad`, 150 msgs, seeds 42/7/1234/99/2026/555): SUPER **20-25%**, delivery **97.3-100%**, **97.3-100%** of sent messages within 5 hops at 1.8-2.0 average hops, **7-9%** of the naive flood-all relay budget (59-78% of routing-without-suppression), ≤0.22 role changes/node/min. Enforced by `src/__tests__/acceptance.test.ts` and `sim/mesh_sim/test/acceptance_test.dart` in CI. Evidence and the three A/B arms: `docs/06-simulator-findings.md` §2.
   - Pitfalls that decide this metric: rank over `self + 1-hop` (§4, not §3's 2-hop); boot nodes with realistic `uptimeMin` or the stability term never saturates; spawn by waypoint cluster, not uniformly.
 - [ ] 10-phone field: atrium node elects SUPER, classroom corners stay NORMAL; no flapping >1 change/min
 - [ ] Battery: SUPER opt-out respected; NORMAL never auto-promoted if battery saver on

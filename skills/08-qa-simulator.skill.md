@@ -18,6 +18,9 @@ Scenarios: `campus_quad` (20 nodes — the acceptance case), `sparse_village` + 
 
 - **Mobility must be waypoint-based.** A pure random walk at 1.4 m/s moves a node ~250 m in a 225 s run: people leave their cluster and isolate themselves. Waypoints took `campus_quad` from 19/20 to 20/20 connected on every seed.
 - **The A/B against naive flooding must replay an identical traffic plan.** Drawing pairs from the simulation's own RNG does not work — the 300 ms MPR wait changes event interleaving, so the two arms diverge into different experiments and report "overhead" of 119-155% (MPR apparently *worse* than flooding). Both engines pre-generate the pair list from a separate seeded generator.
+- **A baseline must not share the mechanism under test.** `flood-all` used to consult the route table. That was invisible while routing was broken and misleading the moment it worked: the campus overhead ratio jumped to 71-78% because the *baseline* had improved, not because the engine regressed. Three arms now run per configuration — `mpr` (ships), `route-flood` (routing, suppression off) and `flood-all` (naive epidemic: no routes, no suppression) — selectable with `--policy`, so "vs naive flood" and "what suppression is still worth" are separate numbers.
+- **Judge suppression against the arm that differs by suppression only.** Naive epidemic flooding does reach 100% delivery in the 60-node crowd — by spending 7-9× the relays — so "within 5 points of flood-all" demands epidemic redundancy instead of testing MPR. Compare on the **mean across seeds**: 150 messages through a chaotic 60-node world carries several points of run-to-run variance that a per-seed bound mistakes for a regression.
+- **tq is a link metric: keep its window per (originator, neighbour) pair.** Keyed on the route entry, a duplicate beacon arriving over a longer path resets the window and tq collapses to 0. Measured 0.107 for direct neighbours whose real receipt rate was ~0.8, so the `tq > 0.6` route gate rejected nearly everything and the network flooded blindly. Per-pair windows took usable routes from 29.7% → **86.8%** (quad) and 46.6% → **91.8%** (crowd). See `docs/06-simulator-findings.md` §6.
 - **Cross-language golden vectors** (`test-fixtures/golden-vectors.json`, `npm run golden`) pin the Dart engine to the TypeScript reference: RNG stream, spawn geometry and protocol counters must match exactly; float aggregates carry a tolerance for libm last-ULP differences.
 
 ### Lab Harness
@@ -37,7 +40,7 @@ Scenarios: `campus_quad` (20 nodes — the acceptance case), `sparse_village` + 
 
 ### Acceptance
 - [x] CI simulator: 20-node seed → delivery ≥90% <5 hops, overhead ↓30% vs naive flood
-  - **Met on all six seeds** (42/7/1234/99/2026/555): delivery **98.7-100%**, ≥98% of sent messages within 5 hops, overhead **54-68%** of flood-all (i.e. a 32-46% reduction against the required 30%), p95 latency 1.0-4.7 s, ≤0.14 elections/node/min.
+  - **Met on all six seeds** (42/7/1234/99/2026/555): delivery **97.3-100%**, **97.3-100%** of sent messages within 5 hops, overhead **7-9%** of naive flood (a 91-93% reduction against the required 30%), p95 latency 1.1-4.5 s, ≤0.22 elections/node/min.
   - Read `delivery ≥90% <5 hops` as: ≥90% of *sent* messages arrive within five radio hops. Exclude ACKs and broadcasts, or control traffic inflates the ratio.
   - Excluded from the latency budget: retries (they add a whole ACK timeout) and DTN bundles (a store-carry-forward delivery measures a *meeting* time, not transport time). Assert the budget on first-attempt routed traffic.
 - [ ] Lab: 5-phone 3-hop text <5s reproducible 10/10

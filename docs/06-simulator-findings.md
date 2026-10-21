@@ -4,9 +4,10 @@
 > calibrated the way it is, what the measurements say, and which documented
 > target is not yet met. Everything here is reproducible from CI.
 
-**Status:** engine implemented in two languages; every `skills/02` + `skills/08`
-simulator criterion met, including the dense-crowd case (§5). One secondary
-target remains open in the 60-node crowd (§5, "Still open").
+**Status:** engine implemented in two languages and executed in CI; every
+`skills/02` + `skills/08` simulator criterion met on the 20-node case they name,
+at **7-9%** of the naive-flood relay budget (§2). One secondary target remains
+open in the 60-node crowd (§6, "Still open").
 **Date:** Oct 2026
 
 ---
@@ -34,21 +35,47 @@ reproduces a run exactly — which is what makes the numbers below meaningful.
 within five radio hops**. ACKs and broadcasts are excluded from the ratio so
 control traffic cannot inflate it.
 
+Three arms run per configuration — same seed, same world, same traffic plan
+(§7). `mpr` is what ships; `route-flood` keeps routing and switches suppression
+off; `flood-all` is naive epidemic flooding, no route table and no suppression,
+which is the baseline both criteria name.
+
 ### Measured — `campus_quad`, 20 nodes, 150 messages
 
-| seed | SUPER | delivery | ≤5 hops | relays (MPR / flood-all) | overhead | flap/node·min | p95 |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 42 | 20% | 99.3% | 149/150 | 5 989 / 11 151 | **54%** | 0.10 | 1402 ms |
-| 7 | 20% | 100% | 150/150 | 5 251 / 9 574 | **55%** | 0.08 | 1348 ms |
-| 1234 | 25% | 100% | 150/150 | 7 424 / 13 210 | **56%** | 0.06 | 1017 ms |
-| 99 | 20% | 100% | 150/150 | 6 622 / 10 360 | **64%** | 0.10 | 1489 ms |
-| 2026 | 25% | 100% | 150/150 | 7 208 / 10 532 | **68%** | 0.14 | 4688 ms |
-| 555 | 25% | 98.7% | 148/150 | 5 670 / 9 105 | **62%** | 0.09 | 1304 ms |
+| seed | SUPER | delivery | ≤5 hops | relays: mpr / route-flood / flood-all | vs naive | vs route-only | flap/node·min | p95 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 42 | 25% | 97.3% | 146/150 | 4 239 / 6 902 / 46 104 | **9%** | 61% | 0.06 | 1257 ms |
+| 7 | 25% | 98.7% | 148/150 | 3 315 / 4 638 / 47 998 | **7%** | 71% | 0.06 | 4537 ms |
+| 1234 | 25% | 100% | 150/150 | 4 959 / 7 408 / 52 770 | **9%** | 67% | 0.12 | 1141 ms |
+| 99 | 20% | 100% | 149/150 | 4 621 / 7 317 / 50 391 | **9%** | 63% | 0.08 | 4307 ms |
+| 2026 | 25% | 99.3% | 149/150 | 3 855 / 4 949 / 49 918 | **8%** | 78% | 0.22 | 1450 ms |
+| 555 | 25% | 97.3% | 146/150 | 4 168 / 7 065 / 47 538 | **9%** | 59% | 0.09 | 4536 ms |
 
-All four criteria hold on all six seeds, at 54-68% of the naive flood relay
-budget — a **32-46% overhead reduction** against the required 30%. These are the
-numbers *after* the coverage gate in §5; the earlier "heard a SUPER" rule scored
-better on overhead (44-66%) only because it was silently dropping messages.
+All four criteria hold on all six seeds: delivery ≥90%, ≥90% within five hops,
+SUPER 15-25%, no flapping — and **7-9% of the naive flood relay budget**, a
+91-93% reduction against the 30% required. MPR suppression is worth a further
+22-41% on top of routing (the "vs route-only" column). Most of the total saving
+is the routing layer, which is exactly why both columns are published (§6).
+
+These are the numbers *after* the coverage gate in §5 and the tq fix in §6; the
+earlier "heard a SUPER" rule scored better on overhead only because it was
+silently dropping messages.
+
+### Measured — `festival_crowd`, 60 nodes, 150 messages
+
+Not the case the criteria target — they name a 20-node seed run — but the density
+docs/02 §6 asks for, measured with the same three arms.
+
+| seed | SUPER | delivery | ≤5 hops | relays: mpr / route-flood / flood-all | vs naive | vs route-only | avg hops | p95 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 42 | 18% | 92.7% | 127/150 | 46 213 / 104 147 / 339 808 | **14%** | 44% | 2.86 | 5728 ms |
+| 7 | 18% | 95.3% | 134/150 | 37 400 / 74 574 / 286 597 | **13%** | 50% | 2.74 | 4756 ms |
+| 1234 | 22% | 91.3% | 124/150 | 35 737 / 84 841 / 299 466 | **12%** | 42% | 2.99 | 6352 ms |
+
+Naive flooding does reach 100% delivery here — for **7-9× the relays**. That
+trade is the whole argument for a routing layer, and it is why the crowd's
+suppression test measures MPR against `route-flood` instead of demanding
+epidemic-level redundancy from a routing engine (§7).
 
 ## 3. Radio calibration
 
@@ -128,6 +155,14 @@ These are behaviour fixes, not tuning knobs. Each is pinned by a test.
 
 ## 5. MPR suppression had to be gated on coverage
 
+> The figures in this section were measured before the tq defect in §6 was
+> found, and its `flood-all` arm still consulted the route table, so it was not
+> the naive baseline the criteria name — "delivery parity with flooding" below
+> means parity with *routing without suppression*, which is the arm §7 now calls
+> `route-flood`. The comparison it draws — coverage-gated suppression against the
+> doc-literal "heard a SUPER" rule — still holds; the absolute numbers are
+> superseded by §2.
+
 The first working version implemented docs/03 §6 literally — *"wait 300 ms; if no
 retransmit from SUPER heard: forward"* — and in the 20-node quad it looked fine.
 At 60 nodes it did not:
@@ -185,13 +220,95 @@ the 30% the docs require. `acceptance.test.ts` asserts the parity directly
 (`delivery ≥ floodDelivery − 0.05` and `overhead ≤ 0.70`) so a regression in
 either direction fails CI.
 
-**Still open:** in the 60-node crowd only 80-91% of messages arrive within 5 hops
-(average 2.5-2.7 hops, p95 latency 5.3-5.7 s). The 5-hop and latency budgets are
-specified against the 20-node seed scenario, which meets them comfortably; the
-crowd needs either a higher `ogmTtl` for route discovery or a hop-count-aware TTL
-before it can be held to the same bar.
+## 6. Link tq was measured per route, not per link
 
-## 6. Methodology note on the A/B
+Chasing the crowd's 5-hop shortfall turned up a defect in the control plane that
+had nothing to do with density.
+
+docs/03 §7 defines `tq = (OGMs received via that neighbor / OGMs expected)` over a
+window of 32 — a **link** metric. The implementation kept one window per *route
+entry*, tagged with the neighbour that had last won it. A copy of the same beacon
+arriving over a different neighbour is not newer, so it recorded no sample — but
+it did discard the window, because that window belonged to somebody else, and tq
+fell to 0:
+
+```
+seq=5 hop=0 via=node-6  newer=true   window 1/1  tq=1.0   <- perfect direct link
+seq=5 hop=3 via=node-2  newer=false  window RESET tq=0.0   <- gossiped duplicate
+seq=5 hop=4 via=node-3  newer=false  window RESET tq=0.0
+```
+
+Gossiped duplicates always land after the direct copy, so **zero was the steady
+state**:
+
+| | mean tq, direct neighbours | usable routes (`tq ≥ 0.6`) |
+| --- | ---: | ---: |
+| `campus_quad` before | **0.107** | 29.7% |
+| `campus_quad` after | 0.935 | **86.8%** |
+| `festival_crowd` before | **0.061** | 46.6% |
+| `festival_crowd` after | 0.934 | **91.8%** |
+
+Three consequences, none of them visible in the aggregate metrics:
+
+1. `getNextHop` gates on `tq > 0.6`, so almost every route was rejected and the
+   network flooded blindly. Multi-hop unicast — the point of the BATMAN-lite
+   control plane — essentially never happened.
+2. `buildOGM` advertises only entries with `tq ≥ 0.6 && lastSeq > 0`, so nodes
+   told each other almost nothing and route discovery could not bootstrap.
+3. The window never grew past one sample, so the 32-interval average the spec
+   asks for was never computed. Second-hand entries six hops away read
+   `tq ≈ 0.99` — an artefact of the same reset, since a freshly created window
+   holds exactly one optimistic sample.
+
+**Fix.** tq is kept per `(originator, neighbour)` pair in `node.tqWindows`,
+bounded by `TQ_PAIR_MAX = 2048` with insertion-order eviction (stable in both JS
+Maps and Dart LinkedHashMaps, so the two engines evict identically) and pruned
+when a neighbour stops being a peer. A route entry reports the window of the
+neighbour it actually routes through, whichever copy arrived last. The
+"if seq newer" rule now applies *per pair*: a copy that is stale globally can
+still be fresh for a neighbour we have not heard it from.
+
+**Effect on the reference run** (golden vectors — `campus_quad`, seed 42, 20
+messages): delivery 18/20 → **20/20**, relays 383 → **253**, p95 latency
+1363 → **950 ms**. In the crowd: delivery 88.7-93.3% → **91.3-95.3%**,
+within-5-hops 80-85% → **82.7-89.3%**.
+
+### The baseline this exposed
+
+With routing broken in *both* arms, "overhead vs `flood-all`" accidentally meant
+what it said — MPR versus blind flooding. Once routing worked, the `flood-all`
+arm began using the route table too, and the campus overhead ratio climbed to
+71-78%: the baseline had got better, not the engine worse. `flood-all` is now
+naive by construction — consulted before the route table — and `route-flood`
+exists so MPR's marginal contribution can be quoted separately. Both columns are
+in §2, because quoting only the 7-9% would hide that most of it is routing.
+
+### Still open
+
+In the 60-node crowd **82.7-89.3%** of sent messages arrive within five hops
+(average 2.6-3.0, p95 4.8-6.4 s), against 97.3-100% in the 20-node case the
+criteria actually name. The tail is 9-12 messages arriving at exactly six hops —
+the ceiling a data `ttl` of 5 allows — plus 7-11 that expire.
+
+The obvious candidate, raising `ogmTtl` so route discovery sees further, is
+**falsified by measurement**:
+
+| `ogmTtl` | crowd ≤5 hops (seeds 42 / 7) | OGM transmissions | second-hand entries |
+| ---: | ---: | ---: | ---: |
+| 5 | 127 / 134 | 813 k / 785 k | 25% / 20% |
+| 7 | 123 / 134 | 1 127 k / 1 130 k | 11% / 19% |
+| 10 | 127 / 138 | 1 632 k / 1 644 k | 13% / 5% |
+
+Deeper gossip does replace second-hand routes with direct evidence, and it buys
+nothing: ±2 points of within-5-hops, which is noise, for **2× the control
+traffic**. The residual is geometric, not informational — the crowd's clusters
+are 61-74 m apart against a 31.6 m hop, so three hops is the *floor*; 80% of
+nodes are moving; and a 16×12 m "Sound tent" sits on the direct line between two
+of the clusters. Holding a 140 m, 60-node field to a five-hop budget needs either
+a longer data TTL — which converts undelivered messages into 6-7 hop ones and so
+*lowers* the ratio — or a density this scenario deliberately does not have.
+
+## 7. Methodology note on the A/B
 
 The overhead figure compares MPR against `flood-all` **on the same seed and the
 same traffic plan**. Drawing message pairs from the simulation's own RNG does not
@@ -199,16 +316,40 @@ work: the 300 ms MPR wait changes event interleaving, so the two arms consume th
 RNG stream differently and quietly become two different experiments. Early runs
 produced "overhead" of 119% and 155% — MPR apparently worse than flooding — which
 was pure artefact. Both engines now pre-generate the pair list from a separate
-seeded generator and replay it into both arms.
+seeded generator and replay it into every arm.
 
-## 7. Reproducing
+The same logic applies to what the arms *are*. Three run per configuration:
+
+| arm | routing | MPR suppression | answers |
+| --- | --- | --- | --- |
+| `mpr` | yes | yes | what ships |
+| `route-flood` | yes | no | what MPR costs and buys, holding routing fixed |
+| `flood-all` | no | no | the documented "naive flood" baseline |
+
+Two rules follow, both learned the hard way (§6). A baseline must not silently
+share the mechanism under test — `flood-all` consulting the route table made the
+overhead ratio meaningless the moment routing started working. And a suppression
+mechanism must be judged against the arm that differs from it by suppression
+only: naive epidemic flooding reaches 100% delivery in the crowd by spending 7-9×
+the relays, so "within 5 points of flood-all" is not a test of MPR, it is a
+demand for epidemic redundancy. That comparison is also made on the **mean across
+seeds**, because 150 messages through a chaotic 60-node world carries several
+points of run-to-run variance that a per-seed bound would mistake for a
+regression.
+
+## 8. Reproducing
 
 ```bash
-npm ci && npm test                 # TS engine: 106 tests incl. acceptance + golden
+npm ci && npm test                 # TS engine: 117 tests incl. acceptance + golden
 npm run golden                     # regenerate the cross-language fixture
 cd sim/mesh_sim && dart pub get && dart test
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --json
+dart run bin/mesh_sim.dart --policy route-flood --scenario festival_crowd --no-check
 ```
+
+`--policy` selects the A/B arm (`mpr` | `route-flood` | `flood-all`); the CLI
+always reports the naive-flood arm alongside it, so one invocation reproduces the
+overhead figures in §2.
 
 `bin/mesh_sim.dart` exits non-zero when the acceptance criteria fail, so CI can
 gate on the CLI directly. Scenarios: `campus_quad` (the 20-node acceptance case),
@@ -220,7 +361,7 @@ gate on the CLI directly. Scenarios: `campus_quad` (the 20-node acceptance case)
 > on queue depth instead, because a 24% delivery ratio with 112 bundles carried
 > is a healthy delay-tolerant network, not a broken one.
 
-## 8. Porting notes (TypeScript ⇄ Dart)
+## 9. Porting notes (TypeScript ⇄ Dart)
 
 The two engines are kept mechanically equivalent so a golden-vector mismatch
 means real drift:
@@ -228,7 +369,17 @@ means real drift:
 - **RNG.** mulberry32 in unsigned 32-bit space. Dart ints are 64-bit, so every
   intermediate is masked with `0xFFFFFFFF`; that reproduces JavaScript's
   signed-32 bitwise semantics bit-for-bit, and `Math.imul` becomes a masked
-  multiply.
+  multiply (`_imul`). **Both operands of each multiply must be read from the same
+  `t`.** The first port overwrote `t` with the XOR result first, computing
+  `(t ^ t>>15) * ((t ^ t>>15) | 1)` instead of `(t ^ t>>15) * (t | 1)`. That is
+  still a plausible uniform stream — it just is not mulberry32, and the first
+  draw for seed 42 came out 0.443627356 instead of 0.601103752. Nothing local
+  caught it; only a second implementation forced to reproduce the same numbers
+  did.
+- **Integer literals in a double context.** Dart folds integer *constant
+  expressions* to double (`const double oppTtlMs = 7 * 24 * 60 * 60 * 1000` is
+  legal), but an expression over a variable is not: `scanOppQueue(..., 1000 + i)`
+  is an `int` and will not bind to a `double` parameter. Write `1000.0 + i`.
 - **Draw order is a contract.** Node construction draws in a fixed order
   (`name → stationary → charging → position → battery → uptime → wander → pdr →
   heading → target`), and the rejection-sampling loop redraws in the same order.

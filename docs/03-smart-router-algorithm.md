@@ -130,6 +130,12 @@ On receive msg:
 > (docs/01: MPR = relay set "covering 2-hop neighbors") gives delivery **parity
 > with flooding** at 50-61% of the relay budget. Keep the 300 ms wait; gate the
 > suppression on coverage.
+>
+> *Those two figures predate the tq fix (`docs/06` §6), and their `flood-all` arm
+> still consulted the route table, so it was not the naive baseline the criteria
+> name. Against a genuinely naive flood the same configuration now runs at 7-14%
+> of the relay budget; against routing-without-suppression, which is the arm that
+> isolates MPR, at 42-78%.*
 
 - **Broadcast (pager):** ttl=5, no ACK, flood via SUPERs.
 - **Unicast DM:** try routed flood; if dest known via nextHop table, unicast via that hop; else opportunistic flood.
@@ -147,6 +153,21 @@ tq (transmit quality) = (OGMs received via that neighbor / OGMs expected) over w
 - Update on each OGM: if seq newer → update; compute tq via sliding window.
 - Forward unicast to originator via `bestNeighborId` if tq > 0.6; else flood.
 - **No full graph** — O(n) memory, n = nodes known (capped 200).
+
+> **Implementation note (Oct 2026 — `sim/mesh_sim`, evidence in `docs/06-simulator-findings.md` §6):** tq is a *link*
+> metric, so its window has to be kept **per (originator, neighbour) pair**. Kept
+> per route entry instead, a duplicate copy of the same beacon arriving over a
+> longer path resets it — the copy is not newer, so it records no sample, but it
+> came from a different neighbour — and tq collapses to 0. Since gossiped
+> duplicates always land after the direct copy, 0 became the steady state:
+> measured tq **0.107** for direct neighbours whose real receipt rate was ~0.8,
+> so the `tq > 0.6` gate above rejected nearly every route and the `tq >= 0.6`
+> advertisement filter in §4 left nodes telling each other almost nothing.
+> Per-pair history is O(n × neighbours) rather than O(n), so it is bounded
+> (`TQ_PAIR_MAX = 2048`, insertion-order eviction) and pruned when a neighbour
+> stops being a peer — still one small window per candidate link, still no
+> topology database. The "if seq newer" rule also becomes per pair: a copy that
+> is stale globally can still be fresh for a neighbour we have not heard it from.
 
 ---
 
