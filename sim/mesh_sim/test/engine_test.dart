@@ -161,6 +161,71 @@ void main() {
       expect(electRole(nodes[0], nodes, rf).reason, contains('Battery'));
     });
 
+    // skills/02 acceptance: "SUPER opt-out respected; NORMAL never
+    // auto-promoted if battery saver on".
+    test('refuses to promote a node that opted out of the router role', () {
+      final nodes = ring(6);
+      nodes[0]
+        ..score = 0.95
+        ..superOptOut = true;
+      final out = electRole(nodes[0], nodes, rf);
+      expect(out.role, equals(Role.normal));
+      expect(out.reason, contains('opt-out'));
+    });
+
+    test('refuses to promote a node in battery-saver mode', () {
+      final nodes = ring(6);
+      nodes[0]
+        ..score = 0.95
+        ..batterySaver = true;
+      final out = electRole(nodes[0], nodes, rf);
+      expect(out.role, equals(Role.normal));
+      expect(out.reason, contains('Battery saver'));
+    });
+
+    test('steps an existing SUPER down at once when it opts out', () {
+      // A toggle is explicit intent, not score noise, so it must not wait out the
+      // two-cycle demotion hysteresis that damps flapping.
+      final nodes = ring(6);
+      nodes[0]
+        ..role = Role.superNode
+        ..score = 0.95
+        ..superOptOut = true;
+      nodes[0].demoteCounter = 0;
+      expect(electRole(nodes[0], nodes, rf).role, equals(Role.normal));
+      expect(nodes[0].demoteCounter, equals(0));
+    });
+
+    test('promotes the next-best candidate when the top scorer opts out', () {
+      // Opting out must not leave a coverage hole: the ranking is over the scores
+      // heard from the neighbourhood, so the runner-up is still in the top 20%.
+      final nodes = ring(9);
+      for (final n in nodes) {
+        n.score = 0.62;
+      }
+      nodes[0].score = 0.8; // would be promoted
+      nodes[1]
+        ..score = 0.75
+        ..superOptOut = true;
+      expect(electRole(nodes[0], nodes, rf).role, equals(Role.superNode));
+      expect(electRole(nodes[1], nodes, rf).role, equals(Role.normal));
+    });
+
+    test('advertises the declination so peers stop ranking it as a candidate',
+        () {
+      final nodes = ring(6);
+      nodes[0].score = 0.9;
+      expect(buildOgm(nodes[0]).declinedRouter, isFalse);
+      nodes[0].superOptOut = true;
+      expect(buildOgm(nodes[0]).declinedRouter, isTrue);
+      nodes[0]
+        ..superOptOut = false
+        ..batterySaver = true;
+      expect(buildOgm(nodes[0]).declinedRouter, isTrue);
+      // and it survives the gossip copy
+      expect(buildOgm(nodes[0]).copyWith(hopCount: 1).declinedRouter, isTrue);
+    });
+
     test('promotes above 0.60 when ranked in the top 20%', () {
       final nodes = ring(6);
       nodes[0].score = 0.75;
@@ -618,6 +683,156 @@ void main() {
       sim.refresh();
       expect(sim.nodes[1].inbox.any((m) => m.body == 'hello'), isTrue);
       expect(sim.stats.acksReceived, lessThanOrEqualTo(1));
+    });
+  });
+
+  group('power policy and telemetry (skills/02, skills/07)', () {
+    test('never promotes a node the user opted out of', () {
+      final sim = MeshSimulation(campusQuad(42));
+      sim.runFor(90000); // past the first election at 30 s
+      sim.refresh();
+      final declined =
+          sim.nodes.firstWhere((n) => n.role == Role.superNode);
+      sim.setSuperOptOut(declined.id, true);
+      expect(declined.role, equals(Role.normal));
+      expect(declined.reasonTrace, contains('opt-out'));
+      sim.runFor(40000); // and it stays down across the next tick
+      expect(declined.role, equals(Role.normal));
+      sim.setSuperOptOut(declined.id, false);
+      sim.runFor(40000);
+      expect(declined.role, equals(Role.superNode));
+    });
+
+    test('never auto-promotes with battery saver on', () {
+      final sim = MeshSimulation(campusQuad(42));
+      sim.runFor(90000);
+      for (final n in sim.nodes) {
+        sim.setBatterySaver(n.id, true);
+      }
+      sim.runFor(60000);
+      sim.refresh();
+      expect(sim.stats.superNodes, equals(0));
+      final online = sim.nodes.where((n) => n.isOnline).toList();
+      expect(online.every((n) => n.reasonTrace.contains('Battery saver')),
+          isTrue);
+    });
+
+    test('leaves duty cycling off by default', () {
+      final sim = MeshSimulation(campusQuad(42));
+      sim.runFor(60000);
+      sim.refresh();
+      expect(sim.config.dutyCycleEnabled, isFalse);
+      expect(sim.stats.awakeRatio, equals(1.0));
+      expect(sim.stats.scansSkippedAsleep, equals(0));
+    });
+
+    test('scans 3 s out of every 10 s when duty cycling, never a SUPER', () {
+      final sim = MeshSimulation(campusQuad(42).copyWith(dutyCycleEnabled: true));
+      sim.runFor(90000);
+      final superNode =
+          sim.nodes.firstWhere((n) => n.role == Role.superNode);
+      expect(sim.isAwake(superNode), isTrue);
+
+      final normal = sim.nodes.firstWhere((n) => n.role == Role.normal)
+        ..dutyPhaseMs = 0.0;
+      var awake = 0;
+      const samples = 1000;
+      for (var i = 0; i < samples; i++) {
+        if (sim.isAwake(normal, i / samples * 10000.0)) awake++;
+      }
+      expect(awake / samples, closeTo(0.3, 0.01));
+      // Int literals do not convert in a `double?` context, so the window
+      // boundaries are written as doubles.
+      expect(sim.isAwake(normal, 0.0), isTrue);
+      expect(sim.isAwake(normal, 2999.0), isTrue);
+      expect(sim.isAwake(normal, 3000.0), isFalse);
+      expect(sim.isAwake(normal, 9999.0), isFalse);
+    });
+
+    test('spreads duty phases so a crowd does not sleep in lockstep', () {
+      final sim = MeshSimulation(campusQuad(42).copyWith(dutyCycleEnabled: true));
+      final phases = sim.nodes.map((n) => n.dutyPhaseMs.round()).toSet();
+      // Phases are spread by index, never drawn: the RNG draw order is part of
+      // the cross-language contract with src/simulation.ts.
+      expect(phases.length, equals(sim.nodes.length));
+      sim.runFor(60000);
+      sim.refresh();
+      expect(sim.stats.awakeRatio, greaterThan(0));
+      expect(sim.stats.awakeRatio, lessThan(1));
+      expect(sim.stats.scansSkippedAsleep, greaterThan(0));
+    });
+
+    test('measures the per-role battery rate against the skills/07 budget', () {
+      // Roles are promoted at the first election, so a window that starts at
+      // warm-up bleeds pre-promotion drain into the average. Settle, re-baseline,
+      // then measure. 15% over 8 h = 1.875 %/h = NORMAL_DRAIN_PER_HOUR exactly:
+      // an always-scanning stationary node spends the whole budget, and SUPER is
+      // the documented 4x (60% per 8 h), which is why the role is opt-out-able.
+      final sim =
+          MeshSimulation(campusQuad(42).copyWith(stationaryRatio: 1.0));
+      sim.runFor(90000);
+      sim.clearRecords();
+      sim.runFor(90000);
+      sim.refresh();
+      expect(sim.stats.batteryPercentPerHourNormal, closeTo(1.875, 1e-3));
+      expect(sim.stats.batteryPercentPerHourNormal * 8, closeTo(15, 1e-2));
+      expect(sim.stats.batteryPercentPerHourSuper, closeTo(7.5, 1e-3));
+    });
+
+    test('buys battery headroom by sleeping', () {
+      final alwaysOn =
+          MeshSimulation(campusQuad(42).copyWith(stationaryRatio: 1.0));
+      alwaysOn.runFor(90000);
+      alwaysOn.clearRecords();
+      alwaysOn.runFor(90000);
+      alwaysOn.refresh();
+
+      final duty = MeshSimulation(campusQuad(42).copyWith(
+          stationaryRatio: 1.0, dutyCycleEnabled: true));
+      duty.runFor(90000);
+      duty.clearRecords();
+      duty.runFor(90000);
+      duty.refresh();
+
+      // 0.3 awake + 0.7 asleep at sleepDrainFactor 0.25 = 0.475 of the budget.
+      expect(duty.stats.batteryPercentPerHourNormal,
+          closeTo(1.875 * 0.475, 1e-3));
+      expect(duty.stats.batteryPercentPerHourNormal * 8, lessThan(8));
+      expect(duty.stats.batteryPercentPerHourSuper, closeTo(7.5, 1e-3));
+      expect(duty.stats.scansPerSec, lessThan(alwaysOn.stats.scansPerSec));
+    });
+
+    test('excludes charging nodes from the measured drain rate', () {
+      final sim = MeshSimulation(campusQuad(42));
+      sim.runFor(60000);
+      for (final n in sim.nodes) {
+        sim.setNodeCharging(n.id, true);
+      }
+      sim.refresh();
+      expect(sim.stats.batteryPercentPerHourNormal, equals(0.0));
+    });
+
+    test('buckets latency by hop for first-attempt routed traffic', () {
+      final sim = MeshSimulation(campusQuad(42));
+      sim.runFor(90000);
+      for (var i = 0; i < 20; i++) {
+        sim.sendMessage('node-0', 'node-${(i % 19) + 1}', 'probe-$i');
+        sim.runFor(1500);
+      }
+      sim.refresh();
+      final buckets = sim.stats.latencyByHop;
+      expect(buckets, isNotEmpty);
+      for (var i = 1; i < buckets.length; i++) {
+        expect(buckets[i].hops, greaterThan(buckets[i - 1].hops));
+      }
+      for (final b in buckets) {
+        expect(b.hops, greaterThanOrEqualTo(1));
+        expect(b.count, greaterThan(0));
+        expect(b.avgMs, greaterThan(0));
+        expect(b.p95Ms, greaterThan(0));
+      }
+      expect(sim.stats.scansPerSec, greaterThan(0));
+      expect(sim.stats.electionEvents, greaterThan(0));
     });
   });
 }

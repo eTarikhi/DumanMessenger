@@ -47,6 +47,10 @@ class SimConfig {
     this.electionIntervalMs = 30000,
     this.scanIntervalSuperMs = 250,
     this.scanIntervalNormalMs = 1000,
+    this.dutyCycleEnabled = false,
+    this.normalScanWindowMs = 3000,
+    this.normalScanCycleMs = 10000,
+    this.sleepDrainFactor = 0.25,
     this.enableSuperElection = true,
     this.enableMobility = true,
     this.enableDtn = true,
@@ -91,6 +95,16 @@ class SimConfig {
   final double electionIntervalMs;
   final double scanIntervalSuperMs;
   final double scanIntervalNormalMs;
+
+  /// skills/07 duty cycling — "NORMAL `scan 3s/sleep 7s`, SUPER `continuous`".
+  /// Off by default: it changes when discovery happens, so turning it on is a
+  /// different experiment (docs/06 §7).
+  final bool dutyCycleEnabled;
+  final double normalScanWindowMs;
+  final double normalScanCycleMs;
+
+  /// Scanner-off battery drain as a fraction of the awake rate.
+  final double sleepDrainFactor;
 
   final bool enableSuperElection;
   final bool enableMobility;
@@ -138,6 +152,10 @@ class SimConfig {
     bool? enableMobility,
     bool? enableDtn,
     double? batteryDrainMultiplier,
+    bool? dutyCycleEnabled,
+    double? normalScanWindowMs,
+    double? normalScanCycleMs,
+    double? sleepDrainFactor,
     double? warmupMs,
     int? maxRetries,
     double? ackTimeoutMs,
@@ -177,6 +195,10 @@ class SimConfig {
         linkRetries: linkRetries,
         batteryDrainMultiplier:
             batteryDrainMultiplier ?? this.batteryDrainMultiplier,
+        dutyCycleEnabled: dutyCycleEnabled ?? this.dutyCycleEnabled,
+        normalScanWindowMs: normalScanWindowMs ?? this.normalScanWindowMs,
+        normalScanCycleMs: normalScanCycleMs ?? this.normalScanCycleMs,
+        sleepDrainFactor: sleepDrainFactor ?? this.sleepDrainFactor,
         warmupMs: warmupMs ?? this.warmupMs,
         trafficIntervalMs: trafficIntervalMs,
       );
@@ -223,6 +245,14 @@ class SimulationStats {
     required this.acksReceived,
     required this.sentUnicast,
     required this.sentBroadcast,
+    required this.batteryPercentPerHourNormal,
+    required this.batteryPercentPerHourSuper,
+    required this.scansPerSec,
+    required this.relaysPerSec,
+    required this.scansSkippedAsleep,
+    required this.awakeRatio,
+    required this.electionEvents,
+    required this.latencyByHop,
   });
 
   final int tick;
@@ -269,6 +299,28 @@ class SimulationStats {
   final int sentUnicast;
   final int sentBroadcast;
 
+  /// skills/07 telemetry: "Battery %/h per role, scans/sec, relays/sec".
+  /// Measured from the battery snapshot taken when metrics were cleared, over
+  /// nodes that are online, in that role and not charging.
+  final double batteryPercentPerHourNormal;
+  final double batteryPercentPerHourSuper;
+  final double scansPerSec;
+  final double relaysPerSec;
+
+  /// Scans a duty-cycling node skipped because its scanner was asleep.
+  final int scansSkippedAsleep;
+
+  /// Fraction of online non-SUPER nodes inside their wake window (1 when duty
+  /// cycling is off).
+  final double awakeRatio;
+
+  /// Election log depth — skills/02: "DO log `electionEvents` for tuner".
+  final int electionEvents;
+
+  /// roadmap Phase 2 metrics dashboard: "latency by hop". First-attempt routed
+  /// unicast only, matching the docs/04 §5 budget's scope.
+  final List<LatencyByHop> latencyByHop;
+
   Map<String, Object?> toJson() => <String, Object?>{
         'tick': tick,
         'simTimeMs': simTimeMs,
@@ -300,6 +352,36 @@ class SimulationStats {
         'acksReceived': acksReceived,
         'sentUnicast': sentUnicast,
         'sentBroadcast': sentBroadcast,
+        'batteryPercentPerHourNormal': batteryPercentPerHourNormal,
+        'batteryPercentPerHourSuper': batteryPercentPerHourSuper,
+        'scansPerSec': scansPerSec,
+        'relaysPerSec': relaysPerSec,
+        'scansSkippedAsleep': scansSkippedAsleep,
+        'awakeRatio': awakeRatio,
+        'electionEvents': electionEvents,
+        'latencyByHop': latencyByHop.map((b) => b.toJson()).toList(),
+      };
+}
+
+/// Latency distribution for one hop count.
+class LatencyByHop {
+  const LatencyByHop({
+    required this.hops,
+    required this.count,
+    required this.avgMs,
+    required this.p95Ms,
+  });
+
+  final int hops;
+  final int count;
+  final double avgMs;
+  final double p95Ms;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'hops': hops,
+        'count': count,
+        'avgMs': avgMs,
+        'p95Ms': p95Ms,
       };
 }
 
@@ -417,7 +499,7 @@ MeshNode createNode(
   final targetAngle = rng() * math.pi * 2;
   final targetRad = wanderRadius * math.sqrt(rng());
 
-  return MeshNode(
+  final node = MeshNode(
     id: id,
     name: '$name-$index',
     pos: Vec2(x, y),
@@ -435,6 +517,14 @@ MeshNode createNode(
     wanderRadius: wanderRadius,
     txPower: config.txPowerDbm,
   );
+  // Spread duty phases evenly over the cycle by index, so a crowd does not sleep
+  // in lockstep. Derived, never drawn: the RNG draw order is a contract.
+  node.dutyPhaseMs = config.nodeCount > 0
+      ? (index % config.nodeCount) *
+          (config.normalScanCycleMs / config.nodeCount)
+      : 0.0;
+  node.batteryAtMeasure = node.battery;
+  return node;
 }
 
 /// Assign each node index to a cluster, round-robin over the declared counts.
@@ -503,7 +593,7 @@ class MeshSimulation {
     nodes = createNodes(rng, this.config);
     _schedule();
     runFor(this.config.warmupMs);
-    _clearRecords();
+    clearRecords();
     stats = _computeStats();
   }
 
@@ -526,6 +616,11 @@ class MeshSimulation {
   final Map<String, _PendingAck> _pendingAcks = <String, _PendingAck>{};
 
   // counters
+  int _scanCount = 0;
+  int _scansSkippedAsleep = 0;
+
+  /// Simulation time when metrics were last cleared: the telemetry baseline.
+  double _measureStartMs = 0;
   int _relayTx = 0;
   int _ogmTx = 0;
   int _lostDataTx = 0;
@@ -559,7 +654,13 @@ class MeshSimulation {
     }
   }
 
-  void _clearRecords() {
+  /// Re-baseline the measurement window: drop the accumulated records and
+  /// snapshot every node's battery and the clock now, so the stats that follow
+  /// describe only what happens after this call. The warm-up path uses it to
+  /// discard bootstrap churn; a caller can use it to measure a settled window
+  /// (roles promoted at the first election otherwise bleed their pre-promotion
+  /// drain into a per-role %/h average).
+  void clearRecords() {
     deliveries = <DeliveryRecord>[];
     sentRecords = <SentRecord>[];
     roleEvents = <RoleEvent>[];
@@ -578,8 +679,12 @@ class MeshSimulation {
     _retriesSent = 0;
     _retriesExhausted = 0;
     _acksReceived = 0;
+    _scanCount = 0;
+    _scansSkippedAsleep = 0;
+    _measureStartMs = now;
     _pendingAcks.clear();
     for (final n in nodes) {
+      n.batteryAtMeasure = n.battery;
       n.roleTransitions = 0;
       n.txCount = 0;
       n.mprSuppressed = 0;
@@ -627,7 +732,7 @@ class MeshSimulation {
     _msgCounter = 0;
     _schedule();
     runFor(this.config.warmupMs);
-    _clearRecords();
+    clearRecords();
     stats = _computeStats();
   }
 
@@ -668,7 +773,13 @@ class MeshSimulation {
       if (!node.isOnline) continue;
       integrateMotion(node, rng, dtSec, config.areaWidth, config.areaHeight,
           config.enableMobility);
-      batteryDrain(node, dtSec, config.batteryDrainMultiplier);
+      // A duty-cycling node with its scanner off burns less: skills/07's whole
+      // argument is that the sleep slot is what keeps NORMAL under 15%/8h.
+      batteryDrain(
+          node,
+          dtSec,
+          config.batteryDrainMultiplier *
+              (isAwake(node) ? 1.0 : config.sleepDrainFactor));
       node.uptimeMin += dtSec / 60;
       node.lastPhysicsAt = now;
       if (node.battery <= 0) {
@@ -725,20 +836,42 @@ class MeshSimulation {
     }
   }
 
+  /// Is this node's scanner inside its wake window?
+  ///
+  /// skills/07: "Duty cycle: NORMAL `scan 3s/sleep 7s`, SUPER `continuous`".
+  /// Only *scanning* is affected. An asleep node keeps beaconing and keeps
+  /// relaying traffic it already knows how to forward, which is the BLE
+  /// asymmetry the spec describes: the advertiser stays up and the link layer
+  /// schedules connection events, while the scanner is what gets throttled
+  /// (Android caps it at 5 starts per 30 s). Modelling a fully off radio would
+  /// also need connection-interval negotiation, which is out of scope here.
+  bool isAwake(MeshNode node, [double? atMs]) {
+    if (!config.dutyCycleEnabled || node.role == Role.superNode) return true;
+    final t = atMs ?? now;
+    final cycle = math.max(1.0, config.normalScanCycleMs);
+    final phase = ((t + node.dutyPhaseMs) % cycle + cycle) % cycle;
+    return phase < config.normalScanWindowMs;
+  }
+
+  /// Score and re-elect one node, recording any transition.
+  void _electOne(MeshNode node) {
+    node.score = computeScore(node, nodes, rf);
+    if (!config.enableSuperElection) return;
+    final outcome = electRole(node, nodes, rf);
+    if (outcome.role != node.role) {
+      node.wasSuper = node.role == Role.superNode;
+      node.roleTransitions++;
+      roleEvents
+          .add(RoleEvent(now, node.id, node.role, outcome.role, outcome.reason));
+    }
+    node.role = outcome.role;
+    node.reasonTrace = outcome.reason;
+  }
+
   void _onElection() {
     for (final node in nodes) {
       if (!node.isOnline) continue;
-      node.score = computeScore(node, nodes, rf);
-      if (!config.enableSuperElection) continue;
-      final outcome = electRole(node, nodes, rf);
-      if (outcome.role != node.role) {
-        node.wasSuper = node.role == Role.superNode;
-        node.roleTransitions++;
-        roleEvents.add(
-            RoleEvent(now, node.id, node.role, outcome.role, outcome.reason));
-      }
-      node.role = outcome.role;
-      node.reasonTrace = outcome.reason;
+      _electOne(node);
     }
     final online = nodes.where((n) => n.isOnline).toList();
     _superSamples++;
@@ -750,6 +883,20 @@ class MeshSimulation {
   void _onScan(String nodeId) {
     final node = _byId(nodeId);
     if (node == null || !node.isOnline) return;
+    final interval = node.role == Role.superNode
+        ? config.scanIntervalSuperMs
+        : config.scanIntervalNormalMs;
+
+    if (!isAwake(node)) {
+      // Scanner off: no discovery, no OppQueue hand-off, no MPR recompute this
+      // cycle. The scan event still recurs so the node picks its window back up
+      // without a reschedule, and the event stream stays regular.
+      _scansSkippedAsleep++;
+      _queue.push(now + interval, EventKind.scan, nodeId);
+      return;
+    }
+    _scanCount++;
+
     final peers = _refreshPeerList(node);
     if (peers.isNotEmpty) {
       var sum = 0.0;
@@ -776,9 +923,6 @@ class MeshSimulation {
         ..addAll(scan.keep);
     }
 
-    final interval = node.role == Role.superNode
-        ? config.scanIntervalSuperMs
-        : config.scanIntervalNormalMs;
     _queue.push(now + interval, EventKind.scan, nodeId);
   }
 
@@ -1123,6 +1267,25 @@ class MeshSimulation {
     stats = _computeStats();
   }
 
+  /// skills/02: "SUPER opt-out respected". Re-elects immediately, so the opt-out
+  /// takes effect now instead of at the next 30 s tick.
+  void setSuperOptOut(NodeId id, bool optedOut) {
+    final node = _byId(id);
+    if (node == null) return;
+    node.superOptOut = optedOut;
+    if (node.isOnline) _electOne(node);
+    stats = _computeStats();
+  }
+
+  /// skills/02: "NORMAL never auto-promoted if battery saver on".
+  void setBatterySaver(NodeId id, bool on) {
+    final node = _byId(id);
+    if (node == null) return;
+    node.batterySaver = on;
+    if (node.isOnline) _electOne(node);
+    stats = _computeStats();
+  }
+
   void setNodeCharging(NodeId id, bool charging) {
     final node = _byId(id);
     if (node == null) return;
@@ -1174,6 +1337,50 @@ class MeshSimulation {
         ? 0.0
         : peerCounts.fold<int>(0, (a, b) => a + b) / peerCounts.length;
 
+    // skills/07 telemetry, measured rather than read off the drain model so it
+    // reflects the role mix, duty cycling and charging as they actually happened
+    // during the window.
+    final elapsedMs = math.max(1.0, now - _measureStartMs);
+    final elapsedHours = elapsedMs / 3600000.0;
+    final elapsedSec = elapsedMs / 1000.0;
+    double drainPerHour(Role role) {
+      final rates = online
+          .where((n) => n.role == role && !n.charging)
+          .map((n) => ((n.batteryAtMeasure - n.battery) / elapsedHours) * 100)
+          // A node that charged and later unplugged shows a net gain. That is not
+          // a drain rate, so it drops out instead of pulling the mean down.
+          .where((v) => v > 0)
+          .toList();
+      if (rates.isEmpty) return 0.0;
+      return rates.fold<double>(0.0, (a, b) => a + b) / rates.length;
+    }
+
+    final dutyNodes = online.where((n) => n.role != Role.superNode).toList();
+    final awakeRatio = dutyNodes.isEmpty
+        ? 1.0
+        : dutyNodes.where(isAwake).length / dutyNodes.length;
+
+    // roadmap Phase 2 metrics dashboard: "latency by hop". Scoped like the
+    // docs/04 §5 budget — first-attempt routed unicast only — so a retry (which
+    // adds a whole ACK timeout) and a DTN bundle (which measures a meeting time,
+    // not transport) cannot smear the distribution.
+    final perHop = <int, List<double>>{};
+    for (final d in unicastDeliveries) {
+      if (d.attempt != 0 || d.dtn) continue;
+      perHop.putIfAbsent(d.hops, () => <double>[]).add(d.latencyMs);
+    }
+    final hopEntries = perHop.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    final latencyByHop = hopEntries.map((e) {
+      final sorted = e.value.toList()..sort();
+      return LatencyByHop(
+        hops: e.key,
+        count: sorted.length,
+        avgMs: sorted.fold<double>(0.0, (a, b) => a + b) / sorted.length,
+        p95Ms: percentile(sorted, 95.0),
+      );
+    }).toList();
+
     return SimulationStats(
       tick: tick,
       simTimeMs: now,
@@ -1205,6 +1412,14 @@ class MeshSimulation {
       acksReceived: _acksReceived,
       sentUnicast: _sentUnicast,
       sentBroadcast: _sentBroadcast,
+      batteryPercentPerHourNormal: drainPerHour(Role.normal),
+      batteryPercentPerHourSuper: drainPerHour(Role.superNode),
+      scansPerSec: _scanCount / elapsedSec,
+      relaysPerSec: _relayTx / elapsedSec,
+      scansSkippedAsleep: _scansSkippedAsleep,
+      awakeRatio: awakeRatio,
+      electionEvents: roleEvents.length,
+      latencyByHop: latencyByHop,
     );
   }
 

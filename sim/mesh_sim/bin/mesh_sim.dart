@@ -59,6 +59,9 @@ Duman mesh simulator (headless)
   --messages <int>    unicast messages to inject           (default: $_defaultMessages)
   --gap <ms>          simulated ms between messages        (default: ${_defaultGapMs.toInt()})
   --policy <name>     mpr | route-flood | flood-all        (default: mpr)
+  --duty-cycle        NORMAL scans 3 s and sleeps 7 s (skills/07). Gates the
+                      15%-per-8h battery budget, which an always-scanning
+                      NORMAL node in a mobile population does not meet.
   --json              machine-readable metrics on stdout
   --no-check          report metrics without asserting the acceptance criteria
   -h, --help          this text
@@ -81,6 +84,7 @@ void main(List<String> args) {
   final messages = int.parse(_arg(args, '--messages', '$_defaultMessages'));
   final gapMs = double.parse(_arg(args, '--gap', '$_defaultGapMs'));
   final policyName = _arg(args, '--policy', 'mpr');
+  final dutyCycle = args.contains('--duty-cycle');
   final asJson = args.contains('--json');
   final noCheck = args.contains('--no-check');
 
@@ -92,6 +96,7 @@ void main(List<String> args) {
     exitCode = 64;
     return;
   }
+  if (dutyCycle) config = config.copyWith(dutyCycleEnabled: true);
   final nodesOverride = args.indexOf('--nodes');
   if (nodesOverride >= 0 && nodesOverride + 1 < args.length) {
     config = config.copyWith(nodeCount: int.parse(args[nodesOverride + 1]));
@@ -177,14 +182,46 @@ void main(List<String> args) {
     'isolatedNodes': s.isolatedNodes,
     'avgScore': _round(s.avgScore),
     'simTimeMs': s.simTimeMs,
+    // skills/07 telemetry and the roadmap's Phase 2 "battery %/h, latency by
+    // hop". Measured over the post-warm-up window, not read off the drain model.
+    'dutyCycle': config.dutyCycleEnabled,
+    'batteryPctPerHourNormal': _round(s.batteryPercentPerHourNormal),
+    'batteryPctPerHourSuper': _round(s.batteryPercentPerHourSuper),
+    'batteryPct8hNormal': _round(s.batteryPercentPerHourNormal * 8),
+    'batteryPct8hSuper': _round(s.batteryPercentPerHourSuper * 8),
+    'scansPerSec': _round(s.scansPerSec),
+    'relaysPerSec': _round(s.relaysPerSec),
+    'awakeRatio': _round(s.awakeRatio),
+    'scansSkippedAsleep': s.scansSkippedAsleep,
+    'electionEvents': s.electionEvents,
+    'latencyByHop': s.latencyByHop.map((b) => <String, Object?>{
+          'hops': b.hops,
+          'count': b.count,
+          'avgMs': _round(b.avgMs),
+          'p95Ms': _round(b.p95Ms),
+        }).toList(),
   };
 
   if (asJson) {
     stdout.writeln(const JsonEncoder.withIndent('  ').convert(report));
   } else {
-    stdout.writeln('Duman mesh simulator — $scenarioName (seed $seed, policy $policyName)');
+    stdout.writeln('Duman mesh simulator — $scenarioName '
+        '(seed $seed, policy $policyName'
+        '${config.dutyCycleEnabled ? ', duty-cycle' : ''})');
     stdout.writeln('─' * 62);
-    report.forEach((k, v) => stdout.writeln('  ${k.padRight(24)} $v'));
+    report.forEach((k, v) {
+      if (k == 'latencyByHop') return;
+      stdout.writeln('  ${k.padRight(24)} $v');
+    });
+    if (s.latencyByHop.isNotEmpty) {
+      stdout.writeln('  ${'latencyByHop'.padRight(24)} hops      n     avg     p95');
+      for (final b in s.latencyByHop) {
+        stdout.writeln('  ${''.padRight(24)} ${b.hops.toString().padLeft(4)}'
+            '${b.count.toString().padLeft(7)}'
+            '${b.avgMs.toStringAsFixed(0).padLeft(6)} ms'
+            '${b.p95Ms.toStringAsFixed(0).padLeft(6)} ms');
+      }
+    }
   }
 
   if (noCheck) return;
@@ -199,6 +236,15 @@ void main(List<String> args) {
   }
   if (s.electionsPerMin > 1) {
     failures.add('election flapping ${s.electionsPerMin.toStringAsFixed(2)}/node/min > 1');
+  }
+  // skills/07: "Android 8h NORMAL: <15% extra drain vs idle". Only gated when
+  // the duty cycle is on, because that is the configuration the criterion
+  // describes — an always-scanning NORMAL node measures 18-25% per 8 h once
+  // mobility is included (docs/06 §7), i.e. the sleep slot is load-bearing for
+  // the budget rather than a refinement of it.
+  if (config.dutyCycleEnabled && s.batteryPercentPerHourNormal * 8 >= 15) {
+    failures.add('NORMAL battery '
+        '${(s.batteryPercentPerHourNormal * 8).toStringAsFixed(1)}% per 8h >= 15%');
   }
   if (connected) {
     if (s.deliveryRatio < 0.90) {

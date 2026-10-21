@@ -250,6 +250,17 @@ jobs:
       fail-fast: false
       matrix:
         scenario: [campus_quad, sparse_village, festival_crowd, partitioned_pair]
+        power: [always-on, duty-cycle]
+        exclude:
+          # Only campus_quad is gated, so only it earns a second power arm: the
+          # other three run --no-check and would report the same numbers twice
+          # without asserting anything new.
+          - scenario: sparse_village
+            power: duty-cycle
+          - scenario: festival_crowd
+            power: duty-cycle
+          - scenario: partitioned_pair
+            power: duty-cycle
     steps:
       - uses: actions/checkout@v5
       - uses: dart-lang/setup-dart@v1
@@ -257,8 +268,12 @@ jobs:
           sdk: stable
       - run: dart pub get
       # The DTN scenarios are deliberately partitioned, so they report metrics
-      # without the connected-world delivery gate.
-      - name: ${{ matrix.scenario }}
+      # without the connected-world delivery gate. The duty-cycle arm is where
+      # skills/07's "<15% per 8 h" budget is asserted: an always-scanning NORMAL
+      # node measures 18-25% per 8 h once mobility is included (docs/06 §7), so
+      # the sleep slot is load-bearing for that criterion, not a refinement.
+      - name: ${{ matrix.scenario }} (${{ matrix.power }})
         run: >-
           dart run bin/mesh_sim.dart --scenario ${{ matrix.scenario }} --seed 42
+          ${{ matrix.power == 'duty-cycle' && '--duty-cycle' || '' }}
           ${{ matrix.scenario == 'campus_quad' && '' || '--no-check' }}

@@ -142,6 +142,7 @@ class Ogm {
     required this.bestHopTo,
     this.hopCount = 0,
     this.neighborIds = const <NodeId>[],
+    this.declinedRouter = false,
   });
 
   final NodeId nodeId;
@@ -164,6 +165,14 @@ class Ogm {
   /// which is the whole point of MPR selection.
   final List<NodeId> neighborIds;
 
+  /// The originator has declined the router role — SUPER opt-out or battery
+  /// saver (skills/02 acceptance). Advertised so neighbours can drop it from the
+  /// top-20% candidacy ranking instead of letting a node that will never promote
+  /// occupy a slot and thin the router set below the 15% floor. Without the flag
+  /// the declination is only knowable locally, which a real device cannot do for
+  /// its peers.
+  final bool declinedRouter;
+
   Ogm copyWith({int? hopCount}) => Ogm(
         nodeId: nodeId,
         seq: seq,
@@ -174,6 +183,7 @@ class Ogm {
         bestHopTo: Map<NodeId, int>.of(bestHopTo),
         hopCount: hopCount ?? this.hopCount,
         neighborIds: List<NodeId>.of(neighborIds),
+        declinedRouter: declinedRouter,
       );
 }
 
@@ -273,6 +283,24 @@ class MeshNode {
 
   /// 0 = stationary, 1 = sprinting (docs/03 §3).
   double mobility;
+
+  /// User declined the router role. skills/02 acceptance: "SUPER opt-out
+  /// respected"; the roadmap's risk table puts it the other way round ("SUPER
+  /// opt-in"). Either way the node must never be promoted while it is set.
+  bool superOptOut = false;
+
+  /// OS battery-saver mode. skills/02 acceptance: "NORMAL never auto-promoted
+  /// if battery saver on".
+  bool batterySaver = false;
+
+  /// Phase offset inside the duty cycle, spread by node index so a crowd does
+  /// not sleep in lockstep. Derived from the index rather than drawn from the
+  /// RNG: the draw order is part of the cross-language contract.
+  double dutyPhaseMs = 0;
+
+  /// Battery level when metrics were last cleared — the baseline for measured
+  /// %/h telemetry (skills/07: "Battery %/h per role").
+  double batteryAtMeasure = 0;
 
   /// Packet delivery ratio over the last 20 transmissions.
   double pdr;

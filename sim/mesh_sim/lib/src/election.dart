@@ -124,6 +124,7 @@ Ogm buildOgm(MeshNode node, [int hopCount = 0]) {
     isSuper: node.role == Role.superNode,
     peerCount: node.peerCount,
     batteryBucket: (node.battery * 10).floor(),
+    declinedRouter: node.superOptOut || node.batterySaver,
     bestHopTo: bestHopTo,
     hopCount: hopCount,
     neighborIds: node.peerIds.take(mprNeighborAdvertiseLimit).toList(),
@@ -369,6 +370,22 @@ String _pct(double v) => (v * 100).toStringAsFixed(0);
 /// Role decision with hysteresis and the SUPER proximity guard (docs/03 §3, §5).
 /// Pure apart from the demote counter, which is the hysteresis state itself.
 ElectionOutcome electRole(MeshNode node, List<MeshNode> allNodes, RfParams rf) {
+  // skills/02 acceptance: "SUPER opt-out respected; NORMAL never auto-promoted
+  // if battery saver on". Both are explicit user or OS intent, so they are
+  // checked before any scoring and demote immediately rather than waiting out
+  // the two-cycle hysteresis below — hysteresis exists to damp score noise, and
+  // a toggle is not noise.
+  if (node.superOptOut) {
+    node.demoteCounter = 0;
+    return ElectionOutcome(
+        Role.normal, 'SUPER opt-out: user declined the router role');
+  }
+  if (node.batterySaver) {
+    node.demoteCounter = 0;
+    return ElectionOutcome(
+        Role.normal, 'Battery saver on: never auto-promoted');
+  }
+
   final peers = peersInRange(node, allNodes, rf);
   if (peers.length < minPeers) {
     node.demoteCounter = 0;
@@ -381,10 +398,16 @@ ElectionOutcome electRole(MeshNode node, List<MeshNode> allNodes, RfParams rf) {
         Role.normal, 'Battery ${_pct(node.battery)}% below 25% threshold');
   }
 
-  // Rank against self + the 1-hop neighbourhood scores heard in OGMs.
+  // Rank against self + the 1-hop neighbourhood scores heard in OGMs. Peers
+  // that have declined the router role are not candidates: counting them would
+  // burn top-20% slots on nodes that can never promote, so a crowd of opt-outs
+  // would leave the mesh with too few SUPERs to cover it (skills/02's 15-25%).
   final scores = <double>[node.score];
   for (final p in peers) {
     final heard = node.ogmTable[p.id];
+    final declined =
+        heard != null ? heard.declinedRouter : (p.superOptOut || p.batterySaver);
+    if (declined) continue;
     scores.add(heard != null ? heard.score : p.score);
   }
   final strictlyBetter = scores.where((s) => s > node.score).length;
