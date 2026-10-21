@@ -11,9 +11,9 @@ jobs:
     name: TypeScript engine + React simulator
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -47,7 +47,7 @@ jobs:
       run:
         working-directory: sim/mesh_sim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: dart-lang/setup-dart@v1
         with:
@@ -251,7 +251,7 @@ jobs:
       matrix:
         scenario: [campus_quad, sparse_village, festival_crowd, partitioned_pair]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
