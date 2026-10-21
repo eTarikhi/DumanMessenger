@@ -51,6 +51,9 @@ class SimConfig {
     this.normalScanWindowMs = 3000,
     this.normalScanCycleMs = 10000,
     this.sleepDrainFactor = 0.25,
+    this.captureLog = false,
+    this.captureOgm = false,
+    this.maxLogEntries = 2000,
     this.enableSuperElection = true,
     this.enableMobility = true,
     this.enableDtn = true,
@@ -106,6 +109,18 @@ class SimConfig {
   /// Scanner-off battery drain as a fraction of the awake rate.
   final double sleepDrainFactor;
 
+  /// Record the pcap-like mesh log ([MeshSimulation.log]). Off by default: a
+  /// 60-node crowd emits hundreds of thousands of events and the golden runs pay
+  /// for none of it. Hop traces on delivered messages are always recorded — they
+  /// are bounded by the path length and are what the UI's "via 2 nodes" reads.
+  final bool captureLog;
+
+  /// Also log OGM beacons. Separate flag because beacons outnumber everything.
+  final bool captureOgm;
+
+  /// Ring-buffer depth for [MeshSimulation.log].
+  final int maxLogEntries;
+
   final bool enableSuperElection;
   final bool enableMobility;
   final bool enableDtn;
@@ -156,6 +171,9 @@ class SimConfig {
     double? normalScanWindowMs,
     double? normalScanCycleMs,
     double? sleepDrainFactor,
+    bool? captureLog,
+    bool? captureOgm,
+    int? maxLogEntries,
     double? warmupMs,
     int? maxRetries,
     double? ackTimeoutMs,
@@ -199,6 +217,9 @@ class SimConfig {
         normalScanWindowMs: normalScanWindowMs ?? this.normalScanWindowMs,
         normalScanCycleMs: normalScanCycleMs ?? this.normalScanCycleMs,
         sleepDrainFactor: sleepDrainFactor ?? this.sleepDrainFactor,
+        captureLog: captureLog ?? this.captureLog,
+        captureOgm: captureOgm ?? this.captureOgm,
+        maxLogEntries: maxLogEntries ?? this.maxLogEntries,
         warmupMs: warmupMs ?? this.warmupMs,
         trafficIntervalMs: trafficIntervalMs,
       );
@@ -397,6 +418,7 @@ class DeliveryRecord {
     required this.timestamp,
     required this.dtn,
     required this.attempt,
+    required this.hopTrace,
   });
 
   final MsgId msgId;
@@ -413,6 +435,49 @@ class DeliveryRecord {
 
   /// 0 for a first-attempt delivery.
   final int attempt;
+
+  /// The journey behind [path]: time, link budget and decision per hop
+  /// (roadmap Phase 4, "via 2 nodes • SUPER Amir").
+  final List<HopRecord> hopTrace;
+}
+
+/// How a forwarding decision shows up in a message's hop trace.
+/// [ForwardMode.waitMpr] is provisional: if the 300 ms wait ends in suppression,
+/// `_onMprDecide` rewrites the record so the trace reports the outcome, not the
+/// intention.
+const Map<ForwardMode, HopAction> hopActionByMode = <ForwardMode, HopAction>{
+  ForwardMode.direct: HopAction.relayed,
+  ForwardMode.route: HopAction.relayed,
+  ForwardMode.flood: HopAction.relayed,
+  ForwardMode.waitMpr: HopAction.relayed,
+  ForwardMode.queue: HopAction.queued,
+  ForwardMode.drop: HopAction.suppressed,
+};
+
+/// The chain of nodes a delivered copy actually travelled, recovered by walking
+/// [HopRecord.via] backwards from the recipient.
+///
+/// `path` (and therefore `hopTrace`) is every node that accepted a fresh copy —
+/// a *tree* once a relay fans out, so a 4-hop delivery in a 20-node mesh can list
+/// 15 nodes. The roadmap's "via 2 nodes • SUPER Amir" wants the route, not the
+/// tree, and `via` is enough to recover it. The originator is not in the result
+/// (it never receives its own message): prepend `delivery.from` when rendering.
+/// A retransmission shares the message id and so the same trace, in which case
+/// the first record for each node wins.
+List<HopRecord> deliveredChain(List<HopRecord> hopTrace, NodeId to) {
+  final firstAt = <NodeId, HopRecord>{};
+  for (final h in hopTrace) {
+    firstAt.putIfAbsent(h.nodeId, () => h);
+  }
+  final chain = <HopRecord>[];
+  final seen = <NodeId>{};
+  var cur = firstAt[to];
+  while (cur != null && !seen.contains(cur.nodeId)) {
+    seen.add(cur.nodeId);
+    chain.insert(0, cur);
+    cur = firstAt[cur.via];
+  }
+  return chain;
 }
 
 class SentRecord {
@@ -569,6 +634,10 @@ class _PathTrace {
   _PathTrace(this.path, this.createdAt, this.from, this.to, this.type);
 
   final List<NodeId> path;
+
+  /// One record per node that accepted a fresh copy, in arrival order. Parallel
+  /// to [path] but carrying time, link budget and the forwarding decision.
+  final List<HopRecord> hops = <HopRecord>[];
   final double createdAt;
   final NodeId from;
   final String to;
@@ -614,6 +683,10 @@ class MeshSimulation {
 
   /// Logical msgId -> the originator still waiting for its ACK.
   final Map<String, _PendingAck> _pendingAcks = <String, _PendingAck>{};
+
+  /// pcap-like capture of radio and protocol events. Bounded, and empty unless
+  /// [SimConfig.captureLog] is set.
+  final List<MeshLogEntry> log = <MeshLogEntry>[];
 
   // counters
   int _scanCount = 0;
@@ -661,6 +734,7 @@ class MeshSimulation {
   /// (roles promoted at the first election otherwise bleed their pre-promotion
   /// drain into a per-role %/h average).
   void clearRecords() {
+    log.clear();
     deliveries = <DeliveryRecord>[];
     sentRecords = <SentRecord>[];
     roleEvents = <RoleEvent>[];
@@ -810,6 +884,11 @@ class MeshSimulation {
   void _beacon(MeshNode node, Ogm ogm) {
     for (final peer in peersInRange(node, nodes, rf)) {
       _ogmTx++;
+      _pushLog(
+          MeshLogKind.ogm,
+          node.id,
+          'OGM seq ${ogm.seq} → ${peer.id} (score ${ogm.score.toStringAsFixed(2)})',
+          peerId: peer.id);
       if (chance(rng, effectiveLossProbability(node, peer, rf, config.linkRetries))) {
         _lostOgmTx++;
         continue;
@@ -853,6 +932,32 @@ class MeshSimulation {
     return phase < config.normalScanWindowMs;
   }
 
+  /// Append one capture-log line. A no-op unless capture is on, so the default
+  /// path — and every golden vector — pays nothing for the log.
+  void _pushLog(MeshLogKind kind, NodeId nodeId, String detail,
+      {NodeId? peerId,
+      MsgId? msgId,
+      MsgType? msgType,
+      int? hop,
+      double? rssi}) {
+    if (!config.captureLog) return;
+    if (kind == MeshLogKind.ogm && !config.captureOgm) return;
+    log.add(MeshLogEntry(
+      atMs: now,
+      kind: kind,
+      nodeId: nodeId,
+      detail: detail,
+      peerId: peerId,
+      msgId: msgId,
+      msgType: msgType,
+      hop: hop,
+      rssi: rssi,
+    ));
+    if (log.length > config.maxLogEntries) {
+      log.removeRange(0, log.length - config.maxLogEntries);
+    }
+  }
+
   /// Score and re-elect one node, recording any transition.
   void _electOne(MeshNode node) {
     node.score = computeScore(node, nodes, rf);
@@ -863,6 +968,10 @@ class MeshSimulation {
       node.roleTransitions++;
       roleEvents
           .add(RoleEvent(now, node.id, node.role, outcome.role, outcome.reason));
+    }
+    if (outcome.role != node.role) {
+      _pushLog(MeshLogKind.election, node.id,
+          '${node.name}: ${node.role.label} → ${outcome.role.label} — ${outcome.reason}');
     }
     node.role = outcome.role;
     node.reasonTrace = outcome.reason;
@@ -1000,7 +1109,7 @@ class MeshSimulation {
 
     final decision = decideForward(
         from, msg, nodes, rf, config.relayPolicy);
-    _applyDecision(from, msg, decision.mode, decision.targets);
+    _applyDecision(from, msg, decision);
     return msg;
   }
 
@@ -1019,7 +1128,15 @@ class MeshSimulation {
       _pendingAcks.remove(msgId);
       _retriesExhausted++;
       // Last resort: carry it until a peer appears (docs/03 §8).
-      if (config.enableDtn) enqueueOpp(node, pending.msg, now);
+      if (config.enableDtn) {
+        enqueueOpp(node, pending.msg, now);
+        _pushLog(
+            MeshLogKind.queue,
+            node.id,
+            '$msgId retries exhausted at ${node.name} — carrying until a peer appears (${node.oppQueue.length} held)',
+            msgId: msgId,
+            msgType: pending.msg.type);
+      }
       return;
     }
     pending.attempts++;
@@ -1032,7 +1149,7 @@ class MeshSimulation {
     );
     final decision = decideForward(
         node, retry, nodes, rf, config.relayPolicy);
-    _applyDecision(node, retry, decision.mode, decision.targets);
+    _applyDecision(node, retry, decision);
     _queue.push(now + config.ackTimeoutMs, EventKind.ackTimeout, nodeId, msgId);
   }
 
@@ -1065,12 +1182,12 @@ class MeshSimulation {
   }
 
   void _applyDecision(
-      MeshNode node, MeshMessage msg, ForwardMode mode, List<NodeId> targets) {
-    switch (mode) {
+      MeshNode node, MeshMessage msg, ForwardDecision decision) {
+    switch (decision.mode) {
       case ForwardMode.direct:
       case ForwardMode.route:
       case ForwardMode.flood:
-        for (final t in targets) {
+        for (final t in decision.targets) {
           _transmit(node, msg, t);
         }
         break;
@@ -1078,7 +1195,15 @@ class MeshSimulation {
         _queue.push(now + config.mprWaitMs, EventKind.mpr, node.id, msg);
         break;
       case ForwardMode.queue:
-        if (config.enableDtn) enqueueOpp(node, msg, now);
+        if (config.enableDtn) {
+          enqueueOpp(node, msg, now);
+          _pushLog(
+              MeshLogKind.queue,
+              node.id,
+              '${msg.id} → OppQueue at ${node.name} (${node.oppQueue.length} held)',
+              msgId: msg.id,
+              msgType: msg.type);
+        }
         break;
       case ForwardMode.drop:
         _mprSuppressed++;
@@ -1090,12 +1215,34 @@ class MeshSimulation {
     final node = _byId(nodeId);
     if (node == null || !node.isOnline) return;
     final decision = resolveMprWait(node, msg, nodes, rf);
+    final trace = _traces[msg.id];
+    HopRecord? hopRecord;
+    if (trace != null) {
+      for (final h in trace.hops) {
+        if (h.nodeId == node.id) {
+          hopRecord = h;
+          break;
+        }
+      }
+    }
     if (decision.mode == ForwardMode.drop) {
       _mprSuppressed++;
       node.mprSuppressed++;
+      if (hopRecord != null) {
+        hopRecord.action = HopAction.suppressed;
+        hopRecord.reason = decision.reason;
+      }
+      _pushLog(
+          MeshLogKind.decision,
+          node.id,
+          '${msg.id} MPR-suppressed at ${node.name} — ${decision.reason}',
+          msgId: msg.id,
+          msgType: msg.type,
+          hop: msg.hopCount);
       return;
     }
-    _applyDecision(node, msg, decision.mode, decision.targets);
+    if (hopRecord != null) hopRecord.reason = decision.reason;
+    _applyDecision(node, msg, decision);
   }
 
   /// One radio transmission: rolls link loss, then schedules the hop.
@@ -1105,12 +1252,31 @@ class MeshSimulation {
     node.txCount++;
     _relayTx++;
     final loss = effectiveLossProbability(node, target, rf, config.linkRetries);
+    final rssi = rssiModel(node, target, rf);
     if (chance(rng, loss)) {
       _lostDataTx++;
       _recordTxOutcome(node, 0);
+      _pushLog(
+          MeshLogKind.loss,
+          node.id,
+          '${msg.id} → $targetId lost (${(loss * 100).toStringAsFixed(1)}% at ${rssi.toStringAsFixed(0)} dBm)',
+          peerId: targetId,
+          msgId: msg.id,
+          msgType: msg.type,
+          hop: msg.hopCount,
+          rssi: rssi);
       return;
     }
     _recordTxOutcome(node, 1);
+    _pushLog(
+        MeshLogKind.tx,
+        node.id,
+        '${msg.id} → $targetId (${msg.type.name}, hop ${msg.hopCount}, ${rssi.toStringAsFixed(0)} dBm)',
+        peerId: targetId,
+        msgId: msg.id,
+        msgType: msg.type,
+        hop: msg.hopCount,
+        rssi: rssi);
     final base = msg.transport == TransportType.wifiDirect
         ? config.hopLatencyWifiMs
         : config.hopLatencyBleMs;
@@ -1161,6 +1327,14 @@ class MeshSimulation {
       if (sender != null && sender.role == Role.superNode) {
         node.mprHeardSuper.add(msg.id);
       }
+      _pushLog(
+          MeshLogKind.duplicate,
+          node.id,
+          '${msg.id} duplicate from $via — already seen, not relayed',
+          peerId: via,
+          msgId: msg.id,
+          msgType: msg.type,
+          hop: msg.hopCount);
       return;
     }
     markSeen(node, seenKey(msg), now);
@@ -1169,16 +1343,45 @@ class MeshSimulation {
     }
 
     final trace = _traces[msg.id];
-    if (trace != null && !trace.path.contains(node.id)) trace.path.add(node.id);
+    // roadmap Phase 4 hop transparency: record when the copy arrived, over what
+    // link budget, and — below — what this node decided to do with it. Only
+    // fresh copies are traced, so a flood cannot grow the array without bound;
+    // duplicates and losses live in the capture log instead.
+    HopRecord? hopRecord;
+    if (trace != null && !trace.path.contains(node.id)) {
+      trace.path.add(node.id);
+      hopRecord = HopRecord(
+        nodeId: node.id,
+        atMs: now,
+        via: via,
+        rssi: sender != null ? rssiModel(node, sender, rf) : 0.0,
+        hop: msg.hopCount,
+        action: HopAction.received,
+      );
+      trace.hops.add(hopRecord);
+    }
 
     if (msg.to == node.id) {
       if (msg.type == MsgType.ack) {
         final ackedId = msg.body.length > 4 ? msg.body.substring(4) : '';
         _pendingAcks.remove(ackedId);
         _acksReceived++;
+        _pushLog(MeshLogKind.ack, node.id, '$ackedId acknowledged',
+            msgId: ackedId, peerId: via);
       }
+      // Set before _recordDelivery copies the trace, so the delivered record
+      // carries the final action rather than the provisional one.
+      if (hopRecord != null) hopRecord.action = HopAction.delivered;
       final fresh = deliverToInbox(node, msg);
       if (fresh) _recordDelivery(node, msg, trace);
+      _pushLog(
+          MeshLogKind.deliver,
+          node.id,
+          '${msg.id} delivered to ${node.name} via $via — ${msg.hopCount + 1} hop${msg.hopCount == 0 ? '' : 's'}, ${(now - msg.timestamp).toStringAsFixed(0)} ms',
+          peerId: via,
+          msgId: msg.id,
+          msgType: msg.type,
+          hop: msg.hopCount + 1);
       if (msg.type != MsgType.ack && msg.to != broadcastAddress) {
         _sendAck(node, msg);
       }
@@ -1190,6 +1393,14 @@ class MeshSimulation {
       if (fresh) {
         _broadcastReceipts++;
         _recordDelivery(node, msg, trace);
+        _pushLog(
+            MeshLogKind.deliver,
+            node.id,
+            '${msg.id} broadcast reached ${node.name} via $via',
+            peerId: via,
+            msgId: msg.id,
+            msgType: msg.type,
+            hop: msg.hopCount + 1);
         for (final rec in sentRecords) {
           if (rec.msgId == msg.id) {
             rec.recipients++;
@@ -1200,12 +1411,33 @@ class MeshSimulation {
       }
     }
 
-    if (msg.ttl <= 0) return;
+    if (msg.ttl <= 0) {
+      if (hopRecord != null) hopRecord.action = HopAction.expired;
+      _pushLog(
+          MeshLogKind.decision,
+          node.id,
+          '${msg.id} TTL exhausted at ${node.name} — not forwarded',
+          msgId: msg.id,
+          msgType: msg.type,
+          hop: msg.hopCount);
+      return;
+    }
 
     final forwarded = msg.copyWith(ttl: msg.ttl - 1, hopCount: msg.hopCount + 1);
     final decision = decideForward(
         node, forwarded, nodes, rf, config.relayPolicy);
-    _applyDecision(node, forwarded, decision.mode, decision.targets);
+    if (hopRecord != null) {
+      hopRecord.action = hopActionByMode[decision.mode] ?? HopAction.received;
+      hopRecord.reason = decision.reason;
+    }
+    _pushLog(
+        MeshLogKind.decision,
+        node.id,
+        '${msg.id} at ${node.name}: ${decision.mode.name} — ${decision.reason}',
+        msgId: msg.id,
+        msgType: msg.type,
+        hop: forwarded.hopCount);
+    _applyDecision(node, forwarded, decision);
   }
 
   void _sendAck(MeshNode node, MeshMessage original) {
@@ -1216,7 +1448,7 @@ class MeshSimulation {
         _PathTrace(<NodeId>[node.id], now, node.id, original.from, MsgType.ack);
     final decision = decideForward(
         node, ack, nodes, rf, config.relayPolicy);
-    _applyDecision(node, ack, decision.mode, decision.targets);
+    _applyDecision(node, ack, decision);
   }
 
   void _recordDelivery(MeshNode node, MeshMessage msg, _PathTrace? trace) {
@@ -1234,6 +1466,7 @@ class MeshSimulation {
       timestamp: now,
       attempt: msg.attempt,
       dtn: msg.carried,
+      hopTrace: trace != null ? List<HopRecord>.of(trace.hops) : <HopRecord>[],
     ));
     if (deliveries.length > 5000) deliveries.removeAt(0);
     for (final rec in sentRecords) {

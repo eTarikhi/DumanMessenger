@@ -187,6 +187,108 @@ class Ogm {
       );
 }
 
+/// What a node did with a copy it accepted.
+enum HopAction { received, delivered, relayed, suppressed, queued, expired }
+
+/// One hop of a message's journey, recorded as a *fresh* copy arrives.
+///
+/// roadmap Phase 4 asks for hop transparency — "via 2 nodes • SUPER Amir" —
+/// which needs more than the node list: when each hop happened, over what link
+/// budget, and what the forwarding decision said. This is the record behind that
+/// string.
+class HopRecord {
+  HopRecord({
+    required this.nodeId,
+    required this.atMs,
+    required this.via,
+    required this.rssi,
+    required this.hop,
+    required this.action,
+    this.reason,
+  });
+
+  final NodeId nodeId;
+
+  /// Simulation time this copy arrived.
+  final double atMs;
+
+  /// Who handed it over.
+  final NodeId via;
+
+  /// Link budget of that hand-over in dBm, from the docs/05 §1.1 model.
+  final double rssi;
+
+  /// `msg.hopCount` as it arrived: 0 for the originator's first neighbour.
+  final int hop;
+
+  /// Provisional on receipt, then set to the outcome: `wait-mpr` becomes
+  /// [HopAction.suppressed] when the 300 ms wait ends that way.
+  HopAction action;
+
+  /// `decideForward`'s own words — "route via node-7", "MPR suppressed".
+  String? reason;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'nodeId': nodeId,
+        'atMs': atMs,
+        'via': via,
+        'rssi': rssi,
+        'hop': hop,
+        'action': action.name,
+        'reason': reason,
+      };
+}
+
+/// Capture-log event kinds. [MeshLogKind.ogm] is opt-in separately: beacons
+/// outnumber everything else and drown the data plane in a 60-node crowd.
+enum MeshLogKind { tx, loss, duplicate, deliver, decision, queue, election, ack, ogm }
+
+/// One line of the pcap-like mesh log: a timestamped radio or protocol event
+/// with enough context to reconstruct why a message went where it did. Bounded —
+/// a 60-node crowd emits hundreds of thousands of beacons — and off by default
+/// so the golden runs pay nothing for it.
+class MeshLogEntry {
+  const MeshLogEntry({
+    required this.atMs,
+    required this.kind,
+    required this.nodeId,
+    required this.detail,
+    this.peerId,
+    this.msgId,
+    this.msgType,
+    this.hop,
+    this.rssi,
+  });
+
+  final double atMs;
+  final MeshLogKind kind;
+
+  /// Who the event happened at (for [MeshLogKind.tx], the sender).
+  final NodeId nodeId;
+
+  /// The other end of the link, where there is one.
+  final NodeId? peerId;
+  final MsgId? msgId;
+  final MsgType? msgType;
+  final int? hop;
+  final double? rssi;
+
+  /// Human-readable detail: the forwarding reason, the role transition, ...
+  final String detail;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'atMs': atMs,
+        'kind': kind.name,
+        'nodeId': nodeId,
+        'peerId': peerId,
+        'msgId': msgId,
+        'msgType': msgType?.name,
+        'hop': hop,
+        'rssi': rssi,
+        'detail': detail,
+      };
+}
+
 /// OGM receipt history for one (originator, neighbour) link.
 ///
 /// tq is a *link* metric — docs/03 §7 measures "OGMs received via that neighbor

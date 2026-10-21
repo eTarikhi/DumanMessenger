@@ -686,6 +686,164 @@ void main() {
     });
   });
 
+  group('hop traces and the capture log (roadmap Phase 4)', () {
+    /// A run with real multi-hop traffic to inspect. Pairs are chosen by index
+    /// rather than drawn from the simulation's RNG, so the run below stays
+    /// comparable with and without capture.
+    MeshSimulation traced(
+        {bool captureLog = false,
+        bool captureOgm = false,
+        int? maxLogEntries,
+        int messages = 24}) {
+      var cfg = campusQuad(42).copyWith(
+          captureLog: captureLog, captureOgm: captureOgm);
+      if (maxLogEntries != null) cfg = cfg.copyWith(maxLogEntries: maxLogEntries);
+      final sim = MeshSimulation(cfg);
+      sim.runFor(90000);
+      for (var i = 0; i < messages; i++) {
+        final online = sim.nodes.where((n) => n.isOnline).toList();
+        final from = online[i % online.length];
+        var to = online[(i * 7 + 3) % online.length];
+        if (to.id == from.id) to = online[(i + 1) % online.length];
+        sim.sendMessage(from.id, to.id, 'probe-$i');
+        sim.runFor(1500);
+      }
+      sim.refresh();
+      return sim;
+    }
+
+    test('records when each hop arrived, over what link, and what it decided',
+        () {
+      final sim = traced();
+      final multi =
+          sim.deliveries.where((d) => d.hops >= 2 && !d.dtn).toList();
+      expect(multi, isNotEmpty);
+      final hops = multi.first.hopTrace;
+      expect(hops, isNotEmpty);
+
+      var prev = -1.0;
+      for (final h in hops) {
+        expect(h.atMs, greaterThanOrEqualTo(prev)); // arrival order
+        prev = h.atMs;
+        expect(h.rssi, lessThan(0)); // a real dBm figure from the docs/05 model
+        expect(h.rssi, greaterThan(-100));
+        expect(h.via, isNot(equals(h.nodeId)));
+        if (h.action == HopAction.relayed || h.action == HopAction.suppressed) {
+          expect(h.reason, isNotNull); // decideForward's own words
+          expect(h.reason, isNotEmpty);
+        }
+      }
+      // The recipient's copy is the one that says so.
+      expect(
+          hops.any((h) =>
+              h.nodeId == multi.first.to && h.action == HopAction.delivered),
+          isTrue);
+    });
+
+    test('recovers the route chain from the fan-out tree', () {
+      // `path` lists every node that accepted a fresh copy, so it branches as
+      // soon as a relay fans out; "via 2 nodes" needs the single route the
+      // delivered copy took. Walking `via` backwards must reproduce exactly
+      // `hops` links.
+      final sim = traced();
+      expect(sim.deliveries.length, greaterThan(5));
+      var sawTree = false;
+      for (final d in sim.deliveries) {
+        final chain = deliveredChain(d.hopTrace, d.to);
+        expect(chain.length, equals(d.hops));
+        expect(chain.last.nodeId, equals(d.to));
+        if (d.path.length > d.hops + 1) sawTree = true;
+      }
+      // The fan-out this exists to cut through actually happens in this world.
+      expect(sawTree, isTrue);
+    });
+
+    test('marks the relays MPR suppressed, with the reason', () {
+      final sim = traced();
+      final suppressed = sim.deliveries
+          .expand((d) => d.hopTrace.where((h) => h.action == HopAction.suppressed))
+          .toList();
+      expect(suppressed, isNotEmpty);
+      expect(suppressed.every((h) => (h.reason ?? '').contains('MPR')), isTrue);
+    });
+
+    test('traces hops always, and captures the log only when asked', () {
+      expect(defaultConfig.captureLog, isFalse);
+      final plain = traced();
+      expect(plain.log, isEmpty);
+      expect(plain.deliveries.any((d) => d.hopTrace.isNotEmpty), isTrue);
+
+      final captured = traced(captureLog: true);
+      expect(captured.log, isNotEmpty);
+      final kinds = captured.log.map((e) => e.kind).toSet();
+      expect(kinds.contains(MeshLogKind.tx), isTrue);
+      expect(kinds.contains(MeshLogKind.decision), isTrue);
+      expect(kinds.contains(MeshLogKind.deliver), isTrue);
+      // Beacons outnumber everything else, so they stay out unless asked for.
+      expect(kinds.contains(MeshLogKind.ogm), isFalse);
+      for (final e in captured.log) {
+        expect(e.detail, isNotEmpty);
+        expect(e.atMs, greaterThanOrEqualTo(0));
+      }
+    });
+
+    test('logs beacons too when captureOgm is set', () {
+      final sim = traced(captureLog: true, captureOgm: true, messages: 4);
+      expect(sim.log.any((e) => e.kind == MeshLogKind.ogm), isTrue);
+    });
+
+    test('keeps the capture bounded and in time order', () {
+      final sim = traced(captureLog: true, maxLogEntries: 40);
+      expect(sim.log.length, equals(40)); // the ring buffer is full by now
+      for (var i = 1; i < sim.log.length; i++) {
+        expect(sim.log[i].atMs, greaterThanOrEqualTo(sim.log[i - 1].atMs));
+      }
+    });
+
+    test('does not perturb the run it is measuring', () {
+      // Instrumentation that changed the result would be worse than none: the
+      // log must not touch the RNG, the event order or a single counter.
+      final plain = traced();
+      final captured = traced(captureLog: true, captureOgm: true);
+      expect(captured.stats.totalForwarded, equals(plain.stats.totalForwarded));
+      expect(
+          captured.stats.controlOverhead, equals(plain.stats.controlOverhead));
+      expect(captured.stats.totalDelivered, equals(plain.stats.totalDelivered));
+      expect(captured.stats.avgLatencyMs, equals(plain.stats.avgLatencyMs));
+      expect(captured.nodes.map((n) => n.pos.x).toList(),
+          equals(plain.nodes.map((n) => n.pos.x).toList()));
+    });
+
+    test('drops the log when metrics are re-baselined', () {
+      final sim = traced(captureLog: true);
+      expect(sim.log, isNotEmpty);
+      sim.clearRecords();
+      expect(sim.log, isEmpty);
+    });
+
+    test('logs the DTN last resort as a queue event', () {
+      // partitioned_pair's two clusters are ~190 m apart, so nothing routes: the
+      // originator retries twice, gives up, and starts carrying the bundle
+      // (docs/03 §8). That hand-over into the OppQueue happens on a different
+      // code path from decideForward's queue mode.
+      final sim = MeshSimulation(partitionedPair(42).copyWith(captureLog: true));
+      sim.runFor(60000);
+      final online = sim.nodes.where((n) => n.isOnline).toList();
+      final sender = online.first;
+      final farAway = online.last;
+      for (var i = 0; i < 4; i++) {
+        sim.sendMessage(sender.id, farAway.id, 'carry-$i');
+        sim.runFor(60000);
+      }
+      sim.refresh();
+      expect(sim.stats.totalQueued, greaterThan(0));
+      final queued = sim.log.where((e) => e.kind == MeshLogKind.queue).toList();
+      expect(queued, isNotEmpty);
+      expect(queued.first.detail, contains('carrying'));
+      expect(sender.oppQueue.length, equals(queued.length));
+    });
+  });
+
   group('power policy and telemetry (skills/02, skills/07)', () {
     test('never promotes a node the user opted out of', () {
       final sim = MeshSimulation(campusQuad(42));

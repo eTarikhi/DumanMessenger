@@ -62,6 +62,9 @@ Duman mesh simulator (headless)
   --duty-cycle        NORMAL scans 3 s and sleeps 7 s (skills/07). Gates the
                       15%-per-8h battery budget, which an always-scanning
                       NORMAL node in a mobile population does not meet.
+  --trace             print the hop-by-hop route each delivered message took
+  --capture           record the pcap-like mesh log and print its tail
+  --capture-ogm       also log OGM beacons (they outnumber everything else)
   --json              machine-readable metrics on stdout
   --no-check          report metrics without asserting the acceptance criteria
   -h, --help          this text
@@ -85,6 +88,8 @@ void main(List<String> args) {
   final gapMs = double.parse(_arg(args, '--gap', '$_defaultGapMs'));
   final policyName = _arg(args, '--policy', 'mpr');
   final dutyCycle = args.contains('--duty-cycle');
+  final showTrace = args.contains('--trace');
+  final capture = args.contains('--capture');
   final asJson = args.contains('--json');
   final noCheck = args.contains('--no-check');
 
@@ -97,6 +102,10 @@ void main(List<String> args) {
     return;
   }
   if (dutyCycle) config = config.copyWith(dutyCycleEnabled: true);
+  if (capture) {
+    config = config.copyWith(
+        captureLog: true, captureOgm: args.contains('--capture-ogm'));
+  }
   final nodesOverride = args.indexOf('--nodes');
   if (nodesOverride >= 0 && nodesOverride + 1 < args.length) {
     config = config.copyWith(nodeCount: int.parse(args[nodesOverride + 1]));
@@ -194,6 +203,26 @@ void main(List<String> args) {
     'awakeRatio': _round(s.awakeRatio),
     'scansSkippedAsleep': s.scansSkippedAsleep,
     'electionEvents': s.electionEvents,
+    if (showTrace)
+      'traces': sim.deliveries.take(40).map((d) {
+        final chain = deliveredChain(d.hopTrace, d.to);
+        return <String, Object?>{
+          'msgId': d.msgId,
+          'from': d.from,
+          'to': d.to,
+          'hops': d.hops,
+          'latencyMs': _round(d.latencyMs),
+          'dtn': d.dtn,
+          'attempt': d.attempt,
+          'route': <NodeId>[d.from, ...chain.map((h) => h.nodeId)],
+          'hopTrace': chain.map((h) => h.toJson()).toList(),
+        };
+      }).toList(),
+    if (capture)
+      'logTail': sim.log
+          .skip(math.max(0, sim.log.length - 50))
+          .map((e) => e.toJson())
+          .toList(),
     'latencyByHop': s.latencyByHop.map((b) => <String, Object?>{
           'hops': b.hops,
           'count': b.count,
@@ -213,6 +242,42 @@ void main(List<String> args) {
       if (k == 'latencyByHop') return;
       stdout.writeln('  ${k.padRight(24)} $v');
     });
+    if (showTrace) {
+      final traced = sim.deliveries.take(20).toList();
+      stdout.writeln('\nHop traces (${sim.deliveries.length} deliveries, showing ${traced.length})');
+      for (final d in traced) {
+        final chain = deliveredChain(d.hopTrace, d.to);
+        final relays = chain.length > 1 ? chain.sublist(0, chain.length - 1) : <HopRecord>[];
+        final supers = relays
+            .where((h) => sim.nodes.any((n) => n.id == h.nodeId && n.role == Role.superNode))
+            .map((h) => h.nodeId)
+            .toList();
+        stdout.writeln('  ${d.msgId} ${d.from} → ${d.to} · ${d.hops} hop(s) · '
+            '${d.latencyMs.toStringAsFixed(0)} ms'
+            '${d.dtn ? ' · DTN' : ''}${d.attempt > 0 ? ' · retry ${d.attempt}' : ''}');
+        final viaLabel = relays.isEmpty
+            ? 'direct — no relay'
+            : 'via ${relays.length} node(s)';
+        final superLabel =
+            supers.isEmpty ? '' : ' • SUPER ${supers.join(', ')}';
+        stdout.writeln('    $viaLabel$superLabel');
+        for (var i = 0; i < chain.length; i++) {
+          final h = chain[i];
+          stdout.writeln('      ${i + 1}. ${h.nodeId.padRight(9)} '
+              '${h.rssi.toStringAsFixed(0).padLeft(4)} dBm  '
+              '+${h.atMs.toStringAsFixed(0).padLeft(7)} ms  '
+              '${h.action.name.padRight(11)} ${h.reason ?? ''}');
+        }
+      }
+    }
+    if (capture) {
+      final tail = sim.log.skip(math.max(0, sim.log.length - 30)).toList();
+      stdout.writeln('\nMesh log (${sim.log.length} captured, last ${tail.length})');
+      for (final e in tail) {
+        stdout.writeln('  ${(e.atMs / 1000).toStringAsFixed(2)}s '
+            '${e.kind.name.padRight(10)} ${e.nodeId.padRight(9)} ${e.detail}');
+      }
+    }
     if (s.latencyByHop.isNotEmpty) {
       stdout.writeln('  ${'latencyByHop'.padRight(24)} hops      n     avg     p95');
       for (final b in s.latencyByHop) {
