@@ -54,6 +54,9 @@ class SimConfig {
     this.captureLog = false,
     this.captureOgm = false,
     this.maxLogEntries = 2000,
+    this.sosTtl = 5,
+    this.sosRepeatMs = 5000,
+    this.sosRepeats = 3,
     this.enableSuperElection = true,
     this.enableMobility = true,
     this.enableDtn = true,
@@ -121,6 +124,18 @@ class SimConfig {
   /// Ring-buffer depth for [MeshSimulation.log].
   final int maxLogEntries;
 
+  /// docs/05 §"Broadcast SOS | All transports, flood (TTL=5)". TTL sets the
+  /// *radius* an SOS can reach: a deployment wider than this many hops leaves the
+  /// far side unheard, and repeating cannot fix that (see docs/06 §11).
+  final int sosTtl;
+
+  /// Gap between the repeated SOS floods.
+  final double sosRepeatMs;
+
+  /// How many times the originator re-floods after the first. `0` reduces SOS to a
+  /// single broadcast, which is the arm the repeat mechanism is measured against.
+  final int sosRepeats;
+
   final bool enableSuperElection;
   final bool enableMobility;
   final bool enableDtn;
@@ -174,6 +189,9 @@ class SimConfig {
     bool? captureLog,
     bool? captureOgm,
     int? maxLogEntries,
+    int? sosTtl,
+    double? sosRepeatMs,
+    int? sosRepeats,
     double? warmupMs,
     int? maxRetries,
     double? ackTimeoutMs,
@@ -220,6 +238,9 @@ class SimConfig {
         captureLog: captureLog ?? this.captureLog,
         captureOgm: captureOgm ?? this.captureOgm,
         maxLogEntries: maxLogEntries ?? this.maxLogEntries,
+        sosTtl: sosTtl ?? this.sosTtl,
+        sosRepeatMs: sosRepeatMs ?? this.sosRepeatMs,
+        sosRepeats: sosRepeats ?? this.sosRepeats,
         warmupMs: warmupMs ?? this.warmupMs,
         trafficIntervalMs: trafficIntervalMs,
       );
@@ -266,6 +287,7 @@ class SimulationStats {
     required this.acksReceived,
     required this.sentUnicast,
     required this.sentBroadcast,
+    required this.sosFloods,
     required this.batteryPercentPerHourNormal,
     required this.batteryPercentPerHourSuper,
     required this.scansPerSec,
@@ -319,6 +341,9 @@ class SimulationStats {
   final int acksReceived;
   final int sentUnicast;
   final int sentBroadcast;
+
+  /// SOS floods actually put on air, repeats included (docs/05 §SOS mode).
+  final int sosFloods;
 
   /// skills/07 telemetry: "Battery %/h per role, scans/sec, relays/sec".
   /// Measured from the battery snapshot taken when metrics were cleared, over
@@ -644,6 +669,14 @@ class _PathTrace {
   final MsgType type;
 }
 
+class _SosRepeatPayload {
+  _SosRepeatPayload(this.sosId, this.body, this.repeat);
+
+  final String sosId;
+  final String body;
+  final int repeat;
+}
+
 class _PendingAck {
   _PendingAck(this.msg, this.from, this.attempts);
 
@@ -703,6 +736,7 @@ class MeshSimulation {
   int _broadcastReceipts = 0;
   int _sentUnicast = 0;
   int _sentBroadcast = 0;
+  int _sosFloods = 0;
   int _superSamples = 0;
   double _superSampleSum = 0;
   int _retriesSent = 0;
@@ -748,6 +782,7 @@ class MeshSimulation {
     _broadcastReceipts = 0;
     _sentUnicast = 0;
     _sentBroadcast = 0;
+    _sosFloods = 0;
     _superSamples = 0;
     _superSampleSum = 0;
     _retriesSent = 0;
@@ -834,6 +869,9 @@ class MeshSimulation {
         break;
       case EventKind.ackTimeout:
         _onAckTimeout(nodeId, payload! as String);
+        break;
+      case EventKind.sosRepeat:
+        _onSosRepeat(nodeId, payload! as _SosRepeatPayload);
         break;
       case EventKind.traffic:
         _onTraffic();
@@ -1075,14 +1113,35 @@ class MeshSimulation {
     final from = _byId(fromId);
     if (from == null || !from.isOnline) return null;
 
-    final ttl = type == MsgType.sos ? 7 : 5;
+    // docs/05 §"Broadcast SOS | All transports, flood (TTL=5)". Reach comes from
+    // repeating the flood and, where the deployment is wider than that, from the
+    // scenario's sosTtl override — see _onSosRepeat and docs/06 §11.
+    final ttl = type == MsgType.sos ? config.sosTtl : 5;
     final priority = (type == MsgType.sos || type == MsgType.voice)
         ? Priority.high
         : Priority.normal;
     final msgType =
         (toId == broadcastAddress && type == MsgType.text) ? MsgType.broadcast : type;
+    final isSos = msgType == MsgType.sos;
+    final sosId = isSos ? 'sos-$fromId-${now.round()}' : null;
     final msg = createMessage(_nextMsgId(), now, fromId, toId, body,
-        type: msgType, ttl: ttl, priority: priority);
+        type: msgType,
+        ttl: ttl,
+        priority: priority,
+        sosId: sosId,
+        sosRepeat: isSos ? 0 : null,
+        sosPos: isSos ? from.pos.clone() : null,
+        transport: isSos ? TransportType.wifiDirect : null);
+    if (isSos) {
+      _sosFloods++;
+      _pushLog(
+          MeshLogKind.sos,
+          fromId,
+          '$sosId flood 1/${config.sosRepeats + 1} from ${from.name} at '
+              '(${from.pos.x.toStringAsFixed(1)}, ${from.pos.y.toStringAsFixed(1)})',
+          msgId: msg.id,
+          msgType: MsgType.sos);
+    }
 
     from.sentLog.add(msg);
     if (msgType != MsgType.ack) {
@@ -1110,7 +1169,81 @@ class MeshSimulation {
     final decision = decideForward(
         from, msg, nodes, rf, config.relayPolicy);
     _applyDecision(from, msg, decision);
+    if (msgType == MsgType.sos && config.sosRepeats > 0) {
+      _scheduleSosRepeat(fromId, msg.sosId!, body, 1);
+    }
     return msg;
+  }
+
+  /// Build one SOS flood.
+  ///
+  /// Wi-Fi Direct is the transport an SOS goes out on. In this model the RF budget
+  /// is transport-independent, so what it buys is a third of the per-hop latency
+  /// (`hopLatencyWifiMs` 40 vs `hopLatencyBleMs` 120) — and docs/02 §3.1 has the
+  /// app preferring the higher-capability transport for a payload that must move.
+  /// "All transports" is not modelled: one payload, one transport, one radio.
+  MeshMessage _createSos(
+      MeshNode from, String body, int repeat, String sosId) {
+    return createMessage(_nextMsgId(), now, from.id, broadcastAddress, body,
+        type: MsgType.sos,
+        ttl: config.sosTtl,
+        priority: Priority.high,
+        sosId: sosId,
+        sosRepeat: repeat,
+        sosPos: from.pos.clone(),
+        transport: TransportType.wifiDirect);
+  }
+
+  void _scheduleSosRepeat(NodeId nodeId, String sosId, String body, int repeat) {
+    _queue.push(now + config.sosRepeatMs, EventKind.sosRepeat, nodeId,
+        _SosRepeatPayload(sosId, body, repeat));
+  }
+
+  /// Repeat an SOS flood — docs/05 §"SOS mode: repeated flood of GPS + text over
+  /// all transports", whose exit criterion is "SOS reaches all within TTL".
+  ///
+  /// Every flood is a fresh message with a fresh id: the seen-cache is keyed on the
+  /// id, so a repeat that reused one would be dropped by every node that already
+  /// heard it. What ties the floods together is `sosId`, which is also what
+  /// receivers collapse on. Each carries the sender's position *now*, so a sender
+  /// that is moving stays trackable across repeats — which is a reason to repeat
+  /// beyond mere loss recovery. A node that goes offline or is switched off stops
+  /// flooding: the emergency is over, or it can no longer speak.
+  void _onSosRepeat(String nodeId, _SosRepeatPayload payload) {
+    final node = _byId(nodeId);
+    if (node == null || !node.isOnline) return;
+
+    final msg = _createSos(node, payload.body, payload.repeat, payload.sosId);
+    _sosFloods++;
+    _sentBroadcast++;
+
+    node.sentLog.add(msg);
+    sentRecords.add(SentRecord(
+      msgId: msg.id,
+      from: nodeId,
+      to: broadcastAddress,
+      type: MsgType.sos,
+      body: payload.body,
+      timestamp: now,
+    ));
+    _traces[msg.id] =
+        _PathTrace(<NodeId>[nodeId], now, nodeId, broadcastAddress, MsgType.sos);
+    _pushLog(
+        MeshLogKind.sos,
+        nodeId,
+        '${payload.sosId} flood ${payload.repeat + 1}/${config.sosRepeats + 1} '
+            'from ${node.name} at (${node.pos.x.toStringAsFixed(1)}, '
+            '${node.pos.y.toStringAsFixed(1)})',
+        msgId: msg.id,
+        msgType: MsgType.sos);
+
+    final decision =
+        decideForward(node, msg, nodes, rf, config.relayPolicy);
+    _applyDecision(node, msg, decision);
+
+    if (payload.repeat < config.sosRepeats) {
+      _scheduleSosRepeat(nodeId, payload.sosId, payload.body, payload.repeat + 1);
+    }
   }
 
   /// No ACK came back, so the originator retransmits. The retry carries the same
@@ -1645,6 +1778,7 @@ class MeshSimulation {
       acksReceived: _acksReceived,
       sentUnicast: _sentUnicast,
       sentBroadcast: _sentBroadcast,
+      sosFloods: _sosFloods,
       batteryPercentPerHourNormal: drainPerHour(Role.normal),
       batteryPercentPerHourSuper: drainPerHour(Role.superNode),
       scansPerSec: _scanCount / elapsedSec,

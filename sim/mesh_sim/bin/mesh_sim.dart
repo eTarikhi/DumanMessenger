@@ -65,6 +65,9 @@ Duman mesh simulator (headless)
   --trace             print the hop-by-hop route each delivered message took
   --capture           record the pcap-like mesh log and print its tail
   --capture-ogm       also log OGM beacons (they outnumber everything else)
+  --sos               fire an SOS from the edge of the world in a separate run
+                      and report how far it got (roadmap Phase 3 exit criterion:
+                      "SOS reaches all within ttl")
   --json              machine-readable metrics on stdout
   --no-check          report metrics without asserting the acceptance criteria
   -h, --help          this text
@@ -89,6 +92,7 @@ void main(List<String> args) {
   final policyName = _arg(args, '--policy', 'mpr');
   final dutyCycle = args.contains('--duty-cycle');
   final showTrace = args.contains('--trace');
+  final sosProbe = args.contains('--sos');
   final capture = args.contains('--capture');
   final asJson = args.contains('--json');
   final noCheck = args.contains('--no-check');
@@ -143,6 +147,10 @@ void main(List<String> args) {
         MeshSimulation(config.copyWith(relayPolicy: RelayPolicy.routeFlood));
     _replay(routeOnly, plan, gapMs);
   }
+
+  // A separate run: an SOS fan-out costs thousands of transmissions, and folding
+  // that into this one would make the overhead ratio meaningless.
+  final sos = sosProbe ? _sosProbe(config) : null;
 
   final s = sim.stats;
   final unicast = sim.deliveries
@@ -223,6 +231,7 @@ void main(List<String> args) {
           .skip(math.max(0, sim.log.length - 50))
           .map((e) => e.toJson())
           .toList(),
+    if (sos != null) 'sos': sos,
     'latencyByHop': s.latencyByHop.map((b) => <String, Object?>{
           'hops': b.hops,
           'count': b.count,
@@ -242,6 +251,29 @@ void main(List<String> args) {
       if (k == 'latencyByHop') return;
       stdout.writeln('  ${k.padRight(24)} $v');
     });
+    if (sos != null) {
+      stdout.writeln('\nSOS probe (edge sender ${sos['sender']}, ttl '
+          '${config.sosTtl}, ${config.sosRepeats} repeats, '
+          '${(config.sosRepeatMs / 1000).toStringAsFixed(0)} s apart)');
+      stdout.writeln('  ${'floods on air'.padRight(26)} ${sos['floods']}');
+      stdout.writeln('  ${'radio-connected peers'.padRight(26)} '
+          '${sos['componentPeers']}/${sos['onlinePeers']}');
+      stdout.writeln('  ${'reached (component)'.padRight(26)} '
+          '${sos['reachedComponent']}/${sos['componentPeers']}  '
+          '${sos['componentReachPct']}%');
+      stdout.writeln('  ${'reached (all online)'.padRight(26)} '
+          '${sos['reachedAll']}/${sos['onlinePeers']}  ${sos['allReachPct']}%');
+      stdout.writeln('  ${'last node heard at'.padRight(26)} ${sos['tLastMs']} ms');
+      stdout.writeln('  ${'data transmissions'.padRight(26)} ${sos['dataTx']}');
+      stdout.writeln('  ${'radio receipts'.padRight(26)} ${sos['radioReceipts']} '
+          '→ ${sos['reachedAll']} alerts (repeats collapse)');
+      final missed = sos['missed'] as List<Object?>;
+      if (missed.isEmpty) {
+        stdout.writeln('  ${'missed in component'.padRight(26)} none');
+      } else {
+        stdout.writeln('  ${'missed in component'.padRight(26)} ${missed.join(', ')}');
+      }
+    }
     if (showTrace) {
       final traced = sim.deliveries.take(20).toList();
       stdout.writeln('\nHop traces (${sim.deliveries.length} deliveries, showing ${traced.length})');
@@ -335,3 +367,89 @@ void main(List<String> args) {
 }
 
 double _round(num v) => double.parse(v.toStringAsFixed(4));
+
+
+/// Fire one SOS from the edge of the world and measure how far it got.
+///
+/// "SOS reaches all within ttl" (roadmap Phase 3, docs/05 §"Exit criteria") is
+/// only meaningful against the nodes a chain of radio links can actually reach:
+/// in the sparse_village world 3 of 11 online nodes share a component with any
+/// given sender, and no protocol choice closes that. So the probe reports reach
+/// both ways — component-relative, which is the protocol's responsibility, and
+/// raw.
+Map<String, Object?> _sosProbe(SimConfig config) {
+  final sim = MeshSimulation(config);
+  // 90 s to settle elections and routes before the emergency, then a clean slate.
+  sim.runFor(90000);
+  sim.clearRecords();
+
+  final online = sim.nodes.where((n) => n.isOnline).toList();
+  final cx = online.fold<double>(0, (a, n) => a + n.pos.x) / online.length;
+  final cy = online.fold<double>(0, (a, n) => a + n.pos.y) / online.length;
+  var sender = online.first;
+  for (final n in online) {
+    final d = (n.pos.x - cx) * (n.pos.x - cx) + (n.pos.y - cy) * (n.pos.y - cy);
+    final b =
+        (sender.pos.x - cx) * (sender.pos.x - cx) + (sender.pos.y - cy) * (sender.pos.y - cy);
+    if (d > b) sender = n;
+  }
+
+  final comp = _component(sim, sender);
+  final t0 = sim.now;
+  final msg = sim.sendMessage(
+      sender.id, broadcastAddress, 'injured, need help', MsgType.sos);
+  sim.runFor(45000);
+  sim.refresh();
+
+  final others = sim.nodes.where((n) => n.isOnline && n.id != sender.id).toList();
+  final inComp = others.where((n) => comp.contains(n.id)).toList();
+  final sosId = msg?.sosId ?? '';
+  bool heard(MeshNode n) => n.inbox.any((m) => m.sosId == sosId);
+  final reachedComp = inComp.where(heard).toList();
+  final reachedAll = others.where(heard).toList();
+
+  final sosIds = sim.sentRecords
+      .where((r) => r.type == MsgType.sos && r.from == sender.id)
+      .map((r) => r.msgId)
+      .toSet();
+  final first = <NodeId, double>{};
+  for (final d in sim.deliveries) {
+    if (sosIds.contains(d.msgId)) first.putIfAbsent(d.to, () => d.timestamp);
+  }
+  final tLast =
+      first.isEmpty ? -1.0 : first.values.reduce(math.max) - t0;
+
+  return <String, Object?>{
+    'sender': sender.id,
+    'senderPos': <String, double>{'x': sender.pos.x, 'y': sender.pos.y},
+    'floods': sim.stats.sosFloods,
+    'onlinePeers': others.length,
+    'componentPeers': inComp.length,
+    'reachedComponent': reachedComp.length,
+    'reachedAll': reachedAll.length,
+    'componentReachPct':
+        _round(100 * reachedComp.length / math.max(1, inComp.length)),
+    'allReachPct': _round(100 * reachedAll.length / math.max(1, others.length)),
+    'tLastMs': _round(tLast),
+    'dataTx': sim.stats.totalForwarded,
+    'radioReceipts': sim.deliveries.where((d) => sosIds.contains(d.msgId)).length,
+    'missed': inComp.where((n) => !heard(n)).map((n) => n.id).toList(),
+  };
+}
+
+/// Every node a chain of radio links reaches from [start], at this instant.
+Set<NodeId> _component(MeshSimulation sim, MeshNode start) {
+  final seen = <NodeId>{start.id};
+  final stack = <MeshNode>[start];
+  while (stack.isNotEmpty) {
+    final n = stack.removeLast();
+    if (!n.isOnline) continue;
+    for (final p in peersInRange(n, sim.nodes, sim.rf)) {
+      if (p.isOnline && !seen.contains(p.id)) {
+        seen.add(p.id);
+        stack.add(p);
+      }
+    }
+  }
+  return seen;
+}

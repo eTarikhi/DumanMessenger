@@ -686,6 +686,274 @@ void main() {
     });
   });
 
+  group('SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3)', () {
+    /// The node furthest from the centroid: an SOS from the edge makes reach a
+    /// real test rather than a formality.
+    MeshNode edgeSender(MeshSimulation sim) {
+      final online = sim.nodes.where((n) => n.isOnline).toList();
+      final cx = online.fold<double>(0, (a, n) => a + n.pos.x) / online.length;
+      final cy = online.fold<double>(0, (a, n) => a + n.pos.y) / online.length;
+      var best = online.first;
+      var bestD = -1.0;
+      for (final n in online) {
+        final d = (n.pos.x - cx) * (n.pos.x - cx) + (n.pos.y - cy) * (n.pos.y - cy);
+        if (d > bestD) {
+          bestD = d;
+          best = n;
+        }
+      }
+      return best;
+    }
+
+    /// Every node a chain of radio links reaches from [start]. The honest
+    /// denominator for "SOS reaches all": a node nothing can hear is not a
+    /// protocol failure.
+    Set<NodeId> componentOf(MeshSimulation sim, MeshNode start) {
+      final seen = <NodeId>{start.id};
+      final stack = <MeshNode>[start];
+      while (stack.isNotEmpty) {
+        final n = stack.removeLast();
+        if (!n.isOnline) continue;
+        for (final p in peersInRange(n, sim.nodes, sim.rf)) {
+          if (p.isOnline && !seen.contains(p.id)) {
+            seen.add(p.id);
+            stack.add(p);
+          }
+        }
+      }
+      return seen;
+    }
+
+    /// One SOS, settled world, 45 s window — enough for four floods at 5 s.
+    Map<String, Object?> sosRun(
+        {SimConfig? world, int repeats = 3, bool captureLog = false}) {
+      final cfg = (world ?? campusQuad(42))
+          .copyWith(sosRepeats: repeats, captureLog: captureLog);
+      final sim = MeshSimulation(cfg);
+      sim.runFor(90000);
+      sim.clearRecords();
+      final sender = edgeSender(sim);
+      final at = sender.pos.clone();
+      final msg = sim.sendMessage(
+          sender.id, broadcastAddress, 'injured, need help', MsgType.sos)!;
+      sim.runFor(45000);
+      sim.refresh();
+      final floods =
+          sender.sentLog.where((m) => m.sosId == msg.sosId).toList();
+      final others =
+          sim.nodes.where((n) => n.isOnline && n.id != sender.id).toList();
+      final reached = others.where((n) => n.inbox.any((m) => m.sosId == msg.sosId)).toList();
+      return <String, Object?>{
+        'sim': sim, 'sender': sender, 'msg': msg, 'floods': floods,
+        'others': others, 'reached': reached, 'at': at,
+      };
+    }
+
+    test('takes its TTL from the documented value, not a longer data TTL', () {
+      // docs/05 §"Broadcast SOS | All transports, flood (TTL=5)". The engine used
+      // to hardcode 7 here, contradicting the spec; a deployment wider than 5 hops
+      // is what the scenario-level sosTtl override is for.
+      expect(defaultConfig.sosTtl, equals(5));
+      final sim = MeshSimulation(campusQuad(42));
+      final sos = sim.sendMessage('node-0', broadcastAddress, 'help', MsgType.sos)!;
+      expect(sos.ttl, equals(5));
+      expect(sos.priority, equals(Priority.high));
+      final text = sim.sendMessage('node-0', 'node-1', 'hi')!;
+      expect(text.ttl, equals(5));
+      expect(text.priority, equals(Priority.normal));
+    });
+
+    test('carries a GPS fix and goes out on the fastest transport', () {
+      final r = sosRun(repeats: 0);
+      final msg = r['msg'] as MeshMessage;
+      final at = r['at'] as Vec2;
+      expect(msg.sosPos!.x, equals(at.x));
+      expect(msg.sosPos!.y, equals(at.y));
+      expect(msg.sosRepeat, equals(0));
+      expect(msg.sosId, contains((r['sender'] as MeshNode).id));
+      // Wi-Fi Direct: the RF budget is transport-independent in this model, so
+      // what it buys is 40 ms per hop instead of 120 (docs/02 §3.1).
+      expect(msg.transport, equals(TransportType.wifiDirect));
+    });
+
+    test('re-floods on the interval, every flood with a fresh id', () {
+      final r = sosRun();
+      final sim = r['sim'] as MeshSimulation;
+      final msg = r['msg'] as MeshMessage;
+      final floods = r['floods'] as List<MeshMessage>;
+      expect(sim.config.sosRepeats, equals(3));
+      expect(floods.length, equals(4)); // 1 + 3 repeats
+      expect(sim.stats.sosFloods, equals(4));
+      // A repeat that reused the id would be dropped by every node that already
+      // heard it: the seen-cache is keyed on the message id.
+      expect(floods.map((f) => f.id).toSet().length, equals(4));
+      expect(floods.every((f) => f.sosId == msg.sosId), isTrue);
+      expect(floods.map((f) => f.sosRepeat).toList(), equals(<int>[0, 1, 2, 3]));
+      for (var i = 1; i < floods.length; i++) {
+        expect(floods[i].timestamp - floods[i - 1].timestamp,
+            equals(sim.config.sosRepeatMs));
+      }
+    });
+
+    test('gives a single-flood arm to measure against', () {
+      final r = sosRun(repeats: 0);
+      expect((r['floods'] as List<MeshMessage>).length, equals(1));
+      expect((r['sim'] as MeshSimulation).stats.sosFloods, equals(1));
+    });
+
+    test('re-floods with a fresh fix, so a moving sender stays trackable', () {
+      final r = sosRun();
+      final sender = r['sender'] as MeshNode;
+      if (sender.stationary) return; // nothing new to report
+      final floods = r['floods'] as List<MeshMessage>;
+      final positions = floods
+          .map((f) => '${f.sosPos!.x.toStringAsFixed(3)},${f.sosPos!.y.toStringAsFixed(3)}')
+          .toSet();
+      expect(positions.length, greaterThan(1));
+    });
+
+    test('reaches every radio-connected node — the roadmap exit criterion', () {
+      final r = sosRun();
+      final sim = r['sim'] as MeshSimulation;
+      final sender = r['sender'] as MeshNode;
+      final msg = r['msg'] as MeshMessage;
+      final others = r['others'] as List<MeshNode>;
+      final comp = componentOf(sim, sender);
+      final inComp = others.where((n) => comp.contains(n.id)).toList();
+      expect(inComp.length, equals(others.length)); // campus_quad is one component
+      final missed = inComp
+          .where((n) => !n.inbox.any((m) => m.sosId == msg.sosId))
+          .map((n) => n.id)
+          .toList();
+      expect(missed, equals(<NodeId>[]));
+    });
+
+    test('reaches all of a 60-node crowd, which TTL=5 cannot span', () {
+      // Measured: from an edge sender this world is 6+ hops across, so the spec
+      // TTL=5 flood stops short of ~7% of it. The scenario widens the radius and
+      // the repeats absorb the loss; together they reach everyone.
+      expect(festivalCrowd(42).sosTtl, equals(7));
+      final r = sosRun(world: festivalCrowd(42));
+      final sim = r['sim'] as MeshSimulation;
+      final sender = r['sender'] as MeshNode;
+      final msg = r['msg'] as MeshMessage;
+      final others = r['others'] as List<MeshNode>;
+      final comp = componentOf(sim, sender);
+      expect(comp.length, equals(others.length + 1));
+      final missed = others
+          .where((n) => comp.contains(n.id))
+          .where((n) => !n.inbox.any((m) => m.sosId == msg.sosId))
+          .map((n) => n.id)
+          .toList();
+      expect(missed, equals(<NodeId>[]));
+    });
+
+    test('collapses repeats into one alert per receiver, newest fix wins', () {
+      final r = sosRun();
+      final sim = r['sim'] as MeshSimulation;
+      final msg = r['msg'] as MeshMessage;
+      final floods = r['floods'] as List<MeshMessage>;
+      final reached = r['reached'] as List<MeshNode>;
+      expect(reached, isNotEmpty);
+      final radioReceipts =
+          sim.deliveries.where((d) => d.type == MsgType.sos).length;
+      for (final n in reached) {
+        final alerts = n.inbox.where((m) => m.sosId == msg.sosId).toList();
+        // Four floods, one notification: docs/04 keeps the SOS channel opt-in
+        // precisely so an emergency cannot spam it.
+        expect(alerts.length, equals(1));
+        final newest =
+            floods.where((f) => f.sosRepeat == alerts.first.sosRepeat).first;
+        expect(alerts.first.sosPos!.x, equals(newest.sosPos!.x));
+        expect(alerts.first.sosPos!.y, equals(newest.sosPos!.y));
+        expect(alerts.first.timestamp, equals(newest.timestamp));
+      }
+      // The radio did the work four times over; the inbox shows it once.
+      expect(radioReceipts, greaterThan(reached.length));
+    });
+
+    test('keeps a late copy from overwriting a newer fix', () {
+      // Copies arrive out of order across four floods, so the alert must only ever
+      // move forward in time.
+      final node = makeNode('node-x', 0, 0);
+      MeshMessage sos(int repeat, double timestamp, double x, double y) =>
+          createMessage('sos-msg-$repeat', timestamp, 'node-a', broadcastAddress,
+              'injured, need help',
+              type: MsgType.sos,
+              ttl: 5,
+              priority: Priority.high,
+              sosId: 'sos-a',
+              sosRepeat: repeat,
+              sosPos: Vec2(x, y));
+      expect(deliverToInbox(node, sos(3, 2000.0, 9, 9)), isTrue);
+      expect(deliverToInbox(node, sos(1, 1000.0, 1, 1)), isTrue); // still a receipt
+      expect(node.inbox.length, equals(1));
+      expect(node.inbox.first.sosPos!.x, equals(9));
+      expect(node.inbox.first.sosRepeat, equals(3));
+    });
+
+    test('floods to every peer whatever the relay policy says', () {
+      // MPR exists to delete duplicate copies; an SOS is made of them. So the
+      // suppression path must not apply, at any hop.
+      final r = sosRun();
+      final sim = r['sim'] as MeshSimulation;
+      final hops = sim.deliveries
+          .where((d) => d.type == MsgType.sos)
+          .expand((d) => d.hopTrace)
+          .toList();
+      expect(hops, isNotEmpty);
+      expect(hops.any((h) => h.action == HopAction.suppressed), isFalse);
+      final relays = hops.where((h) => h.reason != null).toList();
+      expect(relays, isNotEmpty);
+      expect(
+          relays.every((h) => h.reason!.contains('SOS: flood every peer')), isTrue);
+    });
+
+    test('stops flooding when the sender goes dark', () {
+      final sim = MeshSimulation(campusQuad(42).copyWith(sosRepeats: 3));
+      sim.runFor(90000);
+      sim.clearRecords();
+      final sender = edgeSender(sim);
+      sim.sendMessage(sender.id, broadcastAddress, 'injured', MsgType.sos);
+      sim.runFor(1000);
+      sim.toggleNodeOnline(sender.id); // battery dead, or switched off
+      sim.runFor(30000);
+      sim.refresh();
+      expect(sim.stats.sosFloods, equals(1));
+    });
+
+    test('logs every flood when capture is on', () {
+      final r = sosRun(captureLog: true);
+      final sim = r['sim'] as MeshSimulation;
+      final msg = r['msg'] as MeshMessage;
+      final sosEntries = sim.log.where((e) => e.kind == MeshLogKind.sos).toList();
+      expect(sosEntries.length, equals(4));
+      expect(sosEntries.first.detail, contains('flood 1/4'));
+      expect(sosEntries.last.detail, contains('flood 4/4'));
+      expect(sosEntries.every((e) => e.msgId != null), isTrue);
+      expect(sim.log.where((e) => e.msgId == msg.id).length, greaterThan(1));
+    });
+
+    test('buys reach with radio time, and the cost is visible', () {
+      final one = sosRun(repeats: 0)['sim'] as MeshSimulation;
+      final four = sosRun(repeats: 3)['sim'] as MeshSimulation;
+      // Measured on campus_quad seed 42: 178 → 691 data transmissions. Four floods
+      // of a fan-out is not free, which is why the repeat count is a knob.
+      expect(four.stats.totalForwarded,
+          greaterThan(one.stats.totalForwarded * 3));
+      expect(four.stats.totalForwarded, lessThan(one.stats.totalForwarded * 5));
+    });
+
+    test('leaves the unicast metrics baseline alone', () {
+      // An SOS is a broadcast: it must not move deliveryRatio, which the
+      // acceptance criteria measure on unicast traffic.
+      final sim = sosRun()['sim'] as MeshSimulation;
+      expect(sim.stats.sentUnicast, equals(0));
+      expect(sim.stats.sentBroadcast, equals(4));
+      expect(sim.stats.deliveryRatio, equals(0));
+    });
+  });
+
   group('hop traces and the capture log (roadmap Phase 4)', () {
     /// A run with real multi-hop traffic to inspect. Pairs are chosen by index
     /// rather than drawn from the simulation's RNG, so the run below stays

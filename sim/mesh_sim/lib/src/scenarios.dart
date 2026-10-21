@@ -61,7 +61,14 @@ SimConfig festivalCrowd([int seed = 42]) => SimConfig(
         SpawnCluster(100, 95, 20, 20, 'Food court'),
         SpawnCluster(40, 105, 16, 15, 'Camping'),
       ],
-      stationaryRatio: 0.2,
+      // An SOS has to span the deployment. docs/05 §"Broadcast SOS | All
+    // transports, flood (TTL=5)" was written for a phone-scale mesh; measured
+    // from an edge sender this crowd is 6+ hops across, so TTL=5 leaves ~7% of
+    // it unheard and *no* number of repeats closes that gap — repeating recovers
+    // loss and movement, not radius. TTL=7 reaches all 59; TTL=8 buys nothing
+    // more. Evidence in docs/06 §11.
+    sosTtl: 7,
+    stationaryRatio: 0.2,
       chargingRatio: 0.05,
       obstacles: const <Obstacle>[Obstacle(66, 62, 16, 12, 'Sound tent')],
     );

@@ -70,6 +70,9 @@ class MeshMessage {
     this.attempt = 0,
     this.priority = Priority.normal,
     this.encrypted = true,
+    this.sosId,
+    this.sosRepeat,
+    this.sosPos,
   });
 
   final MsgId id;
@@ -103,6 +106,21 @@ class MeshMessage {
   final TransportType transport;
   final int sizeBytes;
 
+  /// Stable identity of one emergency across its repeated floods. Each flood is a
+  /// *new* message id — the seen-cache is keyed on the id, so a repeat that reused
+  /// one would be dropped by every node that already heard it — but receivers
+  /// collapse on this, so one emergency raises one alert rather than four
+  /// (docs/04: the SOS channel is opt-in and must not spam).
+  final String? sosId;
+
+  /// 0-based index of this flood within the SOS.
+  final int? sosRepeat;
+
+  /// GPS fix carried by *this* flood. Repeating is what keeps it useful: a sender
+  /// that is moving reports a different position in flood 3 than in flood 0, and a
+  /// rescuer following the alert sees the movement.
+  final Vec2? sosPos;
+
   MeshMessage copyWith({
     int? ttl,
     int? hopCount,
@@ -127,6 +145,11 @@ class MeshMessage {
         encrypted: encrypted,
         transport: transport,
         sizeBytes: sizeBytes,
+        // Relays must not strip these: a forwarded copy is still the same
+        // emergency, and the receiver collapses on sosId.
+        sosId: sosId,
+        sosRepeat: sosRepeat,
+        sosPos: sosPos,
       );
 }
 
@@ -241,7 +264,20 @@ class HopRecord {
 
 /// Capture-log event kinds. [MeshLogKind.ogm] is opt-in separately: beacons
 /// outnumber everything else and drown the data plane in a 60-node crowd.
-enum MeshLogKind { tx, loss, duplicate, deliver, decision, queue, election, ack, ogm }
+enum MeshLogKind {
+  tx,
+  loss,
+  duplicate,
+  deliver,
+  decision,
+  queue,
+  election,
+  ack,
+
+  /// An SOS flood: sent, repeated, or collapsed onto an existing alert.
+  sos,
+  ogm
+}
 
 /// One line of the pcap-like mesh log: a timestamped radio or protocol event
 /// with enough context to reconstruct why a message went where it did. Bounded —

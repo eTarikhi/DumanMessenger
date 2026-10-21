@@ -8,7 +8,19 @@
 /// in insertion order and both language engines agree exactly.
 library;
 
-enum EventKind { physics, ogm, election, scan, msg, mpr, ackTimeout, traffic }
+enum EventKind {
+  physics,
+  ogm,
+  election,
+  scan,
+  msg,
+  mpr,
+  ackTimeout,
+
+  /// Repeat an SOS flood (docs/05: "SOS mode: repeated flood of GPS + text").
+  sosRepeat,
+  traffic
+}
 
 class SimEvent {
   SimEvent(this.at, this.seq, this.kind, this.nodeId, [this.payload]);
