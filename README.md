@@ -8,6 +8,7 @@
 - `docs/02-technical-architecture.md` — Evaluated stacks & selected approach
 - `docs/03-smart-router-algorithm.md` — Coverage-based super-node election (Duman Adaptive Routing)
 - `docs/04-security-privacy.md` — Threat model & E2EE without servers
+- `docs/05-comprehensive-feasibility-study.md` — Full feasibility study: constraint analysis, protocol/framework comparison, architecture, phased roadmap & talent matrix
 - `roadmap/roadmap.md` — Phase-by-phase delivery plan (12 months, MVP → Scale)
 - `roadmap/index.html` — Interactive visual roadmap (open in browser)
 - `skills/` — 8 development skill definitions for the build team
