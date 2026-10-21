@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  web:
+    name: TypeScript engine + React simulator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit -p tsconfig.json
+
+      # Includes the skills/02 + skills/08 acceptance criteria and the golden
+      # vectors that the Dart job asserts against too.
+      - name: Unit + acceptance tests
+        run: npm test
+
+      - name: Golden vectors are up to date
+        run: |
+          npm run golden
+          if ! git diff --quiet -- test-fixtures/golden-vectors.json; then
+            echo "::error::test-fixtures/golden-vectors.json is stale. Run 'npm run golden' and commit the result."
+            git diff --stat -- test-fixtures/golden-vectors.json
+            exit 1
+          fi
+
+      - name: Production build
+        run: npm run build
+
+  dart:
+    name: Dart mesh_sim (authoritative engine)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sim/mesh_sim
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - run: dart pub get
+
+      # Errors and warnings fail the build; infos do not. `dart format` is left
+      # to contributors because the sandbox that produced this port has no Dart
+      # SDK, so formatting could not be verified here.
+      - name: Analyze
+        run: dart analyze
+
+      # Fails if the Dart engine drifts from the TypeScript reference.
+      - name: Tests (incl. cross-language golden vectors)
+        run: dart test
+
+      - name: CLI acceptance run
+        run: dart run bin/mesh_sim.dart --scenario campus_quad --seed 42
+
+  cli-matrix:
+    name: CLI acceptance across scenarios
+    runs-on: ubuntu-latest
+    needs: dart
+    defaults:
+      run:
+        working-directory: sim/mesh_sim
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [campus_quad, sparse_village, festival_crowd, partitioned_pair]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
+      # The DTN scenarios are deliberately partitioned, so they report metrics
+      # without the connected-world delivery gate.
+      - name: ${{ matrix.scenario }}
+        run: >-
+          dart run bin/mesh_sim.dart --scenario ${{ matrix.scenario }} --seed 42
+          ${{ matrix.scenario == 'campus_quad' && '' || '--no-check' }}
