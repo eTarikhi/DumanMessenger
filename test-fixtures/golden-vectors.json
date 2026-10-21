@@ -260,18 +260,18 @@
       "superNodes": 5,
       "sentUnicast": 20,
       "deliveredUnicast": 20,
-      "relayTx": 253,
-      "ogmTx": 16874,
-      "retriesSent": 1,
-      "acksReceived": 19,
+      "relayTx": 289,
+      "ogmTx": 16655,
+      "retriesSent": 0,
+      "acksReceived": 20,
       "roleTransitions": 5,
       "totalQueued": 0,
-      "sumHopCounts": 36,
+      "sumHopCounts": 33,
       "simTimeMs": 38000,
-      "avgScore": 0.628076,
-      "avgHops": 1.8,
-      "avgLatencyMs": 474.422,
-      "p95LatencyMs": 950.444
+      "avgScore": 0.627662,
+      "avgHops": 1.65,
+      "avgLatencyMs": 526.623,
+      "p95LatencyMs": 1356.134
     }
   }
 }

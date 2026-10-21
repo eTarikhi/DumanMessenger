@@ -204,7 +204,7 @@ export function App() {
             />
           </div>
 
-          <MetricsPanel stats={sim.stats} dutyCycleEnabled={sim.config.dutyCycleEnabled} />
+          <MetricsPanel stats={sim.stats} dutyCycleEnabled={sim.config.dutyCycleEnabled} nodes={sim.nodes} />
 
           <div className="duman-chat-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <div style={{ height: 380 }}>
@@ -219,6 +219,7 @@ export function App() {
                   rerender();
                 }}
                 traceMsgId={traceMsgId}
+                sosRepeats={sim.config.sosRepeats}
               />
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

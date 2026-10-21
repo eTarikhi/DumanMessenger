@@ -327,6 +327,9 @@ export interface SentRecord {
   timestamp: number;
   delivered: boolean;
   recipients: number;
+  /** Set on every SOS flood of one emergency, so a UI can collapse the repeats
+   *  into a single alert exactly as a receiver's inbox does. */
+  sosId?: string;
 }
 
 export interface RoleEvent {
@@ -984,6 +987,7 @@ export class MeshSimulation {
         timestamp: this.now,
         delivered: false,
         recipients: 0,
+        sosId: msg.sosId,
       });
       if (toId === "BROADCAST") this.sentBroadcast++;
       else this.sentUnicast++;
@@ -996,6 +1000,21 @@ export class MeshSimulation {
       to: toId,
       type: msgType,
     });
+
+    // A note to self never needs the radio: the originator ignores copies of its
+    // own messages (see onMsgReceive), so echo it straight into the inbox.
+    if (toId === fromId && msgType !== "ack") {
+      if (deliverToInbox(from, msg)) {
+        this.recordDelivery(from, msg, this.traces.get(msg.id));
+      }
+      this.pushLog(
+        "deliver",
+        fromId,
+        `${msg.id} kept locally — the sender is the destination`,
+        { msgId: msg.id, msgType }
+      );
+      return msg;
+    }
 
     if (toId !== "BROADCAST" && msgType !== "ack" && this.config.maxRetries > 0) {
       this.pendingAcks.set(msg.id, { msg, from: fromId, attempts: 0 });
@@ -1076,6 +1095,7 @@ export class MeshSimulation {
       timestamp: this.now,
       delivered: false,
       recipients: 0,
+      sosId: msg.sosId,
     });
     this.traces.set(msg.id, {
       path: [nodeId],
@@ -1297,12 +1317,26 @@ export class MeshSimulation {
       relays.add(sender.id);
     }
 
-    if (isSeen(node, seenKey(msg))) {
+    // A node never hears its own transmission, but it does hear peers relaying it
+    // back — and that copy is not news. Without this the originator would accept
+    // its own broadcast as a delivery (raising its own SOS as a received alert)
+    // and then re-flood it, so every returning copy triggers a fresh fan-out from
+    // the source: a storm amplifier on exactly the message type that already
+    // floods to every peer. Coverage evidence above is recorded either way, since
+    // a neighbour relaying my message back is still a neighbour that holds it.
+    const isOwn = msg.from === node.id;
+    if (isOwn || isSeen(node, seenKey(msg))) {
       // A duplicate copy still carries information: it tells this node that a
       // SUPER neighbour retransmitted, which is what MPR suppression listens for.
       this.duplicateRx++;
       if (sender && sender.role === "SUPER") node.mprHeardSuper.add(msg.id);
-      this.pushLog("duplicate", node.id, `${msg.id} duplicate from ${via} — already seen, not relayed`, {
+      this.pushLog(
+        "duplicate",
+        node.id,
+        isOwn
+          ? `${msg.id} own message returned by ${via} — not re-flooded`
+          : `${msg.id} duplicate from ${via} — already seen, not relayed`,
+        {
         peerId: via,
         msgId: msg.id,
         msgType: msg.type,

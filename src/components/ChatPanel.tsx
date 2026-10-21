@@ -18,9 +18,12 @@ interface Props {
   /** Opens the hop trace for a delivered message (roadmap Phase 4). */
   onTrace?: (msgId: string) => void;
   traceMsgId?: string | null;
+  /** How many times the originator re-floods an SOS, so the log can show
+   *  "flood 2/4" rather than a count with no total. */
+  sosRepeats?: number;
 }
 
-export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, deliveries, onTrace, traceMsgId }: Props) {
+export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, deliveries, onTrace, traceMsgId, sosRepeats }: Props) {
   const onlineNodes = nodes.filter((n) => n.isOnline);
   const [fromId, setFromId] = useState<string>("");
   const [toId, setToId] = useState<string>("BROADCAST");
@@ -52,6 +55,37 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, d
 
   const nameOf = (id: string) => nodes.find((n) => n.id === id)?.name ?? id;
   const deliveryFor = (msgId: string) => deliveries.find((d) => d.msgId === msgId);
+
+  // One emergency, one card. The originator re-floods an SOS every sosRepeatMs and
+  // a receiver's inbox collapses those floods onto a single alert (docs/04 keeps
+  // the channel opt-in precisely so an emergency cannot spam it), so the log shows
+  // the same collapse — with the flood count and the freshest GPS fix — instead of
+  // four near-identical bubbles.
+  const cards: { entry: SentRecord; floods: SentRecord[] }[] = [];
+  const bySos = new Map<string, { entry: SentRecord; floods: SentRecord[] }>();
+  for (const entry of sentRecords) {
+    if (entry.type === "sos" && entry.sosId) {
+      const existing = bySos.get(entry.sosId);
+      if (existing) {
+        existing.floods.push(entry);
+        continue;
+      }
+      const card = { entry, floods: [entry] };
+      bySos.set(entry.sosId, card);
+      cards.push(card);
+    } else {
+      cards.push({ entry, floods: [entry] });
+    }
+  }
+
+  /** The GPS fix in the latest flood this sender put on air. */
+  const sosFix = (from: string, sosId: string) => {
+    const floods = nodes.find((n) => n.id === from)?.sentLog.filter((m) => m.sosId === sosId) ?? [];
+    return floods.length ? floods[floods.length - 1].sosPos : undefined;
+  };
+  /** Nodes holding the alert right now — the reach figure that matters. */
+  const sosHeard = (sosId: string) =>
+    nodes.filter((n) => n.isOnline && n.inbox.some((m) => m.sosId === sosId)).length;
 
   return (
     <div style={{
@@ -153,10 +187,16 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, d
             No messages yet. Send one to watch it route through the mesh.
           </div>
         )}
-        {sentRecords.slice(-40).map((entry) => {
+        {cards.slice(-40).map(({ entry, floods }) => {
           const isOwn = entry.from === fromId;
           const d = deliveryFor(entry.msgId);
           const isBroadcast = entry.to === "BROADCAST";
+          const isSos = entry.type === "sos";
+          // Every flood is a separate radio event; the alert is one.
+          const receipts = floods.reduce((a, f) => a + f.recipients, 0);
+          const fix = isSos && entry.sosId ? sosFix(entry.from, entry.sosId) : undefined;
+          const heard = isSos && entry.sosId ? sosHeard(entry.sosId) : 0;
+          const peers = nodes.filter((n) => n.isOnline && n.id !== entry.from).length;
           return (
             <div key={entry.msgId} style={{
               alignSelf: isOwn ? "flex-end" : "flex-start",
@@ -178,7 +218,20 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, d
               </div>
               <div style={{ fontSize: 13, color: "#eaf2ff", wordBreak: "break-word" }}>{entry.body}</div>
               <div style={{ fontSize: 10, marginTop: 4 }}>
-                {isBroadcast ? (
+                {isSos ? (
+                  <span style={{ color: "#ff8fa3" }}>
+                    🆘 flood {floods.length}
+                    {sosRepeats !== undefined ? `/${sosRepeats + 1}` : ""} ·{" "}
+                    {fix ? `GPS ${fix.x.toFixed(1)}, ${fix.y.toFixed(1)}` : "no fix yet"} ·{" "}
+                    <span style={{ color: heard === peers && peers > 0 ? "#b6ff4a" : "#ffb84d" }}>
+                      {heard} of {peers} online nodes heard
+                    </span>{" "}
+                    · {receipts} radio receipts
+                    {heard < peers && floods.length <= (sosRepeats ?? 0) + 1
+                      ? " · re-flooding…"
+                      : ""}
+                  </span>
+                ) : isBroadcast ? (
                   entry.recipients > 0 ? (
                     <span style={{ color: "#b6ff4a" }}>
                       ✓ reached {entry.recipients} node{entry.recipients === 1 ? "" : "s"}

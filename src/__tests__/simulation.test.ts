@@ -146,7 +146,14 @@ describe("regressions against the original prototype", () => {
 
     // Pick a pair that is out of direct range but in the same component.
     const from = sim.nodes[0];
-    const target = sim.nodes.find((n) => !canReach(from, n, sim.rf) && componentSize(sim) > 1);
+    // `canReach(a, a)` is false by construction (rf.ts), so without the id check
+    // this silently picked the *sender* as its multi-hop target — and the test
+    // only passed because the engine used to bounce a node's own message back to
+    // it through the mesh. onMsgReceive now drops copies of a message the receiver
+    // originated, so the pick has to be explicit.
+    const target = sim.nodes.find(
+      (n) => n.id !== from.id && !canReach(from, n, sim.rf) && componentSize(sim) > 1
+    );
     expect(target).toBeDefined();
     const to = target as MeshNode;
 

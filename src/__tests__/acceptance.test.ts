@@ -192,8 +192,25 @@ describe("skills/02 + skills/08 acceptance — campus quad, 20 nodes", () => {
     // the relay count should fail here instead of hiding inside 70%.
     expect(r.overheadVsFlood).toBeLessThanOrEqual(0.7);
     expect(r.overheadVsFlood).toBeLessThanOrEqual(0.25);
-    // MPR still buys a further cut on top of working routes (docs/06 §6).
-    expect(r.overheadVsRouteFlood).toBeLessThanOrEqual(0.85);
+    // MPR must never cost *more* than routing without suppression. The size of
+    // that cut is pinned on the mean below, not per seed.
+    expect(r.overheadVsRouteFlood).toBeLessThan(1);
+  });
+
+  it("MPR buys a further cut over routing without suppression, on the mean", () => {
+    // Per seed this ratio is noisy on a cold start — 0.61 to 0.95 across the six
+    // seeds. The reason is instructive: `route-flood` is the arm that floods most,
+    // so it was also the arm most inflated by the originator re-flooding copies of
+    // its own message that peers relayed back. With that amplifier gone (the
+    // duplicate guard in onMsgReceive) the marginal cut is real but smaller than
+    // the 0.85 an earlier measurement suggested: measured mean 0.736 with the
+    // guard, 0.666 without, i.e. part of the old "advantage" was the amplifier
+    // being proportional to how much you flood. Pinned on the mean so a seed that
+    // happens to route most traffic in one hop cannot move the bar.
+    const all = [...results.values()];
+    const mean = all.reduce((a, r) => a + r.overheadVsRouteFlood, 0) / all.length;
+    expect(all.length).toBe(SEEDS.length);
+    expect(mean).toBeLessThanOrEqual(0.8);
   });
 
   it.each(SEEDS)("seed %i keeps a fully connected world with no isolated node", (seed) => {

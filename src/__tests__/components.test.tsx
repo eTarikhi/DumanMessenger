@@ -5,6 +5,7 @@ import { campusQuad } from "../scenarios";
 import { MessageTrace } from "../components/MessageTrace";
 import { MeshLogPanel } from "../components/MeshLogPanel";
 import { MetricsPanel } from "../components/MetricsPanel";
+import { ChatPanel } from "../components/ChatPanel";
 
 /**
  * Render smoke tests. The components have no unit coverage otherwise, and a
@@ -27,6 +28,66 @@ function world(over: Partial<SimConfig> = {}): MeshSimulation {
   sim.refresh();
   return sim;
 }
+
+/** A world with one live SOS in it: 90 s to settle, then the emergency. */
+function sosWorld(over: Partial<SimConfig> = {}): MeshSimulation {
+  const sim = new MeshSimulation({ ...campusQuad(42), ...over });
+  sim.runFor(90000);
+  sim.clearRecords();
+  sim.sendMessage("node-0", "BROADCAST", "injured, need help", "sos");
+  sim.runFor(20000); // floods at 0, 5, 10 and 15 s
+  sim.refresh();
+  return sim;
+}
+
+describe("SOS in the UI", () => {
+  it("shows one alert card for four floods, with the fix and the reach", () => {
+    const sim = sosWorld();
+    expect(sim.stats.sosFloods).toBe(4);
+    const html = renderToStaticMarkup(
+      <ChatPanel
+        nodes={sim.nodes}
+        selectedNodeId={null}
+        onSendMessage={() => null}
+        sentRecords={sim.sentRecords}
+        deliveries={sim.deliveries}
+        sosRepeats={sim.config.sosRepeats}
+      />
+    );
+    // Four floods, one card: the collapse a receiver's inbox does, in the log too.
+    expect((html.match(/flood 4\/4/g) ?? []).length).toBe(1);
+    expect(html).toContain("🆘");
+    expect(html).toContain("GPS");
+    expect(html).toContain("injured, need help");
+    // 19 peers online besides the sender, and every one of them holds the alert.
+    expect(html).toContain("19 of 19 online nodes heard");
+    // Radio receipts outnumber notifications, which is the point of collapsing.
+    const receipts = Number((html.match(/(\d+) radio receipts/) ?? [])[1]);
+    expect(receipts).toBeGreaterThan(19);
+  });
+
+  it("counts live alerts and the newest fix on the dashboard", () => {
+    const sim = sosWorld();
+    const html = renderToStaticMarkup(
+      <MetricsPanel stats={sim.stats} dutyCycleEnabled={false} nodes={sim.nodes} />
+    );
+    expect(html).toContain("SOS — repeated flood");
+    expect(html).toContain("Alerts live");
+    expect(html).toContain("Nodes alerted");
+    // One emergency, four floods, one alert.
+    expect(html).toContain("Newest fix (flood 4)");
+  });
+
+  it("keeps the SOS row off the dashboard until there is an SOS", () => {
+    const sim = world();
+    expect(sim.stats.sosFloods).toBe(0);
+    expect(
+      renderToStaticMarkup(
+        <MetricsPanel stats={sim.stats} dutyCycleEnabled={false} nodes={sim.nodes} />
+      )
+    ).not.toContain("SOS — repeated flood");
+  });
+});
 
 describe("metrics dashboard", () => {
   it("renders the battery, radio and hop-budget figures", () => {

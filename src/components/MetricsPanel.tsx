@@ -1,9 +1,12 @@
 import type { SimulationStats } from "../simulation";
+import type { MeshNode } from "../types";
 
 interface Props {
   stats: SimulationStats;
   /** Whether the duty cycle is on — the awake ratio is meaningless without it. */
   dutyCycleEnabled: boolean;
+  /** Needed for the SOS row: which nodes are holding an alert right now. */
+  nodes?: MeshNode[];
 }
 
 /**
@@ -13,12 +16,34 @@ interface Props {
  * per-role battery burn (skills/07's telemetry row) and the latency distribution
  * broken out by hop count instead of blended into one p95.
  */
-export function MetricsPanel({ stats, dutyCycleEnabled }: Props) {
+export function MetricsPanel({ stats, dutyCycleEnabled, nodes }: Props) {
   // skills/07 acceptance: "Android 8h NORMAL: <15% extra drain vs idle".
   const BUDGET_8H = 15;
   const hopRows = stats.latencyByHop;
   const maxP95 = hopRows.reduce((m, r) => Math.max(m, r.p95Ms), 0);
   const totalHopped = hopRows.reduce((n, r) => n + r.count, 0);
+
+  // One emergency, however many floods it took: receivers collapse on sosId, so
+  // the live picture is "how many alerts exist, who is holding one, and where was
+  // the sender last seen".
+  const online = (nodes ?? []).filter((n) => n.isOnline).length;
+  const alerts = new Map<string, { x: number; y: number; repeat: number }>();
+  let holders = 0;
+  for (const n of nodes ?? []) {
+    const held = n.inbox.filter((m) => m.sosId);
+    if (held.length > 0) holders++;
+    for (const m of held) {
+      const id = m.sosId!;
+      const prev = alerts.get(id);
+      if (!prev || (m.sosRepeat ?? 0) > prev.repeat) {
+        alerts.set(id, { x: m.sosPos?.x ?? 0, y: m.sosPos?.y ?? 0, repeat: m.sosRepeat ?? 0 });
+      }
+    }
+  }
+  let newest: { x: number; y: number; repeat: number } | null = null;
+  for (const a of alerts.values()) {
+    if (!newest || a.repeat > newest.repeat) newest = a;
+  }
 
   return (
     <div style={panelStyle}>
@@ -114,6 +139,32 @@ export function MetricsPanel({ stats, dutyCycleEnabled }: Props) {
           </div>
         </section>
       </div>
+
+      {stats.sosFloods > 0 && (
+        <section style={{ marginTop: 14 }}>
+          <div style={sectionStyle}>🆘 SOS — repeated flood (roadmap Phase 3, docs/05)</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <Counter label="Floods on air" value={`${stats.sosFloods}`} accent="#ff2d55" />
+            <Counter label="Alerts live" value={`${alerts.size}`} accent="#ff8fa3" />
+            <Counter label="Nodes alerted" value={`${holders}`} accent="#b6ff4a" />
+            <Counter label="Online" value={`${online}`} />
+            {newest && (
+              <Counter
+                label={`Newest fix (flood ${(newest.repeat ?? 0) + 1})`}
+                value={`${newest.x.toFixed(1)}, ${newest.y.toFixed(1)}`}
+                accent="#4de0ff"
+              />
+            )}
+          </div>
+          <div style={{ fontSize: 10, color: "#5a6a7a", marginTop: 6, lineHeight: 1.5 }}>
+            {stats.sosFloods} floods, {alerts.size} alert{alerts.size === 1 ? "" : "s"}: receivers
+            collapse on the alert id, so a re-flood refreshes the GPS fix instead of raising a
+            second notification (docs/04 §"SOS misuse"). TTL sets the radius an SOS can reach; the
+            repeats absorb loss and movement. SOS bypasses MPR at every hop — suppression exists to
+            delete duplicate copies, and an emergency broadcast is made of them.
+          </div>
+        </section>
+      )}
     </div>
   );
 }
