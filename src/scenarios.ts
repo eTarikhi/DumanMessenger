@@ -72,6 +72,13 @@ export function festivalCrowd(seed = 42): SimConfig {
     stationaryRatio: 0.2,
     chargingRatio: 0.05,
     obstacles: [{ x: 66, y: 62, w: 16, h: 12, label: "Sound tent" }],
+    // An SOS has to span the deployment. docs/05 §"Broadcast SOS | All
+    // transports, flood (TTL=5)" was written for a phone-scale mesh; measured
+    // from an edge sender this crowd is 6+ hops across, so TTL=5 leaves ~7% of
+    // it unheard and *no* number of repeats closes that gap — repeating recovers
+    // loss and movement, not radius. TTL=7 reaches all 59; TTL=8 buys nothing
+    // more. Evidence in docs/06 §11.
+    sosTtl: 7,
   };
 }
 

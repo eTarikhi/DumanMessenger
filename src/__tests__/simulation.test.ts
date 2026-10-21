@@ -5,15 +5,35 @@ import {
   deliveredChain,
   type SimConfig,
 } from "../simulation";
-import { campusQuad, partitionedPair, sparseVillage } from "../scenarios";
+import { campusQuad, festivalCrowd, partitionedPair, sparseVillage } from "../scenarios";
 import { canReach, peersInRange } from "../rf";
-import type { MeshNode } from "../types";
+import { createMessage, deliverToInbox } from "../routing";
+import { makeNode } from "./helpers";
+import type { MeshMessage, MeshNode } from "../types";
 
 /**
  * Every test in the first block pins a defect that existed in the original
  * prototype engine. They are written as regressions so the failure modes cannot
  * silently return.
  */
+
+/** Minimal SOS message for the inbox rules, which are pure functions. */
+function makeSos(repeat: number, timestamp: number, pos: { x: number; y: number }): MeshMessage {
+  const msg = createMessage(
+    `sos-msg-${repeat}`,
+    timestamp,
+    "node-a",
+    "BROADCAST",
+    "injured, need help",
+    "sos",
+    5,
+    "high"
+  );
+  msg.sosId = "sos-a";
+  msg.sosRepeat = repeat;
+  msg.sosPos = pos;
+  return msg;
+}
 
 /** Deterministic traffic: pairs drawn from the simulation's own RNG. */
 function driveTraffic(sim: MeshSimulation, messages: number, gapMs = 1500): void {
@@ -669,14 +689,215 @@ describe("power policy and telemetry (skills/02, skills/07, roadmap Phase 2)", (
   });
 });
 
-  it("gives SOS messages a longer TTL and high priority", () => {
-    const sim = new MeshSimulation(campusQuad(42));
-    const sos = sim.sendMessage("node-0", "BROADCAST", "help", "sos");
-    expect(sos).not.toBeNull();
-    expect(sos!.ttl).toBe(7);
-    expect(sos!.priority).toBe("high");
-    const text = sim.sendMessage("node-0", "node-1", "hi", "text");
-    expect(text!.ttl).toBe(5);
-    expect(text!.priority).toBe("normal");
+  describe("SOS mode: repeated flood of GPS + text (docs/05 §SOS, roadmap Phase 3)", () => {
+    /** The node furthest from the centroid: an SOS from the edge makes reach a
+     *  real test rather than a formality. */
+    function edgeSender(sim: MeshSimulation): MeshNode {
+      const online = sim.nodes.filter((n) => n.isOnline);
+      const cx = online.reduce((a, n) => a + n.pos.x, 0) / online.length;
+      const cy = online.reduce((a, n) => a + n.pos.y, 0) / online.length;
+      return online.reduce((a, n) =>
+        (n.pos.x - cx) ** 2 + (n.pos.y - cy) ** 2 > (a.pos.x - cx) ** 2 + (a.pos.y - cy) ** 2 ? n : a
+      );
+    }
+
+    /** Every node a chain of radio links can reach from the sender. The honest
+     *  denominator for "SOS reaches all": a node nothing can hear is not a
+     *  protocol failure. */
+    function componentOf(sim: MeshSimulation, sender: MeshNode): Set<string> {
+      const seen = new Set<string>([sender.id]);
+      const stack = [sender];
+      while (stack.length) {
+        const n = stack.pop()!;
+        for (const p of peersInRange(n, sim.nodes, sim.rf)) {
+          if (n.isOnline && p.isOnline && !seen.has(p.id)) {
+            seen.add(p.id);
+            stack.push(p);
+          }
+        }
+      }
+      return seen;
+    }
+
+    function sosRun(cfg: Partial<SimConfig> = {}, world = campusQuad(42), windowMs = 45000) {
+      const sim = new MeshSimulation({ ...world, ...cfg });
+      sim.runFor(90000);
+      sim.clearRecords();
+      const sender = edgeSender(sim);
+      const at = { x: sender.pos.x, y: sender.pos.y };
+      const msg = sim.sendMessage(sender.id, "BROADCAST", "injured, need help", "sos")!;
+      sim.runFor(windowMs);
+      sim.refresh();
+      const floods = sender.sentLog.filter((m) => m.sosId === msg.sosId);
+      const others = sim.nodes.filter((n) => n.isOnline && n.id !== sender.id);
+      const reached = others.filter((n) => n.inbox.some((m) => m.sosId === msg.sosId));
+      return { sim, sender, msg, floods, others, reached, at };
+    }
+
+    it("takes its TTL from the documented value, not from a longer data TTL", () => {
+      // docs/05 §"Broadcast SOS | All transports, flood (TTL=5)". The engine used
+      // to hardcode 7 here, which quietly contradicted the spec; reach in a
+      // deployment wider than 5 hops is what sosTtl is for, per scenario.
+      expect(DEFAULT_CONFIG.sosTtl).toBe(5);
+      const sim = new MeshSimulation(campusQuad(42));
+      const sos = sim.sendMessage("node-0", "BROADCAST", "help", "sos")!;
+      expect(sos.ttl).toBe(5);
+      expect(sos.priority).toBe("high");
+      const text = sim.sendMessage("node-0", "node-1", "hi", "text")!;
+      expect(text.ttl).toBe(5);
+      expect(text.priority).toBe("normal");
+    });
+
+    it("carries a GPS fix and goes out on the transport that moves it fastest", () => {
+      const { msg, sender, at } = sosRun({ sosRepeats: 0 });
+      // `at` is the position when the flood went out; the sender keeps moving for
+      // the rest of the window, which is the whole point of re-flooding.
+      expect(msg.sosPos).toEqual(at);
+      expect(msg.sosRepeat).toBe(0);
+      expect(msg.sosId).toContain(sender.id);
+      // Wi-Fi Direct: the RF budget is transport-independent in this model, so
+      // what it buys is 40 ms per hop instead of 120 (docs/02 §3.1).
+      expect(msg.transport).toBe("wifiDirect");
+    });
+
+    it("re-floods on the interval, every flood with a fresh id", () => {
+      const { sim, msg, floods } = sosRun();
+      expect(sim.config.sosRepeats).toBe(3);
+      expect(floods.length).toBe(4); // 1 + 3 repeats
+      expect(sim.stats.sosFloods).toBe(4);
+      // A repeat that reused the id would be dropped by every node that already
+      // heard it: the seen-cache is keyed on the message id.
+      expect(new Set(floods.map((f) => f.id)).size).toBe(4);
+      expect(floods.every((f) => f.sosId === msg.sosId)).toBe(true);
+      expect(floods.map((f) => f.sosRepeat)).toEqual([0, 1, 2, 3]);
+      for (let i = 1; i < floods.length; i++) {
+        expect(floods[i].timestamp - floods[i - 1].timestamp).toBe(sim.config.sosRepeatMs);
+      }
+    });
+
+    it("gives a single-flood arm to measure against", () => {
+      const { sim, floods } = sosRun({ sosRepeats: 0 });
+      expect(floods.length).toBe(1);
+      expect(sim.stats.sosFloods).toBe(1);
+    });
+
+    it("reaches every radio-connected node — the roadmap exit criterion", () => {
+      const { sim, sender, msg, others, reached } = sosRun();
+      const comp = componentOf(sim, sender);
+      const inComp = others.filter((n) => comp.has(n.id));
+      expect(inComp.length).toBe(others.length); // campus_quad is one component
+      const missed = inComp.filter((n) => !n.inbox.some((m) => m.sosId === msg.sosId));
+      expect(missed.map((n) => n.id)).toEqual([]);
+      expect(reached.length).toBe(others.length);
+    });
+
+    it("reaches all of a 60-node crowd, which TTL=5 cannot span", () => {
+      // Measured: from an edge sender this world is 6+ hops across, so the spec
+      // TTL=5 flood stops short of ~7% of it. The scenario widens the radius and
+      // the repeats absorb the loss; together they reach everyone.
+      expect(festivalCrowd(42).sosTtl).toBe(7);
+      const { sim, sender, msg, others } = sosRun({}, festivalCrowd(42));
+      const comp = componentOf(sim, sender);
+      const missed = others
+        .filter((n) => comp.has(n.id))
+        .filter((n) => !n.inbox.some((m) => m.sosId === msg.sosId));
+      expect(comp.size).toBe(others.length + 1);
+      expect(missed.map((n) => n.id)).toEqual([]);
+    });
+
+    it("re-floods with a fresh fix, so a moving sender stays trackable", () => {
+      const { floods, sender } = sosRun();
+      // Freshness is the reason to repeat beyond loss recovery: flood 3 reports
+      // where the sender is *now*, not where it was 15 s ago.
+      if (sender.stationary) return; // a sender that does not move has nothing new to say
+      const positions = floods.map((f) => `${f.sosPos!.x.toFixed(3)},${f.sosPos!.y.toFixed(3)}`);
+      expect(new Set(positions).size).toBeGreaterThan(1);
+      expect(floods[floods.length - 1].sosPos).not.toEqual(floods[0].sosPos);
+    });
+
+    it("collapses repeats into one alert per receiver, holding the newest fix", () => {
+      const { sim, sender, msg, floods, reached } = sosRun();
+      expect(reached.length).toBeGreaterThan(0);
+      const radioReceipts = sim.deliveries.filter((d) => d.type === "sos").length;
+      for (const n of reached) {
+        const alerts = n.inbox.filter((m) => m.sosId === msg.sosId);
+        // Four floods, one notification: docs/04 keeps the SOS channel opt-in
+        // precisely so an emergency cannot spam it.
+        expect(alerts.length).toBe(1);
+        const newest = floods.find((f) => f.sosRepeat === alerts[0].sosRepeat)!;
+        expect(alerts[0].sosPos).toEqual(newest.sosPos);
+        expect(alerts[0].timestamp).toBe(newest.timestamp);
+      }
+      // The radio did the work four times over; the inbox shows it once.
+      expect(radioReceipts).toBeGreaterThan(reached.length);
+      expect(sender.sentLog.filter((m) => m.sosId === msg.sosId).length).toBe(4);
+    });
+
+    it("keeps a late copy from overwriting a newer fix", () => {
+      // Copies arrive out of order across four floods, so the alert must only ever
+      // move forward in time.
+      const node = makeNode("node-x", 0, 0);
+      const older = { ...makeSos(1, 1000, { x: 1, y: 1 }), sosId: "sos-a" };
+      const newer = { ...makeSos(3, 2000, { x: 9, y: 9 }), sosId: "sos-a" };
+      expect(deliverToInbox(node, newer)).toBe(true);
+      expect(deliverToInbox(node, older)).toBe(true); // heard, still a receipt
+      expect(node.inbox.length).toBe(1);
+      expect(node.inbox[0].sosPos).toEqual({ x: 9, y: 9 });
+      expect(node.inbox[0].sosRepeat).toBe(3);
+    });
+
+    it("floods to every peer whatever the relay policy says", () => {
+      // MPR exists to delete duplicate copies; an SOS is made of them. So the
+      // suppression path must not apply, at any hop.
+      const { sim, msg } = sosRun({ relayPolicy: "mpr" });
+      const sosHops = sim.deliveries
+        .filter((d) => d.msgId === msg.id || d.type === "sos")
+        .flatMap((d) => d.hopTrace);
+      expect(sosHops.length).toBeGreaterThan(0);
+      expect(sosHops.every((h) => h.action !== "suppressed")).toBe(true);
+      const relays = sosHops.filter((h) => h.reason);
+      expect(relays.every((h) => (h.reason ?? "").includes("SOS: flood every peer"))).toBe(true);
+    });
+
+    it("stops flooding when the sender goes dark", () => {
+      const sim = new MeshSimulation({ ...campusQuad(42), sosRepeats: 3 });
+      sim.runFor(90000);
+      sim.clearRecords();
+      const sender = edgeSender(sim);
+      sim.sendMessage(sender.id, "BROADCAST", "injured", "sos");
+      sim.runFor(1000);
+      sim.toggleNodeOnline(sender.id); // battery dead, or the user switched it off
+      sim.runFor(30000);
+      sim.refresh();
+      expect(sim.stats.sosFloods).toBe(1);
+    });
+
+    it("logs every flood when capture is on", () => {
+      const { sim, msg } = sosRun({ captureLog: true });
+      const sosEntries = sim.log.filter((e) => e.kind === "sos");
+      expect(sosEntries.length).toBe(4);
+      expect(sosEntries[0].detail).toContain("flood 1/4");
+      expect(sosEntries[3].detail).toContain("flood 4/4");
+      expect(sosEntries.every((e) => e.msgId)).toBe(true);
+      expect(sim.log.filter((e) => e.msgId === msg.id).length).toBeGreaterThan(1);
+    });
+
+    it("buys reach with radio time, and the cost is visible", () => {
+      const one = sosRun({ sosRepeats: 0 });
+      const four = sosRun({ sosRepeats: 3 });
+      // Measured on campus_quad seed 42: 178 → 691 data transmissions. Four floods
+      // of a fan-out is not free, which is why the repeat count is a knob.
+      expect(four.sim.stats.totalForwarded).toBeGreaterThan(one.sim.stats.totalForwarded * 3);
+      expect(four.sim.stats.totalForwarded).toBeLessThan(one.sim.stats.totalForwarded * 5);
+    });
+
+    it("leaves the unicast metrics baseline alone", () => {
+      // An SOS is a broadcast: it must not move deliveryRatio, which the
+      // acceptance criteria measure on unicast traffic.
+      const { sim } = sosRun();
+      expect(sim.stats.sentUnicast).toBe(0);
+      expect(sim.stats.sentBroadcast).toBe(4);
+      expect(sim.stats.deliveryRatio).toBe(0);
+    });
   });
 });

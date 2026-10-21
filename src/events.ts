@@ -17,6 +17,8 @@ export type EventKind =
   | "msg"
   | "mpr"
   | "acktimeout"
+  /** Repeat an SOS flood (docs/05: "SOS mode: repeated flood of GPS + text"). */
+  | "sosrepeat"
   | "traffic";
 
 export interface SimEvent<T = unknown> {

@@ -62,6 +62,17 @@ export interface MeshMessage {
   encrypted: boolean;
   /** Transport the router selected for this payload (docs/02 §3.1). */
   transport: TransportType;
+  /** Stable identity of one emergency across its repeated floods. Each flood is
+   *  a *new* message id — the seen-cache would otherwise swallow every repeat —
+   *  but receivers collapse on this, so one emergency raises one alert rather
+   *  than four (docs/04: the SOS channel is opt-in and must not spam). */
+  sosId?: string;
+  /** 0-based index of this flood within the SOS. */
+  sosRepeat?: number;
+  /** GPS fix carried by *this* flood. Repeating is what keeps it useful: a
+   *  sender that is moving reports a different position in flood 3 than in
+   *  flood 0, and a rescuer following the alert sees the movement. */
+  sosPos?: Vec2;
   /** Byte size, used by transport selection. */
   sizeBytes: number;
 }
@@ -139,6 +150,8 @@ export type MeshLogKind =
   | "queue"
   | "election"
   | "ack"
+  /** An SOS flood: sent, repeated, or collapsed onto an existing alert. */
+  | "sos"
   | "ogm";
 
 /**

@@ -105,6 +105,28 @@ export function pruneSeenCache(node: MeshNode, nowMs: number): void {
 
 export function deliverToInbox(node: MeshNode, msg: MeshMessage): boolean {
   if (node.inbox.some((m) => m.id === msg.id)) return false;
+  // A repeated SOS flood is a new radio event but the same emergency: it lands on
+  // the existing alert with its fresher GPS fix instead of raising a second
+  // notification (docs/04: "SOS misuse — the channel is opt-in", and four
+  // identical alerts for one emergency is exactly the spam that rule guards
+  // against). The receipt still counts at radio level, which is what
+  // broadcastReach measures.
+  if (msg.sosId) {
+    const existing = node.inbox.find((m) => m.sosId === msg.sosId);
+    if (existing) {
+      // Copies arrive out of order, so only ever move the alert forward in time —
+      // a late flood 1 must not overwrite the fix from flood 3. It is still a
+      // receipt, and it still must not raise a second notification.
+      if (msg.timestamp >= existing.timestamp) {
+        existing.id = msg.id;
+        existing.body = msg.body;
+        existing.timestamp = msg.timestamp;
+        existing.sosRepeat = msg.sosRepeat;
+        existing.sosPos = msg.sosPos;
+      }
+      return true;
+    }
+  }
   node.inbox.push({ ...msg });
   if (node.inbox.length > INBOX_MAX) node.inbox.shift();
   return true;
@@ -164,6 +186,17 @@ export function decideForward(
   }
 
   const peerIds = peers.map((p) => p.id);
+
+  // An SOS is the one payload the network optimises for reach instead of
+  // efficiency: docs/02 §"Broadcast SOS | All transports flooding | Maximize
+  // reach" and docs/05 §"SOS mode | Repeated flood of GPS + text over all
+  // transports". MPR suppression exists to delete the duplicate copies that an
+  // emergency broadcast is *made of*, and a route lookup would hand the alert to
+  // one neighbour instead of all of them, so SOS bypasses both — at every hop,
+  // not just at the originator.
+  if (msg.type === "sos") {
+    return { mode: "flood", targets: peerIds, reason: "SOS: flood every peer — reach over efficiency" };
+  }
 
   // Naive epidemic flooding. Deliberately consulted *before* the route table:
   // a baseline that quietly unicasts along known routes is not the "naive
