@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Duman Messenger — Roadmap & Architecture</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#111823; --muted:#9fb0c3; --line:#1e2a3a;
+    --cyan:#4de0ff; --violet:#8b7dff; --lime:#b6ff4a; --amber:#ffb84d;
+    --radius:18px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto; background: radial-gradient(1200px 600px at 70% -10%, #1b2a41 0%, #0b0f14 55%) fixed; color:#eaf2ff}
+  a{color:var(--cyan); text-decoration:none}
+  header{max-width:1140px; margin:0 auto; padding:28px 20px 10px; display:flex; flex-wrap:wrap; align-items:center; gap:16px; justify-content:space-between}
+  .brand{display:flex; align-items:center; gap:14px}
+  .logo{width:46px; height:46px; border-radius:14px; background: linear-gradient(135deg, var(--cyan), var(--violet)); display:grid; place-items:center; font-weight:900; letter-spacing:.5px; color:#001019; box-shadow: 0 8px 28px rgba(77,224,255,.35)}
+  h1{margin:0; font-size:22px; letter-spacing:.2px}
+  .sub{color:var(--muted); font-size:13px; margin-top:2px}
+  .badges{display:flex; gap:8px; flex-wrap:wrap}
+  .badge{font-size:12px; border:1px solid var(--line); background:rgba(255,255,255,.04); padding:8px 10px; border-radius:999px; color:var(--muted)}
+  .badge b{color:#fff}
+  .wrap{max-width:1140px; margin:0 auto; padding:18px 20px 40px}
+  .hero{display:grid; grid-template-columns: 1.15fr .85fr; gap:16px}
+  @media (max-width:900px){ .hero{grid-template-columns:1fr} }
+  .card{background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02)); border:1px solid var(--line); border-radius: var(--radius); padding:18px}
+  .kicker{font-size:11px; letter-spacing:.16em; color:var(--cyan); text-transform:uppercase; font-weight:700}
+  h2{margin:8px 0 8px; font-size:18px}
+  p{margin:0; color:#cfe0f2; line-height:1.55; font-size:13.5px}
+  .grid3{display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin-top:14px}
+  @media (max-width:900px){ .grid3{grid-template-columns:1fr} }
+  .stat{border:1px solid var(--line); border-radius:14px; padding:14px; background: rgba(255,255,255,.03)}
+  .stat .num{font-size:20px; font-weight:800}
+  .stat .lbl{font-size:12px; color:var(--muted)}
+  .tabs{display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 10px}
+  .tab{padding:10px 12px; border-radius:999px; border:1px solid var(--line); background:rgba(255,255,255,.03); color:var(--muted); font-size:13px; cursor:pointer}
+  .tab.active{background:#eaf2ff; color:#0b0f14; border-color:#eaf2ff; font-weight:700}
+  .timeline{position:relative; padding-left:18px}
+  .timeline::before{content:""; position:absolute; left:7px; top:8px; bottom:8px; width:2px; background: linear-gradient(var(--cyan), var(--violet)); opacity:.6}
+  .phase{position:relative; margin:14px 0; border:1px solid var(--line); border-radius:16px; overflow:hidden; background: rgba(10,16,26,.7)}
+  .phase-h{display:flex; align-items:center; gap:12px; padding:14px 16px; cursor:pointer; user-select:none}
+  .dot{width:12px; height:12px; border-radius:50%; box-shadow: 0 0 0 4px rgba(77,224,255,.12); flex:0 0 12px}
+  .phase-h h3{margin:0; font-size:14px; flex:1}
+  .phase-h .when{font-size:12px; color:var(--muted); border:1px solid var(--line); padding:6px 8px; border-radius:999px; background:rgba(255,255,255,.03)}
+  .phase-b{padding:0 16px 16px 36px; display:none}
+  .phase.open .phase-b{display:block}
+  .pill{font-size:11px; padding:6px 8px; border-radius:999px; border:1px solid var(--line); color:var(--muted); background:rgba(255,255,255,.03); display:inline-block; margin:2px 4px 2px 0}
+  .pill.ok{color:#0b1a00; background: var(--lime); border-color: var(--lime); font-weight:700}
+  .pill.warn{color:#1a1000; background: var(--amber); border-color: var(--amber); font-weight:700}
+  ul{margin:8px 0 0 18px; padding:0; color:#cfe0f2; font-size:13px; line-height:1.6}
+  .arch{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  @media (max-width:900px){ .arch{grid-template-columns:1fr} }
+  .diagram{border:1px solid var(--line); border-radius:16px; padding:14px; background: rgba(255,255,255,.02)}
+  pre{margin:8px 0 0; font-size:11.5px; line-height:1.6; color:#c9d9ea; background:#0a121d; border:1px solid var(--line); border-radius:12px; padding:12px; overflow:auto}
+  .cta{display:flex; gap:10px; flex-wrap:wrap; margin-top:12px}
+  .btn{padding:10px 14px; border-radius:999px; border:1px solid var(--line); font-weight:700; font-size:13px; cursor:pointer}
+  .btn.primary{background: linear-gradient(135deg, var(--cyan), var(--violet)); color:#001019; border-color:transparent}
+  .btn.ghost{background:rgba(255,255,255,.04); color:#eaf2ff}
+  .foot{margin-top:18px; color:var(--muted); font-size:12px; text-align:center}
+  .legend{display:flex; gap:8px; flex-wrap:wrap; margin:8px 0}
+  .legend span{display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted)}
+  .legend i{width:10px; height:10px; border-radius:50%; display:inline-block}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo">DM</div>
+    <div>
+      <h1>Duman Messenger <span style="font-weight:400; color:var(--muted)">— Serverless Mesh</span></h1>
+      <div class="sub">Bluetooth + Wi-Fi Direct • Smart Router (coverage-based Super-Nodes) • Pager & Walkie-Talkie • No Internet / No SIM</div>
+    </div>
+  </div>
+  <div class="badges">
+    <span class="badge"><b>Android 8+</b> • iOS 13+</span>
+    <span class="badge">Stack: <b>Flutter + Native GATT/WiFi</b></span>
+    <span class="badge" style="border-color: rgba(182,255,74,.5)">◉ Android-first • MVP 10 weeks</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="card">
+      <div class="kicker">Executive verdict</div>
+      <h2>Buildable — if scoped honestly</h2>
+      <p><b>Yes</b> to serverless text + broadcast + store-and-forward over BLE + Wi-Fi Direct mesh. <b>Yes</b> to smart router nodes that auto-elect by coverage (peerCount + RSSI + battery + stability). <b>PTT walkie-talkie</b> works as Opus voice-notes over WiFi Direct, not cellular-grade full-duplex across multi-hop. <b>iOS = companion</b> (BLE-only to Android) due to OS limits.</p>
+      <div class="grid3">
+        <div class="stat"><div class="num">10–100 m</div><div class="lbl">per hop • 5–7 hops = 150–500 m extended</div></div>
+        <div class="stat"><div class="num">↓ 30%+</div><div class="lbl">overhead vs naive flood (with SUPER MPR)</div></div>
+        <div class="stat"><div class="num">&lt; 15%/8h</div><div class="lbl">battery target for NORMAL mode</div></div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--cyan)"></i> BLE (discovery + text)</span>
+        <span><i style="background:var(--violet)"></i> Wi-Fi Direct (media/voice)</span>
+        <span><i style="background:var(--lime)"></i> SUPER node</span>
+        <span><i style="background:var(--amber)"></i> NORMAL (power-save)</span>
+      </div>
+      <div class="cta">
+        <button class="btn primary" onclick="document.getElementById('roadmap').scrollIntoView({behavior:'smooth'})">View roadmap ↓</button>
+        <button class="btn ghost" onclick="toggleAll(true)">Expand all phases</button>
+        <button class="btn ghost" onclick="toggleAll(false)">Collapse</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="kicker">Architecture at a glance</div>
+      <h2>Hybrid Mesh — not single-radio fantasy</h2>
+      <div class="arch">
+        <div class="diagram">
+          <b style="font-size:13px">Transport auto-selection</b>
+          <pre>Discovery  → BLE advert 12B (hash+id)
+Text <1KB  → BLE GATT
+Voice 10-40KB → WiFi Direct if GO else BLE chunks
+Image/File → WiFi Direct (250× faster)
+Broadcast → flood all transports (ttl=5)</pre>
+        </div>
+        <div class="diagram">
+          <b style="font-size:13px">Smart router election</b>
+          <pre>score = 0.30·peers + 0.25·RSSI
+        + 0.20·battery + 0.15·stable + 0.10·PDR
+if score>0.60 & top20% neighborhood → SUPER
+hysteresis: demote only if <0.50 ×2 cycles
+SUPER = scan cont. + relay all + GO
+NORMAL = 3s scan / 7s sleep + lazy relay</pre>
+        </div>
+      </div>
+      <p style="margin-top:10px">Docs: <a href="../docs/01-feasibility-analysis.md">Feasibility</a> • <a href="../docs/02-technical-architecture.md">Architecture</a> • <a href="../docs/03-smart-router-algorithm.md">Smart Router Alg</a> • <a href="../docs/04-security-privacy.md">Security</a></p>
+      <p style="margin-top:6px; color:var(--muted); font-size:12px">Key lesson: phones cannot be full BLE-Mesh spec nodes (proxy-only). Duman builds phone-native GATT mesh — proven by Bridgefy/Briar/bitchat/OSHI.</p>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-view="roadmap">Roadmap</button>
+    <button class="tab" data-view="risks">Risks & Mitigations</button>
+    <button class="tab" data-view="stack">Stack & Skills</button>
+  </div>
+
+  <div id="roadmap" class="card">
+    <div class="kicker">12-month delivery plan</div>
+    <h2>Phases — tap to expand</h2>
+    <p style="color:var(--muted); font-size:13px">Honest voice promise: <b>Push-to-Talk</b> walkie-talkie, not duplex call. Streaming only on 1-hop WiFi Direct; multi-hop = voice note. See <a href="../docs/02-technical-architecture.md">arch doc §3.5</a>.</p>
+
+    <div class="timeline" style="margin-top:12px">
+      <div class="phase open">
+        <div class="phase-h" onclick="this.parentElement.classList.toggle('open')">
+          <div class="dot" style="background:var(--lime)"></div>
+          <h3>Phase 0 — Foundations <span style="font-weight:400; color:var(--muted)">• Identity, beacons, 2-phone hello</span></h3>
+          <span class="when">Weeks 1–4</span>
+        </div>
+        <div class="phase-b">
+          <span class="pill ok">Goal: 2 Androids say “hello” over BLE in airplane mode</span>
+          <ul>
+            <li>Repo: Flutter + transport/android (Kotlin) + transport/ios (Swift) + core (pure Dart)</li>
+            <li>Ed25519/X25519 keygen + QR add-contact (Briar pattern)</li>
+            <li>MeshTransport abstraction + BLE GATT beacon (12B hash+id), iOS CoreBluetooth parity</li>
+            <li>Foreground service + permission flows (Android 12+ BT_SCAN/CONNECT)</li>
+          </ul>
+          <span class="pill">Exit: discovery <3s</span><span class="pill">Exit: 1 KB exchange over BLE</span>
+        </div>
+      </div>
+
+      <div class="phase open">
+        <div class="phase-h" onclick="this.parentElement.classList.toggle('open')">
+          <div class="dot" style="background:var(--cyan)"></div>
+          <h3>Phase 1 — Mesh MVP <span style="font-weight:400; color:var(--muted)">• Multi-hop text + broadcast + E2EE</span></h3>
+          <span class="when">Weeks 5–10</span>
+        </div>
+        <div class="phase-b">
+          <span class="pill ok">Goal: 5 phones — A→C via B relay; broadcast to all</span>
+          <ul>
+            <li>Flood routing: seen-cache dedup + TTL(5) + BATMAN-lite nextHop table (best-next-hop only, no global topo)</li>
+            <li>Store-and-forward OppQueue (7 days, 500 cap) + CRDT group history (hash-beacon anti-entropy)</li>
+            <li>Noise_XX 1:1 + SAS verify + padded blocks; public pager vs private DM vs group</li>
+            <li>Metrics logging: delivery/latency per hop</li>
+          </ul>
+          <span class="pill">Target: &lt;2s 1-hop, &lt;5s 3-hop</span>
+        </div>
+      </div>
+
+      <div class="phase open">
+        <div class="phase-h" onclick="this.parentElement.classList.toggle('open')">
+          <div class="dot" style="background:var(--violet)"></div>
+          <h3>Phase 2 — Smart Router <span style="font-weight:400; color:var(--muted)">• “Duman” super-node magic</span></h3>
+          <span class="when">Weeks 11–16</span>
+        </div>
+        <div class="phase-b">
+          <span class="pill ok">Goal: Auto-SUPERs cut overhead ≥30% vs flood-all, no flapping</span>
+          <ul>
+            <li>CoverageScore = 0.30·peers + 0.25·RSSI + 0.20·battery + 0.15·stable + 0.10·PDR (+charging bonus)</li>
+            <li>OGM beacons (2s) gossip scores; local top-20% election + hysteresis + 30m SUPER guard</li>
+            <li>SUPER: continuous scan + relay-all + WiFi GO create; NORMAL: MPR lazy relay (wait 300ms for SUPER)</li>
+            <li>Mesh simulator (mesh_sim.dart) to tune weights w1..w5 + campus quad field test</li>
+          </ul>
+          <span class="pill">Deliver: overhead chart + stability log</span>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-h" onclick="this.parentElement.classList.toggle('open')">
+          <div class="dot" style="background:var(--amber)"></div>
+          <h3>Phase 3 — WiFi Direct Media + PTT <span style="font-weight:400; color:var(--muted)">• Photos, files, walkie-talkie</span></h3>
+          <span class="when">Weeks 17–24</span>
+        </div>
+        <div class="phase-b">
+          <span class="pill warn">Reality: PTT = Opus 6–12kbps voice-notes, streaming only 1-hop</span>
+          <ul>
+            <li>WiFi Direct (Android WifiP2pManager) + MultipeerConnectivity (iOS-to-iOS) transports</li>
+            <li>Chunked file protocol (64 KB, ACK, resume) — up to 10 MB via WiFi only</li>
+            <li>Opus pipeline: 500 ms encrypted chunks, jitter buffer 200 ms; SOS flood mode (GPS + text)</li>
+            <li>External security audit prep + panic wipe</li>
+          </ul>
+          <span class="pill">PTT <3s 1-hop / <8s 3-hop</span><span class="pill">Image via WiFi Direct >10 Mbps</span>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-h" onclick="this.parentElement.classList.toggle('open')">
+          <div class="dot" style="background:#fff"></div>
+          <h3>Phase 4 — Polish, iOS & Scale <span style="font-weight:400; color:var(--muted)">• 50-person beta</span></h3>
+          <span class="when">Weeks 25–36</span>
+        </div>
+        <div class="phase-b">
+          <ul>
+            <li>iOS harden: BLE-only Android↔iOS path; foreground-best UX; WiFi Aware flag experiment</li>
+            <li>Hop trace UI (“via 2 nodes • SUPER Amir”), battery pass (&lt;15%/8h NORMAL), 50-node crowd test</li>
+            <li>Distribution: Play + APK + F-Droid + GitHub Releases + TestFlight; no-GMS fallback</li>
+          </ul>
+          <span class="pill">Exit: festival beta delivery >90% @3 hops</span>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-h" onclick="this.parentElement.classList.toggle('open')">
+          <div class="dot" style="background:var(--lime)"></div>
+          <h3>Phase 5 — Launch <span style="font-weight:400; color:var(--muted)">• v1 Android + v0.9 iOS + SDK</span></h3>
+          <span class="when">Weeks 37–52</span>
+        </div>
+        <div class="phase-b">
+          <ul>
+            <li>Public launch, offline maps (optional), plugin SDK (like Offline Protocol)</li>
+            <li>Community SUPER program: “keep tablet plugged at café → neighborhood relay”</li>
+            <li>Opt-in local analytics to refine scoring; no central telemetry</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="risks" class="card" style="display:none">
+    <div class="kicker">Risks</div>
+    <h2>What kills mesh apps — and Duman’s answers</h2>
+    <div class="grid3">
+      <div class="stat"><div class="num" style="color:var(--amber)">iOS</div><div class="lbl"><b>Problem:</b> BG BLE throttled, no WiFi Direct, no BLE-Mesh node.<br><b>Answer:</b> Ship Android-first; iOS = companion (document BLE-only interop).</div></div>
+      <div class="stat"><div class="num" style="color:var(--amber)">Voice</div><div class="lbl"><b>Problem:</b> Multi-hop latency >1s → no duplex.<br><b>Answer:</b> Market as <b>push-to-talk</b>; stream only 1-hop WiFi; else voice-note.</div></div>
+      <div class="stat"><div class="num" style="color:var(--amber)">Range</div><div class="lbl"><b>Problem:</b> Sparse = no relay = dead.<br><b>Answer:</b> DTN OppQueue (“will send when someone passes”) + community SUPERs.</div></div>
+    </div>
+    <div class="grid3" style="margin-top:10px">
+      <div class="stat"><div class="num" style="color:var(--amber)">Battery</div><div class="lbl"><b>Problem:</b> Briar drains 4× vs server apps.<br><b>Answer:</b> NORMAL duty-cycle 3s/7s; SUPER opt-in + charging bonus.</div></div>
+      <div class="stat"><div class="num" style="color:var(--amber)">Takedown</div><div class="lbl"><b>Problem:</b> Stores can delist (India’26).<br><b>Answer:</b> APK + F-Droid + GitHub; mesh works even after delist.</div></div>
+      <div class="stat"><div class="num" style="color:var(--amber)">Fragment</div><div class="lbl"><b>Problem:</b> Huawei no-GMS, vendor BLE quirks.<br><b>Answer:</b> Test raw BLE+WiFi fallback by W6; no Nearby dependency wall.</div></div>
+    </div>
+  </div>
+
+  <div id="stack" class="card" style="display:none">
+    <div class="kicker">Stack & skills</div>
+    <h2>Flutter + thin native = fastest to proven mesh</h2>
+    <div class="arch">
+      <div class="diagram">
+        <b>Transport matrix</b>
+        <pre>Android↔Android : BLE + WiFi Direct (+Nearby if GMS) ✅ Full
+iOS↔iOS         : Multipeer + BLE ✅ Full
+Android↔iOS     : BLE GATT only ⚠️ Text+PTT chunked
+Future Aware    : Android WiFi Aware + iOS 26 Aware → unify (flag)</pre>
+        <span class="pill ok">Chosen: flutter_blue_plus + custom GATT + WifiP2pManager</span>
+      </div>
+      <div class="diagram">
+        <b>8 skill contracts (see /skills/*.skill.md)</b>
+        <pre>01 mesh-transport  → discovery & send
+02 super-node      → coverage election
+03 crypto         → Noise_XX + QR trust
+04 dtn            → store-carry-forward
+05 voice-media    → Opus PTT + files
+06 persistence    → SQLite + CRDT sync
+07 power-bg       → fg service + bg modes
+08 qa-simulator   → mesh_sim + field gates</pre>
+        <span class="pill">Core: Dart + Kotlin + Swift</span><span class="pill">DB: drift + sqlcipher</span><span class="pill">Audio: Opus</span><span class="pill">Crypto: libsodium</span>
+      </div>
+    </div>
+    <div style="margin-top:12px; color:var(--muted); font-size:13px">Full docs in workspace: <code>docs/01-feasibility-analysis.md</code> through <code>skills/08-qa-simulator.skill.md</code>. See also <code>roadmap/roadmap.md</code> for sprint checklists.</div>
+  </div>
+
+  <div class="foot">
+    Duman means “mist/fog” — a low cloud that connects the valley without towers. Built for campuses, festivals, disaster relief, and censored streets. No promises it replaces the internet; promise it works when the internet doesn’t.<br>
+    <span style="opacity:.7">© 2026 Duman Messenger — Research complete • Stack selected • Ready to build</span>
+  </div>
+</div>
+
+<script>
+  const phases = document.querySelectorAll('.phase');
+  function toggleAll(open){
+    phases.forEach(p=> open ? p.classList.add('open') : p.classList.remove('open'));
+  }
+  const tabs = document.querySelectorAll('.tab');
+  tabs.forEach(t=> t.addEventListener('click', ()=>{
+    tabs.forEach(x=> x.classList.remove('active'));
+    t.classList.add('active');
+    const v = t.dataset.view;
+    document.getElementById('roadmap').style.display = v==='roadmap' ? 'block':'none';
+    document.getElementById('risks').style.display = v==='risks' ? 'block':'none';
+    document.getElementById('stack').style.display = v==='stack' ? 'block':'none';
+  }));
+</script>
+</body>
+</html>
