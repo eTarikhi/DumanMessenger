@@ -6,7 +6,9 @@
 
 **Status:** engine implemented in two languages and executed in CI; every
 `skills/02` + `skills/08` simulator criterion met on the 20-node case they name,
-at **7-9%** of the naive-flood relay budget (§2). One secondary target remains
+at **7-9%** of the naive-flood relay budget (§2). Power policy, the duty cycle and
+the Phase 2 telemetry are implemented and measured (§10) — the duty cycle is what
+brings NORMAL inside `skills/07`'s 15%-per-8h budget. One secondary target remains
 open in the 60-node crowd (§6, "Still open").
 **Date:** Oct 2026
 
@@ -381,6 +383,10 @@ means real drift:
   expressions* to double (`const double oppTtlMs = 7 * 24 * 60 * 60 * 1000` is
   legal), but an expression over a variable is not: `scanOppQueue(..., 1000 + i)`
   is an `int` and will not bind to a `double` parameter. Write `1000.0 + i`.
+- **New node fields must be derived, never drawn.** `dutyPhaseMs` (§10) is
+  computed from the node index, not read from the RNG, because any extra draw
+  shifts every value after it and invalidates the goldens in both languages at
+  once.
 - **Draw order is a contract.** Node construction draws in a fixed order
   (`name → stationary → charging → position → battery → uptime → wander → pdr →
   heading → target`), and the rejection-sampling loop redraws in the same order.
@@ -391,3 +397,120 @@ means real drift:
   float aggregates use a tolerance; spawn geometry uses 1e-6.
 - **`destHint`.** Both engines use the same 32-bit string hash
   (`h = h*31 + charCode`, truncated to 8 hex chars) so routing hints agree.
+
+## 10. Power policy: the sleep slot is what makes the battery budget work
+
+`skills/02`'s battery line (*"SUPER opt-out respected; NORMAL never auto-promoted
+if battery saver on"*), `skills/07`'s duty cycle and telemetry rows, and the
+roadmap's Phase 2 *"metrics dashboard: delivery ratio, overhead ratio, latency by
+hop, battery %/h"* were the last unchecked items the simulator could settle. All
+are now implemented in both engines, **off by default, goldens byte-identical** —
+every new field is either derived or a config knob, so the RNG draw order that
+`test-fixtures/golden-vectors.json` pins is untouched.
+
+### 10.1 The two gates do not wait for hysteresis
+
+`electRole` checks `superOptOut` and `batterySaver` **before** the peer and
+battery gates and returns NORMAL immediately, clearing `demoteCounter`. docs/03
+§3's two-cycle demotion rule exists to damp *score* noise; a user flipping a
+switch is not noise, so making it wait 60 s would be a bug wearing the clothes of
+consistency. `docs/03` §3 already listed "Not in battery saver" as an
+eligibility gate — this implements it. Both switches are user-visible in the
+simulator's node inspector (`setSuperOptOut` / `setBatterySaver` re-elect on the
+spot).
+
+### 10.2 A declined node has to be advertised, or it eats a candidacy slot
+
+The first cut gated only the node itself. Opting out a third of a 20-node mesh
+(`campus_quad`, seed 42) then left **2 SUPERs (ratio 0.10)** — below the 15%
+floor the same skill file demands — because §4 step 3's top-20% ranking still
+counted the declined nodes as candidates. Each one occupied a slot it could never
+fill, and the mesh got a coverage hole for free.
+
+The OGM therefore carries **`declinedRouter`** (1 bit: opt-out or battery saver,
+preserved through `copyWith` so a gossiped copy does not lose it), and peers drop
+declined originators from the ranking set. Same run after the fix: **4 SUPERs
+(ratio 0.20)**, delivery 100% over 30 messages at 1.57 average hops. A device
+cannot read its peers' local settings, so this had to be broadcast rather than
+inferred — the same argument §4 already makes for `neighborIds`.
+
+### 10.3 Measured battery burn: the budget has zero headroom until a node sleeps
+
+`skills/07` sets the acceptance line at *"<15% extra drain per 8 h"* for NORMAL.
+Measured from the battery snapshot taken at `clearRecords` over a **settled** 90 s
+window — roles are promoted at the first election, and a window that starts at
+warm-up bleeds pre-promotion drain into the per-role average (6.82 %/h instead of
+7.5 for SUPER):
+
+| world | duty cycle | NORMAL %/h | NORMAL %/8h | SUPER %/h | SUPER %/8h |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `campus_quad`, stationary | off | 1.875 | **15.0** | 7.500 | 60.0 |
+| `campus_quad`, stationary | on | 0.891 | **7.1** | 7.500 | 60.0 |
+| `campus_quad`, mobile (default) | off | 2.423 | **19.4** | 6.422 | 51.4 |
+| `campus_quad`, mobile (default) | on | 1.245 | **10.0** | 6.240 | 49.9 |
+| `festival_crowd`, mobile | off | 2.811 | **22.5** | 7.574 | 60.6 |
+| `festival_crowd`, mobile | on | 1.356 | **10.9** | 7.574 | 60.6 |
+
+Three things fall out:
+
+1. **The always-on model has zero headroom even for a still node.**
+   `NORMAL_DRAIN_PER_HOUR` is `0.15/8` by construction, so a stationary,
+   always-scanning NORMAL node spends *exactly* 15.0% per 8 h — the budget, not
+   under it. Both engines reproduce this to 1e-3 (`closeTo(1.875)`).
+2. **Mobility breaks it.** docs/03 §3's mobility term adds up to 2 %/h on top, so
+   a moving population measures **19-25% per 8 h**. `skills/07`'s criterion is not
+   met by an always-scanning NORMAL node, and no scan-interval tuning fixes that
+   without also giving up discovery.
+3. **The 3 s/7 s duty cycle brings it back inside.** 0.3 awake + 0.7 asleep at
+   `sleepDrainFactor` 0.25 = **0.475** of the always-on drain → 8.7-12.4% per 8 h
+   across both worlds. That is why the CLI gates the budget only in
+   `--duty-cycle` mode: asserting it on the always-on arm would fail on a true
+   statement about the model rather than on a defect. CI runs that arm on
+   `campus_quad`.
+
+SUPER never sleeps (`skills/07`: *"SUPER continuous"*), and it shows: **51-61% of
+the battery in 8 h**. That is the strongest argument in the corpus for making the
+opt-out user-visible rather than a buried setting — a phone at 30% should not be
+handed a router role it cannot finish.
+
+### 10.4 What sleeping costs: nothing measurable
+
+Duty cycling throttles **scanning only**. An asleep node keeps beaconing and keeps
+relaying what its route table already covers, which is the BLE asymmetry the spec
+describes (the advertiser stays up; Android caps scan starts at 5 per 30 s).
+Modelling a fully off radio would also need connection-interval negotiation, which
+is out of scope. Full 150-message runs, both arms fed the same pre-generated
+traffic plan (§7):
+
+| world | seeds | delivery off → on | ≤5 hops off → on | relays vs flood-all off → on | NORMAL %/8h off → on |
+| --- | --- | --- | --- | --- | --- |
+| `campus_quad` | 42/7/1234/99/2026/555 | 98.8% → **99.6%** | 98.7% → 99.5% | 8.5% → 9.0% | 20.5% → **10.3%** |
+| `festival_crowd` | 42/7/1234 | 93.1% → **93.6%** | 85.6% → 86.2% | 13.0% → 12.3% | 23.6% → **11.6%** |
+
+Seed-mean delivery moves **+0.8** and **+0.5** points; per-seed swings run −1.3 to
++5.4 (crowd seed 1234: 91.3% → 96.7%). Read that as *delivery-neutral inside the
+±5-point noise band at 150 messages*, not as "sleeping routes better" — six campus
+seeds split 4 better / 1 equal / 1 worse. SUPER ratio stays in band (20-25%
+campus, 18-22% crowd), flapping stays ≤0.22/node/min, overhead stays 8-14% of
+naive flood, and the crowd's ≤5-hop tail is unchanged (§6: geometric, not
+scan-limited). Every criterion that passed still passes in both modes.
+
+Hence the flag, not a new default: turning the duty cycle on changes *when*
+discovery happens, so per §7 it is a different experiment, and the golden vectors
+stay where they are.
+
+### 10.5 Telemetry now reported
+
+`computeStats` / `_computeStats` in both engines: `batteryPercentPerHourNormal`,
+`batteryPercentPerHourSuper` (measured, excluding charging nodes and any node
+showing a net gain), `scansPerSec`, `relaysPerSec`, `scansSkippedAsleep`,
+`awakeRatio`, `electionEvents` (`skills/02`: *"DO log `electionEvents` for
+tuner"*), and `latencyByHop` — count/avg/p95 per hop bucket for first-attempt
+non-DTN unicast, the same scope as the docs/04 §5 budget, so a retry (a whole ACK
+timeout) or a DTN bundle (a meeting time, not a transport time) cannot smear the
+distribution. The React visualiser renders these in a metrics dashboard panel;
+`dart run bin/mesh_sim.dart --json` emits them, including the hop table.
+
+Wake-locks (`skills/07`'s fourth telemetry item) are deliberately **not**
+modelled: they are an Android API artefact with no mesh-protocol counterpart, and
+a simulator that invented a number for it would be measuring its own guess.

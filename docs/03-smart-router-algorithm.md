@@ -74,6 +74,13 @@ No election; just gossip:
 > advertises 2-byte aliases (~60 B for 30 neighbours).
 2. Each node maintains table `neighborScores[nodeId] = score` (expires after 30s no OGM → remove).
 3. To rank itself, node looks at `self + 1-hop neighbors` scores it has heard. If in top 20% → promotes. This is **2-hop-local**, not global — scales.
+
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §10.2):** the step-1 payload also carries
+> `declinedRouter` (1 bit: SUPER opt-out or battery saver, §3's eligibility gate), and step 3 drops those
+> peers from the candidacy set *before* ranking. A node that has declined will never promote, so counting
+> it burns a top-20% slot: with a third of a 20-node mesh declined, the unmodified ranking left 2 SUPERs
+> (ratio 0.10) instead of 4 (0.20) — a coverage hole the mesh creates for itself. The flag has to be
+> advertised because a device cannot read its peers' local settings; same argument as `neighborIds`.
 4. SUPER flag is **advisory**, not command. Peers that see SUPER prefer it as next hop but can still use NORMAL if SUPER congested.
 
 **Why this works:** Inspired by OLSR MPR coverage + BATMAN OGM ranking; no Dijkstra on phones, just local sort (O(k log k), k ≤ 30).
