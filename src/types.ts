@@ -73,6 +73,14 @@ export interface MeshMessage {
    *  sender that is moving reports a different position in flood 3 than in
    *  flood 0, and a rescuer following the alert sees the movement. */
   sosPos?: Vec2;
+  /** Set on traffic addressed to a group (docs/04 §4). A scoped flood carries
+   *  `to === GROUP_ADDRESS`; per-member unicast carries the member's id. Either
+   *  way this is what keeps group traffic out of the unicast metrics. */
+  groupId?: string;
+  /** The group's key epoch when this message was sent. A receiver that is a
+   *  member but holds a different epoch cannot decrypt it — which is exactly what
+   *  "groupKey rotated on member leave" (docs/04 §4) is for. */
+  groupEpoch?: number;
   /** Byte size, used by transport selection. */
   sizeBytes: number;
 }
@@ -141,6 +149,27 @@ export interface HopRecord {
 
 /** Capture-log event kinds. `ogm` is opt-in separately: beacons outnumber
  *  everything else and drown the data plane in a 60-node crowd. */
+/** Address of a scoped group flood. Not a node id, and deliberately distinct
+ *  from `"BROADCAST"`: a broadcast is public by design (docs/04 §4), a group
+ *  flood is delivered only to members holding the current key epoch. */
+export const GROUP_ADDRESS = "GROUP";
+
+/** Group size limits — roadmap Phase 1: "group (3-10 members)". */
+export const GROUP_MIN_MEMBERS = 3;
+export const GROUP_MAX_MEMBERS = 10;
+
+/** A group channel (docs/04 §4, roadmap Phase 1 and Phase 4 "Group UX"). */
+export interface Group {
+  id: string;
+  name: string;
+  members: Set<NodeId>;
+  /** Only the admin may rotate the key (roadmap Phase 4: "admin rotate key"). */
+  adminId: NodeId;
+  /** Bumped on every membership change and on manual rotation. */
+  keyEpoch: number;
+  createdAt: number;
+}
+
 export type MeshLogKind =
   | "tx"
   | "loss"
@@ -152,6 +181,8 @@ export type MeshLogKind =
   | "ack"
   /** An SOS flood: sent, repeated, or collapsed onto an existing alert. */
   | "sos"
+  /** Group membership: created, joined, left, key rotated, or a stale epoch rejected. */
+  | "group"
   | "ogm";
 
 /**

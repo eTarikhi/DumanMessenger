@@ -1,3 +1,4 @@
+import { GROUP_ADDRESS } from "./types";
 import type { MeshMessage, MeshNode, MsgType, NodeId, QueuedMessage, RelayPolicy, TransportType } from "./types";
 import type { RfParams } from "./rf";
 import { canReach, peersInRange } from "./rf";
@@ -206,7 +207,11 @@ export function decideForward(
     return { mode: "flood", targets: peerIds, reason: "naive flood baseline" };
   }
 
-  if (msg.to !== "BROADCAST") {
+  // A group flood is addressed to nobody in particular: the network does not know
+  // the membership, so it forwards on the normal policy (MPR included, unlike SOS)
+  // and delivery is decided at the recipient. Routing it as a unicast would send a
+  // group message to one neighbour and strand the rest.
+  if (msg.to !== "BROADCAST" && msg.to !== GROUP_ADDRESS) {
     if (peerIds.includes(msg.to)) {
       return { mode: "direct", targets: [msg.to], reason: "destination in range" };
     }

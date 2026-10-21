@@ -22,6 +22,7 @@ const KIND_COLOR: Record<MeshLogKind, string> = {
   election: "#ffd666",
   ack: "#9fb0c3",
   sos: "#ff2d55",
+  group: "#26d0a8",
   ogm: "#3f5568",
 };
 
@@ -30,6 +31,7 @@ const KINDS: MeshLogKind[] = [
   "decision",
   "deliver",
   "sos",
+  "group",
   "duplicate",
   "loss",
   "queue",

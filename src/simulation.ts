@@ -1,4 +1,10 @@
+import {
+  GROUP_ADDRESS,
+  GROUP_MIN_MEMBERS,
+  GROUP_MAX_MEMBERS,
+} from "./types";
 import type {
+  Group,
   HopAction,
   HopRecord,
   MeshLogEntry,
@@ -115,6 +121,13 @@ export interface SimConfig {
    *  against. */
   sosRepeats: number;
 
+  /** How a group message travels: one scoped flood the whole network relays and
+   *  only members accept, or one routed unicast per member. `docs/06` §14 measures
+   *  the two against each other; the flood is the default because a group's members
+   *  are typically spread across the world and the network does not know who they
+   *  are. */
+  groupMode: "scoped-flood" | "per-member-unicast";
+
   enableSuperElection: boolean;
   enableMobility: boolean;
   enableDtn: boolean;
@@ -178,6 +191,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   sosTtl: 5,
   sosRepeatMs: 5000,
   sosRepeats: 3,
+  groupMode: "scoped-flood",
 
   enableSuperElection: true,
   enableMobility: true,
@@ -241,6 +255,17 @@ export interface SimulationStats {
   sentBroadcast: number;
   /** SOS floods actually put on air, repeats included (docs/05 §SOS mode). */
   sosFloods: number;
+  /** Group messages handed to the radio: 1 per send in `scoped-flood`, one per
+   *  member in `per-member-unicast`. */
+  sentGroup: number;
+  /** Member deliveries of group traffic. */
+  groupReceipts: number;
+  /** Member deliveries that should have happened: the denominator that makes
+   *  `groupDeliveryRatio` comparable across the two modes. */
+  groupExpected: number;
+  groupDeliveryRatio: number;
+  /** Copies a *member* could not decrypt because the key had rotated since. */
+  groupEpochRejected: number;
 
   /** skills/07 telemetry: "Battery %/h per role, scans/sec, relays/sec".
    *  Measured from the battery snapshot taken when metrics were cleared, over
@@ -287,6 +312,10 @@ export interface DeliveryRecord {
   /** The journey behind `path`: time, link budget and decision per hop
    *  (roadmap Phase 4, "via 2 nodes • SUPER Amir"). */
   hopTrace: HopRecord[];
+  /** Set on group traffic, so it can be accounted separately from 1:1. */
+  groupId?: string;
+  /** The key epoch this copy was sent under. */
+  groupEpoch?: number;
 }
 
 /**
@@ -554,6 +583,10 @@ export class MeshSimulation {
   private mprSuppressed = 0;
   private broadcastReceipts = 0;
   private sosFloods = 0;
+  private sentGroup = 0;
+  private groupReceipts = 0;
+  private groupExpected = 0;
+  private groupEpochRejected = 0;
   private sentUnicast = 0;
   private sentBroadcast = 0;
   private superSamples = 0;
@@ -620,6 +653,10 @@ export class MeshSimulation {
     this.sentUnicast = 0;
     this.sentBroadcast = 0;
     this.sosFloods = 0;
+    this.sentGroup = 0;
+    this.groupReceipts = 0;
+    this.groupExpected = 0;
+    this.groupEpochRejected = 0;
     this.superSamples = 0;
     this.superSampleSum = 0;
     this.retriesSent = 0;
@@ -679,6 +716,10 @@ export class MeshSimulation {
   }
 
   reset(config?: Partial<SimConfig>): void {
+    // Groups belong to the world, not to the metrics window: rebuilding the mesh
+    // invalidates every membership, so the registry goes with it.
+    this.groups.clear();
+    this.groupSeq = 0;
     const merged: SimConfig = { ...this.config, ...config };
     this.config = merged;
     this.rng = createRng(merged.seed);
@@ -953,10 +994,37 @@ export class MeshSimulation {
     fromId: NodeId,
     toId: NodeId | "BROADCAST",
     body: string,
-    type: MsgType = "text"
+    type: MsgType = "text",
+    groupCtx?: { id: string; epoch: number }
   ): MeshMessage | null {
     const from = this.byId(fromId);
     if (!from || !from.isOnline) return null;
+
+    // A group id in the destination position means "send to this group"
+    // (docs/04 §4, roadmap Phase 1 "group (3-10 members)"). Which radio pattern
+    // that turns into is `groupMode`, and the two are measured against each other
+    // in docs/06 §14 rather than assumed.
+    const group = groupCtx ? undefined : this.groups.get(toId);
+    if (group) {
+      const targets = [...group.members].filter((id) => id !== fromId);
+      if (targets.length === 0) return null;
+      this.groupExpected += targets.length;
+      const ctx = { id: group.id, epoch: group.keyEpoch };
+      if (this.config.groupMode === "per-member-unicast") {
+        // One routed message per member: the route table can aim each one, and each
+        // costs an ACK and possibly a retry.
+        let last: MeshMessage | null = null;
+        for (const t of targets) {
+          const m = this.sendMessage(fromId, t, body, type, ctx);
+          if (m) last = m;
+        }
+        return last;
+      }
+      // One scoped flood: addressed to nobody in particular, relayed by the whole
+      // network on the normal policy, accepted only by members holding the current
+      // key epoch. The network never learns who the members are.
+      return this.sendMessage(fromId, GROUP_ADDRESS, body, type, ctx);
+    }
 
     // docs/05 §"Broadcast SOS | All transports, flood (TTL=5)". Reach comes from
     // repeating the flood, not from a longer TTL — see onSosRepeat.
@@ -964,6 +1032,10 @@ export class MeshSimulation {
     const priority = type === "sos" || type === "voice" ? "high" : "normal";
     const msgType: MsgType = toId === "BROADCAST" && type === "text" ? "broadcast" : type;
     const msg = createMessage(this.nextMsgId(), this.now, fromId, toId, body, msgType, ttl, priority);
+    if (groupCtx) {
+      msg.groupId = groupCtx.id;
+      msg.groupEpoch = groupCtx.epoch;
+    }
     if (msgType === "sos") {
       const sosId = `sos-${fromId}-${Math.round(this.now)}`;
       this.decorateSos(msg, from, 0, sosId);
@@ -989,7 +1061,11 @@ export class MeshSimulation {
         recipients: 0,
         sosId: msg.sosId,
       });
-      if (toId === "BROADCAST") this.sentBroadcast++;
+      // Group traffic gets its own counters: folding it into `sentUnicast` would
+      // let a 10-member group flatter `deliveryRatio`, and folding it into
+      // `sentBroadcast` would deflate `broadcastReach`.
+      if (groupCtx) this.sentGroup++;
+      else if (toId === "BROADCAST") this.sentBroadcast++;
       else this.sentUnicast++;
     }
     this.traces.set(msg.id, {
@@ -1016,7 +1092,15 @@ export class MeshSimulation {
       return msg;
     }
 
-    if (toId !== "BROADCAST" && msgType !== "ack" && this.config.maxRetries > 0) {
+    // A scoped group flood is addressed to nobody, so no ACK can ever come back:
+    // arming the retry timer here would burn two retransmissions and then push the
+    // message into the OppQueue on every single group send.
+    if (
+      toId !== "BROADCAST" &&
+      toId !== GROUP_ADDRESS &&
+      msgType !== "ack" &&
+      this.config.maxRetries > 0
+    ) {
       this.pendingAcks.set(msg.id, { msg, from: fromId, attempts: 0 });
       this.queue.push(this.now + this.config.ackTimeoutMs, "acktimeout", fromId, msg.id);
     }
@@ -1388,6 +1472,37 @@ export class MeshSimulation {
       return;
     }
 
+    if (msg.to === GROUP_ADDRESS && msg.groupId) {
+      const group = this.groups.get(msg.groupId);
+      const isMember = group ? group.members.has(node.id) : false;
+      if (group && isMember && group.keyEpoch === msg.groupEpoch) {
+        const fresh = deliverToInbox(node, msg);
+        if (fresh) {
+          this.recordDelivery(node, msg, trace);
+          this.pushLog(
+            "deliver",
+            node.id,
+            `${msg.id} group "${group.name}" reached ${node.name} via ${via} (epoch ${msg.groupEpoch})`,
+            { peerId: via, msgId: msg.id, msgType: msg.type, hop: msg.hopCount + 1 }
+          );
+        }
+      } else if (group && isMember) {
+        // A member holding an older epoch cannot decrypt this copy: the key rotated
+        // when somebody left or joined (docs/04 §4, "groupKey rotated on member
+        // leave"). It still relays — the bytes are not secret to the network, only
+        // unreadable to this node.
+        this.groupEpochRejected++;
+        this.pushLog(
+          "group",
+          node.id,
+          `${msg.id} group "${group.name}" at ${node.name}: sent under epoch ${msg.groupEpoch}, holds ${group.keyEpoch} — cannot decrypt, still relaying`,
+          { msgId: msg.id, msgType: msg.type }
+        );
+      }
+      // Non-members fall through silently: relaying traffic you cannot read is the
+      // normal case in a scoped flood, and logging it would drown the capture.
+    }
+
     if (msg.to === "BROADCAST") {
       const fresh = deliverToInbox(node, msg);
       if (fresh) {
@@ -1475,6 +1590,11 @@ export class MeshSimulation {
     msg: MeshMessage,
     trace: PathTrace | undefined
   ): void {
+    // Counted here rather than at a delivery call site because group traffic
+    // arrives by two different roads — a scoped flood addressed to GROUP_ADDRESS,
+    // or a routed unicast per member — and a counter in only one of them silently
+    // reports 0% for the other mode.
+    if (msg.groupId) this.groupReceipts++;
     const createdAt = trace ? trace.createdAt : msg.timestamp;
     this.deliveries.push({
       msgId: msg.id,
@@ -1487,6 +1607,8 @@ export class MeshSimulation {
       latencyMs: Math.max(0, this.now - createdAt),
       path: trace ? trace.path.slice() : [node.id],
       hopTrace: trace ? trace.hops.slice() : [],
+      groupId: msg.groupId,
+      groupEpoch: msg.groupEpoch,
       timestamp: this.now,
       attempt: msg.attempt,
       dtn: msg.carried,
@@ -1494,6 +1616,88 @@ export class MeshSimulation {
     if (this.deliveries.length > 5000) this.deliveries.shift();
     const rec = this.sentRecords.find((s) => s.msgId === msg.id);
     if (rec) rec.delivered = true;
+  }
+
+  // --- group channels (docs/04 §4, roadmap Phase 1 and Phase 4 "Group UX") ----
+
+  /** Live group channels. Membership is simulator state, not wire state: the
+   *  network relays a group flood without ever learning who is in it. */
+  readonly groups = new Map<string, Group>();
+  private groupSeq = 0;
+
+  /**
+   * Create a group. The 3-10 member bound is roadmap Phase 1's, and it is enforced
+   * here rather than left to a UI: below 3 a group is a 1:1 chat with an audience,
+   * and above 10 it is a broadcast wearing a member list — which matters because a
+   * scoped flood costs the whole network relays no matter how few nodes accept it.
+   */
+  createGroup(name: string, memberIds: NodeId[], adminId?: NodeId): Group | null {
+    const unique = [...new Set(memberIds)].filter((id) => this.byId(id));
+    if (unique.length < GROUP_MIN_MEMBERS || unique.length > GROUP_MAX_MEMBERS) return null;
+    const group: Group = {
+      id: `grp-${++this.groupSeq}`,
+      name,
+      members: new Set(unique),
+      adminId: adminId && unique.includes(adminId) ? adminId : unique[0],
+      keyEpoch: 0,
+      createdAt: this.now,
+    };
+    this.groups.set(group.id, group);
+    this.pushLog("group", group.adminId, `group "${group.name}" created with ${unique.length} members (epoch 0)`);
+    return group;
+  }
+
+  /**
+   * Add a member. Rotates the key on the way in, for the mirror image of the reason
+   * `removeFromGroup` rotates it: a joiner must not be able to read the history it
+   * missed. docs/04 §4 names the leave case; the join case is the same argument.
+   */
+  inviteToGroup(groupId: string, nodeId: NodeId): boolean {
+    const group = this.groups.get(groupId);
+    if (!group || group.members.has(nodeId) || !this.byId(nodeId)) return false;
+    if (group.members.size >= GROUP_MAX_MEMBERS) return false;
+    group.members.add(nodeId);
+    group.keyEpoch++;
+    this.pushLog(
+      "group",
+      nodeId,
+      `${this.byId(nodeId)?.name} joined "${group.name}" — key rotated to epoch ${group.keyEpoch}`
+    );
+    return true;
+  }
+
+  /**
+   * Remove a member and rotate the group key, which is what makes the departure
+   * stick: the departed node keeps relaying group traffic (it is just bytes now)
+   * but can no longer read any of it. Refuses to go below 3 members — at that point
+   * the group is a 1:1 chat and should be one.
+   */
+  removeFromGroup(groupId: string, nodeId: NodeId): boolean {
+    const group = this.groups.get(groupId);
+    if (!group || !group.members.has(nodeId)) return false;
+    if (group.members.size <= GROUP_MIN_MEMBERS) return false;
+    group.members.delete(nodeId);
+    group.keyEpoch++;
+    this.pushLog(
+      "group",
+      nodeId,
+      `${this.byId(nodeId)?.name} left "${group.name}" — key rotated to epoch ${group.keyEpoch}`
+    );
+    return true;
+  }
+
+  /** Manual rotation, admin only (roadmap Phase 4: "admin rotate key"). */
+  rotateGroupKey(groupId: string, requestedBy: NodeId): boolean {
+    const group = this.groups.get(groupId);
+    if (!group || group.adminId !== requestedBy) return false;
+    group.keyEpoch++;
+    this.pushLog("group", requestedBy, `admin rotated "${group.name}" key to epoch ${group.keyEpoch}`);
+    return true;
+  }
+
+  /** Groups a node belongs to, for the UI's destination picker. */
+  groupsOf(nodeId: NodeId): Group[] {
+    return [...this.groups.values()].filter((g) => g.members.has(nodeId));
   }
 
   // --- manual controls (UI) ---------------------------------------------------
@@ -1557,8 +1761,10 @@ export class MeshSimulation {
     const avgScore = online.length ? online.reduce((s, n) => s + n.score, 0) / online.length : 0;
     const avgBattery = online.length ? online.reduce((s, n) => s + n.battery, 0) / online.length : 0;
 
+    // Group traffic is neither: it has its own denominator (`groupExpected`), and
+    // folding it in here would let a 10-member group flatter `deliveryRatio`.
     const unicastDeliveries = this.deliveries.filter(
-      (d) => d.type !== "ack" && d.type !== "broadcast"
+      (d) => d.type !== "ack" && d.type !== "broadcast" && !d.groupId
     );
     const dataDeliveries = this.deliveries.filter((d) => d.type !== "ack");
     const latencies = unicastDeliveries.map((d) => d.latencyMs).sort((a, b) => a - b);
@@ -1658,6 +1864,12 @@ export class MeshSimulation {
       sentUnicast: this.sentUnicast,
       sentBroadcast: this.sentBroadcast,
       sosFloods: this.sosFloods,
+      sentGroup: this.sentGroup,
+      groupReceipts: this.groupReceipts,
+      groupExpected: this.groupExpected,
+      groupDeliveryRatio:
+        this.groupExpected > 0 ? this.groupReceipts / this.groupExpected : 0,
+      groupEpochRejected: this.groupEpochRejected,
       batteryPercentPerHourNormal: drainPerHour("NORMAL"),
       batteryPercentPerHourSuper: drainPerHour("SUPER"),
       scansPerSec: this.scanCount / elapsedSec,

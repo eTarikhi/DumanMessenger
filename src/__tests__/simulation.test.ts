@@ -696,6 +696,261 @@ describe("power policy and telemetry (skills/02, skills/07, roadmap Phase 2)", (
   });
 });
 
+  describe("group channels (docs/04 §4, roadmap Phase 1 'group (3-10 members)')", () => {
+    /** A settled world with one group in it. Members are picked spread across the
+     *  world by default, so delivery has to cross hops rather than fall out of a
+     *  single radio range. */
+    function groupWorld(
+      over: Partial<SimConfig> = {},
+      size = 5,
+      spread = true,
+      world = campusQuad(42)
+    ) {
+      const sim = new MeshSimulation({ ...world, ...over });
+      sim.runFor(90000);
+      sim.clearRecords();
+      const online = sim.nodes.filter((n) => n.isOnline);
+      const cx = online.reduce((a, n) => a + n.pos.x, 0) / online.length;
+      const cy = online.reduce((a, n) => a + n.pos.y, 0) / online.length;
+      const ranked = online
+        .slice()
+        .sort(
+          (a, b) =>
+            (b.pos.x - cx) ** 2 + (b.pos.y - cy) ** 2 - ((a.pos.x - cx) ** 2 + (a.pos.y - cy) ** 2)
+        );
+      const ids = spread
+        ? Array.from(
+            new Set(
+              Array.from({ length: size }, (_, i) =>
+                ranked[(i * Math.floor(ranked.length / size)) % ranked.length].id
+              )
+            )
+          )
+        : online
+            .slice()
+            .sort(
+              (a, b) =>
+                (a.pos.x - ranked[0].pos.x) ** 2 +
+                (a.pos.y - ranked[0].pos.y) ** 2 -
+                ((b.pos.x - ranked[0].pos.x) ** 2 + (b.pos.y - ranked[0].pos.y) ** 2)
+            )
+            .slice(0, size)
+            .map((n) => n.id);
+      const group = sim.createGroup("field team", ids, ids[0])!;
+      return { sim, group, ids, sender: sim.nodes.find((n) => n.id === ids[0])! };
+    }
+
+    /** Send `n` group messages, letting each one propagate. */
+    function send(sim: MeshSimulation, groupId: string, from: string, n = 4, gapMs = 4000) {
+      for (let i = 0; i < n; i++) {
+        sim.sendMessage(from, groupId, `status ${i}`, "text");
+        sim.runFor(gapMs);
+      }
+      sim.refresh();
+    }
+
+    it("enforces the 3-10 member bound, and nothing else can create a group", () => {
+      const { sim } = groupWorld({}, 5, false);
+      const all = sim.nodes.map((n) => n.id);
+      expect(sim.createGroup("too small", all.slice(0, 2))).toBeNull();
+      expect(sim.createGroup("too big", all.slice(0, 11))).toBeNull();
+      expect(sim.createGroup("just right", all.slice(0, 3))).not.toBeNull();
+      expect(sim.createGroup("at the cap", all.slice(0, 10))).not.toBeNull();
+      // duplicate ids and ids that do not exist cannot pad out the minimum
+      expect(sim.createGroup("padded", ["node-0", "node-0", "node-404"])).toBeNull();
+      const g = sim.createGroup("admin", all.slice(0, 4), all[2])!;
+      expect(g.adminId).toBe(all[2]);
+      expect(g.keyEpoch).toBe(0);
+      expect(g.members.size).toBe(4);
+    });
+
+    it("reaches every member and nobody else", () => {
+      const { sim, group, ids, sender } = groupWorld();
+      send(sim, group.id, sender.id);
+      for (const n of sim.nodes) {
+        const held = n.inbox.filter((m) => m.groupId === group.id);
+        if (n.id === sender.id) {
+          expect(held).toHaveLength(0); // a sender does not receive its own message
+        } else if (ids.includes(n.id)) {
+          expect(held.length).toBe(4);
+        } else {
+          expect(held).toHaveLength(0);
+        }
+      }
+      expect(sim.stats.groupReceipts).toBe(4 * (ids.length - 1));
+      expect(sim.stats.groupExpected).toBe(4 * (ids.length - 1));
+      expect(sim.stats.groupDeliveryRatio).toBe(1);
+    });
+
+    it("relays through non-members, so a spread group still works", () => {
+      const { sim, group, ids, sender } = groupWorld({}, 5, true);
+      send(sim, group.id, sender.id, 2);
+      // at least one member is out of the sender's radio range and got it anyway
+      const far = ids.filter((id) => id !== sender.id && !sender.peerIds.includes(id));
+      expect(far.length).toBeGreaterThan(0);
+      for (const id of far) {
+        expect(sim.nodes.find((n) => n.id === id)!.inbox.filter((m) => m.groupId === group.id).length)
+          .toBeGreaterThan(0);
+      }
+      // and a non-member carried the traffic: it transmitted without receiving
+      const carriers = sim.nodes.filter(
+        (n) => !ids.includes(n.id) && n.txCount > 0 && !n.inbox.some((m) => m.groupId === group.id)
+      );
+      expect(carriers.length).toBeGreaterThan(0);
+    });
+
+    it("keeps group traffic out of the unicast metrics", () => {
+      const { sim, group, sender } = groupWorld();
+      send(sim, group.id, sender.id);
+      expect(sim.stats.sentUnicast).toBe(0);
+      expect(sim.stats.sentBroadcast).toBe(0);
+      expect(sim.stats.sentGroup).toBe(4);
+      expect(sim.stats.deliveryRatio).toBe(0); // not flattered by 4 member receipts
+      expect(sim.deliveries.every((d) => d.groupId === group.id)).toBe(true);
+    });
+
+    it("never arms a retry timer for a scoped flood", () => {
+      // The flood is addressed to nobody, so no ACK can come back. Arming the timer
+      // would burn two retransmissions and then push every group message into the
+      // OppQueue.
+      const { sim, group, sender } = groupWorld();
+      send(sim, group.id, sender.id);
+      expect(sim.stats.retriesSent).toBe(0);
+      expect(sim.stats.retriesExhausted).toBe(0);
+      expect(sender.oppQueue).toHaveLength(0);
+      expect(sim.nodes.every((n) => n.oppQueue.length === 0)).toBe(true);
+    });
+
+    it("rotates the key when a member leaves, and the departed node can relay but not read", () => {
+      const { sim, group, ids, sender } = groupWorld({}, 5, true);
+      send(sim, group.id, sender.id, 1);
+      const leaving = ids.find((id) => id !== sender.id)!;
+      const leaver = sim.nodes.find((n) => n.id === leaving)!;
+      expect(leaver.inbox.filter((m) => m.groupId === group.id)).toHaveLength(1);
+      const epochBefore = group.keyEpoch;
+      expect(sim.removeFromGroup(group.id, leaving)).toBe(true);
+      expect(group.keyEpoch).toBe(epochBefore + 1); // docs/04 §4: rotated on leave
+      expect(group.members.has(leaving)).toBe(false);
+
+      const txBefore = leaver.txCount;
+      leaver.inbox.length = 0;
+      send(sim, group.id, sender.id, 2);
+      // cannot read any of it...
+      expect(leaver.inbox.filter((m) => m.groupId === group.id)).toHaveLength(0);
+      // ...but the bytes are not secret to the network, so it still carries them
+      expect(leaver.txCount).toBeGreaterThan(txBefore);
+      // and the remaining members are unaffected
+      for (const id of ids.filter((x) => x !== leaving && x !== sender.id)) {
+        expect(sim.nodes.find((n) => n.id === id)!.inbox.filter((m) => m.groupId === group.id))
+          .toHaveLength(3);
+      }
+    });
+
+    it("refuses to shrink a group below three", () => {
+      const { sim, group, ids } = groupWorld({}, 3, false);
+      expect(group.members.size).toBe(3);
+      expect(sim.removeFromGroup(group.id, ids[1])).toBe(false);
+      expect(group.members.size).toBe(3);
+      expect(sim.removeFromGroup(group.id, "node-404")).toBe(false);
+    });
+
+    it("rotates on join, so a joiner cannot read the history it missed", () => {
+      const { sim, group, ids, sender } = groupWorld({}, 4, true);
+      send(sim, group.id, sender.id, 2);
+      const outsider = sim.nodes.find((n) => n.isOnline && !ids.includes(n.id))!;
+      const epochBefore = group.keyEpoch;
+      expect(sim.inviteToGroup(group.id, outsider.id)).toBe(true);
+      expect(group.keyEpoch).toBe(epochBefore + 1);
+      // the two messages sent before it joined were under the old epoch
+      expect(outsider.inbox.filter((m) => m.groupId === group.id)).toHaveLength(0);
+      send(sim, group.id, sender.id, 2);
+      expect(outsider.inbox.filter((m) => m.groupId === group.id)).toHaveLength(2);
+      // joining twice, or past the cap, is refused
+      expect(sim.inviteToGroup(group.id, outsider.id)).toBe(false);
+      for (const n of sim.nodes.filter((x) => x.isOnline && !group.members.has(x.id))) {
+        if (group.members.size >= 10) break;
+        sim.inviteToGroup(group.id, n.id);
+      }
+      expect(group.members.size).toBeLessThanOrEqual(10);
+    });
+
+    it("counts a member that cannot decrypt as a rejected epoch, not a delivery", () => {
+      const { sim, group, ids, sender } = groupWorld({}, 4, true);
+      // A message already in flight under epoch 0 meets a group that rotated to 1.
+      const msg = sim.sendMessage(sender.id, group.id, "in flight", "text")!;
+      expect(msg.groupEpoch).toBe(0);
+      sim.removeFromGroup(group.id, ids[1]);
+      expect(group.keyEpoch).toBe(1);
+      sim.runFor(6000);
+      sim.refresh();
+      expect(sim.stats.groupEpochRejected).toBeGreaterThan(0);
+      const stale = sim.deliveries.filter((d) => d.groupId === group.id && d.groupEpoch === 0);
+      expect(stale.filter((d) => d.to === ids[1])).toHaveLength(0);
+    });
+
+    it("lets only the admin rotate the key", () => {
+      const { sim, group, ids, sender } = groupWorld({}, 4, false);
+      expect(group.adminId).toBe(sender.id);
+      const epoch = group.keyEpoch;
+      expect(sim.rotateGroupKey(group.id, ids[1])).toBe(false);
+      expect(group.keyEpoch).toBe(epoch);
+      expect(sim.rotateGroupKey(group.id, sender.id)).toBe(true);
+      expect(group.keyEpoch).toBe(epoch + 1);
+      expect(sim.rotateGroupKey("grp-404", sender.id)).toBe(false);
+    });
+
+    it("offers per-member unicast as the alternative, with ACKs and the same reach", () => {
+      // The mode the measurement says is cheaper when members are close together:
+      // 4.0 transmissions per message against 519.6 for a scoped flood in the
+      // 60-node crowd, because every member is a direct peer (docs/06 §14).
+      const { sim, group, ids, sender } = groupWorld(
+        { groupMode: "per-member-unicast" },
+        5,
+        false
+      );
+      send(sim, group.id, sender.id, 2);
+      expect(sim.stats.sentGroup).toBe(2 * (ids.length - 1)); // one message per member
+      expect(sim.stats.groupDeliveryRatio).toBe(1);
+      expect(sim.stats.acksReceived).toBeGreaterThan(0); // unicast arms the ACK path
+      expect(sim.stats.sentUnicast).toBe(0); // and still is not 1:1 traffic
+      // ACKs are deliveries too, and they belong to the member message rather than
+      // to the group, so they are the one record here without a groupId.
+      expect(
+        sim.deliveries.filter((d) => d.type !== "ack").every((d) => d.groupId === group.id)
+      ).toBe(true);
+      expect(sim.deliveries.filter((d) => d.type === "ack").length).toBeGreaterThan(0);
+    });
+
+    it("logs membership changes and stale epochs when capture is on", () => {
+      const { sim, group, ids, sender } = groupWorld({ captureLog: true }, 4, false);
+      sim.sendMessage(sender.id, group.id, "hello", "text");
+      sim.runFor(4000);
+      sim.inviteToGroup(group.id, sim.nodes.find((n) => n.isOnline && !ids.includes(n.id))!.id);
+      sim.removeFromGroup(group.id, ids[2]);
+      sim.rotateGroupKey(group.id, group.adminId);
+      const entries = sim.log.filter((e) => e.kind === "group");
+      const detail = entries.map((e) => e.detail).join(" | ");
+      expect(entries.length).toBeGreaterThanOrEqual(4); // create, join, leave, rotate
+      expect(detail).toContain("created with 4 members");
+      expect(detail).toContain("joined");
+      expect(detail).toContain("left");
+      expect(detail).toContain("admin rotated");
+    });
+
+    it("lists a node's groups, and forgets them when the world is rebuilt", () => {
+      const { sim, group, ids } = groupWorld({}, 4, false);
+      expect(sim.groupsOf(ids[0]).map((g) => g.id)).toEqual([group.id]);
+      expect(sim.groupsOf("node-404")).toEqual([]);
+      sim.reset();
+      expect(sim.groups.size).toBe(0);
+      expect(sim.groupsOf(ids[0])).toEqual([]);
+    });
+
+    it("defaults to the mode whose cost does not depend on the route table", () => {
+      expect(DEFAULT_CONFIG.groupMode).toBe("scoped-flood");
+    });
+  });
+
   describe("SOS mode: repeated flood of GPS + text (docs/05 §SOS, roadmap Phase 3)", () => {
     /** The node furthest from the centroid: an SOS from the edge makes reach a
      *  real test rather than a formality. */
