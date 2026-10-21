@@ -58,6 +58,8 @@ MeshMessage createMessage(
   int? sosRepeat,
   Vec2? sosPos,
   TransportType? transport,
+  String? groupId,
+  int? groupEpoch,
 }) {
   final sizeBytes = 64 + body.length * 4;
   return MeshMessage(
@@ -79,6 +81,8 @@ MeshMessage createMessage(
     sosId: sosId,
     sosRepeat: sosRepeat,
     sosPos: sosPos,
+    groupId: groupId,
+    groupEpoch: groupEpoch,
   );
 }
 
@@ -211,7 +215,11 @@ ForwardDecision decideForward(
         ForwardMode.flood, peerIds, 'naive flood baseline');
   }
 
-  if (msg.to != broadcastAddress) {
+  // A group flood is addressed to nobody in particular: the network does not know
+  // the membership, so it forwards on the normal policy (MPR included, unlike SOS)
+  // and delivery is decided at the recipient. Routing it as a unicast would send a
+  // group message to one neighbour and strand the rest.
+  if (msg.to != broadcastAddress && msg.to != groupAddress) {
     if (peerIds.contains(msg.to)) {
       return ForwardDecision(
           ForwardMode.direct, <NodeId>[msg.to], 'destination in range');

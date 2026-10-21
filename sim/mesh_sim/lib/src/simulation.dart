@@ -57,6 +57,7 @@ class SimConfig {
     this.sosTtl = 5,
     this.sosRepeatMs = 5000,
     this.sosRepeats = 3,
+    this.groupMode = GroupMode.scopedFlood,
     this.enableSuperElection = true,
     this.enableMobility = true,
     this.enableDtn = true,
@@ -136,6 +137,10 @@ class SimConfig {
   /// single broadcast, which is the arm the repeat mechanism is measured against.
   final int sosRepeats;
 
+  /// How a group message travels: one scoped flood the whole network relays and
+  /// only members accept, or one routed unicast per member (docs/06 §14).
+  final GroupMode groupMode;
+
   final bool enableSuperElection;
   final bool enableMobility;
   final bool enableDtn;
@@ -192,6 +197,7 @@ class SimConfig {
     int? sosTtl,
     double? sosRepeatMs,
     int? sosRepeats,
+    GroupMode? groupMode,
     double? warmupMs,
     int? maxRetries,
     double? ackTimeoutMs,
@@ -241,6 +247,7 @@ class SimConfig {
         sosTtl: sosTtl ?? this.sosTtl,
         sosRepeatMs: sosRepeatMs ?? this.sosRepeatMs,
         sosRepeats: sosRepeats ?? this.sosRepeats,
+        groupMode: groupMode ?? this.groupMode,
         warmupMs: warmupMs ?? this.warmupMs,
         trafficIntervalMs: trafficIntervalMs,
       );
@@ -288,6 +295,11 @@ class SimulationStats {
     required this.sentUnicast,
     required this.sentBroadcast,
     required this.sosFloods,
+    required this.sentGroup,
+    required this.groupReceipts,
+    required this.groupExpected,
+    required this.groupDeliveryRatio,
+    required this.groupEpochRejected,
     required this.batteryPercentPerHourNormal,
     required this.batteryPercentPerHourSuper,
     required this.scansPerSec,
@@ -344,6 +356,21 @@ class SimulationStats {
 
   /// SOS floods actually put on air, repeats included (docs/05 §SOS mode).
   final int sosFloods;
+
+  /// Group messages handed to the radio: 1 per send in [GroupMode.scopedFlood],
+  /// one per member in [GroupMode.perMemberUnicast].
+  final int sentGroup;
+
+  /// Member deliveries of group traffic.
+  final int groupReceipts;
+
+  /// Member deliveries that should have happened: the denominator that makes
+  /// [groupDeliveryRatio] comparable across the two modes.
+  final int groupExpected;
+  final double groupDeliveryRatio;
+
+  /// Copies a *member* could not decrypt because the key had rotated since.
+  final int groupEpochRejected;
 
   /// skills/07 telemetry: "Battery %/h per role, scans/sec, relays/sec".
   /// Measured from the battery snapshot taken when metrics were cleared, over
@@ -444,6 +471,8 @@ class DeliveryRecord {
     required this.dtn,
     required this.attempt,
     required this.hopTrace,
+    this.groupId,
+    this.groupEpoch,
   });
 
   final MsgId msgId;
@@ -464,6 +493,12 @@ class DeliveryRecord {
   /// The journey behind [path]: time, link budget and decision per hop
   /// (roadmap Phase 4, "via 2 nodes • SUPER Amir").
   final List<HopRecord> hopTrace;
+
+  /// Set on group traffic, so it can be accounted separately from 1:1.
+  final String? groupId;
+
+  /// The key epoch this copy was sent under.
+  final int? groupEpoch;
 }
 
 /// How a forwarding decision shows up in a message's hop trace.
@@ -514,6 +549,7 @@ class SentRecord {
     required this.body,
     required this.timestamp,
     this.sosId,
+    this.groupId,
   });
 
   final MsgId msgId;
@@ -526,6 +562,10 @@ class SentRecord {
   /// Set on every SOS flood of one emergency, so a UI can collapse the repeats
   /// into a single alert exactly as a receiver's inbox does.
   final String? sosId;
+
+  /// Set on group traffic, so a UI can show one card per send even in
+  /// [GroupMode.perMemberUnicast], where one user action is N radio messages.
+  final String? groupId;
   bool delivered = false;
   int recipients = 0;
 }
@@ -674,6 +714,15 @@ class _PathTrace {
   final MsgType type;
 }
 
+/// Ties a message to the group and key epoch it was sent under. Internal: a caller
+/// passes a group id as the destination and [MeshSimulation.sendMessage] builds this.
+class _GroupCtx {
+  _GroupCtx(this.id, this.epoch);
+
+  final String id;
+  final int epoch;
+}
+
 class _SosRepeatPayload {
   _SosRepeatPayload(this.sosId, this.body, this.repeat);
 
@@ -742,6 +791,10 @@ class MeshSimulation {
   int _sentUnicast = 0;
   int _sentBroadcast = 0;
   int _sosFloods = 0;
+  int _sentGroup = 0;
+  int _groupReceipts = 0;
+  int _groupExpected = 0;
+  int _groupEpochRejected = 0;
   int _superSamples = 0;
   double _superSampleSum = 0;
   int _retriesSent = 0;
@@ -788,6 +841,10 @@ class MeshSimulation {
     _sentUnicast = 0;
     _sentBroadcast = 0;
     _sosFloods = 0;
+    _sentGroup = 0;
+    _groupReceipts = 0;
+    _groupExpected = 0;
+    _groupEpochRejected = 0;
     _superSamples = 0;
     _superSampleSum = 0;
     _retriesSent = 0;
@@ -838,6 +895,10 @@ class MeshSimulation {
 
   void reset([SimConfig? config]) {
     if (config != null) this.config = config;
+    // Groups belong to the world, not to the metrics window: rebuilding the mesh
+    // invalidates every membership, so the registry goes with it.
+    groups.clear();
+    _groupSeq = 0;
     rng = createRng(this.config.seed);
     rf = this.config.rf;
     nodes = createNodes(rng, this.config);
@@ -1114,9 +1175,36 @@ class MeshSimulation {
     String toId,
     String body, [
     MsgType type = MsgType.text,
+    _GroupCtx? groupCtx,
   ]) {
     final from = _byId(fromId);
     if (from == null || !from.isOnline) return null;
+
+    // A group id in the destination position means "send to this group"
+    // (docs/04 §4, roadmap Phase 1 "group (3-10 members)"). Which radio pattern
+    // that turns into is `groupMode`, and the two are measured against each other
+    // in docs/06 §14 rather than assumed.
+    final group = groupCtx == null ? groups[toId] : null;
+    if (group != null) {
+      final targets = group.members.where((id) => id != fromId).toList();
+      if (targets.isEmpty) return null;
+      _groupExpected += targets.length;
+      final ctx = _GroupCtx(group.id, group.keyEpoch);
+      if (config.groupMode == GroupMode.perMemberUnicast) {
+        // One routed message per member: the route table can aim each one, and each
+        // costs an ACK and possibly a retry.
+        MeshMessage? last;
+        for (final t in targets) {
+          final m = sendMessage(fromId, t, body, type, ctx);
+          if (m != null) last = m;
+        }
+        return last;
+      }
+      // One scoped flood: addressed to nobody in particular, relayed by the whole
+      // network on the normal policy, accepted only by members holding the current
+      // key epoch. The network never learns who the members are.
+      return sendMessage(fromId, groupAddress, body, type, ctx);
+    }
 
     // docs/05 §"Broadcast SOS | All transports, flood (TTL=5)". Reach comes from
     // repeating the flood and, where the deployment is wider than that, from the
@@ -1136,7 +1224,9 @@ class MeshSimulation {
         sosId: sosId,
         sosRepeat: isSos ? 0 : null,
         sosPos: isSos ? from.pos.clone() : null,
-        transport: isSos ? TransportType.wifiDirect : null);
+        transport: isSos ? TransportType.wifiDirect : null,
+        groupId: groupCtx?.id,
+        groupEpoch: groupCtx?.epoch);
     if (isSos) {
       _sosFloods++;
       _pushLog(
@@ -1158,8 +1248,14 @@ class MeshSimulation {
         body: body,
         timestamp: now,
         sosId: msg.sosId,
+        groupId: msg.groupId,
       ));
-      if (toId == broadcastAddress) {
+      // Group traffic gets its own counters: folding it into sentUnicast would let
+      // a 10-member group flatter deliveryRatio, and folding it into sentBroadcast
+      // would deflate broadcastReach.
+      if (groupCtx != null) {
+        _sentGroup++;
+      } else if (toId == broadcastAddress) {
         _sentBroadcast++;
       } else {
         _sentUnicast++;
@@ -1179,7 +1275,13 @@ class MeshSimulation {
       return msg;
     }
 
-    if (toId != broadcastAddress && msgType != MsgType.ack && config.maxRetries > 0) {
+    // A scoped group flood is addressed to nobody, so no ACK can ever come back:
+    // arming the retry timer here would burn two retransmissions and then push the
+    // message into the OppQueue on every single group send.
+    if (toId != broadcastAddress &&
+        toId != groupAddress &&
+        msgType != MsgType.ack &&
+        config.maxRetries > 0) {
       _pendingAcks[msg.id] = _PendingAck(msg, fromId, 0);
       _queue.push(now + config.ackTimeoutMs, EventKind.ackTimeout, fromId, msg.id);
     }
@@ -1244,6 +1346,7 @@ class MeshSimulation {
       body: payload.body,
       timestamp: now,
       sosId: msg.sosId,
+      groupId: msg.groupId,
     ));
     _traces[msg.id] =
         _PathTrace(<NodeId>[nodeId], now, nodeId, broadcastAddress, MsgType.sos);
@@ -1550,6 +1653,41 @@ class MeshSimulation {
       return;
     }
 
+    if (msg.to == groupAddress && msg.groupId != null) {
+      final group = groups[msg.groupId];
+      final isMember = group != null && group.members.contains(node.id);
+      if (group != null && isMember && group.keyEpoch == msg.groupEpoch) {
+        final fresh = deliverToInbox(node, msg);
+        if (fresh) {
+          _recordDelivery(node, msg, trace);
+          _pushLog(
+              MeshLogKind.deliver,
+              node.id,
+              '${msg.id} group "${group.name}" reached ${node.name} via $via '
+                  '(epoch ${msg.groupEpoch})',
+              peerId: via,
+              msgId: msg.id,
+              msgType: msg.type,
+              hop: msg.hopCount + 1);
+        }
+      } else if (group != null && isMember) {
+        // A member holding an older epoch cannot decrypt this copy: the key rotated
+        // when somebody left or joined (docs/04 §4, "groupKey rotated on member
+        // leave"). It still relays — the bytes are not secret to the network, only
+        // unreadable to this node.
+        _groupEpochRejected++;
+        _pushLog(
+            MeshLogKind.group,
+            node.id,
+            '${msg.id} group "${group.name}" at ${node.name}: sent under epoch '
+                '${msg.groupEpoch}, holds ${group.keyEpoch} — cannot decrypt, still relaying',
+            msgId: msg.id,
+            msgType: msg.type);
+      }
+      // Non-members fall through silently: relaying traffic you cannot read is the
+      // normal case in a scoped flood, and logging it would drown the capture.
+    }
+
     if (msg.to == broadcastAddress) {
       final fresh = deliverToInbox(node, msg);
       if (fresh) {
@@ -1614,6 +1752,11 @@ class MeshSimulation {
   }
 
   void _recordDelivery(MeshNode node, MeshMessage msg, _PathTrace? trace) {
+    // Counted here rather than at a delivery call site because group traffic arrives
+    // by two different roads — a scoped flood addressed to groupAddress, or a routed
+    // unicast per member — and a counter in only one of them silently reports 0% for
+    // the other mode.
+    if (msg.groupId != null) _groupReceipts++;
     final createdAt = trace != null ? trace.createdAt : msg.timestamp;
     deliveries.add(DeliveryRecord(
       msgId: msg.id,
@@ -1629,6 +1772,8 @@ class MeshSimulation {
       attempt: msg.attempt,
       dtn: msg.carried,
       hopTrace: trace != null ? List<HopRecord>.of(trace.hops) : <HopRecord>[],
+      groupId: msg.groupId,
+      groupEpoch: msg.groupEpoch,
     ));
     if (deliveries.length > 5000) deliveries.removeAt(0);
     for (final rec in sentRecords) {
@@ -1638,6 +1783,89 @@ class MeshSimulation {
       }
     }
   }
+
+  // --- group channels (docs/04 §4, roadmap Phase 1 and Phase 4 "Group UX") ----
+
+  /// Live group channels. Membership is simulator state, not wire state: the
+  /// network relays a group flood without ever learning who is in it.
+  final Map<String, Group> groups = <String, Group>{};
+  int _groupSeq = 0;
+
+  /// Create a group. The 3-10 member bound is roadmap Phase 1's, and it is enforced
+  /// here rather than left to a UI: below 3 a group is a 1:1 chat with an audience,
+  /// and above 10 it is a broadcast wearing a member list — which matters because a
+  /// scoped flood costs the whole network relays no matter how few nodes accept it.
+  Group? createGroup(String name, List<NodeId> memberIds, [NodeId? adminId]) {
+    final unique = <NodeId>{};
+    for (final id in memberIds) {
+      if (_byId(id) != null) unique.add(id);
+    }
+    if (unique.length < groupMinMembers || unique.length > groupMaxMembers) {
+      return null;
+    }
+    final list = unique.toList();
+    final group = Group(
+      id: 'grp-${++_groupSeq}',
+      name: name,
+      members: unique,
+      adminId: (adminId != null && unique.contains(adminId)) ? adminId : list.first,
+      keyEpoch: 0,
+      createdAt: now,
+    );
+    groups[group.id] = group;
+    _pushLog(MeshLogKind.group, group.adminId,
+        'group "${group.name}" created with ${unique.length} members (epoch 0)');
+    return group;
+  }
+
+  /// Add a member. Rotates the key on the way in, for the mirror image of the reason
+  /// [removeFromGroup] rotates it: a joiner must not be able to read the history it
+  /// missed. docs/04 §4 names the leave case; the join case is the same argument.
+  bool inviteToGroup(String groupId, NodeId nodeId) {
+    final group = groups[groupId];
+    if (group == null || group.members.contains(nodeId) || _byId(nodeId) == null) {
+      return false;
+    }
+    if (group.members.length >= groupMaxMembers) return false;
+    group.members.add(nodeId);
+    group.keyEpoch++;
+    _pushLog(
+        MeshLogKind.group,
+        nodeId,
+        '${_byId(nodeId)?.name} joined "${group.name}" — key rotated to epoch ${group.keyEpoch}');
+    return true;
+  }
+
+  /// Remove a member and rotate the group key, which is what makes the departure
+  /// stick: the departed node keeps relaying group traffic (it is just bytes now)
+  /// but can no longer read any of it. Refuses to go below 3 members — at that point
+  /// the group is a 1:1 chat and should be one.
+  bool removeFromGroup(String groupId, NodeId nodeId) {
+    final group = groups[groupId];
+    if (group == null || !group.members.contains(nodeId)) return false;
+    if (group.members.length <= groupMinMembers) return false;
+    group.members.remove(nodeId);
+    group.keyEpoch++;
+    _pushLog(
+        MeshLogKind.group,
+        nodeId,
+        '${_byId(nodeId)?.name} left "${group.name}" — key rotated to epoch ${group.keyEpoch}');
+    return true;
+  }
+
+  /// Manual rotation, admin only (roadmap Phase 4: "admin rotate key").
+  bool rotateGroupKey(String groupId, NodeId requestedBy) {
+    final group = groups[groupId];
+    if (group == null || group.adminId != requestedBy) return false;
+    group.keyEpoch++;
+    _pushLog(MeshLogKind.group, requestedBy,
+        'admin rotated "${group.name}" key to epoch ${group.keyEpoch}');
+    return true;
+  }
+
+  /// Groups a node belongs to, for a UI's destination picker.
+  List<Group> groupsOf(NodeId nodeId) =>
+      groups.values.where((g) => g.members.contains(nodeId)).toList();
 
   // --- manual controls -------------------------------------------------------
 
@@ -1701,7 +1929,12 @@ class MeshSimulation {
         : online.fold<double>(0, (s, n) => s + n.battery) / online.length;
 
     final unicastDeliveries = deliveries
-        .where((d) => d.type != MsgType.ack && d.type != MsgType.broadcast)
+        // Group traffic is neither: it has its own denominator (`groupExpected`),
+        // and folding it in here would let a 10-member group flatter deliveryRatio.
+        .where((d) =>
+            d.type != MsgType.ack &&
+            d.type != MsgType.broadcast &&
+            d.groupId == null)
         .toList();
     final dataDeliveries = deliveries.where((d) => d.type != MsgType.ack).toList();
     final latencies = unicastDeliveries.map((d) => d.latencyMs).toList()..sort();
@@ -1808,6 +2041,12 @@ class MeshSimulation {
       sentUnicast: _sentUnicast,
       sentBroadcast: _sentBroadcast,
       sosFloods: _sosFloods,
+      sentGroup: _sentGroup,
+      groupReceipts: _groupReceipts,
+      groupExpected: _groupExpected,
+      groupDeliveryRatio:
+          _groupExpected > 0 ? _groupReceipts / _groupExpected : 0.0,
+      groupEpochRejected: _groupEpochRejected,
       batteryPercentPerHourNormal: drainPerHour(Role.normal),
       batteryPercentPerHourSuper: drainPerHour(Role.superNode),
       scansPerSec: _scanCount / elapsedSec,

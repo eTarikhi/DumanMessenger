@@ -65,6 +65,9 @@ Duman mesh simulator (headless)
   --trace             print the hop-by-hop route each delivered message took
   --capture           record the pcap-like mesh log and print its tail
   --capture-ogm       also log OGM beacons (they outnumber everything else)
+  --group [N]         create an N-member group (default 5, spread across the
+                      world) and report what a group message costs in both
+                      delivery modes -- the docs/06 §14 measurement
   --sos               fire an SOS from the edge of the world in a separate run
                       and report how far it got (roadmap Phase 3 exit criterion:
                       "SOS reaches all within ttl")
@@ -93,6 +96,8 @@ void main(List<String> args) {
   final dutyCycle = args.contains('--duty-cycle');
   final showTrace = args.contains('--trace');
   final sosProbe = args.contains('--sos');
+  final groupProbe = args.contains('--group');
+  final groupSize = int.parse(_arg(args, '--group', '5'));
   final capture = args.contains('--capture');
   final asJson = args.contains('--json');
   final noCheck = args.contains('--no-check');
@@ -151,6 +156,11 @@ void main(List<String> args) {
   // A separate run: an SOS fan-out costs thousands of transmissions, and folding
   // that into this one would make the overhead ratio meaningless.
   final sos = sosProbe ? _sosProbe(config) : null;
+  // Also separate: a group flood costs the whole network relays, so folding it
+  // into the overhead measurement would report the group's cost as routing's.
+  final group = (groupProbe || args.contains('--group'))
+      ? _groupProbe(config, groupSize)
+      : null;
 
   final s = sim.stats;
   final unicast = sim.deliveries
@@ -232,6 +242,7 @@ void main(List<String> args) {
           .map((e) => e.toJson())
           .toList(),
     if (sos != null) 'sos': sos,
+    if (group != null) 'group': group,
     'latencyByHop': s.latencyByHop.map((b) => <String, Object?>{
           'hops': b.hops,
           'count': b.count,
@@ -251,6 +262,21 @@ void main(List<String> args) {
       if (k == 'latencyByHop') return;
       stdout.writeln('  ${k.padRight(24)} $v');
     });
+    if (group != null) {
+      stdout.writeln('\nGroup probe (${group['members']} members spread across the world, '
+          '${group['sends']} messages each)');
+      for (final mode in <String>['scopedFlood', 'perMemberUnicast']) {
+        final m = group[mode] as Map<String, Object?>;
+        if (m.containsKey('error')) {
+          stdout.writeln('  ${mode.padRight(20)} ${m['error']}');
+          continue;
+        }
+        stdout.writeln('  ${mode.padRight(20)} delivery ${(m['deliveryPct'] as num).toStringAsFixed(1)}%  '
+            'tx/msg ${m['txPerMsg']}  receipts ${m['receipts']}/${m['expected']}  '
+            'p95 ${m['p95Ms']} ms  retries ${m['retries']}  acks ${m['acks']}');
+      }
+      stdout.writeln('  ${(group['verdict'] as String)}');
+    }
     if (sos != null) {
       stdout.writeln('\nSOS probe (edge sender ${sos['sender']}, ttl '
           '${config.sosTtl}, ${config.sosRepeats} repeats, '
@@ -452,4 +478,83 @@ Set<NodeId> _component(MeshSimulation sim, MeshNode start) {
     }
   }
   return seen;
+}
+
+/// What a group message costs, in both delivery modes, on the same world and the
+/// same traffic (docs/06 §14).
+///
+/// Run separately from the main report for the same reason as the SOS probe: a
+/// scoped group flood is relayed by the whole network, so charging it to the
+/// routing overhead ratio would misattribute the cost.
+Map<String, Object?> _groupProbe(SimConfig config, int size) {
+  const sends = 5;
+  final modes = <String, Map<String, Object?>>{};
+
+  for (final mode in GroupMode.values) {
+    final sim = MeshSimulation(config.copyWith(groupMode: mode));
+    sim.runFor(90000);
+    sim.clearRecords();
+
+    final online = sim.nodes.where((n) => n.isOnline).toList();
+    final cx = online.fold<double>(0, (a, n) => a + n.pos.x) / online.length;
+    final cy = online.fold<double>(0, (a, n) => a + n.pos.y) / online.length;
+    double d2(MeshNode n) =>
+        (n.pos.x - cx) * (n.pos.x - cx) + (n.pos.y - cy) * (n.pos.y - cy);
+    // Spread across the world by rank, so the group is not one radio cell.
+    final ranked = online.toList()..sort((a, b) => d2(b).compareTo(d2(a)));
+    final step = ranked.length ~/ math.max(1, size);
+    final ids = <NodeId>{};
+    for (var i = 0; i < ranked.length && ids.length < size; i++) {
+      ids.add(ranked[(i * step) % ranked.length].id);
+    }
+    final group = sim.createGroup('field team', ids.toList(), ids.first);
+    if (group == null) {
+      modes[mode.name] = <String, Object?>{'error': 'could not form a group of $size'};
+      continue;
+    }
+
+    for (var i = 0; i < sends; i++) {
+      sim.sendMessage(ids.first, group.id, 'status $i');
+      sim.runFor(4000);
+    }
+    sim.refresh();
+    final lat = sim.deliveries
+        .where((d) => d.groupId == group.id)
+        .map((d) => d.latencyMs)
+        .toList()
+      ..sort();
+    modes[mode.name] = <String, Object?>{
+      'deliveryPct': _round(100 * sim.stats.groupDeliveryRatio),
+      'receipts': sim.stats.groupReceipts,
+      'expected': sim.stats.groupExpected,
+      'radioMessages': sim.stats.sentGroup,
+      'txPerMsg': _round(sim.stats.totalForwarded / sends),
+      'p95Ms': _round(lat.isEmpty
+          ? 0.0
+          : lat[math.max(0, math.min(lat.length - 1, (lat.length * 0.95).floor()))]),
+      'retries': sim.stats.retriesSent,
+      'acks': sim.stats.acksReceived,
+      'epochRejected': sim.stats.groupEpochRejected,
+    };
+  }
+
+  final floodTx = (modes[GroupMode.scopedFlood.name]?['txPerMsg'] as num?) ?? 0;
+  final uniTx = (modes[GroupMode.perMemberUnicast.name]?['txPerMsg'] as num?) ?? 0;
+  final String verdict;
+  if (uniTx <= 0 || floodTx <= 0) {
+    verdict = 'not enough traffic to compare';
+  } else if (uniTx < floodTx) {
+    verdict = 'per-member unicast is ${(floodTx / uniTx).toStringAsFixed(1)}x cheaper here '
+        '(members are close enough that the route table can aim each copy)';
+  } else {
+    verdict = 'scoped flood is ${(uniTx / floodTx).toStringAsFixed(1)}x cheaper here '
+        '(members are far enough that each routed copy fans out anyway)';
+  }
+  return <String, Object?>{
+    'members': size,
+    'sends': sends,
+    GroupMode.scopedFlood.name: modes[GroupMode.scopedFlood.name],
+    GroupMode.perMemberUnicast.name: modes[GroupMode.perMemberUnicast.name],
+    'verdict': verdict,
+  };
 }

@@ -32,6 +32,46 @@ enum Priority { low, normal, high }
 ///   flood-all") and skills/08 ("overhead down 30% vs naive flood") name.
 enum RelayPolicy { mpr, routeFlood, floodAll }
 
+/// Address of a scoped group flood. Not a node id, and deliberately distinct from
+/// `broadcastAddress`: a broadcast is public by design (docs/04 §4), a group flood
+/// is delivered only to members holding the current key epoch.
+const String groupAddress = 'GROUP';
+
+/// Group size limits — roadmap Phase 1: "group (3-10 members)".
+const int groupMinMembers = 3;
+const int groupMaxMembers = 10;
+
+/// How a group message travels. `docs/06` §14 measures the two against each other:
+/// per-member unicast is dramatically cheaper when every member is a direct peer
+/// (4.0 transmissions per message against 519.6 for a scoped flood in a 60-node
+/// crowd) and dramatically dearer when members are spread (3020 vs 519), and the
+/// sender cannot tell which case it is in from its own routing table — so the
+/// geometry-independent flood is the default.
+enum GroupMode { scopedFlood, perMemberUnicast }
+
+/// A group channel (docs/04 §4, roadmap Phase 1 and Phase 4 "Group UX").
+class Group {
+  Group({
+    required this.id,
+    required this.name,
+    required this.members,
+    required this.adminId,
+    required this.keyEpoch,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String name;
+  final Set<NodeId> members;
+
+  /// Only the admin may rotate the key (roadmap Phase 4: "admin rotate key").
+  final NodeId adminId;
+
+  /// Bumped on every membership change and on manual rotation.
+  int keyEpoch;
+  final double createdAt;
+}
+
 class Vec2 {
   Vec2(this.x, this.y);
 
@@ -73,6 +113,8 @@ class MeshMessage {
     this.sosId,
     this.sosRepeat,
     this.sosPos,
+    this.groupId,
+    this.groupEpoch,
   });
 
   final MsgId id;
@@ -121,6 +163,16 @@ class MeshMessage {
   /// rescuer following the alert sees the movement.
   final Vec2? sosPos;
 
+  /// Set on traffic addressed to a group (docs/04 §4). A scoped flood carries
+  /// `to == groupAddress`; per-member unicast carries the member's id. Either way
+  /// this is what keeps group traffic out of the unicast metrics.
+  final String? groupId;
+
+  /// The group's key epoch when this message was sent. A receiver that is a member
+  /// but holds a different epoch cannot decrypt it — which is exactly what
+  /// "groupKey rotated on member leave" (docs/04 §4) is for.
+  final int? groupEpoch;
+
   MeshMessage copyWith({
     int? ttl,
     int? hopCount,
@@ -150,6 +202,10 @@ class MeshMessage {
         sosId: sosId,
         sosRepeat: sosRepeat,
         sosPos: sosPos,
+        // Relays must not strip these either: a forwarded group copy is still
+        // addressed to that group under that epoch.
+        groupId: groupId,
+        groupEpoch: groupEpoch,
       );
 }
 
@@ -276,6 +332,10 @@ enum MeshLogKind {
 
   /// An SOS flood: sent, repeated, or collapsed onto an existing alert.
   sos,
+
+  /// Group membership: created, joined, left, key rotated, or a stale epoch
+  /// rejected.
+  group,
   ogm
 }
 

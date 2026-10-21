@@ -686,6 +686,302 @@ void main() {
     });
   });
 
+  group('group channels (docs/04, roadmap Phase 1 "group (3-10 members)")', () {
+    /// A settled world with one group in it. Members are spread across the world by
+    /// default, so delivery has to cross hops rather than fall out of one radio range.
+    Map<String, Object?> groupWorld(
+        {SimConfig? world,
+        GroupMode? mode,
+        int size = 5,
+        bool spread = true,
+        bool captureLog = false}) {
+      final cfg = (world ?? campusQuad(42)).copyWith(
+          groupMode: mode ?? GroupMode.scopedFlood, captureLog: captureLog);
+      final sim = MeshSimulation(cfg);
+      sim.runFor(90000);
+      sim.clearRecords();
+      final online = sim.nodes.where((n) => n.isOnline).toList();
+      final cx = online.fold<double>(0, (a, n) => a + n.pos.x) / online.length;
+      final cy = online.fold<double>(0, (a, n) => a + n.pos.y) / online.length;
+      double fromCentroid(MeshNode n) =>
+          (n.pos.x - cx) * (n.pos.x - cx) + (n.pos.y - cy) * (n.pos.y - cy);
+      // furthest-from-centroid first, so a "spread" group really spans the world
+      final ranked = online.toList()..sort((a, b) => fromCentroid(b).compareTo(fromCentroid(a)));
+      final List<NodeId> ids;
+      if (spread) {
+        final step = ranked.length ~/ size;
+        final picked = <NodeId>{};
+        for (var i = 0; i < ranked.length && picked.length < size; i++) {
+          picked.add(ranked[(i * step) % ranked.length].id);
+        }
+        ids = picked.toList();
+      } else {
+        final anchorNode = ranked.first;
+        double fromAnchor(MeshNode n) => (n.pos.x - anchorNode.pos.x) * (n.pos.x - anchorNode.pos.x) +
+            (n.pos.y - anchorNode.pos.y) * (n.pos.y - anchorNode.pos.y);
+        ids = (online.toList()..sort((a, b) => fromAnchor(a).compareTo(fromAnchor(b))))
+            .take(size)
+            .map((n) => n.id)
+            .toList();
+      }
+      final group = sim.createGroup('field team', ids, ids.first)!;
+      return <String, Object?>{
+        'sim': sim,
+        'group': group,
+        'ids': ids,
+        'sender': sim.nodes.firstWhere((n) => n.id == ids.first),
+      };
+    }
+
+    /// Send [n] group messages, letting each one propagate.
+    void send(MeshSimulation sim, String groupId, NodeId from,
+        {int n = 4, double gapMs = 4000}) {
+      for (var i = 0; i < n; i++) {
+        sim.sendMessage(from, groupId, 'status $i');
+        sim.runFor(gapMs);
+      }
+      sim.refresh();
+    }
+
+    List<MeshMessage> held(MeshNode n, String groupId) =>
+        n.inbox.where((m) => m.groupId == groupId).toList();
+
+    test('enforces the 3-10 member bound', () {
+      final r = groupWorld(size: 5, spread: false);
+      final sim = r['sim'] as MeshSimulation;
+      final all = sim.nodes.map((n) => n.id).toList();
+      expect(sim.createGroup('too small', all.sublist(0, 2)), isNull);
+      expect(sim.createGroup('too big', all.sublist(0, 11)), isNull);
+      expect(sim.createGroup('just right', all.sublist(0, 3)), isNotNull);
+      expect(sim.createGroup('at the cap', all.sublist(0, 10)), isNotNull);
+      // duplicate ids and ids that do not exist cannot pad out the minimum
+      expect(sim.createGroup('padded', <NodeId>['node-0', 'node-0', 'node-404']), isNull);
+      final g = sim.createGroup('admin', all.sublist(0, 4), all[2])!;
+      expect(g.adminId, equals(all[2]));
+      expect(g.keyEpoch, equals(0));
+      expect(g.members.length, equals(4));
+    });
+
+    test('reaches every member and nobody else', () {
+      final r = groupWorld();
+      final sim = r['sim'] as MeshSimulation;
+      final group = r['group'] as Group;
+      final ids = r['ids'] as List<NodeId>;
+      final sender = r['sender'] as MeshNode;
+      send(sim, group.id, sender.id);
+      for (final n in sim.nodes) {
+        if (n.id == sender.id) {
+          expect(held(n, group.id), isEmpty); // a sender does not receive its own
+        } else if (ids.contains(n.id)) {
+          expect(held(n, group.id).length, equals(4));
+        } else {
+          expect(held(n, group.id), isEmpty);
+        }
+      }
+      expect(sim.stats.groupReceipts, equals(4 * (ids.length - 1)));
+      expect(sim.stats.groupExpected, equals(4 * (ids.length - 1)));
+      expect(sim.stats.groupDeliveryRatio, equals(1));
+    });
+
+    test('relays through non-members, so a spread group still works', () {
+      final r = groupWorld(spread: true);
+      final sim = r['sim'] as MeshSimulation;
+      final group = r['group'] as Group;
+      final ids = r['ids'] as List<NodeId>;
+      final sender = r['sender'] as MeshNode;
+      send(sim, group.id, sender.id, n: 2);
+      final far = ids.where((id) => id != sender.id && !sender.peerIds.contains(id)).toList();
+      expect(far, isNotEmpty);
+      for (final id in far) {
+        expect(held(sim.nodes.firstWhere((n) => n.id == id), group.id), isNotEmpty);
+      }
+      // a non-member carried the traffic: it transmitted without ever receiving
+      final carriers = sim.nodes
+          .where((n) =>
+              !ids.contains(n.id) &&
+              n.txCount > 0 &&
+              !n.inbox.any((m) => m.groupId == group.id))
+          .toList();
+      expect(carriers, isNotEmpty);
+    });
+
+    test('keeps group traffic out of the unicast metrics', () {
+      final r = groupWorld();
+      final sim = r['sim'] as MeshSimulation;
+      final group = r['group'] as Group;
+      send(sim, group.id, (r['sender'] as MeshNode).id);
+      expect(sim.stats.sentUnicast, equals(0));
+      expect(sim.stats.sentBroadcast, equals(0));
+      expect(sim.stats.sentGroup, equals(4));
+      expect(sim.stats.deliveryRatio, equals(0));
+      expect(sim.deliveries.every((d) => d.groupId == group.id), isTrue);
+    });
+
+    test('never arms a retry timer for a scoped flood', () {
+      // The flood is addressed to nobody, so no ACK can come back. Arming the timer
+      // would burn two retransmissions and then push every group message into the
+      // OppQueue.
+      final r = groupWorld();
+      final sim = r['sim'] as MeshSimulation;
+      final sender = r['sender'] as MeshNode;
+      send(sim, (r['group'] as Group).id, sender.id);
+      expect(sim.stats.retriesSent, equals(0));
+      expect(sim.stats.retriesExhausted, equals(0));
+      expect(sender.oppQueue, isEmpty);
+      expect(sim.nodes.every((n) => n.oppQueue.isEmpty), isTrue);
+    });
+
+    test('rotates the key on leave; the departed node relays but cannot read', () {
+      final r = groupWorld(spread: true);
+      final sim = r['sim'] as MeshSimulation;
+      final group = r['group'] as Group;
+      final ids = r['ids'] as List<NodeId>;
+      final sender = r['sender'] as MeshNode;
+      send(sim, group.id, sender.id, n: 1);
+      final leaving = ids.firstWhere((id) => id != sender.id);
+      final leaver = sim.nodes.firstWhere((n) => n.id == leaving);
+      expect(held(leaver, group.id).length, equals(1));
+      final epochBefore = group.keyEpoch;
+      expect(sim.removeFromGroup(group.id, leaving), isTrue);
+      expect(group.keyEpoch, equals(epochBefore + 1)); // docs/04 §4: rotated on leave
+      expect(group.members.contains(leaving), isFalse);
+
+      final txBefore = leaver.txCount;
+      leaver.inbox.clear();
+      send(sim, group.id, sender.id, n: 2);
+      expect(held(leaver, group.id), isEmpty); // cannot read any of it...
+      expect(leaver.txCount, greaterThan(txBefore)); // ...but still carries it
+      for (final id in ids.where((x) => x != leaving && x != sender.id)) {
+        expect(held(sim.nodes.firstWhere((n) => n.id == id), group.id).length, equals(3));
+      }
+    });
+
+    test('refuses to shrink a group below three', () {
+      final r = groupWorld(size: 3, spread: false);
+      final sim = r['sim'] as MeshSimulation;
+      final group = r['group'] as Group;
+      final ids = r['ids'] as List<NodeId>;
+      expect(group.members.length, equals(3));
+      expect(sim.removeFromGroup(group.id, ids[1]), isFalse);
+      expect(group.members.length, equals(3));
+      expect(sim.removeFromGroup(group.id, 'node-404'), isFalse);
+    });
+
+    test('rotates on join, so a joiner cannot read the history it missed', () {
+      final r = groupWorld(size: 4, spread: true);
+      final sim = r['sim'] as MeshSimulation;
+      final group = r['group'] as Group;
+      final ids = r['ids'] as List<NodeId>;
+      final sender = r['sender'] as MeshNode;
+      send(sim, group.id, sender.id, n: 2);
+      final outsider =
+          sim.nodes.firstWhere((n) => n.isOnline && !ids.contains(n.id));
+      final epochBefore = group.keyEpoch;
+      expect(sim.inviteToGroup(group.id, outsider.id), isTrue);
+      expect(group.keyEpoch, equals(epochBefore + 1));
+      expect(held(outsider, group.id), isEmpty); // pre-join traffic is unreadable
+      send(sim, group.id, sender.id, n: 2);
+      expect(held(outsider, group.id).length, equals(2));
+      expect(sim.inviteToGroup(group.id, outsider.id), isFalse); // not twice
+      for (final n in sim.nodes.where((x) => x.isOnline && !group.members.contains(x.id))) {
+        if (group.members.length >= groupMaxMembers) break;
+        sim.inviteToGroup(group.id, n.id);
+      }
+      expect(group.members.length, lessThanOrEqualTo(groupMaxMembers));
+    });
+
+    test('counts a stale key epoch as rejected, not as a delivery', () {
+      final r = groupWorld(size: 4, spread: true);
+      final sim = r['sim'] as MeshSimulation;
+      final group = r['group'] as Group;
+      final ids = r['ids'] as List<NodeId>;
+      // A message already in flight under epoch 0 meets a group that rotated to 1.
+      // Rotation discards the old key everywhere, so the copy is unreadable to every
+      // member, not just to the node that left.
+      final msg = sim.sendMessage((r['sender'] as MeshNode).id, group.id, 'in flight')!;
+      expect(msg.groupEpoch, equals(0));
+      expect(sim.removeFromGroup(group.id, ids[1]), isTrue);
+      expect(group.keyEpoch, equals(1));
+      sim.runFor(6000);
+      sim.refresh();
+      expect(sim.stats.groupEpochRejected, greaterThan(0));
+      expect(sim.deliveries.where((d) => d.msgId == msg.id), isEmpty);
+    });
+
+    test('lets only the admin rotate the key', () {
+      final r = groupWorld(size: 4, spread: false);
+      final sim = r['sim'] as MeshSimulation;
+      final group = r['group'] as Group;
+      final ids = r['ids'] as List<NodeId>;
+      final sender = r['sender'] as MeshNode;
+      expect(group.adminId, equals(sender.id));
+      final epoch = group.keyEpoch;
+      expect(sim.rotateGroupKey(group.id, ids[1]), isFalse);
+      expect(group.keyEpoch, equals(epoch));
+      expect(sim.rotateGroupKey(group.id, sender.id), isTrue);
+      expect(group.keyEpoch, equals(epoch + 1));
+      expect(sim.rotateGroupKey('grp-404', sender.id), isFalse);
+    });
+
+    test('offers per-member unicast, with ACKs and the same reach', () {
+      // The mode the measurement says is cheaper when members are close together:
+      // 4.0 transmissions per message against 519.6 for a scoped flood in the
+      // 60-node crowd, because every member is a direct peer (docs/06 §14).
+      final r = groupWorld(mode: GroupMode.perMemberUnicast, size: 5, spread: false);
+      final sim = r['sim'] as MeshSimulation;
+      final group = r['group'] as Group;
+      final ids = r['ids'] as List<NodeId>;
+      send(sim, group.id, (r['sender'] as MeshNode).id, n: 2);
+      expect(sim.stats.sentGroup, equals(2 * (ids.length - 1)));
+      expect(sim.stats.groupDeliveryRatio, equals(1));
+      expect(sim.stats.acksReceived, greaterThan(0));
+      expect(sim.stats.sentUnicast, equals(0));
+      // ACKs are deliveries too and belong to the member message, not the group.
+      expect(
+          sim.deliveries
+              .where((d) => d.type != MsgType.ack)
+              .every((d) => d.groupId == group.id),
+          isTrue);
+      expect(sim.deliveries.where((d) => d.type == MsgType.ack), isNotEmpty);
+    });
+
+    test('logs membership changes when capture is on', () {
+      final r = groupWorld(size: 4, spread: false, captureLog: true);
+      final sim = r['sim'] as MeshSimulation;
+      final group = r['group'] as Group;
+      final ids = r['ids'] as List<NodeId>;
+      sim.sendMessage((r['sender'] as MeshNode).id, group.id, 'hello');
+      sim.runFor(4000);
+      sim.inviteToGroup(
+          group.id, sim.nodes.firstWhere((n) => n.isOnline && !ids.contains(n.id)).id);
+      sim.removeFromGroup(group.id, ids[2]);
+      sim.rotateGroupKey(group.id, group.adminId);
+      final entries = sim.log.where((e) => e.kind == MeshLogKind.group).toList();
+      final detail = entries.map((e) => e.detail).join(' | ');
+      expect(entries.length, greaterThanOrEqualTo(4)); // create, join, leave, rotate
+      expect(detail, contains('created with 4 members'));
+      expect(detail, contains('joined'));
+      expect(detail, contains('left'));
+      expect(detail, contains('admin rotated'));
+    });
+
+    test("lists a node's groups, and forgets them when the world is rebuilt", () {
+      final r = groupWorld(size: 4, spread: false);
+      final sim = r['sim'] as MeshSimulation;
+      final group = r['group'] as Group;
+      final ids = r['ids'] as List<NodeId>;
+      expect(sim.groupsOf(ids.first).map((g) => g.id).toList(), equals(<String>[group.id]));
+      expect(sim.groupsOf('node-404'), isEmpty);
+      sim.reset();
+      expect(sim.groups, isEmpty);
+      expect(sim.groupsOf(ids.first), isEmpty);
+    });
+
+    test('defaults to the mode whose cost does not depend on the route table', () {
+      expect(defaultConfig.groupMode, equals(GroupMode.scopedFlood));
+    });
+  });
+
   group('SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3)', () {
     /// The node furthest from the centroid: an SOS from the edge makes reach a
     /// real test rather than a formality.
