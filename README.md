@@ -37,13 +37,16 @@ dart test                                                    # incl. golden pari
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42  # exits non-zero if acceptance fails
 dart run bin/mesh_sim.dart --scenario festival_crowd --nodes 80 --json
 dart run bin/mesh_sim.dart --duty-cycle   # NORMAL scans 3 s / sleeps 7 s (skills/07)
+dart run bin/mesh_sim.dart --sos          # SOS reach probe: component-relative and raw
+dart run bin/mesh_sim.dart --trace        # per-delivery route: dBm, action and reason per hop
+dart run bin/mesh_sim.dart --capture      # pcap-like mesh log tail (--capture-ogm adds beacons)
 ```
 
 **TypeScript (reference engine + browser visualiser):**
 
 ```bash
 npm ci
-npm test          # 132 tests: RF, election, routing, DTN, power, regressions, acceptance
+npm test          # 166 tests: RF, election, routing, DTN, power, SOS, hop traces, acceptance, UI renders
 npm run dev       # canvas: watch SUPERs get elected, MPR suppress floods, bundles wait for a contact
                   # click a node to decline its router role or turn on battery saver
 npm run golden    # regenerate test-fixtures/golden-vectors.json after an engine change
@@ -60,6 +63,24 @@ engine delivers **91.3-95.3%** at 12-14% of naive flood's relays — naive flood
 does reach 100% there, for 7-9× the transmissions.
 Criteria, calibration evidence and the protocol bugs found while measuring are in
 [`docs/06-simulator-findings.md`](docs/06-simulator-findings.md).
+
+**SOS mode** (`docs/05` §3.2-3.3, roadmap Phase 3): the originator floods, then re-floods three
+times at 5 s intervals, each flood a *fresh message id* (the seen-cache would swallow a repeat that
+reused one) carrying a fresh GPS fix, with receivers collapsing on `sosId` so four floods raise one
+alert. SOS bypasses MPR at every hop — suppression exists to delete duplicate copies, and an emergency
+broadcast is made of them. Measured: reach over the sender's radio-connected component is **100% in
+all four worlds**; in the 60-node crowd four floods take raw reach from 89.4% to 100%, and with
+link-layer retries disabled repeats take a degraded world from 40.8% to 64.5% — while six floods buy
+nothing over four when the gap is *radius* rather than loss. TTL is the radius knob and stays at the
+documented 5, except in `festival_crowd`, which is 6+ hops across from an edge sender
+(`docs/06-simulator-findings.md` §11).
+
+**Hop transparency** (roadmap Phase 4): every delivery carries a per-hop trace — arrival time, link
+budget in dBm, who handed it over, the action and the router's own reason — and `deliveredChain()`
+recovers the route from what turns out to be a fan-out *tree* (a 4-hop delivery lists 15 nodes), which
+is what makes the roadmap's "via 2 nodes • SUPER Amir" computable instead of decorative. A bounded
+pcap-like capture log sits behind `--capture` and is provably inert: with it on, every counter and
+node position is identical and the golden vectors are byte-for-byte unchanged (§13).
 
 **Power policy** (`skills/02`, `skills/07`): SUPER opt-out and battery saver are
 respected immediately — no two-cycle hysteresis, because a user toggle is not

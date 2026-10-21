@@ -273,6 +273,13 @@ Rationale:
 | Image/file (<10 MB) | Wi-Fi Direct only | 250× faster than BLE; auto-reject over BLE-only with "move closer to SUPER" hint |
 | Broadcast SOS | All transports, flood (TTL=5) | Maximize reach; no ACK needed |
 
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §11):** TTL=5 is the engine default (`sosTtl`) and SOS floods to every peer at every
+> hop, bypassing MPR and the route table. Two things the row does not say, both measured: *all
+> transports* is one payload on one radio here (SOS uses Wi-Fi Direct, which in this model buys 40 ms
+> per hop instead of 120, not extra reach), and TTL sets the **radius** an SOS can reach — a 60-node
+> crowd is 6+ hops from an edge sender, so that scenario overrides `sosTtl` to 7. Repeating the flood
+> recovers loss and movement, never radius.
+
 ### 3.3 Phased Development Roadmap
 
 #### Phase 0 — Prototyping & Foundations (Weeks 1–4)
@@ -331,6 +338,13 @@ Rationale:
 | Audio pipeline | Opus encoder/decoder, 500 ms frames, 6–12 kbps; PTT UI (hold to record); jitter buffer 200 ms | Flutter + Android engineers |
 | E2EE media | Per-frame nonce encryption over existing Noise session | Crypto engineer |
 | SOS mode | Repeated flood of GPS + text over all transports (TTL=5) | Protocol engineer |
+
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §11.1–§11.2):** implemented and measured. Each flood is a *fresh message id* — the
+> seen-cache is keyed on the id, so a repeat that reused one would be dropped by every node that
+> already heard it — tied together by `sosId` and carrying the sender's position at that moment, so a
+> moving sender stays trackable. At TTL 7 in the 60-node crowd, going from 1 flood to 4 takes reach
+> **89.4% → 100.0%**; with link-layer retries disabled in a degraded world it takes it **40.8% → 55.3%
+> → 64.5%** at 1/4/7 floods. Cost is real and tracked: four floods are 3.9× the transmissions of one.
 | Security audit prep | External audit (Cure53-style); panic wipe (one-tap key zeroization) | Crypto engineer + external |
 
 **Exit criteria:** 2 phones exchange image <10 MB over Wi-Fi Direct; PTT Opus note plays in <3 s 1-hop / <8 s 3-hop; SOS reaches all within TTL.

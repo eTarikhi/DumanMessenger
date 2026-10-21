@@ -63,6 +63,11 @@ auth tag: HMAC or AEAD tag (AES-GCM / ChaChaPoly)
 - **Rate limit:** Max 5 broadcasts / minute per node; SUPERs drop excess.
 - **Battery drain attack:** Cap relay to 30 msgs/min per source; ignore floods.
 - **SOS misuse:** SOS channel is opt-in; user must toggle to listen (avoid spam).
+  > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §11):** the anti-spam half is implemented as *collapsing*: a repeated SOS flood is a
+  new radio event but the same emergency, so it replaces the receiver's existing alert with its fresher
+  GPS fix instead of raising a second notification. Copies arrive out of order across four floods, so
+  the alert only ever moves forward in time — a late flood 1 cannot overwrite the fix from flood 3.
+  Four floods over a 20-node world produce 76 radio receipts and **19** notifications, one per peer.
 
 ---
 

@@ -67,10 +67,23 @@
 - [ ] Audio pipeline: Opus encoder/decoder, 500 ms frames, 6-12 kbps, push-to-talk UI (hold to record)
 - [ ] PTT flow: record → chunk → encrypt → send via WiFi Direct preferred / BLE fallback → receiver jitter buffer → sequential play
 - [ ] E2EE for media/voice frames (same Noise session, per-frame nonce)
-- [ ] SOS mode: repeated flood of GPS + text over all transports (like LinkMesh SOS [1](https://github.com/litu173/LinkMesh))
+- [x] SOS mode: repeated flood of GPS + text over all transports (like LinkMesh SOS [1](https://github.com/litu173/LinkMesh))
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §11):** the protocol mechanism is implemented in both engines and measured — four floods
+  5 s apart, each with a fresh GPS fix, receivers collapsing on `sosId` so one emergency raises one
+  alert, and SOS bypassing MPR at every hop because suppression exists to delete the duplicate copies
+  an emergency broadcast is made of. `TTL=5` is the default as specified; `festival_crowd` overrides it
+  to 7 because from an edge sender that world is 6+ hops across and **repeating cannot fix a radius
+  limit** (6 floods buy nothing over 4 at TTL 5). Reach over the sender's radio-connected component is
+  **100% in all four worlds**; the app-side work (all-transports fan-out, the opt-in listen toggle) is
+  still to do. `dart run bin/mesh_sim.dart --sos` prints the reach probe.
 - [ ] External audit prep + panic wipe (one-tap key zeroization)
 
 **Exit criteria:** 2 phones exchange image <10 MB over WiFi Direct mesh; PTT Opus note plays in <3s 1-hop / <8s 3-hop; SOS reaches all within ttl.
+
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §11.3):** the SOS clause is met in simulation and needs a denominator to be
+  meaningful: over the sender's radio-connected component, reach is **100%** in all four worlds, while
+  raw reach is 27% in `sparse_village` and 44% in `partitioned_pair` because 8 of 11 and 5 of 9 online
+  nodes have no chain of links to the sender at all. The image and PTT clauses need hardware.
 
 ---
 
@@ -80,7 +93,14 @@
 - [ ] iOS harden: background scan throttling UX (“keep in foreground for mesh”), MPC fallbacks, BLE-only Android↔iOS interop
 - [ ] WiFi Aware experiment (Android 26+ & iOS 26 compat probe) — feature-flagged
 - [ ] Group UX: invite via QR, admin rotate key, leave/rejoin sync
-- [ ] Hop visualization: “via 2 nodes • SUPER Amir” hop trace for transparency
+- [x] Hop visualization: “via 2 nodes • SUPER Amir” hop trace for transparency
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §13):** delivered in both engines plus the visualiser. `path` turned out to be a
+  *fan-out tree* — a 4-hop delivery in the 20-node world lists 15 nodes — so `deliveredChain()` walks
+  the per-hop `via` links backwards to recover the route the sentence describes, and the string is
+  computed from data rather than asserted. Each hop carries arrival time, link budget in dBm, the
+  action (`delivered`/`relayed`/`suppressed`/`queued`/`expired`) and the router's own reason, so the
+  panel can show *why* two nodes stayed quiet. A pcap-like capture log (`--capture`, off by default,
+  bounded, provably inert on the golden vectors) backs it.
 - [ ] Performance pass: 50-node density test (emulator + 15 real phones crowded), battery <15%/8h NORMAL
 - [ ] Onboarding: 3-slide explainer (no internet needed, keep Bluetooth on, this is short-range not replacement)
 - [ ] Distribution: Play + APK direct + F-Droid + GitHub Releases + TestFlight; handle GMS-less Huawei via fallback

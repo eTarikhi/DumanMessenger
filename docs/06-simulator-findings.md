@@ -8,8 +8,12 @@
 `skills/02` + `skills/08` simulator criterion met on the 20-node case they name,
 at **7-9%** of the naive-flood relay budget (§2). Power policy, the duty cycle and
 the Phase 2 telemetry are implemented and measured (§10) — the duty cycle is what
-brings NORMAL inside `skills/07`'s 15%-per-8h budget. One secondary target remains
-open in the 60-node crowd (§6, "Still open").
+brings NORMAL inside `skills/07`'s 15%-per-8h budget. SOS mode (roadmap Phase 3)
+and hop transparency (roadmap Phase 4) are implemented and measured (§11, §13),
+and a protocol defect both engines shared — a node re-flooding copies of its own
+message — was found by a render test and removed (§12), cutting relay
+transmissions 18.3% in the warm 20-node world. One secondary target remains open
+in the 60-node crowd (§6, "Still open").
 **Date:** Oct 2026
 
 ---
@@ -514,3 +518,257 @@ distribution. The React visualiser renders these in a metrics dashboard panel;
 Wake-locks (`skills/07`'s fourth telemetry item) are deliberately **not**
 modelled: they are an Android API artefact with no mesh-protocol counterpart, and
 a simulator that invented a number for it would be measuring its own guess.
+
+
+---
+
+## 11. SOS: TTL sets the radius, repeating absorbs loss and movement
+
+`docs/05` §3.2 specifies *"Broadcast SOS | All transports, flood (TTL=5) |
+Maximize reach; no ACK needed"*, §3.3 Phase 3 specifies *"SOS mode | Repeated
+flood of GPS + text over all transports (TTL=5)"*, and the Phase 3 exit criterion
+is *"SOS reaches all within TTL"*. `docs/02` §"Broadcast SOS | All transports
+flooding | Maximize reach" agrees.
+
+Before this the engine had **one** broadcast with a TTL hardcoded to `7` — which
+contradicted the documented 5 and was missing the repeat entirely. What ships now:
+
+- the originator floods, then re-floods every `sosRepeatMs` (5 s) `sosRepeats`
+  (3) more times — four floods;
+- **each flood is a fresh message id.** The seen-cache is keyed on the id, so a
+  repeat that reused one would be dropped by every node that already heard it.
+  `sosId` is what ties the floods together;
+- each flood carries `sosPos`, the sender's position *at that moment*, so a sender
+  who is moving stays trackable. That is a reason to repeat beyond loss recovery;
+- receivers collapse on `sosId`: four floods raise **one** alert holding the
+  newest fix (`docs/04` §6 keeps the SOS channel opt-in precisely so an emergency
+  cannot spam it). Copies arrive out of order, so the alert only ever moves
+  forward in time — a late flood 1 must not overwrite the fix from flood 3;
+- SOS bypasses MPR and the route table **at every hop** and floods to all peers.
+  Suppression exists to delete duplicate copies; an emergency broadcast is made of
+  them;
+- SOS goes out on Wi-Fi Direct. The RF budget here is transport-independent, so
+  what that buys is 40 ms per hop instead of 120. *"All transports"* is **not**
+  modelled — one payload, one transport, one radio — and the code says so;
+- a sender that goes offline or is switched off stops flooding.
+
+### 11.1 Two knobs, because they fix different failures
+
+Measured from the node furthest from the centroid (an SOS from the edge makes
+reach a real test), 45 s window, `festival_crowd` 60 nodes, seeds 42/7/1234:
+
+| arm | reach | last node heard | data tx |
+| --- | --- | --- | --- |
+| TTL 5, 1 flood (spec default) | 93.2% | 850 ms | 795 |
+| TTL 5, 4 floods @ 5 s | 98.3% | **5 837 ms** | 3 177 |
+| TTL 5, 6 floods @ 5 s | 98.3% | 5 837 ms | 4 900 |
+| TTL 5, 4 floods @ 2.5 s | 97.2% | 2 536 ms | 3 098 |
+| TTL 5, 11 floods @ 2 s | 100.0% | 6 208 ms | 8 657 |
+| **TTL 7, 1 flood** | **100.0%** | 879 ms | **1 064** |
+| TTL 7, 4 floods @ 5 s | 100.0% | 879 ms | 4 202 |
+
+Three things fall out of that table. First, **repeats cannot fix a radius limit**:
+six floods at TTL 5 buy nothing over four, because the missed nodes are beyond the
+flood's reach, not unlucky — only 20 s of flooding plus mobility drift closes it,
+at 8× the radio cost. Second, the 5 837 ms figure is the mechanism working: in a
+TTL-limited flood the last node to hear it hears it **on a later flood**. Third,
+`TTL 8` buys nothing over `TTL 7`, so 7 is the minimum that spans this world.
+
+So `sosTtl` stays at the documented **5** as the default, and `festival_crowd`
+overrides it to **7** with the reason in the scenario source: from an edge sender
+that world is 6+ hops across (clusters 61–74 m apart against a 31.6 m LOS hop),
+which is the same geometric floor §6 records for the crowd's ≤5-hop tail.
+
+### 11.2 What repeating *is* for: loss and movement
+
+At a TTL that already spans the world, repeats still earn their cost — 4 seeds,
+`festival_crowd`, TTL 7: **89.4% → 100.0%** going from 1 flood to 4. And where
+links are degraded they earn far more (`campus_quad`, TTL 7, 4 seeds):
+
+| link conditions | 1 flood | 4 floods | 7 floods |
+| --- | --- | --- | --- |
+| as shipped (`linkRetries` 2) | 100.0% | 100.0% | 100.0% |
+| no link-layer retries | 100.0% | 100.0% | 100.0% |
+| shorter range (rx −80 dBm) **and** no retries | **40.8%** | **55.3%** | **64.5%** |
+
+Each flood is an independent draw over marginal links, so repeating is
+loss recovery — monotone in the repeat count exactly where loss is what bites, and
+worth nothing where a single flood already covers everyone. Shortening the gap
+without lengthening the total flood window makes it *worse* (97.2% at 4 floods
+every 2.5 s vs 98.3% at 4 floods every 5 s): what matters is how long the sender
+keeps trying, not how often.
+
+### 11.3 "Reaches all" needs a denominator
+
+Raw reach in a partitioned world is not a protocol failure. Measured over the
+sender's **radio-connected component** (every node a chain of in-range links
+reaches, at send time), SOS reach is **100% in all four scenarios and every arm**:
+
+| world | component / online | component-relative reach | raw reach |
+| --- | --- | --- | --- |
+| `campus_quad` (20) | 19 / 19 | 100% | 100% |
+| `festival_crowd` (60) | 59 / 59 | 100% | 93–100% depending on TTL |
+| `sparse_village` (12) | 3 / 11 | 100% | 27.3% |
+| `partitioned_pair` (10) | 4 / 9 | 100% | 44.4% |
+
+`sparse_village` and `partitioned_pair` are built to be disconnected, so 8 of 11
+and 5 of 9 online nodes simply have no chain to the sender. The exit criterion is
+therefore reported both ways, and `dart run bin/mesh_sim.dart --sos` prints both
+plus the missed ids — in a *separate* simulation, because an SOS fan-out costs
+thousands of transmissions and folding it into the main run would make the
+overhead ratio meaningless.
+
+Cost, stated plainly: four floods in `campus_quad` are **178 → 691** data
+transmissions (3.9×), tracked as `stats.sosFloods`. That is why the repeat count
+is a knob with a `0` setting rather than a constant.
+
+---
+
+## 12. A node must never process a copy of its own message
+
+Found by a render smoke test for the SOS card, which reported
+**"20 of 19 online nodes heard"**. The impossible denominator was the originator
+holding its own alert.
+
+A node never hears its own transmission, but it does hear **peers relaying it
+back**, and `onMsgReceive` had no rule for that copy. So the originator:
+
+1. accepted its own broadcast as a fresh delivery (raising its own SOS as a
+   received notification, and putting a message it wrote into its own inbox);
+2. marked it seen and **re-flooded it** — `decideForward` on a broadcast returns
+   every peer — so each returning copy triggered a fresh fan-out from the source.
+
+On a broadcast SOS, which already floods to every peer at every hop, that is a
+storm amplifier bounded only by TTL. Both engines now treat a copy of the
+receiver's own message as the duplicate it is: counted, logged as *"own message
+returned by X — not re-flooded"*, and **still recorded as coverage evidence**
+(`heardRelays`), because a neighbour relaying my message back is genuinely a
+neighbour that holds it. `sendMessage` echoes a note-to-self straight into the
+inbox instead of putting it on the radio, since with the guard in place such a
+message could otherwise never be delivered at all.
+
+### 12.1 Measured, six seeds, identical traffic plan per arm
+
+| world | relay tx | delivery | acks | retries |
+| --- | --- | --- | --- | --- |
+| `campus_quad`, warm | 3 009 → **2 458** (−18.3%) | 99.3 → **99.7%** | 97.5 → 98.2 | 12.7 → 15.7 |
+| `festival_crowd`, warm | 30 734 → **29 491** (−4.0%) | 84.7 → **86.2%** | 63.7 → 65.5 | 84.8 → 80.5 |
+
+SOS: 80 → 76 radio receipts in `campus_quad` (the four phantom self-receipts
+gone), sender no longer holds its own alert, component reach still 100%.
+
+**Latency moved the other way** in these samples — campus p95 1 729 → 2 467 ms,
+crowd 7 355 → 8 152 ms — with per-seed swings of 1.1–4.6 s, so it is reported and
+not claimed either direction. The guard is a correctness fix that happens to be
+cheaper; it was not adopted *for* the transmission saving.
+
+### 12.2 Why the golden vectors moved, and why that is legitimate
+
+The guard changes **how many transmissions happen**, and every transmission draws
+from the RNG for its loss roll — so the stream diverges and the whole run
+rearranges. This is not the "a new field must consume no RNG" rule of §9 being
+broken; it is a behaviour change, and it is the reason the fixture is regenerated
+rather than patched:
+
+| field | before | after |
+| --- | --- | --- |
+| `relayTx` | 253 | 289 |
+| `ogmTx` | 16 874 | 16 655 |
+| `retriesSent` | 1 | 0 |
+| `acksReceived` | 19 | **20** |
+| `sumHopCounts` | 36 | 33 |
+| `avgHops` | 1.80 | 1.65 |
+| `avgLatencyMs` | 474.4 | 526.6 |
+| `p95LatencyMs` | 950.4 | 1 356.1 |
+
+Regeneration is deterministic (running `npm run golden` twice is byte-identical),
+`deliveredUnicast` stays 20/20, and both engines carry the same guard — CI's
+Dart job compares against the same fixture, so agreement is checked, not assumed.
+
+### 12.3 Two tests corrected, not loosened
+
+- *"delivers a multi-hop unicast along a routed path"* was picking **the sender
+  itself** as its out-of-range target, because `canReach(a, a)` is `false` by
+  construction (`rf.ts`). It only ever passed because the engine bounced the
+  node's own message back to it through the mesh — the defect was load-bearing for
+  the test. The pick is now explicit.
+- The per-seed `mpr / route-flood ≤ 0.85` pin measured **0.947** on seed 42 after
+  the guard. Cause, from the cold-start A/B: `route-flood` is the arm that floods
+  most, so it was the arm most inflated by the amplifier — on that seed its
+  transmissions fell 37% (6 902 → 4 315) while MPR's fell 4% (4 239 → 4 087).
+  Part of the previously measured advantage was *the amplifier being proportional
+  to how much you flood*. Six-seed means: `mpr/route-flood` 0.752 → **0.736**,
+  `mpr/flood-all` 0.085 → 0.093. The cut is now pinned on the **mean** (≤ 0.80)
+  plus a hard per-seed "never worse than routing without suppression", with this
+  reasoning in the test body.
+
+---
+
+## 13. Hop traces and the capture log (roadmap Phase 4)
+
+*"Hop visualization: 'via 2 nodes • SUPER Amir' hop trace for transparency."*
+Rendering that string honestly needs more than a node list, so two things were
+added.
+
+**`HopRecord`** — one per node that accepted a *fresh* copy: arrival time, who
+handed it over, the link budget in dBm from the `docs/05` §1.1 model, the hop
+index, the action (`delivered` / `relayed` / `suppressed` / `queued` / `expired`)
+and `decideForward`'s own reason string. A `wait-mpr` record is **provisional**:
+when the 300 ms wait ends in suppression, `onMprDecide` rewrites it, so the trace
+reports the outcome rather than the intention. Traces are always on — they are
+bounded by the path length.
+
+**`MeshLogEntry`** — a pcap-like capture of radio and protocol events
+(`tx`, `loss`, `duplicate`, `deliver`, `decision`, `queue`, `election`, `ack`,
+`sos`, and `ogm` behind its own flag). Bounded at `maxLogEntries` 2 000 and **off
+by default**, because a 60-node crowd emits hundreds of thousands of beacons.
+
+### 13.1 `path` is a tree; the roadmap sentence wants a chain
+
+`path` (and therefore `hopTrace`) lists every node that accepted a fresh copy, so
+it branches the moment a relay fans out. A 4-hop delivery in the 20-node world
+lists **15** nodes. `deliveredChain(hopTrace, to)` walks `via` backwards from the
+recipient to recover the actual route, and on every sampled delivery
+`chain.length === hops` while `path.length` runs to 12–15. The originator is not
+in the result (it never receives its own message), so a renderer prepends
+`delivery.from`. Retransmissions share the message id and so the same trace, where
+first-record-per-node wins.
+
+Probe of the deepest trace in a 40-message campus run (`m11`, 4 hops, ~924 ms
+end-to-end):
+
+```
+node-15  hop 0  "MPR fallback: no relay heard"          → 8 neighbours
+node-11  hop 1  relayed   "route via node-0"
+node-0   hop 2  relayed   "destination in range"
+node-8   hop 2  SUPPRESSED "MPR: heard relays cover all my neighbours"
+node-13  hop 2  SUPPRESSED "MPR: heard relays cover all my neighbours"
+node-5   hop 3  delivered
+chain: node-15 → node-11 → node-0 → node-5   (length 3 == hops)
+```
+
+The two suppressed rows are the whole point of the panel: `path` alone cannot show
+that MPR kept two nodes quiet, and "via 2 nodes • SUPER Amir-11" is computed from
+the chain, not from the tree.
+
+### 13.2 Capture is provably inert
+
+One 40-message campus run: hop actions `{delivered 80, relayed 221, suppressed
+60}`; log kinds `{tx 820, decision 436, duplicate 378, deliver 83, ack 40, loss
+24, election 8}` = 1 789 entries under the 2 000 cap; `deliveryRatio` 1.000
+unchanged. With `captureLog` **and** `captureOgm` on, `totalForwarded`,
+`controlOverhead`, `totalDelivered`, `avgLatencyMs` and every node position are
+**identical** to the uncaptured run, and the golden vectors are byte-identical —
+logging consumes no RNG, which is the property that makes it safe to leave on.
+
+`clearRecords()` drops the log with the rest, so a re-baselined measurement never
+carries events from before the baseline. The DTN last resort (retries exhausted →
+OppQueue, `docs/03` §8) is logged as a `queue` event; it was not, and writing the
+test for it is what exposed that.
+
+CLI: `--trace` prints each delivered message's route as the roadmap phrases it
+(`via 2 node(s) • SUPER node-11`) followed by the hop table — dBm, arrival,
+action, reason; `--capture` prints the log tail; both are in `--json` as `traces`
+and `logTail`. In the UI, the chat log's **trace** button draws the route on the
+canvas as a numbered polyline and opens the hop panel, and the mesh log panel
+filters to the traced message.

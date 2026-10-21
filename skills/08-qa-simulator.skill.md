@@ -12,6 +12,9 @@
 ```bash
 cd sim/mesh_sim && dart pub get && dart test
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --json   # exits non-zero if acceptance fails
+dart run bin/mesh_sim.dart --sos                # SOS reach probe: component-relative and raw
+dart run bin/mesh_sim.dart --trace              # per-delivery route: dBm, action, reason per hop
+dart run bin/mesh_sim.dart --capture            # pcap-like mesh log tail (--capture-ogm adds beacons)
 ```
 
 Scenarios: `campus_quad` (20 nodes — the acceptance case), `sparse_village` + `partitioned_pair` (store-carry-forward), `festival_crowd` (60 nodes, the W36 density target).
@@ -22,6 +25,10 @@ Scenarios: `campus_quad` (20 nodes — the acceptance case), `sparse_village` + 
 - **Judge suppression against the arm that differs by suppression only.** Naive epidemic flooding does reach 100% delivery in the 60-node crowd — by spending 7-9× the relays — so "within 5 points of flood-all" demands epidemic redundancy instead of testing MPR. Compare on the **mean across seeds**: 150 messages through a chaotic 60-node world carries several points of run-to-run variance that a per-seed bound mistakes for a regression.
 - **tq is a link metric: keep its window per (originator, neighbour) pair.** Keyed on the route entry, a duplicate beacon arriving over a longer path resets the window and tq collapses to 0. Measured 0.107 for direct neighbours whose real receipt rate was ~0.8, so the `tq > 0.6` route gate rejected nearly everything and the network flooded blindly. Per-pair windows took usable routes from 29.7% → **86.8%** (quad) and 46.6% → **91.8%** (crowd). See `docs/06-simulator-findings.md` §6.
 - **Cross-language golden vectors** (`test-fixtures/golden-vectors.json`, `npm run golden`) pin the Dart engine to the TypeScript reference: RNG stream, spawn geometry and protocol counters must match exactly; float aggregates carry a tolerance for libm last-ULP differences.
+- **A behaviour change that alters the transmission count invalidates the goldens, and that is correct.** Every transmission draws from the RNG for its loss roll, so removing one rearranges the whole run. Regenerate and check the run is deterministic; do not hand-patch the fixture. Adding a *field*, a log entry or a hop record consumes no RNG and must leave the fixture byte-identical — assert that, it is the cheapest possible proof that instrumentation is inert.
+- **Instrument the reach of a broadcast against the sender's radio-connected component.** Raw reach in `sparse_village` is 27% and in `partitioned_pair` 44%, and no protocol choice moves either: 8 of 11 and 5 of 9 online nodes have no chain of links to the sender. Report both numbers or the criterion is untestable. See `docs/06-simulator-findings.md` §11.3.
+- **A render test on the UI finds engine defects.** Rendering the SOS card with `react-dom/server` against real simulation state reported "20 of 19 online nodes heard" — an impossible denominator that traced to every node accepting and re-flooding copies of its *own* message returned by peers. No engine test would have caught it, because every engine assertion was consistent with the bug. Fixing it cut relay transmissions 18.3% in the warm 20-node world (§12).
+- **When a ratio test breaks after a correctness fix, ask which arm the defect was inflating.** `mpr / route-flood ≤ 0.85` measured 0.947 once the originator stopped re-flooding: `route-flood` floods most, so it was the arm most inflated by the amplifier (−37% transmissions on that seed vs MPR's −4%). Part of the measured advantage was the defect. Re-pin such ratios on the **mean across seeds** and keep a hard per-seed invariant that cannot be gamed ("never worse than the arm without the mechanism").
 
 ### Lab Harness
 - 6-10 real phones + RF-attenuated boxes to fake distance
