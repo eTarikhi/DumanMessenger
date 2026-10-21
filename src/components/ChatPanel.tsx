@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import type { MeshNode } from "../types";
+import type { MeshNode, MeshMessage } from "../types";
 
 interface Props {
   nodes: MeshNode[];
   selectedNodeId: string | null;
-  onSendMessage: (from: string, to: string | "BROADCAST", body: string, type: "text" | "broadcast" | "sos") => void;
+  onSendMessage: (from: string, to: string | "BROADCAST", body: string, type: "text" | "broadcast" | "sos") => MeshMessage | null;
   deliveries: { msgId: string; from: string; to: string; hops: number; latencyMs: number; path: string[] }[];
 }
 
@@ -15,6 +15,8 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, deliveries }: 
   const [body, setBody] = useState("");
   const [msgType, setMsgType] = useState<"text" | "broadcast" | "sos">("text");
   const [log, setLog] = useState<{ id: string; from: string; to: string; body: string; type: string; timestamp: number; delivered: boolean; hops?: number; latency?: number }[]>([]);
+  const logRef = useRef(log);
+  logRef.current = log;
   const logEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -30,7 +32,7 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, deliveries }: 
   }, [selectedNodeId, onlineNodes]);
 
   useEffect(() => {
-    const newDeliveries = deliveries.filter((d) => !log.some((l) => l.id === d.msgId));
+    const newDeliveries = deliveries.filter((d) => !logRef.current.some((l) => l.id === d.msgId));
     if (newDeliveries.length > 0) {
       setLog((prev) => {
         const updated = [...prev];
@@ -45,7 +47,7 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, deliveries }: 
         return updated;
       });
     }
-  }, [deliveries, log]);
+  }, [deliveries]);
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -53,17 +55,18 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, deliveries }: 
 
   const handleSend = () => {
     if (!body.trim() || !fromId) return;
-    const msgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    setLog((prev) => [...prev, {
-      id: msgId,
-      from: fromId,
-      to: toId,
-      body,
-      type: msgType,
-      timestamp: Date.now(),
-      delivered: false,
-    }]);
-    onSendMessage(fromId, toId, body, msgType);
+    const sentMsg = onSendMessage(fromId, toId, body, msgType);
+    if (sentMsg) {
+      setLog((prev) => [...prev, {
+        id: sentMsg.id,
+        from: fromId,
+        to: toId,
+        body,
+        type: msgType,
+        timestamp: Date.now(),
+        delivered: false,
+      }]);
+    }
     setBody("");
   };
 

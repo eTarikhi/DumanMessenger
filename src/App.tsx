@@ -54,6 +54,27 @@ export function App() {
     rerender();
   };
 
+  const handleRandomBroadcast = () => {
+    const online = sim.nodes.filter((n) => n.isOnline);
+    if (online.length === 0) return;
+    const sender = online[Math.floor(Math.random() * online.length)];
+    const messages = ["Hello mesh!", "Anyone there?", "Test broadcast", "Mesh check", "Ping all"];
+    sim.sendMessage(sender.id, "BROADCAST", messages[Math.floor(Math.random() * messages.length)], "broadcast");
+    rerender();
+  };
+
+  const handleRandomDM = () => {
+    const online = sim.nodes.filter((n) => n.isOnline);
+    if (online.length < 2) return;
+    const from = online[Math.floor(Math.random() * online.length)];
+    let to = online[Math.floor(Math.random() * online.length)];
+    while (to.id === from.id) {
+      to = online[Math.floor(Math.random() * online.length)];
+    }
+    sim.sendMessage(from.id, to.id, `Hey ${to.name}`, "text");
+    rerender();
+  };
+
   return (
     <div style={{
       minHeight: "100vh",
@@ -89,12 +110,14 @@ export function App() {
         </div>
       </header>
 
-      <div style={{
-        maxWidth: 1400, margin: "0 auto", padding: "12px 24px 40px",
-        display: "grid",
-        gridTemplateColumns: "1fr 320px",
-        gap: 16,
-      }}>
+      <div
+        className="duman-main-grid"
+        style={{
+          maxWidth: 1400, margin: "0 auto", padding: "12px 24px 40px",
+          display: "grid",
+          gridTemplateColumns: "1fr 320px",
+          gap: 16,
+        }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <StatsBar
             stats={sim.stats}
@@ -106,7 +129,12 @@ export function App() {
             onSpeedChange={setSpeed}
           />
 
-          <div style={{
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button onClick={handleRandomBroadcast} style={quickBtnStyle}>📡 Send Random Broadcast</button>
+            <button onClick={handleRandomDM} style={quickBtnStyle}>💬 Send Random DM</button>
+          </div>
+
+          <div className="duman-canvas-wrap" style={{
             borderRadius: 14, border: "1px solid #1e2a3a", overflow: "hidden",
             background: "rgba(17, 24, 35, 0.5)",
             display: "flex", justifyContent: "center", padding: 8,
@@ -121,9 +149,11 @@ export function App() {
             />
           </div>
 
-          <div style={{
-            display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16,
-          }}>
+          <div
+            className="duman-chat-grid"
+            style={{
+              display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16,
+            }}>
             <div style={{ height: 360 }}>
               <ChatPanel
                 nodes={sim.nodes}
@@ -181,6 +211,17 @@ export function App() {
     </div>
   );
 }
+
+const quickBtnStyle: React.CSSProperties = {
+  padding: "8px 14px",
+  borderRadius: 8,
+  border: "1px solid #1e2a3a",
+  background: "rgba(255,255,255,0.04)",
+  color: "#cfe0f2",
+  fontWeight: 600,
+  fontSize: 12,
+  cursor: "pointer",
+};
 
 const badgeStyle: React.CSSProperties = {
   fontSize: 11,

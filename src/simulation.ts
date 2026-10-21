@@ -126,7 +126,21 @@ export class MeshSimulation {
   constructor(config: SimConfig = DEFAULT_CONFIG) {
     this.config = config;
     this.nodes = createNodes(config);
+    this.warmup();
     this.stats = this.computeStats();
+  }
+
+  private warmup(): void {
+    for (let i = 0; i < 5; i++) {
+      this.tick++;
+      this.broadcastOGMs();
+    }
+    this.runElection();
+    for (let i = 0; i < 3; i++) {
+      this.tick++;
+      this.broadcastOGMs();
+    }
+    this.tick = 0;
   }
 
   subscribe(fn: () => void): () => void {
@@ -289,7 +303,7 @@ export class MeshSimulation {
   }
 
   private handleForwardResult(
-    node: MeshNode,
+    _node: MeshNode,
     originalMsg: MeshMessage,
     result: ReturnType<typeof processMessage>
   ): void {
@@ -414,6 +428,7 @@ export class MeshSimulation {
     this.deliveries = [];
     this.sentRecords = [];
     this.msgPathTracker.clear();
+    this.warmup();
     this.stats = this.computeStats();
     this.notify();
   }

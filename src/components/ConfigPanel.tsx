@@ -43,12 +43,12 @@ export function ConfigPanel({ config, onChange, showLinks, showRanges, onToggleL
         <Toggle
           label="Super-Node Election"
           value={config.enableSuperElection}
-          onChange={(v) => onChange({ enableSuperElection: v })}
+          onChange={() => onChange({ enableSuperElection: !config.enableSuperElection })}
         />
         <Toggle
           label="Mobility (random walk)"
           value={config.enableMobility}
-          onChange={(v) => onChange({ enableMobility: v })}
+          onChange={() => onChange({ enableMobility: !config.enableMobility })}
         />
         <Toggle label="Show Links" value={showLinks} onChange={onToggleLinks} />
         <Toggle label="Show Ranges" value={showRanges} onChange={onToggleRanges} />

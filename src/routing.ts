@@ -228,8 +228,8 @@ export function processMessage(
 
 export function shouldNormalRelay(
   node: MeshNode,
-  msg: MeshMessage,
-  allNodes: MeshNode[],
+  _msg: MeshMessage,
+  _allNodes: MeshNode[],
   superRetransmitted: boolean
 ): boolean {
   if (node.role === "SUPER") return true;
