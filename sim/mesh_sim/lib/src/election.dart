@@ -256,7 +256,7 @@ bool receiveOgm(MeshNode node, Ogm ogm, NodeId via, double nowMs) {
       windowNeighbor: via,
     );
   } else {
-    prev!.tq = tq;
+    prev.tq = tq;
     prev.lastSeq = lastSeq;
     prev.lastSeen = nowMs;
     prev.window = window;

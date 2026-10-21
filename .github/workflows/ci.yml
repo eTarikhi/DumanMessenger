@@ -55,18 +55,141 @@ jobs:
 
       - run: dart pub get
 
+      # All three steps below run unconditionally and capture their output, so a
+      # single red build reports the analyzer, the test failures *and* the CLI
+      # metrics instead of stopping at the first one. "Publish diagnostics" then
+      # republishes that output as annotations (with real file paths, which the
+      # runner's generic problem matcher loses) and as the job summary, and
+      # "Gate" turns any non-success outcome back into a failed job.
+      #
       # Errors and warnings fail the build; infos do not. `dart format` is left
       # to contributors because the sandbox that produced this port has no Dart
       # SDK, so formatting could not be verified here.
       - name: Analyze
-        run: dart analyze
+        id: analyze
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          dart analyze 2>&1 | tee /tmp/dart-analyze.txt
 
       # Fails if the Dart engine drifts from the TypeScript reference.
       - name: Tests (incl. cross-language golden vectors)
-        run: dart test
+        id: test
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          dart test --reporter expanded 2>&1 | tee /tmp/dart-test.txt
 
       - name: CLI acceptance run
-        run: dart run bin/mesh_sim.dart --scenario campus_quad --seed 42
+        id: cli
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 2>&1 |
+            tee /tmp/dart-cli.txt
+
+      - name: Publish diagnostics
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os, re
+
+          SUMMARY = os.environ.get("GITHUB_STEP_SUMMARY") or os.devnull
+          MAX_ANNOTATIONS = 40  # GitHub caps a check run at 50
+
+
+          def read(path):
+              try:
+                  with open(path, encoding="utf-8", errors="replace") as handle:
+                      return handle.read().strip()
+              except OSError:
+                  return "(no output captured)"
+
+
+          def escape(text):
+              return (text.replace("%", "%25")
+                          .replace("\r", "%0D")
+                          .replace("\n", "%0A"))
+
+
+          def analyze_issues(text):
+              """Parse `dart analyze` lines of the form
+              '<severity> • <field> • <field> • <code>'. Which field holds the
+              location differs between SDK versions, so pick the one that ends
+              in :line:col."""
+              issues = []
+              for line in text.splitlines():
+                  parts = [p.strip() for p in line.split(" • ")]
+                  if len(parts) < 3 or parts[0] not in ("error", "warning", "info"):
+                      continue
+                  loc = next((p for p in parts
+                              if re.search(r":\d+:\d+$", p)), None)
+                  if loc is None:
+                      continue
+                  path, line_no, col = loc.rsplit(":", 2)
+                  rest = [p for p in parts[1:] if p != loc]
+                  code = rest[-1] if rest else ""
+                  message = " • ".join(rest[:-1]) if len(rest) > 1 else code
+                  issues.append((parts[0], path, line_no, col, code, message))
+              return issues
+
+
+          def failing_tests(text):
+              """Keep the expectation details for each failing test rather than
+              the whole (mostly green) expanded-reporter log."""
+              captured, active = [], False
+              for line in text.splitlines():
+                  if "[E]" in line:
+                      active = True
+                      captured.append(line)
+                      continue
+                  if not active:
+                      continue
+                  if re.match(r"^\d{2}:\d{2} \+\d+", line):
+                      active = False
+                      captured.append("")
+                  else:
+                      captured.append(line)
+              if not captured:
+                  return "(no test failures in the captured output)"
+              return "\n".join(captured[-400:])
+
+
+          analyze_out = read("/tmp/dart-analyze.txt")
+          test_out = read("/tmp/dart-test.txt")
+          cli_out = read("/tmp/dart-cli.txt")
+
+          emitted = 0
+          for severity, path, line_no, col, code, message in analyze_issues(analyze_out):
+              if emitted >= MAX_ANNOTATIONS:
+                  print("::warning::More analyzer issues than fit in the "
+                        "annotation budget — see the job summary.")
+                  break
+              level = "notice" if severity == "info" else severity
+              print("::%s file=%s,line=%s,col=%s,title=%s::%s"
+                    % (level, path, line_no, col, code or severity,
+                       escape(message)))
+              emitted += 1
+
+          tail = "\n".join(test_out.splitlines()[-25:]) or test_out
+          with open(SUMMARY, "a", encoding="utf-8") as summary:
+              summary.write("### dart analyze\n\n```\n%s\n```\n\n" % analyze_out)
+              summary.write("### dart test — failures\n\n```\n%s\n```\n\n"
+                            % failing_tests(test_out))
+              summary.write("### dart test — tail\n\n```\n%s\n```\n\n" % tail)
+              summary.write("### CLI acceptance (campus_quad, seed 42)\n\n```\n"
+                            "%s\n```\n" % cli_out)
+          PY
+
+      - name: Gate
+        if: always()
+        run: |
+          if [ "${{ steps.analyze.outcome }}" != "success" ] ||
+             [ "${{ steps.test.outcome }}" != "success" ] ||
+             [ "${{ steps.cli.outcome }}" != "success" ]; then
+            echo "::error::Dart engine failed (analyze: ${{ steps.analyze.outcome }}, test: ${{ steps.test.outcome }}, CLI: ${{ steps.cli.outcome }}). Captured output is in the job summary."
+            exit 1
+          fi
 
   cli-matrix:
     name: CLI acceptance across scenarios

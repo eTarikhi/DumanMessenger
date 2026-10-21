@@ -428,7 +428,7 @@ void main() {
           window: <int>[], windowNeighbor: 'r');
       final forwarded = <int>[];
       for (var i = 0; i < sprayLimit + 3; i++) {
-        final res = scanOppQueue(a, <MeshNode>[a, relay, dest], rf, 1000 + i);
+        final res = scanOppQueue(a, <MeshNode>[a, relay, dest], rf, 1000.0 + i);
         forwarded.add(res.forward.length);
         a.oppQueue
           ..clear()
