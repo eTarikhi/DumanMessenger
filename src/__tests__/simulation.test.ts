@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { MeshSimulation, DEFAULT_CONFIG, type SimConfig } from "../simulation";
+import {
+  MeshSimulation,
+  DEFAULT_CONFIG,
+  deliveredChain,
+  type SimConfig,
+} from "../simulation";
 import { campusQuad, partitionedPair, sparseVillage } from "../scenarios";
 import { canReach, peersInRange } from "../rf";
 import type { MeshNode } from "../types";
@@ -340,6 +345,141 @@ describe("protocol behaviour", () => {
     sim.refresh();
     expect(sim.stats.superNodes).toBe(0);
   });
+
+describe("hop traces and the capture log (roadmap Phase 4)", () => {
+  /** A run with real multi-hop traffic to inspect. */
+  function traced(over: Partial<SimConfig> = {}, messages = 24): MeshSimulation {
+    const sim = new MeshSimulation({ ...campusQuad(42), ...over });
+    sim.runFor(90000);
+    driveTraffic(sim, messages);
+    return sim;
+  }
+
+  it("records when each hop arrived, over what link, and what it decided", () => {
+    const sim = traced();
+    const multi = sim.deliveries.find((d) => d.hops >= 2 && !d.dtn);
+    expect(multi).toBeDefined();
+    const hops = multi!.hopTrace;
+    expect(hops.length).toBeGreaterThan(0);
+
+    let prev = -1;
+    for (const h of hops) {
+      expect(h.atMs).toBeGreaterThanOrEqual(prev); // arrival order
+      prev = h.atMs;
+      expect(h.rssi).toBeLessThan(0); // a real dBm figure from the docs/05 model
+      expect(h.rssi).toBeGreaterThan(-100);
+      expect(h.via).not.toBe(h.nodeId);
+      expect(["received", "delivered", "relayed", "suppressed", "queued", "expired"]).toContain(
+        h.action
+      );
+      if (h.action === "relayed" || h.action === "suppressed") {
+        expect(h.reason).toBeTruthy(); // decideForward's own words
+      }
+    }
+    // The recipient's copy is the one that says so.
+    expect(hops.some((h) => h.nodeId === multi!.to && h.action === "delivered")).toBe(true);
+  });
+
+  it("recovers the route chain from the fan-out tree", () => {
+    // `path` lists every node that accepted a fresh copy, so it branches as soon
+    // as a relay fans out; "via 2 nodes" needs the single route the delivered
+    // copy took. Walking `via` backwards must reproduce exactly `hops` links.
+    const sim = traced();
+    expect(sim.deliveries.length).toBeGreaterThan(5);
+    let sawTree = false;
+    for (const d of sim.deliveries) {
+      const chain = deliveredChain(d.hopTrace, d.to);
+      expect(chain.length).toBe(d.hops);
+      expect(chain[chain.length - 1].nodeId).toBe(d.to);
+      if (d.path.length > d.hops + 1) sawTree = true;
+    }
+    // The fan-out this exists to cut through actually happens in this world.
+    expect(sawTree).toBe(true);
+  });
+
+  it("marks the relays MPR suppressed, with the reason", () => {
+    const sim = traced();
+    const suppressed = sim.deliveries.flatMap((d) =>
+      d.hopTrace.filter((h) => h.action === "suppressed")
+    );
+    expect(suppressed.length).toBeGreaterThan(0);
+    expect(suppressed.every((h) => /MPR/.test(h.reason ?? ""))).toBe(true);
+  });
+
+  it("traces hops always, and captures the log only when asked", () => {
+    expect(DEFAULT_CONFIG.captureLog).toBe(false);
+    const plain = traced();
+    expect(plain.log).toHaveLength(0);
+    expect(plain.deliveries.some((d) => d.hopTrace.length > 0)).toBe(true);
+
+    const captured = traced({ captureLog: true });
+    expect(captured.log.length).toBeGreaterThan(0);
+    const kinds = new Set(captured.log.map((e) => e.kind));
+    expect(kinds.has("tx")).toBe(true);
+    expect(kinds.has("decision")).toBe(true);
+    expect(kinds.has("deliver")).toBe(true);
+    // Beacons outnumber everything else, so they stay out unless asked for.
+    expect(kinds.has("ogm")).toBe(false);
+    for (const e of captured.log) {
+      expect(e.detail.length).toBeGreaterThan(0);
+      expect(e.atMs).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("logs beacons too when captureOgm is set", () => {
+    const sim = traced({ captureLog: true, captureOgm: true }, 4);
+    expect(sim.log.some((e) => e.kind === "ogm")).toBe(true);
+  });
+
+  it("keeps the capture bounded and in time order", () => {
+    const sim = traced({ captureLog: true, maxLogEntries: 40 });
+    expect(sim.log.length).toBeLessThanOrEqual(40);
+    expect(sim.log.length).toBe(40); // the ring buffer is full by now
+    for (let i = 1; i < sim.log.length; i++) {
+      expect(sim.log[i].atMs).toBeGreaterThanOrEqual(sim.log[i - 1].atMs);
+    }
+  });
+
+  it("does not perturb the run it is measuring", () => {
+    // Instrumentation that changed the result would be worse than none: the log
+    // must not touch the RNG, the event order or a single counter.
+    const plain = traced();
+    const captured = traced({ captureLog: true, captureOgm: true });
+    expect(captured.stats.totalForwarded).toBe(plain.stats.totalForwarded);
+    expect(captured.stats.controlOverhead).toBe(plain.stats.controlOverhead);
+    expect(captured.stats.totalDelivered).toBe(plain.stats.totalDelivered);
+    expect(captured.stats.avgLatencyMs).toBe(plain.stats.avgLatencyMs);
+    expect(captured.nodes.map((n) => n.pos.x)).toEqual(plain.nodes.map((n) => n.pos.x));
+  });
+
+  it("drops the log when metrics are re-baselined", () => {
+    const sim = traced({ captureLog: true });
+    expect(sim.log.length).toBeGreaterThan(0);
+    sim.clearRecords();
+    expect(sim.log).toHaveLength(0);
+  });
+
+  it("logs the DTN last resort as a queue event", () => {
+    // partitioned_pair's two clusters are ~190 m apart, so nothing routes: the
+    // originator retries twice, gives up, and starts carrying the bundle
+    // (docs/03 §8). That hand-over into the OppQueue is exactly the event a
+    // debugger needs, and it happens on a different code path from
+    // decideForward's "queue" mode.
+    const sim = new MeshSimulation({ ...partitionedPair(42), captureLog: true });
+    sim.runFor(60000);
+    const online = sim.nodes.filter((n) => n.isOnline);
+    for (let i = 0; i < 4; i++) {
+      sim.sendMessage(online[0].id, online[online.length - 1].id, `carry-${i}`, "text");
+      sim.runFor(60000);
+    }
+    sim.refresh(); // `stats` is a snapshot, not a live getter
+    expect(sim.stats.totalQueued).toBeGreaterThan(0);
+    const queued = sim.log.filter((e) => e.kind === "queue");
+    expect(queued.length).toBeGreaterThan(0);
+    expect(queued[0].detail).toMatch(/carrying/);
+    expect(sim.nodes[0].oppQueue.length).toBe(queued.length);
+  });
+});
 
 describe("power policy and telemetry (skills/02, skills/07, roadmap Phase 2)", () => {
   it("never promotes a node the user opted out of, and steps it down at once", () => {

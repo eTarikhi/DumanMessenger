@@ -97,6 +97,71 @@ export interface OGM {
   declinedRouter: boolean;
 }
 
+/** What a node did with a copy it accepted. */
+export type HopAction =
+  | "received"
+  | "delivered"
+  | "relayed"
+  | "suppressed"
+  | "queued"
+  | "expired";
+
+/**
+ * One hop of a message's journey, recorded as a *fresh* copy arrives.
+ *
+ * roadmap Phase 4 asks for hop transparency — "via 2 nodes • SUPER Amir" — which
+ * needs more than the node list: when each hop happened, over what link budget,
+ * and what the forwarding decision said. This is the record behind that string.
+ */
+export interface HopRecord {
+  nodeId: NodeId;
+  /** Simulation time this copy arrived. */
+  atMs: number;
+  /** Who handed it over. */
+  via: NodeId;
+  /** Link budget of that hand-over in dBm, from the docs/05 §1.1 model. */
+  rssi: number;
+  /** `msg.hopCount` as it arrived: 0 for the originator's first neighbour. */
+  hop: number;
+  action: HopAction;
+  /** `decideForward`'s own words — "route via node-7", "MPR suppressed". */
+  reason?: string;
+}
+
+/** Capture-log event kinds. `ogm` is opt-in separately: beacons outnumber
+ *  everything else and drown the data plane in a 60-node crowd. */
+export type MeshLogKind =
+  | "tx"
+  | "loss"
+  | "duplicate"
+  | "deliver"
+  | "decision"
+  | "queue"
+  | "election"
+  | "ack"
+  | "ogm";
+
+/**
+ * One line of the pcap-like mesh log: a timestamped radio or protocol event with
+ * enough context to reconstruct why a message went where it did. Bounded — a
+ * 60-node crowd emits hundreds of thousands of beacons — and off by default so
+ * the golden runs pay nothing for it.
+ */
+export interface MeshLogEntry {
+  atMs: number;
+  kind: MeshLogKind;
+  /** Who the event happened at (for `tx`, the sender). */
+  nodeId: NodeId;
+  /** The other end of the link, where there is one. */
+  peerId?: NodeId;
+  msgId?: MsgId;
+  msgType?: MsgType;
+  hop?: number;
+  rssi?: number;
+  /** Human-readable detail: the forwarding reason, the role transition, ... */
+  detail: string;
+}
+
 /** OGM receipt history for one (originator, neighbour) link.
  *
  *  tq is a *link* metric (docs/03 §7: "OGMs received via that neighbor / OGMs
