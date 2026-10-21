@@ -6,6 +6,7 @@ import { MessageTrace } from "../components/MessageTrace";
 import { MeshLogPanel } from "../components/MeshLogPanel";
 import { MetricsPanel } from "../components/MetricsPanel";
 import { ChatPanel } from "../components/ChatPanel";
+import { NodeInspector } from "../components/NodeInspector";
 
 /**
  * Render smoke tests. The components have no unit coverage otherwise, and a
@@ -39,6 +40,145 @@ function sosWorld(over: Partial<SimConfig> = {}): MeshSimulation {
   sim.refresh();
   return sim;
 }
+
+/** A settled world with one five-member group that has already exchanged traffic. */
+function groupWorld(over: Partial<SimConfig> = {}): MeshSimulation {
+  const sim = new MeshSimulation({ ...campusQuad(42), ...over });
+  sim.runFor(90000);
+  sim.clearRecords();
+  const online = sim.nodes.filter((n) => n.isOnline);
+  const anchor = online[0];
+  const nearest = online
+    .filter((n) => n.id !== anchor.id)
+    .sort(
+      (a, b) =>
+        (a.pos.x - anchor.pos.x) ** 2 +
+        (a.pos.y - anchor.pos.y) ** 2 -
+        ((b.pos.x - anchor.pos.x) ** 2 + (b.pos.y - anchor.pos.y) ** 2)
+    )
+    .slice(0, 4)
+    .map((n) => n.id);
+  const group = sim.createGroup("field team", [anchor.id, ...nearest], anchor.id)!;
+  for (let i = 0; i < 3; i++) {
+    sim.sendMessage(anchor.id, group.id, `status ${i}`, "text");
+    sim.runFor(4000);
+  }
+  sim.refresh();
+  return sim;
+}
+
+function inspector(sim: MeshSimulation, nodeId: string) {
+  return renderToStaticMarkup(
+    <NodeInspector
+      node={sim.nodes.find((n) => n.id === nodeId) ?? null}
+      allNodes={sim.nodes}
+      rf={sim.rf}
+      dutyCycleEnabled={false}
+      awake
+      onToggleOnline={() => {}}
+      onToggleCharging={() => {}}
+      onToggleSuperOptOut={() => {}}
+      onToggleBatterySaver={() => {}}
+      onClose={() => {}}
+      groups={[...sim.groups.values()]}
+      onCreateGroup={() => {}}
+      onInviteNearest={() => {}}
+      onLeaveGroup={() => {}}
+      onRotateKey={() => {}}
+    />
+  );
+}
+
+describe("groups in the UI", () => {
+  it("offers the group as a destination and reports member reach", () => {
+    const sim = groupWorld();
+    const group = [...sim.groups.values()][0];
+    const sender = [...group.members][0];
+    const html = renderToStaticMarkup(
+      <ChatPanel
+        nodes={sim.nodes}
+        selectedNodeId={sender}
+        onSendMessage={() => null}
+        sentRecords={sim.sentRecords}
+        deliveries={sim.deliveries}
+        groups={[...sim.groups.values()]}
+        groupMode={sim.config.groupMode}
+      />
+    );
+    expect(html).toContain("👥 field team (5)");       // the destination picker
+    expect(html).toContain("epoch 0");
+    expect(html).toContain("4 of 4 members received");  // everyone but the sender
+    expect(html).toContain("one scoped flood");
+    expect(sim.stats.groupDeliveryRatio).toBe(1);
+  });
+
+  it("collapses per-member unicasts into the one send the user made", () => {
+    const sim = groupWorld({ groupMode: "per-member-unicast" });
+    const group = [...sim.groups.values()][0];
+    const sender = [...group.members][0];
+    // three sends, four members each: twelve radio messages, three cards
+    expect(sim.stats.sentGroup).toBe(12);
+    const html = renderToStaticMarkup(
+      <ChatPanel
+        nodes={sim.nodes}
+        selectedNodeId={sender}
+        onSendMessage={() => null}
+        sentRecords={sim.sentRecords}
+        deliveries={sim.deliveries}
+        groups={[...sim.groups.values()]}
+        groupMode={sim.config.groupMode}
+        onToggleGroupMode={() => {}}
+      />
+    );
+    expect((html.match(/one send/g) ?? []).length).toBe(3);
+    expect(html).toContain("4 routed unicasts");
+    expect(html).toContain("per-member unicast"); // the live mode toggle
+  });
+
+  it("shows membership, the admin badge and the rules that bind the buttons", () => {
+    const sim = groupWorld();
+    const group = [...sim.groups.values()][0];
+    const admin = [...group.members][0];
+    const member = [...group.members][1];
+    const outsider = sim.nodes.find((n) => !group.members.has(n.id))!;
+
+    const asAdmin = inspector(sim, admin);
+    expect(asAdmin).toContain("field team");
+    expect(asAdmin).toContain("5/10 · epoch 0");
+    expect(asAdmin).toContain("you are admin");
+    expect(asAdmin).toContain("(you)");
+
+    // A non-admin sees the same group without the badge, and a non-member sees none.
+    expect(inspector(sim, member)).not.toContain("you are admin");
+    expect(inspector(sim, outsider.id)).toContain("Not a member of any group");
+  });
+
+  it("disables leaving a three-member group and rotating without admin", () => {
+    const sim = groupWorld();
+    const group = [...sim.groups.values()][0];
+    const member = [...group.members][1];
+    sim.removeFromGroup(group.id, [...group.members][4]);
+    sim.removeFromGroup(group.id, [...group.members][3]);
+    expect(group.members.size).toBe(3);
+    const html = inspector(sim, member);
+    // The rule is in the DOM, not just in the engine: leaving would drop below three.
+    expect(html).toContain("A group cannot drop below three members");
+    expect(html).toContain("Only the admin may rotate the group key");
+  });
+
+  it("counts group traffic on the dashboard, and only when there is any", () => {
+    const sim = groupWorld();
+    const html = renderToStaticMarkup(
+      <MetricsPanel stats={sim.stats} dutyCycleEnabled={false} nodes={sim.nodes} />
+    );
+    expect(html).toContain("Group channels");
+    expect(html).toContain("12/12"); // three sends × four members
+    expect(html).toContain("100%");
+    expect(
+      renderToStaticMarkup(<MetricsPanel stats={world().stats} dutyCycleEnabled={false} />)
+    ).not.toContain("Group channels");
+  });
+});
 
 describe("SOS in the UI", () => {
   it("shows one alert card for four floods, with the fix and the reach", () => {

@@ -140,6 +140,32 @@ export function MetricsPanel({ stats, dutyCycleEnabled, nodes }: Props) {
         </section>
       </div>
 
+      {stats.sentGroup > 0 && (
+        <section style={{ marginTop: 14 }}>
+          <div style={sectionStyle}>👥 Group channels (docs/04 §4, roadmap Phase 1)</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <Counter label="Group sends" value={`${stats.sentGroup}`} accent="#26d0a8" />
+            <Counter
+              label="Member receipts"
+              value={`${stats.groupReceipts}/${stats.groupExpected}`}
+              accent="#b6ff4a"
+            />
+            <Counter
+              label="Group delivery"
+              value={`${(stats.groupDeliveryRatio * 100).toFixed(0)}%`}
+              accent={stats.groupDeliveryRatio >= 0.99 ? "#b6ff4a" : "#ffb84d"}
+            />
+            <Counter label="Stale key epoch" value={`${stats.groupEpochRejected}`} accent="#ff9f4d" />
+          </div>
+          <div style={{ fontSize: 10, color: "#5a6a7a", marginTop: 6, lineHeight: 1.5 }}>
+            Counted apart from 1:1 traffic, so a 10-member group can neither flatter{" "}
+            <code>deliveryRatio</code> nor deflate <code>broadcastReach</code>. "Stale key epoch" is
+            the security property doing work: copies a member cannot decrypt because the key rotated
+            when somebody left or joined — the node still relayed them, it just could not read them.
+          </div>
+        </section>
+      )}
+
       {stats.sosFloods > 0 && (
         <section style={{ marginTop: 14 }}>
           <div style={sectionStyle}>🆘 SOS — repeated flood (roadmap Phase 3, docs/05)</div>

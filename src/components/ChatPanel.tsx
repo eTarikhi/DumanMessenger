@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { MeshNode, MeshMessage } from "../types";
+import type { Group, MeshNode, MeshMessage } from "../types";
 import type { DeliveryRecord, SentRecord } from "../simulation";
 
 interface Props {
@@ -21,11 +21,19 @@ interface Props {
   /** How many times the originator re-floods an SOS, so the log can show
    *  "flood 2/4" rather than a count with no total. */
   sosRepeats?: number;
+  /** Live group channels, so the destination picker can offer them. */
+  groups?: Group[];
+  groupMode?: "scoped-flood" | "per-member-unicast";
+  /** Flips the group delivery mode without rebuilding the world. */
+  onToggleGroupMode?: () => void;
 }
 
-export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, deliveries, onTrace, traceMsgId, sosRepeats }: Props) {
+export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, deliveries, onTrace, traceMsgId, sosRepeats, groups, groupMode, onToggleGroupMode }: Props) {
   const onlineNodes = nodes.filter((n) => n.isOnline);
-  const [fromId, setFromId] = useState<string>("");
+  // Seeded from the node list rather than left to an effect: the composer should
+  // have a valid sender on the very first render (and a server-side render, where
+  // effects never run, should still show the sender's groups).
+  const [fromId, setFromId] = useState<string>(() => nodes.find((n) => n.isOnline)?.id ?? "");
   const [toId, setToId] = useState<string>("BROADCAST");
   const [body, setBody] = useState("");
   const [msgType, setMsgType] = useState<"text" | "broadcast" | "sos">("text");
@@ -43,6 +51,15 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, d
     }
   }, [selectedNodeId, onlineNodes]);
 
+  // A group destination belongs to whoever created it: if the sender changes and is
+  // not a member, fall back to the broadcast channel rather than sending into a
+  // group the engine will refuse.
+  useEffect(() => {
+    if (toId.startsWith("grp-") && !(groups ?? []).some((g) => g.id === toId && g.members.has(fromId))) {
+      setToId("BROADCAST");
+    }
+  }, [fromId, toId, groups]);
+
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ block: "nearest" });
   }, [sentRecords.length, deliveries.length]);
@@ -53,6 +70,8 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, d
     setBody("");
   };
 
+  const myGroups = (groups ?? []).filter((g) => g.members.has(fromId));
+  const groupById = (id?: string) => (id ? (groups ?? []).find((g) => g.id === id) : undefined);
   const nameOf = (id: string) => nodes.find((n) => n.id === id)?.name ?? id;
   const deliveryFor = (msgId: string) => deliveries.find((d) => d.msgId === msgId);
 
@@ -64,6 +83,20 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, d
   const cards: { entry: SentRecord; floods: SentRecord[] }[] = [];
   const bySos = new Map<string, { entry: SentRecord; floods: SentRecord[] }>();
   for (const entry of sentRecords) {
+    // In `per-member-unicast` mode one user action is N radio messages, all created
+    // at the same instant for the same group: one card, like the SOS collapse.
+    if (entry.groupId && groupMode === "per-member-unicast") {
+      const key = `${entry.groupId}|${entry.timestamp}|${entry.body}`;
+      const existing = bySos.get(key);
+      if (existing) {
+        existing.floods.push(entry);
+        continue;
+      }
+      const card = { entry, floods: [entry] };
+      bySos.set(key, card);
+      cards.push(card);
+      continue;
+    }
     if (entry.type === "sos" && entry.sosId) {
       const existing = bySos.get(entry.sosId);
       if (existing) {
@@ -102,6 +135,19 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, d
         <span style={{ fontSize: 11, color: "#9fb0c3", fontWeight: 400 }}>
           ({onlineNodes.length} online · {sentRecords.length} sent)
         </span>
+        {onToggleGroupMode && groupMode && (
+          <button
+            onClick={onToggleGroupMode}
+            title="How a group message travels: one flood only members accept, or one routed unicast per member"
+            style={{
+              marginLeft: "auto", padding: "2px 9px", borderRadius: 999, cursor: "pointer",
+              fontSize: 10, fontWeight: 700, border: "1px solid rgba(38,208,168,0.4)",
+              background: "rgba(38,208,168,0.12)", color: "#26d0a8",
+            }}
+          >
+            👥 {groupMode === "scoped-flood" ? "scoped flood" : "per-member unicast"}
+          </button>
+        )}
       </div>
 
       <div style={{ padding: 12, borderBottom: "1px solid #1e2a3a", display: "flex", flexDirection: "column", gap: 8 }}>
@@ -118,6 +164,15 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, d
             <span style={{ fontSize: 10, color: "#5a6a7a", textTransform: "uppercase", letterSpacing: 0.6 }}>To</span>
             <select value={toId} onChange={(e) => setToId(e.target.value)} style={selectStyle}>
               <option value="BROADCAST">📡 Broadcast</option>
+              {myGroups.length > 0 && (
+                <optgroup label="Groups">
+                  {myGroups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      👥 {g.name} ({g.members.size})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
               {onlineNodes.filter((n) => n.id !== fromId).map((n) => (
                 <option key={n.id} value={n.id}>{n.name}</option>
               ))}
@@ -192,6 +247,15 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, d
           const d = deliveryFor(entry.msgId);
           const isBroadcast = entry.to === "BROADCAST";
           const isSos = entry.type === "sos";
+          const cardGroup = groupById(entry.groupId);
+          const groupGot = cardGroup
+            ? new Set(
+                deliveries
+                  .filter((d) => floods.some((f) => f.msgId === d.msgId) && d.type !== "ack")
+                  .map((d) => d.to)
+              ).size
+            : 0;
+          const groupWant = cardGroup ? cardGroup.members.size - 1 : 0;
           // Every flood is a separate radio event; the alert is one.
           const receipts = floods.reduce((a, f) => a + f.recipients, 0);
           const fix = isSos && entry.sosId ? sosFix(entry.from, entry.sosId) : undefined;
@@ -210,7 +274,12 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, d
                 : { background: "rgba(255,255,255,0.04)", borderColor: "#1e2a3a" }),
             }}>
               <div style={{ fontSize: 10, color: "#9fb0c3", marginBottom: 4 }}>
-                {nameOf(entry.from)} → {isBroadcast ? "📡 All" : nameOf(entry.to)}
+                {nameOf(entry.from)} →{" "}
+                {cardGroup
+                  ? `👥 ${cardGroup.name} (${cardGroup.members.size} · epoch ${cardGroup.keyEpoch})`
+                  : isBroadcast
+                  ? "📡 All"
+                  : nameOf(entry.to)}
                 {entry.type === "sos" && " 🆘"}
                 <span style={{ marginLeft: 6, fontFamily: "monospace" }}>
                   t+{(entry.timestamp / 1000).toFixed(1)}s
@@ -218,7 +287,15 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, d
               </div>
               <div style={{ fontSize: 13, color: "#eaf2ff", wordBreak: "break-word" }}>{entry.body}</div>
               <div style={{ fontSize: 10, marginTop: 4 }}>
-                {isSos ? (
+                {cardGroup ? (
+                  <span style={{ color: groupGot === groupWant ? "#b6ff4a" : "#ffb84d" }}>
+                    👥 {groupGot} of {groupWant} member{groupWant === 1 ? "" : "s"} received
+                    {groupMode ? ` · ${groupMode === "scoped-flood" ? "one scoped flood" : `${floods.length} routed unicasts`}` : ""}
+                    {floods.length > 1 && groupMode === "per-member-unicast"
+                      ? " (one send)"
+                      : ""}
+                  </span>
+                ) : isSos ? (
                   <span style={{ color: "#ff8fa3" }}>
                     🆘 flood {floods.length}
                     {sosRepeats !== undefined ? `/${sosRepeats + 1}` : ""} ·{" "}

@@ -359,6 +359,9 @@ export interface SentRecord {
   /** Set on every SOS flood of one emergency, so a UI can collapse the repeats
    *  into a single alert exactly as a receiver's inbox does. */
   sosId?: string;
+  /** Set on group traffic, so a UI can show one card per send even in
+   *  `per-member-unicast` mode, where one user action is N radio messages. */
+  groupId?: string;
 }
 
 export interface RoleEvent {
@@ -1060,6 +1063,7 @@ export class MeshSimulation {
         delivered: false,
         recipients: 0,
         sosId: msg.sosId,
+        groupId: msg.groupId,
       });
       // Group traffic gets its own counters: folding it into `sentUnicast` would
       // let a 10-member group flatter `deliveryRatio`, and folding it into
@@ -1180,6 +1184,7 @@ export class MeshSimulation {
       delivered: false,
       recipients: 0,
       sosId: msg.sosId,
+      groupId: msg.groupId,
     });
     this.traces.set(msg.id, {
       path: [nodeId],

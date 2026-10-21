@@ -88,6 +88,55 @@ export function App() {
     rerender();
   };
 
+  // --- group channels (roadmap Phase 1 "group (3-10 members)", Phase 4 Group UX)
+  /** Online nodes nearest to `nodeId`, optionally skipping a set (e.g. members). */
+  const nearestIds = (nodeId: string, count: number, exclude?: Set<string>): string[] => {
+    const node = sim.nodes.find((n) => n.id === nodeId);
+    if (!node) return [];
+    return sim.nodes
+      .filter((n) => n.isOnline && n.id !== nodeId && !(exclude && exclude.has(n.id)))
+      .sort(
+        (a, b) =>
+          (a.pos.x - node.pos.x) ** 2 +
+          (a.pos.y - node.pos.y) ** 2 -
+          ((b.pos.x - node.pos.x) ** 2 + (b.pos.y - node.pos.y) ** 2)
+      )
+      .slice(0, count)
+      .map((n) => n.id);
+  };
+
+  const handleCreateGroup = (nodeId: string) => {
+    const node = sim.nodes.find((n) => n.id === nodeId);
+    sim.createGroup(`${node?.name ?? nodeId}'s team`, [nodeId, ...nearestIds(nodeId, 4)], nodeId);
+    rerender();
+  };
+
+  const handleInviteNearest = (groupId: string, nodeId: string) => {
+    const group = sim.groups.get(groupId);
+    if (!group) return;
+    const [next] = nearestIds(nodeId, 1, group.members);
+    if (next) sim.inviteToGroup(groupId, next);
+    rerender();
+  };
+
+  const handleLeaveGroup = (groupId: string, nodeId: string) => {
+    sim.removeFromGroup(groupId, nodeId);
+    rerender();
+  };
+
+  const handleRotateKey = (groupId: string, nodeId: string) => {
+    sim.rotateGroupKey(groupId, nodeId);
+    rerender();
+  };
+
+  /** Live protocol switch, like capture: flipping it must not throw the world away,
+   *  or every group the user built would vanish with it. */
+  const handleToggleGroupMode = () => {
+    sim.config.groupMode =
+      sim.config.groupMode === "scoped-flood" ? "per-member-unicast" : "scoped-flood";
+    rerender();
+  };
+
   const handleToggleOgm = () => {
     const next = !captureOgm;
     sim.config.captureOgm = next;
@@ -220,6 +269,9 @@ export function App() {
                 }}
                 traceMsgId={traceMsgId}
                 sosRepeats={sim.config.sosRepeats}
+                groups={[...sim.groups.values()]}
+                groupMode={sim.config.groupMode}
+                onToggleGroupMode={handleToggleGroupMode}
               />
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -297,6 +349,11 @@ export function App() {
               const n = sim.nodes.find((x) => x.id === id);
               if (n) sim.setBatterySaver(id, !n.batterySaver);
             }}
+            groups={[...sim.groups.values()]}
+            onCreateGroup={handleCreateGroup}
+            onInviteNearest={handleInviteNearest}
+            onLeaveGroup={handleLeaveGroup}
+            onRotateKey={handleRotateKey}
             onClose={() => setSelectedId(null)}
           />
         </div>

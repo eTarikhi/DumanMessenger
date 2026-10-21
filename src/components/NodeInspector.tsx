@@ -1,4 +1,4 @@
-import type { MeshNode } from "../types";
+import type { Group, MeshNode } from "../types";
 import type { RfParams } from "../rf";
 import { peersInRange, rssiModel, normRssi } from "../rf";
 import { TQ_USABLE } from "../election";
@@ -16,6 +16,12 @@ interface Props {
   onToggleSuperOptOut: (id: string) => void;
   onToggleBatterySaver: (id: string) => void;
   onClose: () => void;
+  /** Group channels this node may belong to (roadmap Phase 1 / Phase 4 Group UX). */
+  groups?: Group[];
+  onCreateGroup?: (nodeId: string) => void;
+  onInviteNearest?: (groupId: string, nodeId: string) => void;
+  onLeaveGroup?: (groupId: string, nodeId: string) => void;
+  onRotateKey?: (groupId: string, nodeId: string) => void;
 }
 
 export function NodeInspector({
@@ -28,6 +34,11 @@ export function NodeInspector({
   onToggleCharging,
   onToggleSuperOptOut,
   onToggleBatterySaver,
+  groups,
+  onCreateGroup,
+  onInviteNearest,
+  onLeaveGroup,
+  onRotateKey,
   onClose,
 }: Props) {
   if (!node) return null;
@@ -35,6 +46,26 @@ export function NodeInspector({
   const peers = peersInRange(node, allNodes, rf);
   const routeEntries = Object.entries(node.nextHopTable);
   const usableRoutes = routeEntries.filter(([, e]) => e.tq >= TQ_USABLE);
+
+  const myGroups = (groups ?? []).filter((g) => g.members.has(node.id));
+  const byDistance = (ids: string[]) =>
+    ids
+      .map((id) => allNodes.find((n) => n.id === id))
+      .filter((n): n is MeshNode => !!n && n.isOnline)
+      .sort(
+        (a, b) =>
+          (a.pos.x - node.pos.x) ** 2 +
+          (a.pos.y - node.pos.y) ** 2 -
+          ((b.pos.x - node.pos.x) ** 2 + (b.pos.y - node.pos.y) ** 2)
+      );
+  const nearestOutsider = (g: Group) =>
+    byDistance(allNodes.filter((n) => !g.members.has(n.id)).map((n) => n.id))[0];
+  const groupButton: React.CSSProperties = {
+    flex: 1, padding: "5px 8px", borderRadius: 7, cursor: "pointer",
+    border: "1px solid #1e2a3a", fontSize: 10.5, fontWeight: 600,
+    background: "rgba(38,208,168,0.10)", color: "#26d0a8",
+  };
+  const disabledButton: React.CSSProperties = { ...groupButton, opacity: 0.35, cursor: "not-allowed" };
 
   return (
     <div style={panelStyle}>
@@ -216,6 +247,79 @@ export function NodeInspector({
       <div style={{ fontSize: 10, color: "#5a6a7a", marginTop: 6, lineHeight: 1.5 }}>
         Declining takes effect at once — no two-cycle hysteresis — and is advertised in this node's
         OGM so neighbours stop counting it as a top-20% candidate.
+      </div>
+
+      {/* roadmap Phase 1 "group (3-10 members)" and Phase 4 "Group UX: admin rotate
+          key, leave/rejoin sync". Membership is per-node state, so it lives here
+          rather than in the config panel. */}
+      <div style={{ marginTop: 14, borderTop: "1px solid #1e2a3a", paddingTop: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#26d0a8", letterSpacing: 0.4 }}>
+          👥 Groups
+        </div>
+        {myGroups.length === 0 && (
+          <div style={{ fontSize: 11, color: "#5a6a7a", marginTop: 4 }}>Not a member of any group.</div>
+        )}
+        {myGroups.map((g) => {
+          const outsider = nearestOutsider(g);
+          return (
+            <div
+              key={g.id}
+              style={{ marginTop: 8, border: "1px solid #1e2a3a", borderRadius: 8, padding: 8 }}
+            >
+              <div style={{ fontSize: 12, color: "#eaf2ff", fontWeight: 600 }}>
+                {g.name}
+                <span style={{ color: "#5a6a7a", fontWeight: 400, marginLeft: 6 }}>
+                  {g.members.size}/10 · epoch {g.keyEpoch}
+                  {g.adminId === node.id ? " · you are admin" : ""}
+                </span>
+              </div>
+              <div style={{ fontSize: 10, color: "#9fb0c3", marginTop: 3, fontFamily: "monospace" }}>
+                {byDistance([...g.members])
+                  .map((n) => (n.id === node.id ? `${n.name} (you)` : n.name))
+                  .join(", ")}
+              </div>
+              <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                <button
+                  onClick={() => onRotateKey?.(g.id, node.id)}
+                  disabled={g.adminId !== node.id}
+                  style={g.adminId === node.id ? groupButton : disabledButton}
+                  title="Only the admin may rotate the group key"
+                >
+                  Rotate key
+                </button>
+                <button
+                  onClick={() => outsider && onInviteNearest?.(g.id, node.id)}
+                  disabled={g.members.size >= 10 || !outsider}
+                  style={g.members.size < 10 && outsider ? groupButton : disabledButton}
+                  title={outsider ? `Invite ${outsider.name}, the nearest non-member` : "Group is full"}
+                >
+                  Invite nearest
+                </button>
+                <button
+                  onClick={() => onLeaveGroup?.(g.id, node.id)}
+                  disabled={g.members.size <= 3}
+                  style={g.members.size > 3 ? groupButton : disabledButton}
+                  title="A group cannot drop below three members"
+                >
+                  Leave
+                </button>
+              </div>
+            </div>
+          );
+        })}
+        <button
+          onClick={() => onCreateGroup?.(node.id)}
+          disabled={peers.length < 2}
+          style={{ ...groupButton, flex: "none", width: "100%", marginTop: 8, padding: "7px 10px" }}
+          title="Group with this node and its four nearest online peers"
+        >
+          New group with 4 nearest peers
+        </button>
+        <div style={{ fontSize: 10, color: "#5a6a7a", marginTop: 6, lineHeight: 1.5 }}>
+          Every membership change rotates the group key (docs/04 §4), so a node that leaves keeps
+          relaying group traffic but can no longer read it, and a node that joins cannot read the
+          history it missed. Below three members a group is a 1:1 chat, so leaving is refused.
+        </div>
       </div>
     </div>
   );
