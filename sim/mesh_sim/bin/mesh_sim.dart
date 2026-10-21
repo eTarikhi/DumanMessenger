@@ -116,8 +116,19 @@ void main(List<String> args) {
   final sim = MeshSimulation(config);
   final sent = _replay(sim, plan, gapMs);
 
+  // The two A/B arms from docs/06 §7, so one invocation reproduces the whole
+  // overhead table: naive epidemic flooding is the baseline the acceptance
+  // criteria name, and routing-without-suppression is the only arm that isolates
+  // what MPR still buys once the route table works.
   final baseline = MeshSimulation(config.copyWith(relayPolicy: RelayPolicy.floodAll));
   _replay(baseline, plan, gapMs);
+
+  MeshSimulation? routeOnly;
+  if (config.relayPolicy != RelayPolicy.routeFlood) {
+    routeOnly =
+        MeshSimulation(config.copyWith(relayPolicy: RelayPolicy.routeFlood));
+    _replay(routeOnly, plan, gapMs);
+  }
 
   final s = sim.stats;
   final unicast = sim.deliveries
@@ -147,6 +158,12 @@ void main(List<String> args) {
     'relayTx': s.totalForwarded,
     'floodAllRelayTx': baseline.stats.totalForwarded,
     'overheadVsFloodAll': _round(overheadVsFlood),
+    // null when route-flood *is* the selected policy: there is nothing to
+    // compare it against that the run has not already measured.
+    'routeFloodRelayTx': routeOnly?.stats.totalForwarded,
+    'overheadVsRouteFlood': routeOnly == null
+        ? null
+        : _round(s.totalForwarded / math.max(1, routeOnly.stats.totalForwarded)),
     'overheadRatio': _round(s.overheadRatio),
     'mprSuppressed': s.mprSuppressed,
     'retriesSent': s.retriesSent,

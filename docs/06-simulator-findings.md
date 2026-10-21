@@ -347,9 +347,10 @@ dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --json
 dart run bin/mesh_sim.dart --policy route-flood --scenario festival_crowd --no-check
 ```
 
-`--policy` selects the A/B arm (`mpr` | `route-flood` | `flood-all`); the CLI
-always reports the naive-flood arm alongside it, so one invocation reproduces the
-overhead figures in §2.
+`--policy` picks the arm under test (`mpr` | `route-flood` | `flood-all`). The CLI
+replays the same plan through the other two as well and reports
+`overheadVsFloodAll` and `overheadVsRouteFlood`, so a single invocation
+reproduces both overhead columns in §2.
 
 `bin/mesh_sim.dart` exits non-zero when the acceptance criteria fail, so CI can
 gate on the CLI directly. Scenarios: `campus_quad` (the 20-node acceptance case),
