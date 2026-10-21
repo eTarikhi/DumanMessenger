@@ -18,17 +18,25 @@ const int _goldenGamma = 0x6d2b79f5;
 const int _u32 = 4294967296;
 const int _mask = 0xFFFFFFFF;
 
+/// JavaScript's `Math.imul`: multiply two values and keep the low 32 bits.
+///
+/// Dart integers are 64-bit, so the product has to be masked back down. Masking
+/// the operands first is what reproduces `imul`'s ToUint32 coercion of a
+/// negative int32.
+int _imul(int x, int y) => ((x & _mask) * (y & _mask)) & _mask;
+
 /// mulberry32: small, fast, good enough for Monte-Carlo mesh runs.
 Rng createRng(int seed) {
   var a = seed & _mask;
   return () {
     a = (a + _goldenGamma) & _mask;
     var t = a;
-    t = (t ^ (t >> 15)) & _mask;
-    t = (t * ((t | 1) & _mask)) & _mask;
-    final inner = (t ^ (t >> 7)) & _mask;
-    final product = (inner * ((inner | 61) & _mask)) & _mask;
-    t = (t ^ ((t + product) & _mask)) & _mask;
+    // Both operands of each multiply are read from the *same* t, so the
+    // right-hand operand must be taken before t is overwritten by the product.
+    // Getting this wrong still yields a plausible stream — it just is not
+    // mulberry32, and every golden vector diverges from the first draw.
+    t = _imul(t ^ (t >> 15), t | 1);
+    t = (t ^ ((t + _imul(t ^ (t >> 7), t | 61)) & _mask)) & _mask;
     t = (t ^ (t >> 14)) & _mask;
     return t / _u32;
   };

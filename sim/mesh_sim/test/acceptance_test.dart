@@ -30,6 +30,7 @@ class _Run {
     required this.deliveredUnicast,
     required this.withinFiveHops,
     required this.overheadVsFlood,
+    required this.baselineRelays,
     required this.oneHopMaxMs,
     required this.threeHopMaxMs,
     required this.isolatedNodes,
@@ -41,6 +42,10 @@ class _Run {
   final int deliveredUnicast;
   final int withinFiveHops;
   final double overheadVsFlood;
+
+  /// Relay count of the flood-all arm. Carried so the guard that used to sit in
+  /// [_measure] can be asserted from inside a test instead.
+  final int baselineRelays;
   final double oneHopMaxMs;
   final double threeHopMaxMs;
   final int isolatedNodes;
@@ -90,7 +95,6 @@ _Run _measure(SimConfig config, {bool baseline = true}) {
     final flood = MeshSimulation(config.copyWith(relayPolicy: RelayPolicy.floodAll));
     _replay(flood, plan);
     baselineRelays = flood.stats.totalForwarded;
-    expect(baselineRelays, greaterThan(0));
   }
 
   final uni = sim.deliveries
@@ -109,6 +113,7 @@ _Run _measure(SimConfig config, {bool baseline = true}) {
     deliveredUnicast: uni.length,
     withinFiveHops: uni.where((d) => d.hops <= 5).length,
     overheadVsFlood: sim.stats.totalForwarded / math.max(1, baselineRelays),
+    baselineRelays: baselineRelays,
     oneHopMaxMs: oneHop.isEmpty ? 0.0 : oneHop.reduce(math.max),
     threeHopMaxMs: threeHop.isEmpty ? 0.0 : threeHop.reduce(math.max),
     isolatedNodes: sim.stats.isolatedNodes,
@@ -141,7 +146,11 @@ void main() {
       });
 
       test('seed $seed uses <=70% of the naive flood-all relay budget', () {
-        expect(runs[seed]!.overheadVsFlood, lessThanOrEqualTo(0.70));
+        final r = runs[seed]!;
+        // A ratio against an empty baseline would be meaningless, and this used
+        // to be guarded inside _measure, where expect() cannot run.
+        expect(r.baselineRelays, greaterThan(0));
+        expect(r.overheadVsFlood, lessThanOrEqualTo(0.70));
       });
 
       test('seed $seed keeps a connected world with no isolated node', () {
