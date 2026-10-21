@@ -8,12 +8,12 @@
 `skills/02` + `skills/08` simulator criterion met on the 20-node case they name,
 at **7-9%** of the naive-flood relay budget (§2). Power policy, the duty cycle and
 the Phase 2 telemetry are implemented and measured (§10) — the duty cycle is what
-brings NORMAL inside `skills/07`'s 15%-per-8h budget. SOS mode (roadmap Phase 3)
-and hop transparency (roadmap Phase 4) are implemented and measured (§11, §13),
-and a protocol defect both engines shared — a node re-flooding copies of its own
-message — was found by a render test and removed (§12), cutting relay
-transmissions 18.3% in the warm 20-node world. One secondary target remains open
-in the 60-node crowd (§6, "Still open").
+brings NORMAL inside `skills/07`'s 15%-per-8h budget. SOS mode (roadmap Phase 3),
+hop transparency (roadmap Phase 4) and group channels (roadmap Phase 1) are
+implemented and measured (§11, §13, §14), and a protocol defect both engines
+shared — a node re-flooding copies of its own message — was found by a render test
+and removed (§12), cutting relay transmissions 18.3% in the warm 20-node world.
+One secondary target remains open in the 60-node crowd (§6, "Still open").
 **Date:** Oct 2026
 
 ---
@@ -772,3 +772,122 @@ action, reason; `--capture` prints the log tail; both are in `--json` as `traces
 and `logTail`. In the UI, the chat log's **trace** button draws the route on the
 canvas as a numbered polyline and opens the hop panel, and the mesh log panel
 filters to the traced message.
+
+
+---
+
+## 14. Group channels: the crossover is proximity, not group size
+
+`docs/04` §4: *"Group chat: MLS-style or simple sender-key distribution over 1:1
+channels: each group has `groupKey` rotated on member leave"*. roadmap Phase 1:
+*"Broadcast pager channel (public) + private 1:1 + group (3-10 members)"*. Phase 4
+adds *"Group UX: invite via QR, admin rotate key, leave/rejoin sync"*.
+
+What the engines implement: a group of 3-10 members with an admin, a key epoch
+that rotates on **every** membership change and on manual admin rotation, and two
+delivery modes —
+
+- **`scoped-flood`** (default): one message addressed to `GROUP`, relayed by the
+  whole network on the *normal* policy (MPR included, unlike SOS), accepted only by
+  members holding the current epoch. The network never learns the membership, which
+  is the point: a non-member that relays a group message learns nothing from it.
+- **`per-member-unicast`**: one routed message per member, which the route table can
+  aim, and which gets an ACK and retries each.
+
+### 14.1 Measured: 20 sends per arm, seeds 42/7/1234
+
+Transmissions **per group message**, and group delivery ratio:
+
+| world | members | layout | scoped flood | per-member unicast | cheaper |
+| --- | --- | --- | --- | --- | --- |
+| campus (20) | 3 | clustered | 75.7 tx · 100% | **4.0 tx** · 100% | unicast 19× |
+| campus | 3 | spread | **66.8 tx** · 100% | 37.8 tx · 100% | unicast 1.8× |
+| campus | 5 | clustered | 75.7 tx · 99.6% | **8.3 tx** · 100% | unicast 9× |
+| campus | 5 | spread | **75.7 tx** · 100% | 158.8 tx · 99.6% | flood 2.1× |
+| campus | 10 | clustered | **75.7 tx** · 99.8% | 116.7 tx · 99.8% | flood 1.5× |
+| campus | 10 | spread | **75.7 tx** · 99.8% | 298.6 tx · 99.1% | flood 4.0× |
+| crowd (60) | 3 | clustered | 519.6 tx · 100% | **4.0 tx** · 100% | unicast 130× |
+| crowd | 5 | clustered | 519.6 tx · 100% | **8.3 tx** · 100% | unicast 63× |
+| crowd | 10 | clustered | 519.6 tx · 99.8% | **18.8 tx** · 99.8% | unicast 28× |
+| crowd | 3 | spread | **519.6 tx** · 92.5% | 608.1 tx · 90.0% | flood 1.2× |
+| crowd | 5 | spread | **519.6 tx** · 96.3% | 273.9 tx · 98.3% | unicast 1.9× |
+| crowd | 10 | spread | **519.6 tx** · 95.0% | 3020.6 tx · 91.9% | flood 5.8× |
+
+Three things the table says:
+
+1. **A scoped flood costs the same whatever the group.** 75.7 tx in the campus and
+   519.6 tx in the crowd for 3 members or 10 — the whole network relays it either
+   way, and only the accept count changes. That is the price of not revealing
+   membership, and it is a fixed price.
+2. **Per-member unicast cost tracks how far the members are, not how many.** All
+   three clustered crowd rows are 4-19 tx (every member is a direct peer: one
+   transmission each) while the spread rows are 274-3021 tx (each copy fans out
+   when the route is unknown or long). Size matters only through distance.
+3. **Delivery is a wash except at the edges.** Both modes reach ~100% in the campus.
+   In the crowd the flood is better for spread groups (95.0% vs 91.9% at 10 members)
+   because it has no per-member ACK/retry tail and its TTL-5 fan-out covers more of
+   a sparse geometry than ten individually routed paths; unicast is better for the
+   5-member spread row (98.3% vs 96.3%) because a retry recovers what one flood lost.
+
+So `scoped-flood` ships as the default: its cost is predictable, it needs nothing
+from the route table, and it is the only mode whose privacy property holds (a
+per-member unicast reveals the membership to every node on each path).
+
+### 14.2 Why there is no `auto` mode: the sender cannot price a unicast
+
+The obvious follow-up is to let the sender choose per message. It cannot, and the
+reason is worth recording because it looks like it should work.
+
+The sender *does* hold an OGM entry per member with a hop count. But that hop count
+is **not a distance oracle**: for members it reaches in one hop, the table said 3-4.
+That is correct BATMAN behaviour — the best entry is the one with the highest link
+quality, and in a dense world the direct link can have worse tq than a gossiped
+path, so the recorded `hopCount` describes the *chosen* route, not the *shortest*
+one. `decideForward` then sends to a direct peer anyway, because "destination in
+range" is checked before the route table.
+
+Predicting unicast cost from those numbers does not work either. Realised
+transmissions per summed OGM hop, across the twelve rows above: **0.6, 1.0, 1.2,
+5.3, 9.4, 13.0, 17.1, 22.7, 76.0, 107.9** — a 180× spread with no usable signal.
+The dominant term is how often a member copy falls back to a fan-out because the
+route was unknown *at that instant*, which is a property of scan timing rather than
+of geometry.
+
+So: two modes, a measured default, and `--group [N]` in the CLI, which reports both
+modes on the world you are actually running and prints which is cheaper and why.
+An `auto` mode is a legitimate follow-up, but it needs a fresher distance estimate
+than the OGM table gives — a direct-peer check plus a measured fan-out rate, not a
+hop count.
+
+### 14.3 Key rotation is network-wide, and that is the semantics
+
+Rotation discards the old key everywhere, so a message already in flight under
+epoch *n* becomes unreadable to **every** member once the group rotates to *n+1* —
+not only to the node that left. Both engines count those copies as
+`groupEpochRejected` and never deliver them, and a test pins that a message sent
+under epoch 0 produces zero deliveries after a rotation to epoch 1.
+
+The departed node keeps **relaying**: the bytes are not secret to the network, only
+unreadable to it. That is the property the leave test asserts (its `txCount` rises
+while its inbox stays empty), and it is why a scoped flood does not need membership
+knowledge to work.
+
+### 14.4 Accounting
+
+Group traffic is excluded from `unicastDeliveries` — a 10-member group would
+otherwise flatter `deliveryRatio` tenfold — and from `sentBroadcast`, which would
+deflate `broadcastReach`. It gets `sentGroup`, `groupReceipts`, `groupExpected` and
+`groupDeliveryRatio` instead, where `groupExpected` counts *member deliveries that
+should have happened* so the ratio means the same thing in both modes (one message
+in flood mode, N in unicast mode).
+
+`groupReceipts` is incremented in `recordDelivery`, not at a delivery call site,
+because group traffic arrives by two different roads and a counter in only one of
+them silently reports 0% for the other — which is exactly what the first
+measurement run of §14.1 showed for every unicast row before the counter moved.
+
+Not implemented, and named so nobody assumes otherwise: sender-key distribution
+over 1:1 channels (docs/04's actual key-agreement scheme), QR invites, rejoin
+history sync, and CRDT anti-entropy for group history (roadmap Phase 1 item 32).
+The simulator models *who may read what, and what it costs to get it there*; the
+key agreement underneath is the research item.

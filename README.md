@@ -75,6 +75,16 @@ nothing over four when the gap is *radius* rather than loss. TTL is the radius k
 documented 5, except in `festival_crowd`, which is 6+ hops across from an edge sender
 (`docs/06-simulator-findings.md` §11).
 
+**Group channels** (`docs/04` §4, roadmap Phase 1): 3-10 members, an admin, and a key epoch that
+rotates on every membership change — so a node that leaves keeps relaying group traffic but can no
+longer read it, and a node that joins cannot read the history it missed. Delivery ships in two
+measured modes: a **scoped flood** the whole network relays and only members accept (the default, and
+the only mode that does not reveal the membership to every node on the path), or **one routed unicast
+per member**, which is up to 130× cheaper when every member is a direct peer and up to 5.8× dearer
+when they are spread across the world. `dart run bin/mesh_sim.dart --group 10` reports both on any
+world and says which is cheaper and why; the visualiser manages membership from the node inspector and
+flips the mode live from the chat header (`docs/06-simulator-findings.md` §14).
+
 **Hop transparency** (roadmap Phase 4): every delivery carries a per-hop trace — arrival time, link
 budget in dBm, who handed it over, the action and the router's own reason — and `deliveredChain()`
 recovers the route from what turns out to be a fan-out *tree* (a 4-hop delivery lists 15 nodes), which

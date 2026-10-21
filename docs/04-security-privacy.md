@@ -30,6 +30,15 @@
 
 - **1:1 DM:** **Noise_XX** (or X3DH + Double Ratchet light) with forward secrecy. Initiated via BLE handshake when peers first meet; session keys ratchet per message. Libsodium / Dart `cryptography`.
 - **Group chat:** **MLS-style** or simple sender-key distribution over 1:1 channels: each group has `groupKey` rotated on member leave; stored encrypted.
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §14):** the *membership and epoch* half is implemented and measured in both
+> engines: a group of 3-10 with an admin, a key epoch that rotates on every membership change and on
+> admin command, and copies whose epoch does not match the receiver's counted as rejected rather than
+> delivered. Two semantics worth fixing now, because they are easy to get wrong in the app: rotation
+> discards the old key **network-wide**, so a message already in flight becomes unreadable to every
+> member, not just to the node that left; and a departed member keeps **relaying** group traffic (the
+> bytes are not secret to the network, only unreadable to it), which is why a scoped group flood needs
+> no membership knowledge to work. Not modelled here: the key agreement itself — sender-key
+> distribution over 1:1 channels is `skills/03` work.
 - **Broadcast/pager channel:** **Not private** by design (like walkie channel). Option to create encrypted broadcast group with shared key.
 - **At rest:** Encrypted SQLite (SQLCipher) + OS keystore; panic wipe = overwrite key.
 

@@ -32,6 +32,14 @@ aead {nonce12, ciphertext, tag16} // ciphertext = from, ts, body, pad256
 - DO implement panic wipe: zero keys + overwrite DB + toast
 
 ### Acceptance
+
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §14):** the group *membership and epoch* semantics this skill depends on are
+> already implemented and pinned by tests in both engines — 3-10 members, admin-only rotation, rotation
+> on every join and leave, and a copy whose epoch does not match the receiver's rejected rather than
+> delivered. What is not implemented is any of the cryptography below: there is no handshake, no
+> ratchet, no sender-key distribution and no SAS in the simulator, and its "cannot decrypt" is an epoch
+> comparison, not a cipher. Treat the simulator as the specification of *when* a key must change and
+> *who* may read what, and this skill as the specification of how.
 - [ ] 2 peers: QR exchange → Noise handshake → E2EE DM that SUPER cannot decrypt (capture test)
 - [ ] Forward secrecy: compromise after = cannot decrypt prior (ratchet verify)
 - [ ] Audit checklist: no plaintext PII in logs, destHint leaks only 8B hash

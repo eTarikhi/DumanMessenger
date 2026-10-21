@@ -31,7 +31,15 @@
 - [ ] Store-and-forward OppQueue (7-day expiry, 500 msgs cap)
 - [ ] SQLite + CRDT for group/broadcast history (hash beacon anti-entropy)
 - [ ] E2EE round 1: Noise_XX 1:1, SAS verify, padding
-- [ ] Broadcast pager channel (public) + private 1:1 + group (3-10 members)
+- [x] Broadcast pager channel (public) + private 1:1 + group (3-10 members)
+  > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §14):** all three traffic classes now exist in both engines with their own
+  accounting, so a 10-member group can neither flatter `deliveryRatio` nor deflate `broadcastReach`.
+  Group delivery ships in two measured modes — a scoped flood the whole network relays and only members
+  accept (default, and the only mode that does not reveal membership to every node on the path), or one
+  routed unicast per member (up to 130× cheaper when every member is a direct peer, up to 5.8× dearer
+  when they are spread). `dart run bin/mesh_sim.dart --group 10` reports both on any world. The app-side
+  work — sender-key agreement, the channel list UI, persistence — is Phase 1's remaining crypto and
+  storage items.
 - [ ] Foreground service (Android) + bg mode (iOS) + duty cycling NORMAL vs continuous SUPER (manual toggle first)
 - [ ] Battery/performance logging
 
@@ -93,6 +101,12 @@
 - [ ] iOS harden: background scan throttling UX (“keep in foreground for mesh”), MPC fallbacks, BLE-only Android↔iOS interop
 - [ ] WiFi Aware experiment (Android 26+ & iOS 26 compat probe) — feature-flagged
 - [ ] Group UX: invite via QR, admin rotate key, leave/rejoin sync
+  > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §14.3):** partly delivered in simulation: admin-only key rotation, invite and
+  leave with rotation on both, and the 3-10 bound are implemented, tested and visible in the visualiser's
+  node inspector (the engine's rules are in the DOM: Leave is disabled at three members, Rotate key for a
+  non-admin). Still to do: QR invites and *rejoin sync*, which needs the CRDT history reconciliation from
+  Phase 1 item 32 — a rejoining member cannot read the history it missed, by design, so syncing it is a
+  separate mechanism from rotating the key.
 - [x] Hop visualization: “via 2 nodes • SUPER Amir” hop trace for transparency
 > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §13):** delivered in both engines plus the visualiser. `path` turned out to be a
   *fan-out tree* — a 4-hop delivery in the 20-node world lists 15 nodes — so `deliveredChain()` walks
