@@ -86,6 +86,15 @@ export interface OGM {
    * neighbours, which is the whole point of MPR selection.
    */
   neighborIds: NodeId[];
+  /**
+   * The originator has declined the router role — SUPER opt-out or battery
+   * saver (skills/02 acceptance). Advertised so that neighbours can drop it
+   * from the top-20% candidacy ranking instead of letting a node that will
+   * never promote occupy a slot and thin the router set below the 15% floor.
+   * Without the flag the declination is only knowable locally, which a real
+   * device cannot observe for its peers.
+   */
+  declinedRouter: boolean;
 }
 
 /** OGM receipt history for one (originator, neighbour) link.
@@ -166,6 +175,20 @@ export interface MeshNode {
   mprSet: NodeId[];
   /** This node's own 1-hop neighbours, sorted; advertised in its OGM. */
   peerIds: NodeId[];
+  /** User declined the router role. skills/02 acceptance: "SUPER opt-out
+   *  respected"; the roadmap's risk table puts it the other way round ("SUPER
+   *  opt-in"). Either way the node must never be promoted while it is set. */
+  superOptOut: boolean;
+  /** OS battery-saver mode. skills/02 acceptance: "NORMAL never auto-promoted
+   *  if battery saver on". */
+  batterySaver: boolean;
+  /** Phase offset inside the duty cycle, spread by node index so a crowd does
+   *  not sleep in lockstep. Derived from the index rather than drawn from the
+   *  RNG: the draw order is part of the cross-language contract. */
+  dutyPhaseMs: number;
+  /** Battery level when metrics were last cleared — the baseline for measured
+   *  %/h telemetry (skills/07: "Battery %/h per role"). */
+  batteryAtMeasure: number;
   oppQueue: QueuedMessage[];
   inbox: MeshMessage[];
   sentLog: MeshMessage[];

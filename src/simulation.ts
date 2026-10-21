@@ -82,6 +82,15 @@ export interface SimConfig {
   scanIntervalSuperMs: number;
   scanIntervalNormalMs: number;
 
+  /** skills/07 duty cycling — "NORMAL `scan 3s/sleep 7s`, SUPER `continuous`".
+   *  Off by default: it changes when discovery happens, so turning it on is a
+   *  different experiment (docs/06 §7). */
+  dutyCycleEnabled: boolean;
+  normalScanWindowMs: number;
+  normalScanCycleMs: number;
+  /** Scanner-off battery drain as a fraction of the awake rate. */
+  sleepDrainFactor: number;
+
   enableSuperElection: boolean;
   enableMobility: boolean;
   enableDtn: boolean;
@@ -132,6 +141,11 @@ export const DEFAULT_CONFIG: SimConfig = {
   electionIntervalMs: 30000,
   scanIntervalSuperMs: 250,
   scanIntervalNormalMs: 1000,
+
+  dutyCycleEnabled: false,
+  normalScanWindowMs: 3000,
+  normalScanCycleMs: 10000,
+  sleepDrainFactor: 0.25,
 
   enableSuperElection: true,
   enableMobility: true,
@@ -193,6 +207,32 @@ export interface SimulationStats {
   acksReceived: number;
   sentUnicast: number;
   sentBroadcast: number;
+
+  /** skills/07 telemetry: "Battery %/h per role, scans/sec, relays/sec".
+   *  Measured from the battery snapshot taken when metrics were cleared, over
+   *  nodes that are online, in that role and not charging. */
+  batteryPercentPerHourNormal: number;
+  batteryPercentPerHourSuper: number;
+  scansPerSec: number;
+  relaysPerSec: number;
+  /** Scans a duty-cycling node skipped because its scanner was asleep. */
+  scansSkippedAsleep: number;
+  /** Fraction of online non-SUPER nodes inside their wake window (1 when duty
+   *  cycling is off). */
+  awakeRatio: number;
+  /** Election log depth — skills/02: "DO log `electionEvents` for tuner". */
+  electionEvents: number;
+  /** roadmap Phase 2 metrics dashboard: "latency by hop". First-attempt routed
+   *  unicast only, matching the docs/04 §5 budget's scope. */
+  latencyByHop: LatencyByHop[];
+}
+
+/** Latency distribution for one hop count. */
+export interface LatencyByHop {
+  hops: number;
+  count: number;
+  avgMs: number;
+  p95Ms: number;
 }
 
 export interface DeliveryRecord {
@@ -309,6 +349,15 @@ export function createNode(
     twoHopView: {},
     mprSet: [],
     peerIds: [],
+    superOptOut: false,
+    batterySaver: false,
+    // Spread phases evenly over the cycle by index, so a crowd does not sleep in
+    // lockstep. Derived, never drawn: the RNG draw order is a contract.
+    dutyPhaseMs:
+      config.nodeCount > 0
+        ? (index % config.nodeCount) * (config.normalScanCycleMs / config.nodeCount)
+        : 0,
+    batteryAtMeasure: battery,
     oppQueue: [],
     inbox: [],
     sentLog: [],
@@ -392,6 +441,10 @@ export class MeshSimulation {
   deliveries: DeliveryRecord[] = [];
   sentRecords: SentRecord[] = [];
   roleEvents: RoleEvent[] = [];
+  private scanCount = 0;
+  private scansSkippedAsleep = 0;
+  /** Simulation time when metrics were last cleared: the telemetry baseline. */
+  private measureStartMs = 0;
 
   private queue = new EventQueue();
   private msgCounter = 0;
@@ -450,7 +503,15 @@ export class MeshSimulation {
     }
   }
 
-  private clearRecords(): void {
+  /**
+   * Re-baseline the measurement window: drop the accumulated records and
+   * snapshot every node's battery and the clock now, so the stats that follow
+   * describe only what happens after this call. The warm-up path uses it to
+   * discard bootstrap churn; a caller can use it to measure a settled window
+   * (roles promoted at the first election otherwise bleed their pre-promotion
+   * drain into a per-role %/h average).
+   */
+  clearRecords(): void {
     this.deliveries = [];
     this.sentRecords = [];
     this.roleEvents = [];
@@ -469,8 +530,12 @@ export class MeshSimulation {
     this.retriesSent = 0;
     this.retriesExhausted = 0;
     this.acksReceived = 0;
+    this.scanCount = 0;
+    this.scansSkippedAsleep = 0;
+    this.measureStartMs = this.now;
     this.pendingAcks.clear();
     for (const n of this.nodes) {
+      n.batteryAtMeasure = n.battery;
       n.roleTransitions = 0;
       n.txCount = 0;
       n.mprSuppressed = 0;
@@ -584,7 +649,13 @@ export class MeshSimulation {
         this.config.areaHeight,
         this.config.enableMobility
       );
-      batteryDrain(node, dtSec, this.config.batteryDrainMultiplier);
+      // A duty-cycling node with its scanner off burns less: skills/07's whole
+      // argument is that the sleep slot is what keeps NORMAL under 15%/8h.
+      batteryDrain(
+        node,
+        dtSec,
+        this.config.batteryDrainMultiplier * (this.isAwake(node) ? 1 : this.config.sleepDrainFactor)
+      );
       node.uptimeMin += dtSec / 60;
       node.lastPhysicsAt = this.now;
       if (node.battery <= 0) {
@@ -646,19 +717,41 @@ export class MeshSimulation {
     }
   }
 
+  /** Is this node's scanner inside its wake window?
+   *
+   *  skills/07: "Duty cycle: NORMAL `scan 3s/sleep 7s`, SUPER `continuous`".
+   *  Only *scanning* is affected. An asleep node keeps beaconing and keeps
+   *  relaying traffic it already knows how to forward, which is the BLE
+   *  asymmetry the spec describes: the advertiser stays up and the link layer
+   *  schedules connection events, while the scanner is what gets throttled
+   *  (Android caps it at 5 starts per 30 s). Modelling a fully off radio would
+   *  also need connection-interval negotiation, which is out of scope here.
+   */
+  isAwake(node: MeshNode, atMs: number = this.now): boolean {
+    if (!this.config.dutyCycleEnabled || node.role === "SUPER") return true;
+    const cycle = Math.max(1, this.config.normalScanCycleMs);
+    const phase = ((atMs + node.dutyPhaseMs) % cycle + cycle) % cycle;
+    return phase < this.config.normalScanWindowMs;
+  }
+
+  /** Score and re-elect one node, recording any transition. */
+  private electOne(node: MeshNode): void {
+    node.score = computeScore(node, this.nodes, this.rf);
+    if (!this.config.enableSuperElection) return;
+    const { role, reason } = electRole(node, this.nodes, this.rf);
+    if (role !== node.role) {
+      node.wasSuper = node.role === "SUPER";
+      node.roleTransitions++;
+      this.roleEvents.push({ at: this.now, nodeId: node.id, from: node.role, to: role, reason });
+    }
+    node.role = role;
+    node.reasonTrace = reason;
+  }
+
   private onElection(): void {
     for (const node of this.nodes) {
       if (!node.isOnline) continue;
-      node.score = computeScore(node, this.nodes, this.rf);
-      if (!this.config.enableSuperElection) continue;
-      const { role, reason } = electRole(node, this.nodes, this.rf);
-      if (role !== node.role) {
-        node.wasSuper = node.role === "SUPER";
-        node.roleTransitions++;
-        this.roleEvents.push({ at: this.now, nodeId: node.id, from: node.role, to: role, reason });
-      }
-      node.role = role;
-      node.reasonTrace = reason;
+      this.electOne(node);
     }
     const online = this.nodes.filter((n) => n.isOnline);
     this.superSamples++;
@@ -669,6 +762,19 @@ export class MeshSimulation {
   private onScan(nodeId: string): void {
     const node = this.byId(nodeId);
     if (!node || !node.isOnline) return;
+    const interval =
+      node.role === "SUPER" ? this.config.scanIntervalSuperMs : this.config.scanIntervalNormalMs;
+
+    if (!this.isAwake(node)) {
+      // Scanner off: no discovery, no OppQueue hand-off, no MPR recompute this
+      // cycle. The scan event still recurs so the node picks its window back up
+      // without a reschedule, and the event stream stays regular.
+      this.scansSkippedAsleep++;
+      this.queue.push(this.now + interval, "scan", nodeId);
+      return;
+    }
+    this.scanCount++;
+
     const peers = this.refreshPeerList(node);
     if (peers.length > 0) {
       let sum = 0;
@@ -691,8 +797,6 @@ export class MeshSimulation {
       node.oppQueue = scan.keep;
     }
 
-    const interval =
-      node.role === "SUPER" ? this.config.scanIntervalSuperMs : this.config.scanIntervalNormalMs;
     this.queue.push(this.now + interval, "scan", nodeId);
   }
 
@@ -1072,6 +1176,27 @@ export class MeshSimulation {
     this.notify();
   }
 
+  /** skills/02: "SUPER opt-out respected". Re-elects immediately, so the
+   *  opt-out takes effect now instead of at the next 30 s tick. */
+  setSuperOptOut(id: NodeId, optedOut: boolean): void {
+    const node = this.byId(id);
+    if (!node) return;
+    node.superOptOut = optedOut;
+    if (node.isOnline) this.electOne(node);
+    this.stats = this.computeStats();
+    this.notify();
+  }
+
+  /** skills/02: "NORMAL never auto-promoted if battery saver on". */
+  setBatterySaver(id: NodeId, on: boolean): void {
+    const node = this.byId(id);
+    if (!node) return;
+    node.batterySaver = on;
+    if (node.isOnline) this.electOne(node);
+    this.stats = this.computeStats();
+    this.notify();
+  }
+
   setNodeCharging(id: NodeId, charging: boolean): void {
     const node = this.byId(id);
     if (!node) return;
@@ -1114,6 +1239,49 @@ export class MeshSimulation {
       ? peerCounts.reduce((a, b) => a + b, 0) / peerCounts.length
       : 0;
 
+    // skills/07 telemetry, measured rather than read off the drain model so it
+    // reflects the role mix, duty cycling and charging as they actually
+    // happened during the window.
+    const elapsedMs = Math.max(1, this.now - this.measureStartMs);
+    const elapsedHours = elapsedMs / 3600000;
+    const elapsedSec = elapsedMs / 1000;
+    const drainPerHour = (role: "SUPER" | "NORMAL"): number => {
+      const rates = online
+        .filter((n) => n.role === role && !n.charging)
+        .map((n) => ((n.batteryAtMeasure - n.battery) / elapsedHours) * 100)
+        // A node that charged and later unplugged shows a net gain. That is not
+        // a drain rate, so it drops out instead of pulling the mean down.
+        .filter((v) => v > 0);
+      return rates.length ? rates.reduce((a, b) => a + b, 0) / rates.length : 0;
+    };
+    const dutyNodes = online.filter((n) => n.role !== "SUPER");
+    const awakeRatio = dutyNodes.length
+      ? dutyNodes.filter((n) => this.isAwake(n)).length / dutyNodes.length
+      : 1;
+
+    // roadmap Phase 2 metrics dashboard: "latency by hop". Scoped like the
+    // docs/04 §5 budget — first-attempt routed unicast only — so a retry (which
+    // adds a whole ACK timeout) and a DTN bundle (which measures a meeting time,
+    // not transport) cannot smear the distribution.
+    const perHop = new Map<number, number[]>();
+    for (const d of unicastDeliveries) {
+      if (d.attempt !== 0 || d.dtn) continue;
+      const xs = perHop.get(d.hops);
+      if (xs) xs.push(d.latencyMs);
+      else perHop.set(d.hops, [d.latencyMs]);
+    }
+    const latencyByHop: LatencyByHop[] = Array.from(perHop.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([hops, xs]) => {
+        const sorted = xs.slice().sort((a, b) => a - b);
+        return {
+          hops,
+          count: sorted.length,
+          avgMs: sorted.reduce((a, b) => a + b, 0) / sorted.length,
+          p95Ms: percentile(sorted, 95),
+        };
+      });
+
     return {
       tick: this.tick,
       simTimeMs: this.now,
@@ -1145,6 +1313,14 @@ export class MeshSimulation {
       acksReceived: this.acksReceived,
       sentUnicast: this.sentUnicast,
       sentBroadcast: this.sentBroadcast,
+      batteryPercentPerHourNormal: drainPerHour("NORMAL"),
+      batteryPercentPerHourSuper: drainPerHour("SUPER"),
+      scansPerSec: this.scanCount / elapsedSec,
+      relaysPerSec: this.relayTx / elapsedSec,
+      scansSkippedAsleep: this.scansSkippedAsleep,
+      awakeRatio,
+      electionEvents: this.roleEvents.length,
+      latencyByHop,
     };
   }
 

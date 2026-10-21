@@ -278,6 +278,44 @@ describe("super-node election (docs/03 §3-5, skills/02)", () => {
     expect(out.reason).toMatch(/Battery/);
   });
 
+  // skills/02 acceptance: "SUPER opt-out respected; NORMAL never auto-promoted
+  // if battery saver on".
+  it("refuses to promote a node that opted out of the router role", () => {
+    const nodes = cluster(6, { score: 0.95, superOptOut: true });
+    const out = electRole(nodes[0], nodes, rf);
+    expect(out.role).toBe("NORMAL");
+    expect(out.reason).toMatch(/opt-out/);
+  });
+
+  it("refuses to promote a node in battery-saver mode", () => {
+    const nodes = cluster(6, { score: 0.95, batterySaver: true });
+    const out = electRole(nodes[0], nodes, rf);
+    expect(out.role).toBe("NORMAL");
+    expect(out.reason).toMatch(/Battery saver/);
+  });
+
+  it("steps an existing SUPER down at once when it opts out", () => {
+    // A toggle is explicit intent, not score noise, so it must not wait out the
+    // two-cycle demotion hysteresis that damps flapping.
+    const nodes = cluster(6, { score: 0.95, role: "SUPER" });
+    nodes[0].demoteCounter = 0;
+    nodes[0].superOptOut = true;
+    const out = electRole(nodes[0], nodes, rf);
+    expect(out.role).toBe("NORMAL");
+    expect(nodes[0].demoteCounter).toBe(0);
+  });
+
+  it("promotes the next-best candidate when the top scorer opts out", () => {
+    // Opting out must not leave a coverage hole: the ranking is over the scores
+    // heard from the neighbourhood, so the runner-up is still in the top 20%.
+    const nodes = cluster(9, { score: 0.62 });
+    nodes[0].score = 0.8; // would be promoted
+    nodes[1].score = 0.75;
+    nodes[1].superOptOut = true;
+    expect(electRole(nodes[0], nodes, rf).role).toBe("SUPER");
+    expect(electRole(nodes[1], nodes, rf).role).toBe("NORMAL");
+  });
+
   it("promotes above 0.60 when ranked in the top 20%", () => {
     const nodes = cluster(6, { score: 0.75 });
     for (const p of nodes.slice(1)) p.score = 0.3;

@@ -341,6 +341,194 @@ describe("protocol behaviour", () => {
     expect(sim.stats.superNodes).toBe(0);
   });
 
+describe("power policy and telemetry (skills/02, skills/07, roadmap Phase 2)", () => {
+  it("never promotes a node the user opted out of, and steps it down at once", () => {
+    const sim = new MeshSimulation(campusQuad(42));
+    sim.runFor(90000); // past the first election at 30 s
+    sim.refresh();
+    const super0 = sim.nodes.find((n) => n.role === "SUPER");
+    expect(super0).toBeDefined();
+    sim.setSuperOptOut(super0!.id, true);
+    expect(super0!.role).toBe("NORMAL");
+    expect(super0!.reasonTrace).toMatch(/opt-out/);
+    // and it stays down across the next tick
+    sim.runFor(40000);
+    expect(super0!.role).toBe("NORMAL");
+    sim.setSuperOptOut(super0!.id, false);
+    sim.runFor(40000);
+    expect(super0!.role).toBe("SUPER");
+  });
+
+  it("keeps the mesh routing when a third of the nodes decline the role", () => {
+    // Opt-out is user intent, so it outranks the 15-25% band skills/02 measures
+    // on an unmodified run: the router set must shrink. What must not happen is
+    // a coverage hole. Because the declination is advertised in the OGM, the
+    // declined nodes drop out of the top-20% candidacy ranking and the
+    // remaining ones take the slots — measured here as 4 SUPERs (ratio 0.20)
+    // instead of the 2 (ratio 0.10) the ranking produced while declined peers
+    // still occupied candidate slots.
+    const sim = new MeshSimulation(campusQuad(42));
+    sim.runFor(90000);
+    for (let i = 0; i < sim.nodes.length; i += 3) sim.setSuperOptOut(sim.nodes[i].id, true);
+    expect(sim.nodes.filter((n) => n.superOptOut)).toHaveLength(7);
+    sim.clearRecords();
+    driveTraffic(sim, 30);
+    expect(sim.nodes.filter((n) => n.superOptOut && n.role === "SUPER")).toHaveLength(0);
+    // 13 remaining candidates * 20% = 3 slots, so the set must not fall below
+    // what the reduced pool still allows.
+    expect(sim.stats.superNodes).toBeGreaterThanOrEqual(3);
+    expect(sim.stats.superRatio).toBeLessThanOrEqual(0.25);
+    expect(sim.stats.deliveryRatio).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it("never auto-promotes with battery saver on", () => {
+    const sim = new MeshSimulation(campusQuad(42));
+    sim.runFor(90000);
+    for (const n of sim.nodes) sim.setBatterySaver(n.id, true);
+    sim.runFor(60000);
+    sim.refresh();
+    expect(sim.stats.superNodes).toBe(0);
+    const online = sim.nodes.filter((n) => n.isOnline);
+    expect(online.every((n) => n.reasonTrace.includes("Battery saver"))).toBe(true);
+  });
+
+  it("leaves duty cycling off by default", () => {
+    expect(DEFAULT_CONFIG.dutyCycleEnabled).toBe(false);
+    const sim = new MeshSimulation(campusQuad(42));
+    sim.runFor(60000);
+    sim.refresh();
+    expect(sim.stats.awakeRatio).toBe(1);
+    expect(sim.stats.scansSkippedAsleep).toBe(0);
+  });
+
+  it("scans 3 s out of every 10 s when duty cycling, and never sleeps a SUPER", () => {
+    const sim = new MeshSimulation({ ...campusQuad(42), dutyCycleEnabled: true });
+    sim.runFor(90000);
+    const normal = sim.nodes.find((n) => n.role === "NORMAL")!;
+    const superNode = sim.nodes.find((n) => n.role === "SUPER")!;
+    expect(sim.isAwake(superNode)).toBe(true);
+
+    // Sample the window across one full cycle for a node whose phase is 0.
+    normal.dutyPhaseMs = 0;
+    let awake = 0;
+    const samples = 1000;
+    for (let i = 0; i < samples; i++) {
+      if (sim.isAwake(normal, (i / samples) * 10000)) awake++;
+    }
+    expect(awake / samples).toBeCloseTo(0.3, 1);
+    // Window boundaries: awake at 0 and 2999 ms, asleep at 3000 and 9999 ms.
+    expect(sim.isAwake(normal, 0)).toBe(true);
+    expect(sim.isAwake(normal, 2999)).toBe(true);
+    expect(sim.isAwake(normal, 3000)).toBe(false);
+    expect(sim.isAwake(normal, 9999)).toBe(false);
+  });
+
+  it("spreads duty phases so a crowd does not sleep in lockstep", () => {
+    const sim = new MeshSimulation({ ...campusQuad(42), dutyCycleEnabled: true });
+    const phases = new Set(sim.nodes.map((n) => Math.round(n.dutyPhaseMs)));
+    expect(phases.size).toBe(sim.nodes.length);
+    // At any instant some NORMAL node is awake to carry discovery.
+    sim.runFor(60000);
+    sim.refresh();
+    expect(sim.stats.awakeRatio).toBeGreaterThan(0);
+    expect(sim.stats.awakeRatio).toBeLessThan(1);
+    expect(sim.stats.scansSkippedAsleep).toBeGreaterThan(0);
+  });
+
+  it("trades discovery for battery when duty cycling", () => {
+    // skills/07's whole argument: the sleep slot is what keeps NORMAL under
+    // 15%/8h. Measured, not asserted from the drain constants.
+    const plain = new MeshSimulation(campusQuad(42));
+    driveTraffic(plain, 20);
+    const duty = new MeshSimulation({ ...campusQuad(42), dutyCycleEnabled: true });
+    driveTraffic(duty, 20);
+    expect(duty.stats.batteryPercentPerHourNormal).toBeLessThan(
+      plain.stats.batteryPercentPerHourNormal
+    );
+    expect(duty.stats.scansPerSec).toBeLessThan(plain.stats.scansPerSec);
+    // Sleeping must not cost delivery: an asleep node still relays what it
+    // knows how to route.
+    expect(duty.stats.deliveryRatio).toBeGreaterThanOrEqual(plain.stats.deliveryRatio - 0.05);
+  });
+
+  it("reports battery %/h per role, scans/sec and relays/sec", () => {
+    const sim = new MeshSimulation(campusQuad(42));
+    driveTraffic(sim, 20);
+    const s = sim.stats;
+    expect(s.batteryPercentPerHourNormal).toBeGreaterThan(0);
+    expect(s.batteryPercentPerHourSuper).toBeGreaterThan(s.batteryPercentPerHourNormal);
+    expect(s.scansPerSec).toBeGreaterThan(0);
+    expect(s.relaysPerSec).toBeGreaterThan(0);
+    expect(s.electionEvents).toBeGreaterThan(0);
+  });
+
+  it("spends exactly the skills/07 budget always-on, and buys headroom by sleeping", () => {
+    // Roles are promoted at the first election, so a window that starts at
+    // warm-up bleeds pre-promotion drain into the per-role average (measured
+    // 6.82 %/h instead of 7.5 for SUPER). Settle first, then re-baseline.
+    const measure = (over: Partial<SimConfig>) => {
+      const sim = new MeshSimulation({ ...campusQuad(42), stationaryRatio: 1, ...over });
+      sim.runFor(90000);
+      sim.clearRecords();
+      sim.runFor(90000);
+      sim.refresh();
+      return sim.stats;
+    };
+
+    // 15% over 8 h = 1.875 %/h, which is precisely NORMAL_DRAIN_PER_HOUR: an
+    // always-scanning NORMAL node spends the whole documented budget with zero
+    // margin, and a moving node adds the mobility term on top of it.
+    const alwaysOn = measure({});
+    expect(alwaysOn.batteryPercentPerHourNormal).toBeCloseTo(1.875, 3);
+    expect(alwaysOn.batteryPercentPerHourNormal * 8).toBeCloseTo(15, 2);
+    // SUPER is the documented 4x — 60% of the battery in 8 h — which is why the
+    // role has to be opt-out-able rather than silently assigned.
+    expect(alwaysOn.batteryPercentPerHourSuper).toBeCloseTo(7.5, 3);
+    expect(alwaysOn.batteryPercentPerHourSuper / alwaysOn.batteryPercentPerHourNormal).toBeCloseTo(
+      4,
+      3
+    );
+
+    // skills/07 duty cycle: NORMAL scans 3 s and sleeps 7 s, SUPER stays
+    // continuous. The sleep slot drains at sleepDrainFactor, so the average is
+    // 0.3 + 0.7 * 0.25 = 0.475 of the always-on budget — under 8% per 8 h.
+    const duty = measure({ dutyCycleEnabled: true });
+    expect(duty.batteryPercentPerHourNormal).toBeCloseTo(1.875 * 0.475, 3);
+    expect(duty.batteryPercentPerHourNormal * 8).toBeLessThan(8);
+    expect(duty.batteryPercentPerHourSuper).toBeCloseTo(7.5, 3); // never sleeps
+    expect(duty.scansPerSec).toBeLessThan(alwaysOn.scansPerSec);
+  });
+
+  it("excludes charging nodes from the measured drain rate", () => {
+    const sim = new MeshSimulation(campusQuad(42));
+    sim.runFor(60000);
+    for (const n of sim.nodes) n.charging = true;
+    sim.refresh();
+    expect(sim.stats.batteryPercentPerHourNormal).toBe(0);
+  });
+
+  it("buckets latency by hop for first-attempt routed traffic", () => {
+    const sim = new MeshSimulation(campusQuad(42));
+    driveTraffic(sim, 30);
+    const buckets = sim.stats.latencyByHop;
+    expect(buckets.length).toBeGreaterThan(0);
+    expect(buckets.map((b) => b.hops)).toEqual(
+      buckets.map((b) => b.hops).slice().sort((a, b) => a - b)
+    );
+    for (const b of buckets) {
+      expect(b.hops).toBeGreaterThanOrEqual(1);
+      expect(b.count).toBeGreaterThan(0);
+      expect(b.avgMs).toBeGreaterThan(0);
+      expect(b.p95Ms).toBeGreaterThan(0);
+    }
+    // docs/04 §5 budget, per hop bucket rather than as one blended number.
+    const oneHop = buckets.find((b) => b.hops === 1);
+    if (oneHop) expect(oneHop.p95Ms).toBeLessThan(2000);
+    const threeHop = buckets.filter((b) => b.hops <= 3);
+    for (const b of threeHop) expect(b.p95Ms).toBeLessThan(5000);
+  });
+});
+
   it("gives SOS messages a longer TTL and high priority", () => {
     const sim = new MeshSimulation(campusQuad(42));
     const sos = sim.sendMessage("node-0", "BROADCAST", "help", "sos");

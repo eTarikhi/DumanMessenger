@@ -121,6 +121,7 @@ export function buildOGM(node: MeshNode, hopCount = 0): OGM {
     bestHopTo,
     hopCount,
     neighborIds: node.peerIds.slice(0, MPR_NEIGHBOR_ADVERTISE_LIMIT),
+    declinedRouter: node.superOptOut || node.batterySaver,
   };
 }
 
@@ -358,6 +359,20 @@ export interface ElectionOutcome {
  * hysteresis state itself.
  */
 export function electRole(node: MeshNode, allNodes: MeshNode[], rf: RfParams): ElectionOutcome {
+  // skills/02 acceptance: "SUPER opt-out respected; NORMAL never auto-promoted
+  // if battery saver on". Both are explicit user or OS intent, so they are
+  // checked before any scoring and demote immediately rather than waiting out
+  // the two-cycle hysteresis below — hysteresis exists to damp score noise, and
+  // a toggle is not noise.
+  if (node.superOptOut) {
+    node.demoteCounter = 0;
+    return { role: "NORMAL", reason: "SUPER opt-out: user declined the router role" };
+  }
+  if (node.batterySaver) {
+    node.demoteCounter = 0;
+    return { role: "NORMAL", reason: "Battery saver on: never auto-promoted" };
+  }
+
   const peers = peersInRange(node, allNodes, rf);
   if (peers.length < MIN_PEERS) {
     node.demoteCounter = 0;
@@ -368,10 +383,14 @@ export function electRole(node: MeshNode, allNodes: MeshNode[], rf: RfParams): E
     return { role: "NORMAL", reason: `Battery ${(node.battery * 100).toFixed(0)}% below 25% threshold` };
   }
 
-  // Rank against self + the 1-hop neighbourhood scores heard in OGMs.
+  // Rank against self + the 1-hop neighbourhood scores heard in OGMs. Peers
+  // that have declined the router role are not candidates: counting them would
+  // burn top-20% slots on nodes that can never promote, so a crowd of opt-outs
+  // would leave the mesh with too few SUPERs to cover it (skills/02's 15-25%).
   const scores: number[] = [node.score];
   for (const p of peers) {
     const heard = node.ogmTable[p.id];
+    if (heard ? heard.declinedRouter : p.superOptOut || p.batterySaver) continue;
     scores.push(heard ? heard.score : p.score);
   }
   const strictlyBetter = scores.filter((s) => s > node.score).length;
