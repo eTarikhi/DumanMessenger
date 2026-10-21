@@ -269,6 +269,89 @@ void main() {
       expect(me.ogmTable.containsKey('x'), isFalse);
     });
 
+    test('keeps link quality per neighbour, so a duplicate cannot zero it', () {
+      // The defect this pins: tq used to live on the route entry, keyed by
+      // whichever neighbour had last won it. A gossiped copy of the *same*
+      // beacon arriving over a longer path is not newer, so it recorded no
+      // sample — but it did discard the window because it came from a different
+      // neighbour, and tq fell to 0. Gossiped duplicates always land after the
+      // direct copy, so 0 was the steady state: the 20-node quad measured tq
+      // 0.11 for direct neighbours whose real receipt rate was ~0.8, the window
+      // never grew past one sample, and getNextHop's tq > 0.6 gate rejected
+      // nearly every route.
+      final me = makeNode('me', 0, 0);
+      final origin = makeNode('x', 0, 0);
+      for (var seq = 1; seq <= 6; seq++) {
+        origin.seq = seq;
+        receiveOgm(me, buildOgm(origin), 'x', seq * 1000.0);
+        // Same beacon, relayed back over a 3-hop path by three neighbours.
+        for (final relay in <String>['r1', 'r2', 'r3']) {
+          receiveOgm(me, buildOgm(origin).copyWith(hopCount: 3), relay,
+              seq * 1000.0 + 50);
+        }
+      }
+      final entry = me.nextHopTable['x']!;
+      expect(entry.bestNeighbor, equals('x'));
+      expect(entry.tq, equals(1.0));
+      // One sample per beacon actually heard on that link — six, not one.
+      expect(entry.window, equals(<int>[1, 1, 1, 1, 1, 1]));
+      expect(getNextHop(me, 'x'), equals('x'));
+    });
+
+    test('measures each candidate neighbour separately', () {
+      final me = makeNode('me', 0, 0);
+      final origin = makeNode('x', 0, 0);
+      for (var seq = 1; seq <= 8; seq++) {
+        origin.seq = seq;
+        // relay-a hears every beacon; relay-b only every fourth.
+        receiveOgm(me, buildOgm(origin), 'relay-a', seq * 1000.0);
+        if (seq % 4 == 0) {
+          receiveOgm(me, buildOgm(origin), 'relay-b', seq * 1000.0 + 10);
+        }
+      }
+      final a = tqWindowFor(me, 'x', 'relay-a')!;
+      final b = tqWindowFor(me, 'x', 'relay-b')!;
+      expect(tqOfWindow(a.window), equals(1.0));
+      // Heard seq 4 then seq 8: three missed beacons recorded as zeros.
+      expect(b.window, equals(<int>[1, 0, 0, 0, 1]));
+      expect(tqOfWindow(b.window), closeTo(0.4, 1e-12));
+      // Equal hop count, so the better link wins the route.
+      expect(me.nextHopTable['x']!.bestNeighbor, equals('relay-a'));
+      expect(getNextHop(me, 'x'), equals('relay-a'));
+    });
+
+    test('bounds the receipt windows one node keeps', () {
+      // docs/03 §7 promises O(n) memory. Per-link history is O(n x neighbours),
+      // so pruneStaleEntries drops windows for neighbours that are no longer
+      // peers and then evicts in insertion order — stable in both JS Maps and
+      // Dart LinkedHashMaps, which is what keeps the two engines identical.
+      final me = makeNode('me', 0, 0)..peerIds = <String>['x'];
+      receiveOgm(me, buildOgm(makeNode('x', 0, 0, seq: 1)), 'x', 1000);
+      expect(me.tqWindows.length, equals(1));
+      expect(me.tqWindows.containsKey(tqPairKey('x', 'x')), isTrue);
+
+      me.peerIds = <String>[]; // x walked out of range
+      pruneStaleEntries(me, 2000, neighborScoreTtlMs);
+      expect(me.tqWindows, isEmpty);
+
+      for (var i = 0; i < tqPairMax + 50; i++) {
+        me.peerIds.add('p$i');
+        me.nextHopTable['o$i'] = NextHopEntry(
+            bestNeighbor: 'p$i', tq: 1, lastSeq: 1, hopCount: 1, lastSeen: 2000,
+            window: <int>[1], windowNeighbor: 'p$i');
+        me.tqWindows[tqPairKey('o$i', 'p$i')] =
+            TqWindow(lastSeq: 1, window: <int>[1]);
+      }
+      pruneStaleEntries(me, 2000, neighborScoreTtlMs);
+      expect(me.tqWindows.length, equals(tqPairMax));
+      // Oldest inserted go first.
+      expect(me.tqWindows.containsKey(tqPairKey('o0', 'p0')), isFalse);
+      expect(
+          me.tqWindows
+              .containsKey(tqPairKey('o${tqPairMax + 49}', 'p${tqPairMax + 49}')),
+          isTrue);
+    });
+
     test('only offers a next hop whose tq is usable', () {
       final me = makeNode('me', 0, 0);
       me.nextHopTable['good'] = NextHopEntry(
@@ -331,7 +414,7 @@ void main() {
       final a = makeNode('a', 0, 0);
       final b = makeNode('b', 10, 0);
       final d = decideForward(a, createMessage('m', 0, 'a', 'b', 'hi'),
-          <MeshNode>[a, b], rf, true);
+          <MeshNode>[a, b], rf, RelayPolicy.mpr);
       expect(d.mode, equals(ForwardMode.direct));
       expect(d.targets, equals(<String>['b']));
     });
@@ -344,7 +427,7 @@ void main() {
           bestNeighbor: 'r', tq: 0.9, lastSeq: 1, hopCount: 2, lastSeen: 0,
           window: <int>[], windowNeighbor: 'r');
       final d = decideForward(a, createMessage('m', 0, 'a', 'f', 'hi'),
-          <MeshNode>[a, relay, far], rf, true);
+          <MeshNode>[a, relay, far], rf, RelayPolicy.mpr);
       expect(d.mode, equals(ForwardMode.route));
       expect(d.targets, equals(<String>['r']));
     });
@@ -353,17 +436,49 @@ void main() {
       final a = makeNode('a', 0, 0, role: Role.superNode);
       final peers = <MeshNode>[a, makeNode('b', 10, 0), makeNode('c', 0, 10)];
       final msg = createMessage('m', 0, 'a', 'far', 'hi');
-      expect(decideForward(a, msg, peers, rf, true).mode, equals(ForwardMode.flood));
+      expect(decideForward(a, msg, peers, rf, RelayPolicy.mpr).mode,
+          equals(ForwardMode.flood));
       a.role = Role.normal;
-      expect(decideForward(a, msg, peers, rf, true).mode, equals(ForwardMode.waitMpr));
-      expect(decideForward(a, msg, peers, rf, false).mode, equals(ForwardMode.flood));
+      expect(decideForward(a, msg, peers, rf, RelayPolicy.mpr).mode,
+          equals(ForwardMode.waitMpr));
+      // Neither baseline waits; only `mpr` gives NORMAL nodes the 300 ms window.
+      expect(decideForward(a, msg, peers, rf, RelayPolicy.routeFlood).mode,
+          equals(ForwardMode.flood));
+      expect(decideForward(a, msg, peers, rf, RelayPolicy.floodAll).mode,
+          equals(ForwardMode.flood));
+    });
+
+    test('keeps the flood-all baseline naive: no routes, no direct unicast', () {
+      // skills/02 measures "overhead <=70% of flood-all" and skills/08
+      // "overhead down 30% vs naive flood". A baseline that unicasts along known
+      // routes is not naive, so it must ignore the routing layer entirely.
+      final a = makeNode('a', 0, 0);
+      final b = makeNode('b', 10, 0);
+      final relay = makeNode('r', 10, 0);
+      final far = makeNode('f', 90, 0);
+      a.nextHopTable['f'] = NextHopEntry(
+          bestNeighbor: 'r', tq: 0.9, lastSeq: 1, hopCount: 2, lastSeen: 0,
+          window: <int>[], windowNeighbor: 'r');
+      expect(
+          decideForward(a, createMessage('m', 0, 'a', 'b', 'hi'),
+              <MeshNode>[a, b], rf, RelayPolicy.floodAll).mode,
+          equals(ForwardMode.flood));
+      final routed = decideForward(a, createMessage('m', 0, 'a', 'f', 'hi'),
+          <MeshNode>[a, relay, far], rf, RelayPolicy.floodAll);
+      expect(routed.mode, equals(ForwardMode.flood));
+      expect(routed.targets, equals(<String>['r']));
+      // `routeFlood` is the other arm: routes kept, suppression off.
+      expect(
+          decideForward(a, createMessage('m', 0, 'a', 'f', 'hi'),
+              <MeshNode>[a, relay, far], rf, RelayPolicy.routeFlood).mode,
+          equals(ForwardMode.route));
     });
 
     test('queues for store-carry-forward when nobody is in range', () {
       final a = makeNode('a', 0, 0);
       final far = makeNode('f', 500, 500);
       final d = decideForward(a, createMessage('m', 0, 'a', 'f', 'hi'),
-          <MeshNode>[a, far], rf, true);
+          <MeshNode>[a, far], rf, RelayPolicy.mpr);
       expect(d.mode, equals(ForwardMode.queue));
       expect(d.targets, isEmpty);
     });

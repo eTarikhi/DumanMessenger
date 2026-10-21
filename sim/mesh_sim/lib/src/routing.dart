@@ -157,7 +157,7 @@ ForwardDecision decideForward(
   MeshMessage msg,
   List<MeshNode> allNodes,
   RfParams rf,
-  bool mprEnabled,
+  RelayPolicy policy,
 ) {
   final peers = peersInRange(node, allNodes, rf);
   if (peers.isEmpty) {
@@ -165,6 +165,14 @@ ForwardDecision decideForward(
   }
 
   final peerIds = peers.map((p) => p.id).toList();
+
+  // Naive epidemic flooding. Deliberately consulted *before* the route table: a
+  // baseline that quietly unicasts along known routes is not the "naive flood"
+  // the acceptance criteria compare against.
+  if (policy == RelayPolicy.floodAll) {
+    return ForwardDecision(
+        ForwardMode.flood, peerIds, 'naive flood baseline');
+  }
 
   if (msg.to != broadcastAddress) {
     if (peerIds.contains(msg.to)) {
@@ -178,12 +186,16 @@ ForwardDecision decideForward(
     }
   }
 
-  // Flood branch: SUPER relays everything, NORMAL applies MPR suppression.
-  if (node.role == Role.superNode || !mprEnabled) {
+  // Flood branch: SUPER relays everything, NORMAL applies MPR suppression —
+  // unless the policy switches suppression off, which is what `routeFlood` is
+  // for (routing kept, MPR removed).
+  if (node.role == Role.superNode || policy == RelayPolicy.routeFlood) {
     return ForwardDecision(
         ForwardMode.flood,
         peerIds,
-        node.role == Role.superNode ? 'SUPER relay-all' : 'flood-all policy');
+        node.role == Role.superNode
+            ? 'SUPER relay-all'
+            : 'routing without MPR suppression');
   }
   return ForwardDecision(ForwardMode.waitMpr, peerIds,
       'NORMAL waiting 300ms for SUPER');

@@ -26,7 +26,11 @@ import {
   pruneStaleEntries,
   receiveOGM,
   selectMprSet,
+  tqOfWindow,
+  tqPairKey,
+  tqWindowFor,
   MPR_NEIGHBOR_ADVERTISE_LIMIT,
+  TQ_PAIR_MAX,
   WEIGHTS,
 } from "../election";
 import {
@@ -375,6 +379,84 @@ describe("OGM handling (docs/03 §4, §7)", () => {
     expect(me.nextHopTable["x"].window.length).toBeLessThanOrEqual(32);
   });
 
+  it("keeps link quality per neighbour, so a duplicate cannot zero a good link", () => {
+    // The defect this pins: tq used to live on the route entry, keyed by
+    // whichever neighbour had last won it. A gossiped copy of the *same* beacon
+    // arriving over a longer path is not newer, so it recorded no sample — but
+    // it did discard the window because it came from a different neighbour, and
+    // tq fell to 0. Gossiped duplicates always land after the direct copy, so 0
+    // was the steady state: the 20-node quad measured tq 0.11 for direct
+    // neighbours whose real receipt rate was ~0.8, the window never grew past
+    // one sample, and getNextHop's tq > 0.6 gate rejected nearly every route.
+    const me = makeNode("me", 0, 0);
+    const origin = makeNode("x", 0, 0);
+    for (let seq = 1; seq <= 6; seq++) {
+      origin.seq = seq;
+      receiveOGM(me, buildOGM(origin), "x", seq * 1000);
+      // Same beacon, relayed back over a 3-hop path by three other neighbours.
+      for (const relay of ["r1", "r2", "r3"]) {
+        receiveOGM(me, { ...buildOGM(origin), hopCount: 3 }, relay, seq * 1000 + 50);
+      }
+    }
+    const entry = me.nextHopTable["x"];
+    expect(entry.bestNeighbor).toBe("x");
+    expect(entry.tq).toBe(1);
+    // One sample per beacon actually heard on that link — six, not one.
+    expect(entry.window).toEqual([1, 1, 1, 1, 1, 1]);
+    expect(getNextHop(me, "x")).toBe("x");
+  });
+
+  it("measures each candidate neighbour separately and routes via the better one", () => {
+    const me = makeNode("me", 0, 0);
+    const origin = makeNode("x", 0, 0);
+    for (let seq = 1; seq <= 8; seq++) {
+      origin.seq = seq;
+      // relay-a hears every beacon; relay-b only every fourth.
+      receiveOGM(me, buildOGM(origin), "relay-a", seq * 1000);
+      if (seq % 4 === 0) receiveOGM(me, buildOGM(origin), "relay-b", seq * 1000 + 10);
+    }
+    const a = tqWindowFor(me, "x", "relay-a")!;
+    const b = tqWindowFor(me, "x", "relay-b")!;
+    expect(tqOfWindow(a.window)).toBe(1);
+    // Heard seq 4 then seq 8: three missed beacons recorded as zeros.
+    expect(b.window).toEqual([1, 0, 0, 0, 1]);
+    expect(tqOfWindow(b.window)).toBeCloseTo(0.4, 12);
+    // Equal hop count, so the better link wins the route.
+    expect(me.nextHopTable["x"].bestNeighbor).toBe("relay-a");
+    expect(getNextHop(me, "x")).toBe("relay-a");
+  });
+
+  it("bounds the receipt windows one node keeps", () => {
+    // docs/03 §7 promises O(n) memory. Per-link history is O(n x neighbours),
+    // so pruneStaleEntries drops windows for neighbours that are no longer
+    // peers and then evicts in insertion order — which is stable in both JS
+    // Maps and Dart LinkedHashMaps, keeping the two engines identical.
+    const me = makeNode("me", 0, 0);
+    const origin = makeNode("x", 0, 0, { seq: 1 });
+    me.peerIds = ["x"];
+    receiveOGM(me, buildOGM(origin), "x", 1000);
+    expect(me.tqWindows.size).toBe(1);
+    expect(me.tqWindows.get(tqPairKey("x", "x"))).toBeDefined();
+
+    me.peerIds = []; // x walked out of range
+    pruneStaleEntries(me, 2000, 30000);
+    expect(me.tqWindows.size).toBe(0);
+
+    for (let i = 0; i < TQ_PAIR_MAX + 50; i++) {
+      me.peerIds.push(`p${i}`);
+      me.nextHopTable[`o${i}`] = {
+        bestNeighbor: `p${i}`, tq: 1, lastSeq: 1, hopCount: 1, lastSeen: 2000,
+        window: [1], windowNeighbor: `p${i}`,
+      };
+      me.tqWindows.set(tqPairKey(`o${i}`, `p${i}`), { lastSeq: 1, window: [1] });
+    }
+    pruneStaleEntries(me, 2000, 30000);
+    expect(me.tqWindows.size).toBe(TQ_PAIR_MAX);
+    // Oldest inserted go first.
+    expect(me.tqWindows.has(tqPairKey("o0", "p0"))).toBe(false);
+    expect(me.tqWindows.has(tqPairKey(`o${TQ_PAIR_MAX + 49}`, `p${TQ_PAIR_MAX + 49}`))).toBe(true);
+  });
+
   it("builds a 2-hop view only from beacons heard directly", () => {
     const me = makeNode("me", 0, 0);
     const origin = makeNode("x", 0, 0, { seq: 1 });
@@ -482,7 +564,7 @@ describe("data plane (docs/03 §6, §8)", () => {
   it("sends directly when the destination is a neighbour", () => {
     const a = makeNode("a", 0, 0);
     const b = makeNode("b", 10, 0);
-    const d = decideForward(a, createMessage("m", 0, "a", "b", "hi"), [a, b], rf, true);
+    const d = decideForward(a, createMessage("m", 0, "a", "b", "hi"), [a, b], rf, "mpr");
     expect(d.mode).toBe("direct");
     expect(d.targets).toEqual(["b"]);
   });
@@ -492,7 +574,7 @@ describe("data plane (docs/03 §6, §8)", () => {
     const relay = makeNode("r", 10, 0);
     const far = makeNode("f", 90, 0);
     a.nextHopTable["f"] = { bestNeighbor: "r", tq: 0.9, lastSeq: 1, hopCount: 2, lastSeen: 0, window: [], windowNeighbor: "r" };
-    const d = decideForward(a, createMessage("m", 0, "a", "f", "hi"), [a, relay, far], rf, true);
+    const d = decideForward(a, createMessage("m", 0, "a", "f", "hi"), [a, relay, far], rf, "mpr");
     expect(d.mode).toBe("route");
     expect(d.targets).toEqual(["r"]);
   });
@@ -501,17 +583,39 @@ describe("data plane (docs/03 §6, §8)", () => {
     const a = makeNode("a", 0, 0, { role: "SUPER" });
     const peers = [a, makeNode("b", 10, 0), makeNode("c", 0, 10)];
     const msg = createMessage("m", 0, "a", "far", "hi");
-    expect(decideForward(a, msg, peers, rf, true).mode).toBe("flood");
+    expect(decideForward(a, msg, peers, rf, "mpr").mode).toBe("flood");
     a.role = "NORMAL";
-    expect(decideForward(a, msg, peers, rf, true).mode).toBe("wait-mpr");
-    // flood-all baseline never waits
-    expect(decideForward(a, msg, peers, rf, false).mode).toBe("flood");
+    expect(decideForward(a, msg, peers, rf, "mpr").mode).toBe("wait-mpr");
+    // Neither baseline waits; only `mpr` gives NORMAL nodes the 300 ms window.
+    expect(decideForward(a, msg, peers, rf, "route-flood").mode).toBe("flood");
+    expect(decideForward(a, msg, peers, rf, "flood-all").mode).toBe("flood");
+  });
+
+  it("keeps the flood-all baseline naive: no route table, no direct unicast", () => {
+    // skills/02 measures "overhead <=70% of flood-all" and skills/08 "overhead
+    // down 30% vs naive flood". A baseline that unicasts along known routes is
+    // not naive, so it must ignore the routing layer entirely.
+    const a = makeNode("a", 0, 0);
+    const b = makeNode("b", 10, 0);
+    const relay = makeNode("r", 10, 0);
+    const far = makeNode("f", 90, 0);
+    a.nextHopTable["f"] = {
+      bestNeighbor: "r", tq: 0.9, lastSeq: 1, hopCount: 2, lastSeen: 0, window: [], windowNeighbor: "r",
+    };
+    expect(decideForward(a, createMessage("m", 0, "a", "b", "hi"), [a, b], rf, "flood-all").mode)
+      .toBe("flood");
+    const routed = decideForward(a, createMessage("m", 0, "a", "f", "hi"), [a, relay, far], rf, "flood-all");
+    expect(routed.mode).toBe("flood");
+    expect(routed.targets).toEqual(["r"]);
+    // `route-flood` is the other arm: routes kept, suppression off.
+    expect(decideForward(a, createMessage("m", 0, "a", "f", "hi"), [a, relay, far], rf, "route-flood").mode)
+      .toBe("route");
   });
 
   it("queues for store-carry-forward when nobody is in range", () => {
     const a = makeNode("a", 0, 0);
     const far = makeNode("f", 500, 500);
-    const d = decideForward(a, createMessage("m", 0, "a", "f", "hi"), [a, far], rf, true);
+    const d = decideForward(a, createMessage("m", 0, "a", "f", "hi"), [a, far], rf, "mpr");
     expect(d.mode).toBe("queue");
     expect(d.targets).toEqual([]);
   });

@@ -24,6 +24,7 @@ export function makeNode(id: string, x: number, y: number, over: Partial<MeshNod
     reasonTrace: "test",
     ogmTable: {},
     nextHopTable: {},
+    tqWindows: new Map(),
     neighborScores: {},
     seenCache: new Map(),
     mprHeardSuper: new Set(),

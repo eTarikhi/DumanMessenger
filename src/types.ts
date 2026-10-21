@@ -7,7 +7,20 @@ export type TransportType = "ble" | "wifiDirect" | "multipeer";
 export type MsgType = "text" | "broadcast" | "voice" | "sos" | "ack" | "ogm";
 
 /** Flood-suppression policy for the data plane (docs/03 §6). */
-export type RelayPolicy = "mpr" | "flood-all";
+/**
+ * Relay policy for the data plane.
+ *
+ * - `mpr`         routing plus MPR flood suppression — what ships.
+ * - `route-flood` routing without suppression. Comparing this against `mpr`
+ *                 isolates what MPR still buys once the route table works;
+ *                 the two mechanisms are substitutes, so the honest overhead
+ *                 claim needs both (docs/06 §6).
+ * - `flood-all`   naive epidemic flooding: no route table, no suppression.
+ *                 This is the baseline skills/02 ("overhead ≤70% of
+ *                 flood-all") and skills/08 ("overhead ↓30% vs naive flood")
+ *                 are written against.
+ */
+export type RelayPolicy = "mpr" | "route-flood" | "flood-all";
 
 export interface Vec2 {
   x: number;
@@ -75,6 +88,18 @@ export interface OGM {
   neighborIds: NodeId[];
 }
 
+/** OGM receipt history for one (originator, neighbour) link.
+ *
+ *  tq is a *link* metric (docs/03 §7: "OGMs received via that neighbor / OGMs
+ *  expected"), so it has to be tracked per neighbour that delivers copies of an
+ *  originator's beacons, not per route entry. See `recordTqSample`. */
+export interface TqWindow {
+  /** Highest originator sequence number heard over this neighbour. */
+  lastSeq: number;
+  /** Ring buffer of 1 (heard) / 0 (missed) OGM receipts, newest last. */
+  window: number[];
+}
+
 export interface NextHopEntry {
   bestNeighbor: NodeId;
   /** Transmit quality, sliding-window ratio of received/expected OGMs
@@ -126,6 +151,8 @@ export interface MeshNode {
   reasonTrace: string;
   ogmTable: Record<string, OGM>;
   nextHopTable: Record<string, NextHopEntry>;
+  /** `"originator|neighbour"` -> receipt history behind that link's tq. */
+  tqWindows: Map<string, TqWindow>;
   neighborScores: Record<string, number>;
   /** msgId -> simulation time first heard. */
   seenCache: Map<string, number>;

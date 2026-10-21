@@ -173,6 +173,19 @@ void main() {
     });
   });
 
+  group('dense crowd (docs/02 §6: 50+ nodes)', () {
+    test('stays stable and cheap at 60 nodes', () {
+      final r = _measure(festivalCrowd(42));
+      expect(r.stats.superRatio, inInclusiveRange(0.10, 0.30));
+      expect(r.stats.roleChangesPerNodeMin, lessThanOrEqualTo(1.0));
+      expect(r.stats.avgHops, lessThanOrEqualTo(4.0));
+      expect(r.deliveryRatio, greaterThanOrEqualTo(0.85));
+      // 12-14% of the naive epidemic budget measured; the documented bar is 70%.
+      expect(r.overheadVsFlood, lessThanOrEqualTo(0.20));
+      expect(r.stats.mprSuppressed, greaterThan(1000));
+    });
+  });
+
   group('skills/08 configuration envelope', () {
     test('supports the documented node counts and areas', () {
       for (final nodeCount in <int>[10, 60]) {

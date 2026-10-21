@@ -58,7 +58,7 @@ Duman mesh simulator (headless)
   --nodes <int>       override node count
   --messages <int>    unicast messages to inject           (default: $_defaultMessages)
   --gap <ms>          simulated ms between messages        (default: ${_defaultGapMs.toInt()})
-  --policy <name>     mpr | flood-all                      (default: mpr)
+  --policy <name>     mpr | route-flood | flood-all        (default: mpr)
   --json              machine-readable metrics on stdout
   --no-check          report metrics without asserting the acceptance criteria
   -h, --help          this text
@@ -96,8 +96,20 @@ void main(List<String> args) {
   if (nodesOverride >= 0 && nodesOverride + 1 < args.length) {
     config = config.copyWith(nodeCount: int.parse(args[nodesOverride + 1]));
   }
-  if (policyName == 'flood-all') {
-    config = config.copyWith(relayPolicy: RelayPolicy.floodAll);
+  switch (policyName) {
+    case 'mpr':
+      break;
+    case 'route-flood':
+      config = config.copyWith(relayPolicy: RelayPolicy.routeFlood);
+      break;
+    case 'flood-all':
+      config = config.copyWith(relayPolicy: RelayPolicy.floodAll);
+      break;
+    default:
+      stderr.writeln('Unknown --policy "$policyName". '
+          'Try: mpr | route-flood | flood-all');
+      exitCode = 64;
+      return;
   }
 
   final plan = _trafficPlan(config.seed, messages, config.nodeCount);

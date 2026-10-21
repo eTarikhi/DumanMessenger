@@ -1,4 +1,4 @@
-import type { MeshNode, NodeId, OGM, Role } from "./types";
+import type { MeshNode, NodeId, OGM, Role, TqWindow } from "./types";
 import type { RfParams } from "./rf";
 import { normRssi, peersInRange, rssiModel } from "./rf";
 
@@ -46,6 +46,13 @@ export const DEMOTE_CYCLES = 2;
 /** tq below this makes a route unusable, so the router falls back to flood. */
 export const TQ_USABLE = 0.6;
 export const TQ_WINDOW = 32;
+/**
+ * Bound on the number of (originator, neighbour) receipt windows one node
+ * keeps. docs/03 §7 promises O(n) memory with n = nodes known, and per-link
+ * history is O(n x neighbours); this is the hard stop, and `pruneStaleEntries`
+ * evicts in insertion order so both language engines evict identically.
+ */
+export const TQ_PAIR_MAX = 2048;
 /**
  * Bound on the neighbour list carried in an OGM.
  *
@@ -187,6 +194,61 @@ export function relaysCoverPeers(node: MeshNode, key: string): boolean {
   return true;
 }
 
+/** Key for one link's receipt history: `"originator|neighbour"`. */
+export function tqPairKey(originator: NodeId, via: NodeId): string {
+  return `${originator}|${via}`;
+}
+
+/** Ratio of received to expected OGMs over the window; 0 when there is none. */
+export function tqOfWindow(window: readonly number[]): number {
+  if (window.length === 0) return 0;
+  let ones = 0;
+  for (const v of window) ones += v;
+  return ones / window.length;
+}
+
+/**
+ * Record one OGM receipt against the link that delivered it and return that
+ * link's window.
+ *
+ * Missing sequence numbers between two receipts over the *same* neighbour are
+ * the "OGMs expected" half of docs/03 §7, so they are recorded as zeros. A copy
+ * that arrives over a different neighbour is evidence about that other link and
+ * must not disturb this one.
+ */
+export function recordTqSample(
+  node: MeshNode,
+  originator: NodeId,
+  via: NodeId,
+  seq: number
+): TqWindow {
+  const key = tqPairKey(originator, via);
+  const existing = node.tqWindows.get(key);
+  if (!existing) {
+    // First copy over this link: there is no way to know how many were missed
+    // before it, so start optimistic and let the gaps pull it down, exactly as
+    // BATMAN's tq does for a newly discovered neighbour.
+    const created: TqWindow = { lastSeq: seq, window: [1] };
+    node.tqWindows.set(key, created);
+    return created;
+  }
+  if (seq > existing.lastSeq) {
+    const gap = seq - existing.lastSeq;
+    for (let i = 1; i < Math.min(gap, TQ_WINDOW); i++) existing.window.push(0);
+    existing.window.push(1);
+    if (existing.window.length > TQ_WINDOW) {
+      existing.window = existing.window.slice(existing.window.length - TQ_WINDOW);
+    }
+    existing.lastSeq = seq;
+  }
+  return existing;
+}
+
+/** The receipt window for one link, or null if that link has no history. */
+export function tqWindowFor(node: MeshNode, originator: NodeId, via: NodeId): TqWindow | null {
+  return node.tqWindows.get(tqPairKey(originator, via)) ?? null;
+}
+
 /**
  * Consume one OGM copy. `via` is the neighbour that handed it over and
  * `nowMs` is *simulation* time. Returns true when this node should gossip the
@@ -218,35 +280,38 @@ export function receiveOGM(
   const prev = node.nextHopTable[ogm.nodeId];
   const hopCount = ogm.hopCount + 1;
 
-  // Link transmit quality over a sliding window of TQ_WINDOW OGM intervals.
-  let window = prev && prev.windowNeighbor === via ? prev.window.slice() : [];
-  let lastSeq = prev && prev.windowNeighbor === via ? prev.lastSeq : 0;
-  if (isNewer) {
-    const gap = lastSeq === 0 ? 1 : ogm.seq - lastSeq;
-    for (let i = 1; i < Math.min(gap, TQ_WINDOW); i++) window.push(0);
-    window.push(1);
-    if (window.length > TQ_WINDOW) window = window.slice(window.length - TQ_WINDOW);
-    lastSeq = ogm.seq;
-  }
-  const tq = window.length === 0 ? 0 : window.reduce((s, v) => s + v, 0) / window.length;
+  // Link transmit quality over a sliding window of TQ_WINDOW OGM intervals,
+  // tracked per (originator, neighbour) pair rather than per route entry.
+  //
+  // Keying it on the entry instead means a duplicate copy that arrives over a
+  // longer path destroys the history of a perfect direct link: the copy is not
+  // newer, so no sample is recorded, yet the window is thrown away because it
+  // came from a different neighbour and tq collapses to 0. Gossiped duplicates
+  // always land after the direct copy, so the zero was the steady state — the
+  // 20-node quad measured tq 0.11 for direct neighbours whose real receipt rate
+  // was ~0.8, the window never grew past one sample, and getNextHop's
+  // tq > 0.6 gate rejected almost every route (docs/06 §5).
+  const sample = recordTqSample(node, ogm.nodeId, via, ogm.seq);
 
-  const betterHop = !prev || hopCount < prev.hopCount || (hopCount === prev.hopCount && tq > prev.tq);
-  if (betterHop) {
-    node.nextHopTable[ogm.nodeId] = {
-      bestNeighbor: via,
-      tq,
-      lastSeq,
-      hopCount,
-      lastSeen: nowMs,
-      window,
-      windowNeighbor: via,
-    };
-  } else {
-    prev.tq = tq;
-    prev.lastSeq = lastSeq;
-    prev.lastSeen = nowMs;
-    prev.window = window;
-  }
+  // Fewest hops wins, ties go to the better link. Whichever copy arrives last,
+  // the entry reports the window of the neighbour it actually routes through.
+  const betterHop =
+    !prev || hopCount < prev.hopCount || (hopCount === prev.hopCount && tqOfWindow(sample.window) > prev.tq);
+  const bestNeighbor = betterHop ? via : prev.bestNeighbor;
+  const best = betterHop ? sample : tqWindowFor(node, ogm.nodeId, bestNeighbor) ?? sample;
+  node.nextHopTable[ogm.nodeId] = {
+    bestNeighbor,
+    tq: tqOfWindow(best.window),
+    // Highest sequence number heard from this originator. Entries bootstrapped
+    // second-hand from a neighbour's bestHopTo never see one, which is how
+    // buildOGM tells "I have heard this node's beacon" from "someone mentioned
+    // it" — see the note there on why that distinction keeps dead routes mortal.
+    lastSeq: Math.max(prev ? prev.lastSeq : 0, ogm.seq),
+    hopCount: betterHop ? hopCount : prev.hopCount,
+    lastSeen: nowMs,
+    window: best.window.slice(),
+    windowNeighbor: bestNeighbor,
+  };
 
   // Bootstrap from routes the originator advertises (second-hand reachability).
   //
@@ -255,16 +320,20 @@ export function receiveOGM(
   // their own beacons, each copy re-stamps lastSeen, and the 30 s soft-state
   // expiry can never fire. Once bootstrapped, an entry must be kept alive by the
   // destination's own gossiped OGMs — exactly as BATMAN does.
+  // The only link this second-hand route can be judged on is the one to the
+  // neighbour that told us about it: nothing about `dest`'s own beacon has been
+  // heard, so lastSeq stays 0 and buildOGM will not pass the rumour on.
+  const linkToVia = tqWindowFor(node, via, via) ?? sample;
   for (const dest of Object.keys(ogm.bestHopTo)) {
     if (dest === node.id) continue;
     if (node.nextHopTable[dest]) continue;
     node.nextHopTable[dest] = {
       bestNeighbor: via,
-      tq,
+      tq: tqOfWindow(linkToVia.window),
       lastSeq: 0,
       hopCount: ogm.bestHopTo[dest] + hopCount,
       lastSeen: nowMs,
-      window,
+      window: linkToVia.window.slice(),
       windowNeighbor: via,
     };
   }
@@ -368,6 +437,22 @@ export function pruneStaleEntries(node: MeshNode, nowMs: number, maxAgeMs: numbe
   }
   for (const id of Object.keys(node.nextHopTable)) {
     if (nowMs - node.nextHopTable[id].lastSeen > maxAgeMs) delete node.nextHopTable[id];
+  }
+  // Receipt windows are keyed by the neighbour that delivered them: a neighbour
+  // we can no longer hear is not a candidate next hop, and an originator whose
+  // route entry just expired is not worth measuring either.
+  for (const key of Array.from(node.tqWindows.keys())) {
+    const sep = key.lastIndexOf("|");
+    const originator = key.slice(0, sep);
+    const via = key.slice(sep + 1);
+    if (!peers.has(via) || !node.nextHopTable[originator]) node.tqWindows.delete(key);
+  }
+  // Insertion order is stable in both JS Maps and Dart LinkedHashMaps, so
+  // evicting the oldest keeps the two engines bit-identical.
+  while (node.tqWindows.size > TQ_PAIR_MAX) {
+    const oldest = node.tqWindows.keys().next();
+    if (oldest.done) break;
+    node.tqWindows.delete(oldest.value);
   }
   for (const id of Object.keys(node.ogmTable)) {
     if (!node.nextHopTable[id]) {

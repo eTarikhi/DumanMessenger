@@ -96,7 +96,7 @@ class SimConfig {
   final bool enableMobility;
   final bool enableDtn;
 
-  /// `mpr` suppresses redundant NORMAL relays; `floodAll` is the baseline.
+  /// [RelayPolicy.mpr] ships; the other two are the A/B baselines.
   final RelayPolicy relayPolicy;
 
   final double hopLatencyBleMs;
@@ -855,7 +855,7 @@ class MeshSimulation {
     }
 
     final decision = decideForward(
-        from, msg, nodes, rf, config.relayPolicy == RelayPolicy.mpr);
+        from, msg, nodes, rf, config.relayPolicy);
     _applyDecision(from, msg, decision.mode, decision.targets);
     return msg;
   }
@@ -887,7 +887,7 @@ class MeshSimulation {
       timestamp: now,
     );
     final decision = decideForward(
-        node, retry, nodes, rf, config.relayPolicy == RelayPolicy.mpr);
+        node, retry, nodes, rf, config.relayPolicy);
     _applyDecision(node, retry, decision.mode, decision.targets);
     _queue.push(now + config.ackTimeoutMs, EventKind.ackTimeout, nodeId, msgId);
   }
@@ -1060,7 +1060,7 @@ class MeshSimulation {
 
     final forwarded = msg.copyWith(ttl: msg.ttl - 1, hopCount: msg.hopCount + 1);
     final decision = decideForward(
-        node, forwarded, nodes, rf, config.relayPolicy == RelayPolicy.mpr);
+        node, forwarded, nodes, rf, config.relayPolicy);
     _applyDecision(node, forwarded, decision.mode, decision.targets);
   }
 
@@ -1071,7 +1071,7 @@ class MeshSimulation {
     _traces[ack.id] =
         _PathTrace(<NodeId>[node.id], now, node.id, original.from, MsgType.ack);
     final decision = decideForward(
-        node, ack, nodes, rf, config.relayPolicy == RelayPolicy.mpr);
+        node, ack, nodes, rf, config.relayPolicy);
     _applyDecision(node, ack, decision.mode, decision.targets);
   }
 

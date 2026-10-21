@@ -107,7 +107,7 @@ export function ConfigPanel({
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <span style={{ fontSize: 11, color: "#9fb0c3" }}>Relay policy</span>
         <div style={{ display: "flex", gap: 6 }}>
-          {(["mpr", "flood-all"] as const).map((p) => (
+          {(["mpr", "route-flood", "flood-all"] as const).map((p) => (
             <button
               key={p}
               aria-pressed={draft.relayPolicy === p}

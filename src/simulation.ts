@@ -85,7 +85,7 @@ export interface SimConfig {
   enableSuperElection: boolean;
   enableMobility: boolean;
   enableDtn: boolean;
-  /** "mpr" suppresses redundant NORMAL relays; "flood-all" is the baseline. */
+  /** `mpr` ships; `route-flood` and `flood-all` are the two A/B baselines. */
   relayPolicy: RelayPolicy;
 
   hopLatencyBleMs: number;
@@ -301,6 +301,7 @@ export function createNode(
     reasonTrace: "Initial",
     ogmTable: {},
     nextHopTable: {},
+    tqWindows: new Map(),
     neighborScores: {},
     seenCache: new Map(),
     mprHeardSuper: new Set(),
@@ -771,7 +772,7 @@ export class MeshSimulation {
       msg,
       this.nodes,
       this.rf,
-      this.config.relayPolicy === "mpr"
+      this.config.relayPolicy
     );
     this.applyDecision(from, msg, decision.mode, decision.targets);
     return msg;
@@ -811,7 +812,7 @@ export class MeshSimulation {
       retry,
       this.nodes,
       this.rf,
-      this.config.relayPolicy === "mpr"
+      this.config.relayPolicy
     );
     this.applyDecision(node, retry, decision.mode, decision.targets);
     this.queue.push(this.now + this.config.ackTimeoutMs, "acktimeout", nodeId, msgId);
@@ -989,7 +990,7 @@ export class MeshSimulation {
       forwarded,
       this.nodes,
       this.rf,
-      this.config.relayPolicy === "mpr"
+      this.config.relayPolicy
     );
     this.applyDecision(node, forwarded, decision.mode, decision.targets);
   }
@@ -1017,7 +1018,7 @@ export class MeshSimulation {
       ack,
       this.nodes,
       this.rf,
-      this.config.relayPolicy === "mpr"
+      this.config.relayPolicy
     );
     this.applyDecision(node, ack, decision.mode, decision.targets);
   }

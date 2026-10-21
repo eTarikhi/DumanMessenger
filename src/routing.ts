@@ -1,4 +1,4 @@
-import type { MeshMessage, MeshNode, MsgType, NodeId, QueuedMessage, TransportType } from "./types";
+import type { MeshMessage, MeshNode, MsgType, NodeId, QueuedMessage, RelayPolicy, TransportType } from "./types";
 import type { RfParams } from "./rf";
 import { canReach, peersInRange } from "./rf";
 import { getNextHop, relaysCoverPeers } from "./election";
@@ -156,7 +156,7 @@ export function decideForward(
   msg: MeshMessage,
   allNodes: MeshNode[],
   rf: RfParams,
-  mprEnabled: boolean
+  policy: RelayPolicy
 ): ForwardDecision {
   const peers = peersInRange(node, allNodes, rf);
   if (peers.length === 0) {
@@ -164,6 +164,14 @@ export function decideForward(
   }
 
   const peerIds = peers.map((p) => p.id);
+
+  // Naive epidemic flooding. Deliberately consulted *before* the route table:
+  // a baseline that quietly unicasts along known routes is not the "naive
+  // flood" the acceptance criteria compare against, and it flatters nothing —
+  // it is the arm that used to hide most of the routing layer's contribution.
+  if (policy === "flood-all") {
+    return { mode: "flood", targets: peerIds, reason: "naive flood baseline" };
+  }
 
   if (msg.to !== "BROADCAST") {
     if (peerIds.includes(msg.to)) {
@@ -175,9 +183,15 @@ export function decideForward(
     }
   }
 
-  // Flood branch: SUPER relays everything, NORMAL applies MPR suppression.
-  if (node.role === "SUPER" || !mprEnabled) {
-    return { mode: "flood", targets: peerIds, reason: node.role === "SUPER" ? "SUPER relay-all" : "flood-all policy" };
+  // Flood branch: SUPER relays everything, NORMAL applies MPR suppression —
+  // unless the policy switches suppression off, which is what `route-flood` is
+  // for (routing kept, MPR removed).
+  if (node.role === "SUPER" || policy === "route-flood") {
+    return {
+      mode: "flood",
+      targets: peerIds,
+      reason: node.role === "SUPER" ? "SUPER relay-all" : "routing without MPR suppression",
+    };
   }
   return { mode: "wait-mpr", targets: peerIds, reason: "NORMAL waiting 300ms for SUPER" };
 }

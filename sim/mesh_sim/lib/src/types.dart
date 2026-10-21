@@ -20,8 +20,17 @@ enum MsgType { text, broadcast, voice, sos, ack, ogm }
 
 enum Priority { low, normal, high }
 
-/// Flood-suppression policy for the data plane (docs/03 §6).
-enum RelayPolicy { mpr, floodAll }
+/// Relay policy for the data plane (docs/03 §6).
+///
+/// * [RelayPolicy.mpr] — routing plus MPR flood suppression: what ships.
+/// * [RelayPolicy.routeFlood] — routing without suppression. Comparing it
+///   against [RelayPolicy.mpr] isolates what MPR still buys once the route
+///   table works; the two mechanisms are substitutes, so an honest overhead
+///   claim needs both arms (docs/06 §6).
+/// * [RelayPolicy.floodAll] — naive epidemic flooding: no route table, no
+///   suppression. This is the baseline skills/02 ("overhead <=70% of
+///   flood-all") and skills/08 ("overhead down 30% vs naive flood") name.
+enum RelayPolicy { mpr, routeFlood, floodAll }
 
 class Vec2 {
   Vec2(this.x, this.y);
@@ -168,6 +177,21 @@ class Ogm {
       );
 }
 
+/// OGM receipt history for one (originator, neighbour) link.
+///
+/// tq is a *link* metric — docs/03 §7 measures "OGMs received via that neighbor
+/// / OGMs expected" — so it is tracked per neighbour that delivers copies of an
+/// originator's beacons, not per route entry. See [recordTqSample].
+class TqWindow {
+  TqWindow({required this.lastSeq, required this.window});
+
+  /// Highest originator sequence number heard over this neighbour.
+  int lastSeq;
+
+  /// Ring buffer of 1 (heard) / 0 (missed) OGM receipts, newest last.
+  List<int> window;
+}
+
 class NextHopEntry {
   NextHopEntry({
     required this.bestNeighbor,
@@ -193,7 +217,7 @@ class NextHopEntry {
   /// Ring buffer of 1/0 OGM receipts over the last `tqWindow` intervals.
   List<int> window;
 
-  /// Neighbour the window belongs to; a change of relay resets the window.
+  /// Neighbour whose receipt window backs this entry's tq.
   NodeId windowNeighbor;
 }
 
@@ -263,6 +287,12 @@ class MeshNode {
   String reasonTrace = 'Initial';
   final Map<NodeId, Ogm> ogmTable = <NodeId, Ogm>{};
   final Map<NodeId, NextHopEntry> nextHopTable = <NodeId, NextHopEntry>{};
+
+  /// `'originator|neighbour'` -> receipt history behind that link's tq.
+  /// Insertion order is significant: `pruneStaleEntries` evicts the oldest when
+  /// the bound is hit, and JS Maps iterate in insertion order too, so both
+  /// engines evict identically.
+  final Map<String, TqWindow> tqWindows = <String, TqWindow>{};
   final Map<NodeId, double> neighborScores = <NodeId, double>{};
 
   /// seenKey -> simulation time first heard.
