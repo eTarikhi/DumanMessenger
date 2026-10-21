@@ -15,9 +15,12 @@ interface Props {
    *  stale bubbles behind. */
   sentRecords: SentRecord[];
   deliveries: DeliveryRecord[];
+  /** Opens the hop trace for a delivered message (roadmap Phase 4). */
+  onTrace?: (msgId: string) => void;
+  traceMsgId?: string | null;
 }
 
-export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, deliveries }: Props) {
+export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, deliveries, onTrace, traceMsgId }: Props) {
   const onlineNodes = nodes.filter((n) => n.isOnline);
   const [fromId, setFromId] = useState<string>("");
   const [toId, setToId] = useState<string>("BROADCAST");
@@ -187,6 +190,21 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, d
                 ) : entry.delivered && d ? (
                   <span style={{ color: "#b6ff4a" }}>
                     ✓ {d.hops} hop{d.hops === 1 ? "" : "s"} · {d.latencyMs.toFixed(0)}ms · acked
+                    {onTrace && (
+                      <button
+                        onClick={() => onTrace(entry.msgId)}
+                        aria-label={`Trace ${entry.msgId} hop by hop`}
+                        style={{
+                          marginLeft: 6, padding: "1px 6px", borderRadius: 999, cursor: "pointer",
+                          fontSize: 9, fontWeight: 700, verticalAlign: "middle",
+                          border: `1px solid ${traceMsgId === entry.msgId ? "#ffd666" : "rgba(182,255,74,0.35)"}`,
+                          background: traceMsgId === entry.msgId ? "rgba(255,214,102,0.18)" : "transparent",
+                          color: traceMsgId === entry.msgId ? "#ffd666" : "#b6ff4a",
+                        }}
+                      >
+                        trace
+                      </button>
+                    )}
                   </span>
                 ) : (
                   <span style={{ color: "#ffb84d" }}>⏳ routing…</span>

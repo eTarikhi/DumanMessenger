@@ -8,6 +8,9 @@ import { ChatPanel } from "./components/ChatPanel";
 import { ConfigPanel } from "./components/ConfigPanel";
 import { LatencyChart } from "./components/LatencyChart";
 import { MetricsPanel } from "./components/MetricsPanel";
+import { MessageTrace } from "./components/MessageTrace";
+import { MeshLogPanel } from "./components/MeshLogPanel";
+import { deliveredChain } from "./simulation";
 
 export function App() {
   const simRef = useRef<MeshSimulation | null>(null);
@@ -21,6 +24,13 @@ export function App() {
   const [showLinks, setShowLinks] = useState(true);
   const [showRanges, setShowRanges] = useState(false);
   const [autoTraffic, setAutoTraffic] = useState(false);
+  /** The message whose hop-by-hop route is drawn on the canvas and explained in
+   *  the trace panel (roadmap Phase 4). */
+  const [traceMsgId, setTraceMsgId] = useState<string | null>(null);
+  // Capture is a config flag, not a world parameter: flipping it must not throw
+  // the run away, so it mutates the live config instead of calling reset().
+  const [captureLog, setCaptureLog] = useState(false);
+  const [captureOgm, setCaptureOgm] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const rerender = useCallback(() => setFrame((f) => f + 1), []);
@@ -42,16 +52,47 @@ export function App() {
 
   const selectedNode = selectedId ? sim.nodes.find((n) => n.id === selectedId) ?? null : null;
 
+  // A broadcast has one delivery record per recipient; trace the first, since
+  // its route is a tree rather than a chain either way.
+  const tracedDelivery = traceMsgId
+    ? sim.deliveries.find((d) => d.msgId === traceMsgId) ?? null
+    : null;
+  const traceIds = tracedDelivery
+    ? [
+        tracedDelivery.from,
+        ...deliveredChain(tracedDelivery.hopTrace, tracedDelivery.to).map((h) => h.nodeId),
+      ]
+    : undefined;
+
   const handleConfigChange = (config: Partial<SimConfig>) => {
     sim.reset(config);
     setSelectedId(null);
+    setTraceMsgId(null);
     setIsRunning(false);
   };
 
   const handleNewSeed = () => {
     sim.reset({ seed: Math.floor(Math.random() * 9999) + 1 });
     setSelectedId(null);
+    setTraceMsgId(null);
     setIsRunning(false);
+  };
+
+  const handleToggleCapture = () => {
+    const next = !captureLog;
+    sim.config.captureLog = next;
+    setCaptureLog(next);
+    if (!next) sim.config.captureOgm = false;
+    setCaptureOgm(next ? captureOgm : false);
+    if (!next) sim.log = [];
+    rerender();
+  };
+
+  const handleToggleOgm = () => {
+    const next = !captureOgm;
+    sim.config.captureOgm = next;
+    setCaptureOgm(next);
+    rerender();
   };
 
   const handleSend = (
@@ -131,6 +172,7 @@ export function App() {
               sim.reset();
               setIsRunning(false);
               setSelectedId(null);
+              setTraceMsgId(null);
             }}
             onNewSeed={handleNewSeed}
             speed={speed}
@@ -157,6 +199,7 @@ export function App() {
               onSelect={setSelectedId}
               showLinks={showLinks}
               showRanges={showRanges}
+              traceIds={traceIds}
               frame={frame}
             />
           </div>
@@ -171,6 +214,11 @@ export function App() {
                 onSendMessage={handleSend}
                 sentRecords={sim.sentRecords}
                 deliveries={sim.deliveries}
+                onTrace={(msgId) => {
+                  setTraceMsgId(msgId);
+                  rerender();
+                }}
+                traceMsgId={traceMsgId}
               />
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -187,9 +235,34 @@ export function App() {
                   <LegendItem color="rgba(120,130,150,0.5)" label="Building (−12 dB per wall crossed)" />
                   <LegendItem color="rgba(182,255,74,0.35)" label="Link touching a SUPER" />
                   <LegendItem color="rgba(77,224,255,0.18)" label="Normal peer link" />
+                  <LegendItem color="#ffd666" label="Traced route — the hops one delivered message took" />
                 </div>
               </div>
             </div>
+          </div>
+          <div className="duman-chat-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <MessageTrace
+              delivery={tracedDelivery}
+              nodes={sim.nodes}
+              recent={sim.deliveries}
+              onPick={(msgId) => {
+                setTraceMsgId(msgId);
+                rerender();
+              }}
+              onClear={() => {
+                setTraceMsgId(null);
+                rerender();
+              }}
+            />
+            <MeshLogPanel
+              entries={sim.log}
+              captureLog={captureLog}
+              captureOgm={captureOgm}
+              onToggleCapture={handleToggleCapture}
+              onToggleOgm={handleToggleOgm}
+              nodes={sim.nodes}
+              focusMsgId={traceMsgId}
+            />
           </div>
         </div>
 

@@ -12,13 +12,16 @@ interface Props {
   onSelect: (id: string) => void;
   showLinks: boolean;
   showRanges: boolean;
+  /** Ordered node ids of the route being traced (originator first), drawn as a
+   *  highlighted polyline with a hop number on each segment. */
+  traceIds?: string[];
   /** Bumped by the parent on every simulation update to trigger a redraw. */
   frame: number;
 }
 
 const TARGET_CANVAS_PX = 640;
 
-export function MeshCanvas({ nodes, config, rf, selectedId, onSelect, showLinks, showRanges, frame }: Props) {
+export function MeshCanvas({ nodes, config, rf, selectedId, onSelect, showLinks, showRanges, traceIds, frame }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scaleRef = useRef(1);
 
@@ -112,6 +115,44 @@ export function MeshCanvas({ nodes, config, rf, selectedId, onSelect, showLinks,
       }
     }
 
+    // The traced route, drawn over the link graph and under the nodes so the
+    // hop markers stay readable (roadmap Phase 4: "via 2 nodes • SUPER Amir").
+    if (traceIds && traceIds.length > 1) {
+      const byId = new Map(nodes.map((n) => [n.id, n]));
+      const pts: { x: number; y: number }[] = [];
+      for (const id of traceIds) {
+        const n = byId.get(id);
+        if (n) pts.push({ x: px(n.pos.x), y: px(n.pos.y) });
+      }
+      ctx.save();
+      ctx.strokeStyle = "rgba(255, 214, 102, 0.95)";
+      ctx.lineWidth = 2.4;
+      ctx.shadowColor = "rgba(255, 214, 102, 0.55)";
+      ctx.shadowBlur = 9;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.font = "9px Inter, sans-serif";
+      ctx.textAlign = "center";
+      for (let i = 1; i < pts.length; i++) {
+        const mx = (pts[i - 1].x + pts[i].x) / 2;
+        const my = (pts[i - 1].y + pts[i].y) / 2;
+        ctx.fillStyle = "rgba(11, 15, 20, 0.9)";
+        ctx.beginPath();
+        ctx.arc(mx, my, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255, 214, 102, 0.9)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = "#ffd666";
+        ctx.fillText(`${i}`, mx, my + 3);
+      }
+      ctx.textAlign = "start";
+    }
+
     for (const node of nodes) {
       const isSelected = node.id === selectedId;
       const cx = px(node.pos.x);
@@ -168,7 +209,7 @@ export function MeshCanvas({ nodes, config, rf, selectedId, onSelect, showLinks,
         ctx.textAlign = "start";
       }
     }
-  }, [nodes, config, rf, selectedId, showLinks, showRanges, scale, viewW, viewH, radioRangeM, frame]);
+  }, [nodes, config, rf, selectedId, showLinks, showRanges, traceIds, scale, viewW, viewH, radioRangeM, frame]);
 
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
