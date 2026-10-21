@@ -7,12 +7,29 @@ interface Props {
   node: MeshNode | null;
   allNodes: MeshNode[];
   rf: RfParams;
+  /** Whether the duty cycle is running — otherwise "asleep" is meaningless. */
+  dutyCycleEnabled: boolean;
+  /** Is this node inside its scan window right now (SUPER nodes always are). */
+  awake: boolean;
   onToggleOnline: (id: string) => void;
   onToggleCharging: (id: string) => void;
+  onToggleSuperOptOut: (id: string) => void;
+  onToggleBatterySaver: (id: string) => void;
   onClose: () => void;
 }
 
-export function NodeInspector({ node, allNodes, rf, onToggleOnline, onToggleCharging, onClose }: Props) {
+export function NodeInspector({
+  node,
+  allNodes,
+  rf,
+  dutyCycleEnabled,
+  awake,
+  onToggleOnline,
+  onToggleCharging,
+  onToggleSuperOptOut,
+  onToggleBatterySaver,
+  onClose,
+}: Props) {
   if (!node) return null;
 
   const peers = peersInRange(node, allNodes, rf);
@@ -40,6 +57,8 @@ export function NodeInspector({ node, allNodes, rf, onToggleOnline, onToggleChar
       }}>
         {node.role === "SUPER" ? "SUPER NODE" : "NORMAL"}
         {!node.isOnline && " • OFFLINE"}
+        {node.isOnline && dutyCycleEnabled && (awake ? " • AWAKE" : " • ASLEEP")}
+        {node.superOptOut && " • ROUTER DECLINED"}
       </div>
 
       <div style={{ fontSize: 11, color: "#9fb0c3", marginBottom: 14, lineHeight: 1.5 }}>
@@ -56,6 +75,24 @@ export function NodeInspector({ node, allNodes, rf, onToggleOnline, onToggleChar
         <Metric label="PDR (last 20)" value={`${(node.pdr * 100).toFixed(0)}%`} color="#eaf2ff" />
         <Metric label="Mobility" value={node.mobility.toFixed(2)} color="#eaf2ff" />
         <Metric label="Charging" value={node.charging ? "Yes" : "No"} color={node.charging ? "#b6ff4a" : "#9fb0c3"} />
+        <Metric
+          label="Router role"
+          value={node.superOptOut ? "Opted out" : node.batterySaver ? "Saver" : "Available"}
+          color={node.superOptOut || node.batterySaver ? "#ffb84d" : "#b6ff4a"}
+        />
+        <Metric
+          label={dutyCycleEnabled ? "Duty state" : "Duty cycle"}
+          value={
+            dutyCycleEnabled
+              ? node.role === "SUPER"
+                ? "Continuous"
+                : awake
+                  ? "Scanning"
+                  : "Asleep"
+              : "Off"
+          }
+          color={dutyCycleEnabled && !awake && node.role !== "SUPER" ? "#8b7dff" : "#4de0ff"}
+        />
         <Metric label="Tx packets" value={`${node.txCount}`} color="#4de0ff" />
         <Metric label="MPR suppressed" value={`${node.mprSuppressed}`} color="#b6ff4a" />
         <Metric label="Role changes" value={`${node.roleTransitions}`} color="#ffb84d" />
@@ -153,6 +190,32 @@ export function NodeInspector({ node, allNodes, rf, onToggleOnline, onToggleChar
         }}>
           {node.charging ? "Unplug" : "Plug in ⚡"}
         </button>
+      </div>
+
+      {/* skills/02 acceptance: "SUPER opt-out respected; NORMAL never
+          auto-promoted if battery saver on". Both are user-visible switches on
+          a real device, so they are user-visible here too. */}
+      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+        <button onClick={() => onToggleSuperOptOut(node.id)} aria-pressed={node.superOptOut} style={{
+          flex: 1, padding: "8px 12px", borderRadius: 8, cursor: "pointer",
+          border: "1px solid #1e2a3a", fontSize: 12, fontWeight: 600,
+          background: node.superOptOut ? "rgba(255,184,77,0.15)" : "rgba(255,255,255,0.04)",
+          color: node.superOptOut ? "#ffb84d" : "#eaf2ff",
+        }}>
+          {node.superOptOut ? "Accept router role" : "Decline router role"}
+        </button>
+        <button onClick={() => onToggleBatterySaver(node.id)} aria-pressed={node.batterySaver} style={{
+          flex: 1, padding: "8px 12px", borderRadius: 8, cursor: "pointer",
+          border: "1px solid #1e2a3a", fontSize: 12, fontWeight: 600,
+          background: node.batterySaver ? "rgba(255,77,109,0.15)" : "rgba(255,255,255,0.04)",
+          color: node.batterySaver ? "#ff4d6d" : "#eaf2ff",
+        }}>
+          {node.batterySaver ? "Battery saver on" : "Battery saver off"}
+        </button>
+      </div>
+      <div style={{ fontSize: 10, color: "#5a6a7a", marginTop: 6, lineHeight: 1.5 }}>
+        Declining takes effect at once — no two-cycle hysteresis — and is advertised in this node's
+        OGM so neighbours stop counting it as a top-20% candidate.
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import { NodeInspector } from "./components/NodeInspector";
 import { ChatPanel } from "./components/ChatPanel";
 import { ConfigPanel } from "./components/ConfigPanel";
 import { LatencyChart } from "./components/LatencyChart";
+import { MetricsPanel } from "./components/MetricsPanel";
 
 export function App() {
   const simRef = useRef<MeshSimulation | null>(null);
@@ -160,6 +161,8 @@ export function App() {
             />
           </div>
 
+          <MetricsPanel stats={sim.stats} dutyCycleEnabled={sim.config.dutyCycleEnabled} />
+
           <div className="duman-chat-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <div style={{ height: 380 }}>
               <ChatPanel
@@ -205,10 +208,20 @@ export function App() {
             node={selectedNode}
             allNodes={sim.nodes}
             rf={sim.rf}
+            dutyCycleEnabled={sim.config.dutyCycleEnabled}
+            awake={selectedNode ? sim.isAwake(selectedNode) : true}
             onToggleOnline={(id) => sim.toggleNodeOnline(id)}
             onToggleCharging={(id) => {
               const n = sim.nodes.find((x) => x.id === id);
               if (n) sim.setNodeCharging(id, !n.charging);
+            }}
+            onToggleSuperOptOut={(id) => {
+              const n = sim.nodes.find((x) => x.id === id);
+              if (n) sim.setSuperOptOut(id, !n.superOptOut);
+            }}
+            onToggleBatterySaver={(id) => {
+              const n = sim.nodes.find((x) => x.id === id);
+              if (n) sim.setBatterySaver(id, !n.batterySaver);
             }}
             onClose={() => setSelectedId(null)}
           />

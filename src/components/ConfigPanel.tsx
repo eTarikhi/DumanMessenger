@@ -26,6 +26,10 @@ type Draft = {
   enableMobility: boolean;
   enableDtn: boolean;
   batteryDrainMultiplier: number;
+  dutyCycleEnabled: boolean;
+  normalScanWindowMs: number;
+  normalScanCycleMs: number;
+  sleepDrainFactor: number;
 };
 
 function toDraft(c: SimConfig): Draft {
@@ -40,6 +44,10 @@ function toDraft(c: SimConfig): Draft {
     enableMobility: c.enableMobility,
     enableDtn: c.enableDtn,
     batteryDrainMultiplier: c.batteryDrainMultiplier,
+    dutyCycleEnabled: c.dutyCycleEnabled,
+    normalScanWindowMs: c.normalScanWindowMs,
+    normalScanCycleMs: c.normalScanCycleMs,
+    sleepDrainFactor: c.sleepDrainFactor,
   };
 }
 
@@ -78,6 +86,10 @@ export function ConfigPanel({
       enableMobility: draft.enableMobility,
       enableDtn: draft.enableDtn,
       batteryDrainMultiplier: draft.batteryDrainMultiplier,
+      dutyCycleEnabled: draft.dutyCycleEnabled,
+      normalScanWindowMs: draft.normalScanWindowMs,
+      normalScanCycleMs: draft.normalScanCycleMs,
+      sleepDrainFactor: draft.sleepDrainFactor,
       trafficIntervalMs: autoTraffic ? 1500 : 0,
     });
   };
@@ -119,12 +131,16 @@ export function ConfigPanel({
                 color: draft.relayPolicy === p ? "#4de0ff" : "#9fb0c3",
               }}
             >
-              {p === "mpr" ? "MPR (super-node)" : "Flood-all (baseline)"}
+              {POLICY_LABELS[p]}
             </button>
           ))}
         </div>
-        <span style={{ fontSize: 10, color: "#5a6a7a" }}>
-          Compare the two to measure the overhead saving claimed in skills/02.
+        <span style={{ fontSize: 10, color: "#5a6a7a", lineHeight: 1.5 }}>
+          Three arms, each isolating one mechanism: <b style={{ color: "#9fb0c3" }}>mpr</b> vs{" "}
+          <b style={{ color: "#9fb0c3" }}>route-flood</b> is the MPR suppression saving,{" "}
+          <b style={{ color: "#9fb0c3" }}>route-flood</b> vs{" "}
+          <b style={{ color: "#9fb0c3" }}>flood-all</b> is the value of route knowledge. skills/02
+          measures mpr against the naive arm.
         </span>
       </div>
 
@@ -135,6 +151,26 @@ export function ConfigPanel({
           onChange={() => set("enableMobility", !draft.enableMobility)} />
         <Toggle label="DTN store-carry-forward" value={draft.enableDtn}
           onChange={() => set("enableDtn", !draft.enableDtn)} />
+        <Toggle label="Duty cycle (NORMAL sleeps)" value={draft.dutyCycleEnabled}
+          onChange={() => set("dutyCycleEnabled", !draft.dutyCycleEnabled)} />
+      </div>
+
+      {draft.dutyCycleEnabled && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: -6 }}>
+          <Slider label="Scan window (s)" value={draft.normalScanWindowMs / 1000} min={1} max={9} step={1}
+            onChange={(v) => set("normalScanWindowMs", v * 1000)} />
+          <Slider label="Cycle (s)" value={draft.normalScanCycleMs / 1000} min={2} max={30} step={1}
+            onChange={(v) => set("normalScanCycleMs", v * 1000)} />
+          <Slider label="Sleep drain (% of awake)" value={Math.round(draft.sleepDrainFactor * 100)} min={0} max={100} step={5}
+            onChange={(v) => set("sleepDrainFactor", v / 100)} />
+          <span style={{ fontSize: 10, color: "#5a6a7a", lineHeight: 1.5 }}>
+            {dutySummary(draft)} — the always-on figure is 15.0% per 8 h, exactly the skills/07
+            budget, so the sleep slot is what buys headroom. SUPER never sleeps.
+          </span>
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <Toggle label="Auto traffic (1 msg / 1.5 s)" value={autoTraffic} onChange={onToggleAutoTraffic} />
         <Toggle label="Show links" value={showLinks} onChange={onToggleLinks} />
         <Toggle label="Show radio ranges" value={showRanges} onChange={onToggleRanges} />
@@ -155,6 +191,25 @@ export function ConfigPanel({
     </div>
   );
 }
+
+/** What the duty cycle is predicted to cost, from the draft values. */
+function dutySummary(d: Draft): string {
+  const cycle = Math.max(1, d.normalScanCycleMs);
+  const awake = Math.min(1, d.normalScanWindowMs / cycle);
+  const factor = awake + (1 - awake) * d.sleepDrainFactor;
+  const perHour = 1.875 * factor; // NORMAL_DRAIN_PER_HOUR, stationary
+  return (
+    `Scan ${(d.normalScanWindowMs / 1000).toFixed(0)}s / sleep ${((cycle - d.normalScanWindowMs) / 1000).toFixed(0)}s` +
+    ` => ${(factor * 100).toFixed(0)}% of the always-on drain, ~${perHour.toFixed(2)}%/h` +
+    ` (${(perHour * 8).toFixed(1)}% per 8 h)`
+  );
+}
+
+const POLICY_LABELS: Record<RelayPolicy, string> = {
+  mpr: "MPR (super-node)",
+  "route-flood": "Route-flood",
+  "flood-all": "Flood-all (naive)",
+};
 
 const panelStyle: React.CSSProperties = {
   padding: 14, borderRadius: 14, border: "1px solid #1e2a3a",
