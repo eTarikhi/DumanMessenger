@@ -982,6 +982,78 @@ void main() {
     });
   });
 
+  group('MPR fallback at density (skills/08 nodeCount 10-200)', () {
+    MeshMessage msg() => createMessage('m1', 0.0, 'centre', 'node-999', 'hi');
+
+    int sectorOf(MeshNode centre, MeshNode p) {
+      final a = math.atan2(p.pos.y - centre.pos.y, p.pos.x - centre.pos.x);
+      return (((a + math.pi) / (2 * math.pi)) * denseFallbackFanout).floor() %
+          denseFallbackFanout;
+    }
+
+    /// Wire the centre's peer list up to the ring, as a scan would.
+    MeshNode wire(List<MeshNode> nodes) {
+      final centre = nodes.first;
+      centre.peerIds
+        ..clear()
+        ..addAll(nodes.skip(1).map((p) => p.id));
+      return centre;
+    }
+
+    test('floods to every peer while a beacon can describe the neighbourhood', () {
+      final nodes = ring(mprNeighborAdvertiseLimit);
+      final centre = wire(nodes);
+      final d = resolveMprWait(centre, msg(), nodes, rfWith());
+      expect(d.mode, equals(ForwardMode.flood));
+      expect(d.targets.length, equals(nodes.length - 1));
+      expect(d.reason.contains('capped'), isFalse);
+    });
+
+    test('caps the fan-out once the neighbourhood no longer fits in a beacon', () {
+      final nodes = ring(mprNeighborAdvertiseLimit * 2);
+      final centre = wire(nodes);
+      final d = resolveMprWait(centre, msg(), nodes, rfWith());
+      expect(d.mode, equals(ForwardMode.flood));
+      expect(d.targets.length, equals(denseFallbackFanout));
+      expect(d.reason,
+          contains('capped at $denseFallbackFanout of ${nodes.length - 1} peers'));
+      final ids = nodes.skip(1).map((p) => p.id).toSet();
+      expect(ids.containsAll(d.targets), isTrue);
+    });
+
+    test('spreads the capped fan-out over direction, not the strongest links', () {
+      // The nearest peers are all on one side of a node, so choosing by RSSI fans out
+      // into a wedge. One peer per angular sector covers the world instead — measured
+      // at 200 nodes as 98.3% delivery and 125 tx/message against 96.7% and 205
+      // (docs/06 §15).
+      final nodes = ring(mprNeighborAdvertiseLimit * 3);
+      final centre = wire(nodes);
+      final d = resolveMprWait(centre, msg(), nodes, rfWith());
+      final chosen = nodes.skip(1).where((p) => d.targets.contains(p.id)).toList();
+      expect(chosen.map((p) => sectorOf(centre, p)).toSet().length,
+          equals(denseFallbackFanout));
+    });
+
+    test('still suppresses at density when the heard relays cover everyone', () {
+      // The cap is a fallback, not a replacement for the coverage check: a node that
+      // can prove its neighbours are covered stays quiet however dense the world is.
+      final nodes = ring(mprNeighborAdvertiseLimit * 2);
+      final centre = wire(nodes);
+      final m = msg();
+      final peers = nodes.skip(1).toList();
+      final half = peers.length ~/ 2;
+      centre.heardRelays[seenKey(m)] = <NodeId>{peers[0].id, peers[1].id};
+      centre.twoHopView[peers[0].id] =
+          peers.sublist(0, half).map((p) => p.id).toList();
+      centre.twoHopView[peers[1].id] =
+          peers.sublist(half).map((p) => p.id).toList();
+      final d = resolveMprWait(centre, m, nodes, rfWith());
+      expect(d.mode, equals(ForwardMode.drop));
+      expect(d.reason, contains('cover all my neighbours'));
+      expect(centre.mprSuppressed, equals(1));
+    });
+  });
+
   group('SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3)', () {
     /// The node furthest from the centroid: an SOS from the edge makes reach a
     /// real test rather than a formality.

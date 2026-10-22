@@ -67,6 +67,18 @@ const int tqPairMax = 2048;
 /// budget docs/03 §3 sets. A real deployment advertises 2-byte aliases, so 30
 /// neighbours cost ~60 B per beacon.
 const int mprNeighborAdvertiseLimit = 30;
+
+/// Fan-out cap for the MPR fallback **at density only** — when a node has more peers
+/// than one beacon can advertise, it cannot know who is covered, so it must forward,
+/// but forwarding to all of them is an epidemic (docs/06 §15: one 3-hop delivery
+/// costing 7,038 transmissions at 200 nodes in a 100×100 m area, where each node
+/// hears ~179 of the other 199). A K-ary fan-out still covers a homogeneous dense
+/// world in log_K(N) hops, because every relay's peers are everyone's peers.
+///
+/// Below the advertise limit the peer list is complete and the coverage answer is
+/// exact, so the cap never applies: campus_quad peaks at 12 peers and
+/// festival_crowd at 24, and neither changes by one transmission.
+const int denseFallbackFanout = 6;
 const double neighborScoreTtlMs = 30000;
 
 /// Entries advertised in an OGM so peers can learn routes to non-neighbours.

@@ -29,6 +29,7 @@ import {
   tqOfWindow,
   tqPairKey,
   tqWindowFor,
+  DENSE_FALLBACK_FANOUT,
   MPR_NEIGHBOR_ADVERTISE_LIMIT,
   TQ_PAIR_MAX,
   WEIGHTS,
@@ -768,5 +769,68 @@ describe("helper sanity", () => {
       expect(v).toBeGreaterThanOrEqual(50);
       expect(v).toBeLessThan(200);
     }
+  });
+});
+
+describe("MPR fallback at density (skills/08 nodeCount 10-200)", () => {
+  /** A node at the centre of `count` peers evenly spaced on a ring, so direction is
+   *  well defined and every peer is comfortably in range. */
+  function ring(count: number, radius = 12) {
+    const peers: MeshNode[] = [];
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2;
+      peers.push(makeNode(`node-${i + 1}`, 50 + Math.cos(a) * radius, 50 + Math.sin(a) * radius));
+    }
+    const node = makeNode("node-0", 50, 50, { peerIds: peers.map((p) => p.id) });
+    return { node, all: [node, ...peers], peers };
+  }
+  const msg = () => createMessage("m1", 0, "node-0", "node-999", "hi", "text", 5, "normal");
+  const sectorOf = (node: MeshNode, p: MeshNode) =>
+    Math.floor(
+      (((Math.atan2(p.pos.y - node.pos.y, p.pos.x - node.pos.x) + Math.PI) / (2 * Math.PI)) *
+        DENSE_FALLBACK_FANOUT) %
+        DENSE_FALLBACK_FANOUT
+    );
+
+  it("floods to every peer while one beacon can still describe the neighbourhood", () => {
+    const { node, all, peers } = ring(MPR_NEIGHBOR_ADVERTISE_LIMIT);
+    const d = resolveMprWait(node, msg(), all, rfWith());
+    expect(d.mode).toBe("flood");
+    expect(d.targets).toHaveLength(peers.length);
+    expect(d.reason).not.toContain("capped");
+  });
+
+  it("caps the fan-out once the neighbourhood no longer fits in a beacon", () => {
+    const { node, all, peers } = ring(MPR_NEIGHBOR_ADVERTISE_LIMIT * 2);
+    const d = resolveMprWait(node, msg(), all, rfWith());
+    expect(d.mode).toBe("flood");
+    expect(d.targets).toHaveLength(DENSE_FALLBACK_FANOUT);
+    expect(d.reason).toContain(`capped at ${DENSE_FALLBACK_FANOUT} of ${peers.length} peers`);
+    for (const id of d.targets) expect(peers.some((p) => p.id === id)).toBe(true);
+  });
+
+  it("spreads the capped fan-out over direction, not over the strongest links", () => {
+    // The nearest peers are all on one side of a node, so choosing by RSSI fans out
+    // into a wedge. One peer per angular sector covers the world instead — measured
+    // at 200 nodes as 98.3% delivery and 125 tx/message against 96.7% and 205
+    // (docs/06 §15).
+    const { node, all, peers } = ring(MPR_NEIGHBOR_ADVERTISE_LIMIT * 3);
+    const d = resolveMprWait(node, msg(), all, rfWith());
+    const chosen = peers.filter((p) => d.targets.includes(p.id));
+    expect(new Set(chosen.map((p) => sectorOf(node, p))).size).toBe(DENSE_FALLBACK_FANOUT);
+  });
+
+  it("still suppresses at density when the heard relays really do cover everyone", () => {
+    // The cap is a fallback, not a replacement for the coverage check: a node that
+    // can prove its neighbours are covered stays quiet however dense the world is.
+    const { node, all, peers } = ring(MPR_NEIGHBOR_ADVERTISE_LIMIT * 2);
+    const m = msg();
+    node.heardRelays.set(seenKey(m), new Set(["node-1", "node-2"]));
+    node.twoHopView["node-1"] = peers.slice(0, peers.length / 2).map((p) => p.id);
+    node.twoHopView["node-2"] = peers.slice(peers.length / 2).map((p) => p.id);
+    const d = resolveMprWait(node, m, all, rfWith());
+    expect(d.mode).toBe("drop");
+    expect(d.reason).toContain("cover all my neighbours");
+    expect(node.mprSuppressed).toBe(1);
   });
 });

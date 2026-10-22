@@ -1,8 +1,13 @@
 import { GROUP_ADDRESS } from "./types";
 import type { MeshMessage, MeshNode, MsgType, NodeId, QueuedMessage, RelayPolicy, TransportType } from "./types";
 import type { RfParams } from "./rf";
-import { canReach, peersInRange } from "./rf";
-import { getNextHop, relaysCoverPeers } from "./election";
+import { canReach, peersInRange, rssiModel } from "./rf";
+import {
+  DENSE_FALLBACK_FANOUT,
+  MPR_NEIGHBOR_ADVERTISE_LIMIT,
+  getNextHop,
+  relaysCoverPeers,
+} from "./election";
 
 /**
  * Data plane (docs/03 §6, docs/05 §2.1).
@@ -265,13 +270,56 @@ export function resolveMprWait(
     };
   }
   const heardSuper = node.mprHeardSuper.has(msg.id);
-  return {
-    mode: "flood",
-    targets: peers.map((p) => p.id),
-    reason: heardSuper
-      ? "MPR fallback: SUPER heard but my neighbours are not covered"
-      : "MPR fallback: no relay heard",
-  };
+  const why = heardSuper
+    ? "MPR fallback: SUPER heard but my neighbours are not covered"
+    : "MPR fallback: no relay heard";
+
+  // At density the coverage question is unanswerable from the wire, because a beacon
+  // advertises at most MPR_NEIGHBOR_ADVERTISE_LIMIT of a node's neighbours. This node
+  // still has to forward — it cannot prove anyone else did — but forwarding to all
+  // 179 peers is how one message becomes 7,038 transmissions. Forward instead to the
+  // strongest links: a K-ary fan-out covers a homogeneous dense world in log_K(N)
+  // hops, so the reach survives and the cost stops being quadratic. Where the peer
+  // list is complete this branch is not taken and nothing changes.
+  if (peers.length > MPR_NEIGHBOR_ADVERTISE_LIMIT) {
+    // Chosen by *direction*, not by strength. The strongest links are the nearest
+    // peers, and the nearest peers are all on the same side of this node, so picking
+    // by RSSI fans out into one wedge and leaves the rest of the world to chance.
+    // K angular sectors, best link per sector, then strongest-first to fill any
+    // sector that is empty. Measured at 200 nodes: 98.3% delivery at 125
+    // transmissions per message, against 96.7% at 205 for the same K chosen by RSSI
+    // (docs/06 §15).
+    const scored = peers.map((p) => ({
+      id: p.id,
+      rssi: rssiModel(node, p, rf),
+      ang: Math.atan2(p.pos.y - node.pos.y, p.pos.x - node.pos.x),
+    }));
+    const k = DENSE_FALLBACK_FANOUT;
+    const sectors = new Map<number, { id: string; rssi: number }>();
+    for (const s of scored) {
+      const idx = Math.floor(((s.ang + Math.PI) / (2 * Math.PI)) * k) % k;
+      const current = sectors.get(idx);
+      if (!current || s.rssi > current.rssi) sectors.set(idx, s);
+    }
+    const best = [...sectors.values()].map((s) => s.id);
+    if (best.length < k) {
+      // Tie-break on the id as well as the link: JS and Dart sort differently when
+      // two keys are equal, and the two engines must pick the same peers.
+      for (const s of scored
+        .slice()
+        .sort((a, b) => b.rssi - a.rssi || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+        if (best.length >= k) break;
+        if (!best.includes(s.id)) best.push(s.id);
+      }
+    }
+    return {
+      mode: "flood",
+      targets: best,
+      reason: `${why} — capped at ${best.length} of ${peers.length} peers (density)`,
+    };
+  }
+
+  return { mode: "flood", targets: peers.map((p) => p.id), reason: why };
 }
 
 /** Spray-and-wait over the OppQueue when peers are discovered (docs/03 §8). */

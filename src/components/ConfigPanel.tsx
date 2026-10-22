@@ -112,7 +112,7 @@ export function ConfigPanel({
         Changes rebuild the world, so they are applied on demand.
       </div>
 
-      <Slider label="Nodes" value={draft.nodeCount} min={5} max={80} step={1}
+      <Slider label="Nodes" value={draft.nodeCount} min={5} max={200} step={5}
         onChange={(v) => set("nodeCount", v)} />
       <Slider label="Area (m, square)" value={draft.areaWidth} min={40} max={400} step={10}
         onChange={(v) => set("areaWidth", v)} />

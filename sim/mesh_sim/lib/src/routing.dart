@@ -6,6 +6,8 @@
 /// the TypeScript and Dart engines mechanical translations of one another.
 library;
 
+import 'dart:math' as math;
+
 import 'election.dart';
 import 'rf.dart';
 import 'types.dart';
@@ -274,12 +276,65 @@ ForwardDecision resolveMprWait(
         'MPR: heard relays cover all my neighbours');
   }
   final heardSuper = node.mprHeardSuper.contains(msg.id);
+  final why = heardSuper
+      ? 'MPR fallback: SUPER heard but my neighbours are not covered'
+      : 'MPR fallback: no relay heard';
+
+  // At density the coverage question is unanswerable from the wire, because a beacon
+  // advertises at most [mprNeighborAdvertiseLimit] of a node's neighbours. This node
+  // still has to forward — it cannot prove anyone else did — but forwarding to all
+  // 179 peers is how one message becomes 7,038 transmissions. Forward instead to the
+  // strongest link in each of K angular sectors: the nearest peers are all on one
+  // side of a node, so choosing by RSSI alone fans out into a wedge, while one peer
+  // per direction covers the world. Measured at 200 nodes: 98.3% delivery at 125
+  // transmissions per message against 96.7% at 205 for the same K chosen by RSSI,
+  // and 100% at 531 unbounded (docs/06 §15). Where the peer list is complete this
+  // branch is not taken and nothing changes.
+  if (peers.length > mprNeighborAdvertiseLimit) {
+    final scored = peers
+        .map((p) => _PeerChoice(
+            p.id,
+            rssiModel(node, p, rf),
+            math.atan2(p.pos.y - node.pos.y, p.pos.x - node.pos.x)))
+        .toList();
+    final sectors = <int, _PeerChoice>{};
+    for (final sc in scored) {
+      final idx = (((sc.ang + math.pi) / (2 * math.pi)) * denseFallbackFanout).floor() %
+          denseFallbackFanout;
+      final current = sectors[idx];
+      if (current == null || sc.rssi > current.rssi) sectors[idx] = sc;
+    }
+    final best = sectors.values.map((sc) => sc.id).toList();
+    if (best.length < denseFallbackFanout) {
+      // Tie-break on the id as well as the link: JS and Dart sort differently when
+      // two keys are equal, and the two engines must pick the same peers.
+      final byRssi = scored.toList()
+        ..sort((a, b) {
+          final c = b.rssi.compareTo(a.rssi);
+          return c != 0 ? c : a.id.compareTo(b.id);
+        });
+      for (final sc in byRssi) {
+        if (best.length >= denseFallbackFanout) break;
+        if (!best.contains(sc.id)) best.add(sc.id);
+      }
+    }
+    return ForwardDecision(
+        ForwardMode.flood,
+        best,
+        '$why — capped at ${best.length} of ${peers.length} peers (density)');
+  }
+
   return ForwardDecision(
-      ForwardMode.flood,
-      peers.map((p) => p.id).toList(),
-      heardSuper
-          ? 'MPR fallback: SUPER heard but my neighbours are not covered'
-          : 'MPR fallback: no relay heard');
+      ForwardMode.flood, peers.map((p) => p.id).toList(), why);
+}
+
+/// One candidate peer for the density-capped fallback: link budget and bearing.
+class _PeerChoice {
+  _PeerChoice(this.id, this.rssi, this.ang);
+
+  final NodeId id;
+  final double rssi;
+  final double ang;
 }
 
 /// Spray-and-wait over the OppQueue when peers are discovered (docs/03 §8).

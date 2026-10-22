@@ -65,6 +65,20 @@ export const TQ_PAIR_MAX = 2048;
  * neighbours cost ~60 B per beacon.
  */
 export const MPR_NEIGHBOR_ADVERTISE_LIMIT = 30;
+
+/**
+ * Fan-out cap for the MPR fallback **at density only** — when a node has more peers
+ * than one beacon can advertise, it cannot know who is covered, so it must forward,
+ * but forwarding to all of them is an epidemic (docs/06 §15: one 3-hop delivery
+ * costing 7,038 transmissions at 200 nodes in a 100×100 m area, where each node
+ * hears ~179 of the other 199). A K-ary fan-out still covers a homogeneous dense
+ * world in log_K(N) hops, because every relay's peers are everyone's peers.
+ *
+ * Below the advertise limit the peer list is complete and the coverage answer is
+ * exact, so the cap never applies: campus_quad peaks at 12 peers and
+ * festival_crowd at 24, and neither changes by one transmission.
+ */
+export const DENSE_FALLBACK_FANOUT = 6;
 export const NEIGHBOR_SCORE_TTL_MS = 30_000;
 
 function normPeers(count: number): number {

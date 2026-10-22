@@ -696,6 +696,61 @@ describe("power policy and telemetry (skills/02, skills/07, roadmap Phase 2)", (
   });
 });
 
+  describe("scale: the documented 10-200 node range (skills/08)", () => {
+    /** Drive a handful of messages through a world of `nodeCount` nodes in the
+     *  documented 100×100 m area, and report what it cost. */
+    function scaleRun(nodeCount: number, messages = 6) {
+      const sim = new MeshSimulation({ ...campusQuad(42), nodeCount });
+      sim.runFor(sim.config.warmupMs);
+      sim.clearRecords();
+      let sent = 0;
+      for (let i = 0; i < messages; i++) {
+        const from = `node-${i % nodeCount}`;
+        const to = `node-${(i * 37 + 11) % nodeCount}`;
+        if (sim.sendMessage(from, to, `scale-${i}`, "text")) sent++;
+        sim.runFor(1500);
+      }
+      sim.refresh();
+      const uni = sim.deliveries.filter((d) => d.type !== "ack" && d.type !== "broadcast");
+      return { sim, sent, delivered: uni.length, txPerMsg: sim.stats.totalForwarded / Math.max(1, sent) };
+    }
+
+    it("runs at the bottom of the range with nobody cut off", () => {
+      const r = scaleRun(10);
+      expect(r.sim.nodes).toHaveLength(10);
+      expect(r.sim.stats.isolatedNodes).toBe(0);
+      expect(r.delivered / r.sent).toBeGreaterThanOrEqual(0.9);
+    });
+
+    it("runs at the top of the range, and the fallback does not go quadratic", () => {
+      // 200 nodes in a 100×100 m area is one radio cell: every node hears ~179 of
+      // the other 199, so a beacon cannot describe the neighbourhood and the MPR
+      // coverage question is unanswerable. Unbounded, that turned one 3-hop delivery
+      // into 7,038 transmissions and the run into 531 per message. Bounded to six
+      // direction-spread peers it is ~125 per message at 98.3% delivery (docs/06 §15).
+      const r = scaleRun(200);
+      expect(r.sim.nodes).toHaveLength(200);
+      expect(r.sim.stats.isolatedNodes).toBe(0);
+      expect(r.delivered / r.sent).toBeGreaterThanOrEqual(0.9); // measured 98.3%
+      expect(r.txPerMsg).toBeLessThan(400); // measured ~125; the pre-fix figure was 531
+      const peers = r.sim.nodes.filter((n) => n.isOnline).map((n) => n.peerIds.length);
+      expect(Math.max(...peers)).toBeGreaterThan(30); // the dense branch really was taken
+    });
+
+    it("keeps the dense branch out of the worlds that do not need it", () => {
+      // campus_quad peaks at 12 peers and festival_crowd at 24, both under the
+      // 30-neighbour beacon cap, so the cap on fallback fan-out cannot fire and
+      // every measurement taken at those sizes still stands.
+      for (const world of [campusQuad(42), festivalCrowd(42)]) {
+        const sim = new MeshSimulation(world);
+        sim.runFor(90000);
+        sim.refresh();
+        const max = Math.max(...sim.nodes.filter((n) => n.isOnline).map((n) => n.peerIds.length));
+        expect(max).toBeLessThanOrEqual(30);
+      }
+    });
+  });
+
   describe("group channels (docs/04 §4, roadmap Phase 1 'group (3-10 members)')", () => {
     /** A settled world with one group in it. Members are picked spread across the
      *  world by default, so delivery has to cross hops rather than fall out of a

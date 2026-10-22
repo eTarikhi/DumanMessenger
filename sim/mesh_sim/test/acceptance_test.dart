@@ -230,4 +230,37 @@ void main() {
       expect(() => buildScenario('nope'), throwsArgumentError);
     });
   });
+
+  test('supports the documented 10-200 node range without a quadratic fallback',
+      () {
+    // skills/08: "Configurable: nodeCount 10-200, area 100x100m". The top of that
+    // range is one radio cell — at 200 nodes every node hears ~179 of the other 199
+    // — so a beacon cannot describe the neighbourhood and the MPR coverage question
+    // is unanswerable. Unbounded, the fallback cost 531 transmissions per message
+    // (one 3-hop delivery: 7,038); bounded to six direction-spread peers it is ~125
+    // at 98.3% delivery. See docs/06 §15.
+    for (final nodeCount in <int>[10, 200]) {
+      final sim = MeshSimulation(campusQuad(42).copyWith(nodeCount: nodeCount));
+      sim.runFor(sim.config.warmupMs);
+      sim.clearRecords();
+      var sent = 0;
+      for (var i = 0; i < 6; i++) {
+        final from = 'node-${i % nodeCount}';
+        final to = 'node-${(i * 37 + 11) % nodeCount}';
+        if (sim.sendMessage(from, to, 'scale-$i') != null) sent++;
+        sim.runFor(1500);
+      }
+      sim.refresh();
+      expect(sim.nodes.length, equals(nodeCount), reason: '$nodeCount nodes');
+      expect(sim.stats.isolatedNodes, equals(0), reason: '$nodeCount nodes');
+      final uni = sim.deliveries
+          .where((d) =>
+              d.type != MsgType.ack &&
+              d.type != MsgType.broadcast &&
+              d.groupId == null)
+          .toList();
+      expect(uni.length / sent, greaterThanOrEqualTo(0.9), reason: '$nodeCount nodes');
+      expect(sim.stats.totalForwarded / sent, lessThan(400), reason: '$nodeCount nodes');
+    }
+  });
 }
