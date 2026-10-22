@@ -44,6 +44,14 @@
 > bytes are not secret to the network, only unreadable to it), which is why a scoped group flood needs
 > no membership knowledge to work. Not modelled here: the key agreement itself — sender-key
 > distribution over 1:1 channels is `skills/03` work.
+>
+> **Addendum (Oct 2026 — evidence in `docs/06-simulator-findings.md` §17.5):** rotation has a second
+> consequence now that group history is repaired by hash-beacon anti-entropy. Because a rotated epoch makes
+> older copies unreadable to *everybody*, the engine does not offer them for repair, so **the repairable
+> history of a group is only ever as old as its last membership change**. A member that was out of range
+> recovers everything sent since it last shared an epoch, and nothing from before. If readable history is a
+> product feature, the key schedule has to change with it (per-message keys, or a rotation that re-wraps
+> history) — anti-entropy cannot substitute for it.
 - **Broadcast/pager channel:** **Not private** by design (like walkie channel). Option to create encrypted broadcast group with shared key.
 - **At rest:** Encrypted SQLite (SQLCipher) + OS keystore; panic wipe = overwrite key.
 

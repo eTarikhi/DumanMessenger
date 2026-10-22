@@ -41,6 +41,7 @@ dart run bin/mesh_sim.dart --scenario festival_crowd --nodes 80 --json
 dart run bin/mesh_sim.dart --duty-cycle   # NORMAL scans 3 s / sleeps 7 s (skills/07)
 dart run bin/mesh_sim.dart --sos          # SOS reach probe: component-relative and raw
 dart run bin/mesh_sim.dart --media        # 10 MB image at 1/2/3 hops, BLE-only ladder, PTT budgets
+dart run bin/mesh_sim.dart --history      # group history repair, against the same world with it off
 dart run bin/mesh_sim.dart --trace        # per-delivery route: dBm, action and reason per hop
 dart run bin/mesh_sim.dart --capture      # pcap-like mesh log tail (--capture-ogm adds beacons)
 ```
@@ -54,6 +55,7 @@ npm run dev       # canvas: watch SUPERs get elected, MPR suppress floods, bundl
                   # click a node to decline its router role or turn on battery saver
 npm run golden    # regenerate test-fixtures/golden-vectors.json after an engine change
 npm run media     # the media transport probe behind docs/08 (files, PTT, retry timer, contention)
+npm run history   # group-history anti-entropy, with and without repair (docs/06 §17)
 ```
 
 Scenarios: `campus_quad` (20 nodes — the `skills/02` + `skills/08` acceptance
@@ -116,6 +118,20 @@ the audio. Chunks are counted apart from 1:1 traffic so one file cannot flatter 
 chat panel renders a transfer as one progress row instead of 160 empty bubbles, and
 `dart run bin/mesh_sim.dart --media` / `npm run media` print every table in
 [`docs/08-media-transport-ptt.md`](docs/08-media-transport-ptt.md).
+
+**Group history repair** (roadmap Phase 1's "CRDT for group/broadcast history (hash beacon
+anti-entropy)"): every member holds its group's messages as a grow-only set keyed by message id, so
+merging two members is a union and a beacon may be lost, duplicated or reordered without the protocol
+caring. Each offers every co-member it can *hear* a digest — 16 XOR-folded bucket hashes, **156
+characters whether the group has said nothing or 400 messages**, one 256 B BLE packet — and a peer whose
+buckets differ asks for those buckets *and lists the ids it already holds*, which is what lets a reply be
+capped at 32 entries and still converge (without the list, every round re-offers the same head and repair
+stalls). Nothing is acknowledged; the next beacon is the retry. Measured on a five-member group with one
+member out of range for a whole 20-message conversation: **20/20 recovered, converged in 8.8 s**, against
+**0/20** with beacons off, for 31 beacons/min and 81 B/s when idle. The boundary is measured too — beacons
+are peer-to-peer, so what converges is the membership's *peer graph*: a spread membership recovers the
+returning member and still never converges, because reach is the scoped flood's job, not repair's
+(`docs/06-simulator-findings.md` §17).
 
 **Hop transparency** (roadmap Phase 4): every delivery carries a per-hop trace — arrival time, link
 budget in dBm, who handed it over, the action and the router's own reason — and `deliveredChain()`

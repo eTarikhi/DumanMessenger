@@ -1129,3 +1129,136 @@ one hard seed (99) went 81% → 62% and three easy seeds improved.
 not a formality. For a 60-node mobile world the band is wide enough to invert a
 conclusion, so any parameter change proposed on this evidence needs six seeds before
 it is believed, and the per-seed spread printed next to the mean.
+
+---
+
+## 17. Group history: hash-beacon anti-entropy, and the graph it can repair over
+
+**Roadmap Phase 1 asks for "SQLite + CRDT for group/broadcast history (hash beacon
+anti-entropy)". §14 established half of why it matters — a rotation makes older copies
+unreadable — but the other half was simply missing: a member that was asleep, out of
+range or switched off while a scoped flood went by missed that copy for good. Nothing in
+the engine repaired it, and `groupDeliveryRatio` recorded the loss without offering any
+way back.**
+
+Both engines now implement the repair, and `npm run history` /
+`dart run bin/mesh_sim.dart --history` measure it. SQLite is storage and stays app-side;
+what is simulatable is the protocol, and the protocol is where the interesting boundary
+turned out to be.
+
+### 17.1 The mechanism
+
+Each member keeps the group messages it holds as a **grow-only set keyed by message id**
+— a G-Set CRDT — so merging two members' histories is a union: idempotent, commutative
+and associative. That property is what lets the rest of the design be lazy: beacons can
+be lost, duplicated or reordered, and a reply can arrive twice, without the protocol
+caring.
+
+* **Beacon.** Every `historyBeaconMs` (10 s) a member offers each co-member it can
+  *hear* a digest of what it holds: `HISTORY_BUCKETS = 16` XOR-folded FNV-1a bucket
+  hashes plus an entry count. Measured size: **156 characters whether the group has said
+  nothing or 400 messages**, which is `wireSizeOf(156) = 256 B` — one BLE packet, and
+  the only part that grows with history is the decimal count (158 characters at 400
+  entries).
+* **Request.** A peer whose buckets differ asks for *those buckets* and lists the ids it
+  already holds in them (capped at 64).
+* **Reply.** The responder sends the entries in those buckets that the requester did not
+  list, capped at `historyReplyMax = 32`, sorted by id.
+* **Merge.** Union by message id. Entries under an older key epoch are refused and
+  counted (`historyEpochDropped`), because a rotation made them unreadable (§14).
+* **No acknowledgements.** The next beacon is the retry. Acknowledging every digest would
+  cost more radio time than the repair it reports on.
+
+FNV-1a is not a cryptographic hash and does not need to be: a digest here only has to
+tell two sets apart, and the ids it covers are already visible to every relay on the
+path. Both engines assert the same fixed points — `fnv1a32("m1") = 2486071275`,
+`historyBucket("m1") = 11` — so a drift in either implementation fails CI.
+
+XOR folds a *set*: feeding it the same id twice cancels that id out. That is not a defect
+to fix but the reason the store is keyed by id and the merge is a union, and both test
+suites assert the cancellation explicitly rather than pretending it cannot happen.
+
+### 17.2 The defect a test caught: a bounded reply has to know what to skip
+
+The first version replied with the first 32 entries of the differing buckets. With a
+20-message absence and `historyReplyMax = 8`, the returning member converged to 8
+entries and **stopped**: every round re-offered the same head of the same sorted list,
+because the responder had no idea what the requester had just accepted.
+
+The fix is the id list in the request. Once the responder can exclude what the requester
+already holds, each capped round advances, and a 20-message absence converges in
+`ceil(20/8)` rounds plus whatever link loss adds. This is why the request is bigger than
+a bucket list, and why the cap is safe.
+
+### 17.3 Measured: repair works, and it is transitive
+
+Five members, 20 messages, one member out of radio range for the whole conversation
+(`campus_quad`, seed 42, settled 90 s), then the member returns:
+
+| membership | member peer graph | recovered | converged | rounds | packets | payload |
+|---|---|---|---|---|---|---|
+| spread across the world | 6 of 20 directed links, **not connected** | 20/20 | **no** (>300 s) | 2 | 171 | 29.8 KB |
+| 5 nearest nodes | 20 of 20 links, connected | 20/20 | **yes, 8.8 s** | 4 | 60 | 15.7 KB |
+| either, with `historyBeaconMs: 0` | — | **0/20** | no | 0 | 0 | 0 |
+
+Repair is **transitive**, which the capture log shows directly: in a three-member line a
+copy the middle member lost reaches it from the sender — `field team: Amir-0 and
+Bianca-1 disagree on bucket 1 (20 vs 19 entries) — requesting` — and then reaches the
+returning member from the middle. A run repairing 20 messages cost 32 beacons, 8
+requests, 4 replies, 44 packets and recovered 21 entries (the extra one is the middle
+member's own loss).
+
+Idle cost, when there is nothing to repair: **31 beacons/minute for a five-member group,
+81 B/s of background traffic**. For scale, the same 20-node campus sends ~2,800 relay
+transmissions in 300 s of ordinary message traffic (§6), so the digest beacons are noise
+next to the routing plane they ride on.
+
+### 17.4 The boundary: anti-entropy converges over the peer graph, not the membership
+
+The spread arm recovered every message the returning member had missed and still never
+converged. That is not a bug and not a timeout that a longer budget would fix; it is the
+shape of the protocol.
+
+Beacons go to co-members **in range** and nowhere else. So the graph being reconciled is
+"which members can hear which", and in the spread arm only 6 of 20 directed member pairs
+can carry a beacon and the graph is disconnected: two members who are never in range of
+each other, with no chain of co-members between them, can never compare digests. Whatever
+one of them holds alone stays alone.
+
+The honest statement of the division of labour:
+
+* the **scoped flood** (§14) is responsible for getting a message to every member, across
+  hops, through relays that cannot read it;
+* **anti-entropy** is responsible for the last hop of a loss — the member that was asleep,
+  out of range, or switched off — and for repairing it cheaply, without re-flooding;
+* a membership spread beyond radio range needs the flood to have worked in the first
+  place. Repair cannot substitute for reach, and the measurement above is exactly where
+  the two responsibilities meet.
+
+The alternative — letting digests relay across the mesh — would converge a spread
+membership and would cost what a scoped flood costs on every interval, forever, to
+repair traffic that mostly arrived. It was not implemented, and the numbers above are the
+reason.
+
+### 17.5 What a key rotation costs that §14 did not show
+
+§14 measured a rotation's effect on delivery. It has a second effect: because entries
+under an older epoch are unreadable to everybody, the engine does not offer them, so
+**the repairable history of a group is only ever as old as its last membership change**.
+In a group that rotates on every join and leave (the shipped policy, and the one
+`docs/04` §4 asks for), anti-entropy can repair a member's absence but can never rebuild
+the group's past. Both suites assert this: after a rotation the pre-rotation message is
+not offered, not recovered, and `historyEpochDropped` stays at 0 because nothing stale
+was ever put on air.
+
+That is a design consequence worth stating to whoever builds the app: if history is a
+product feature, the key schedule has to change with it (per-message keys, or a rotation
+that re-wraps history), and no amount of anti-entropy will substitute.
+
+### 17.6 Accounting
+
+Sync packets are counted apart (`sentSync`, `historyBeacons`, `historyRequests`,
+`historyReplies`, `historyEntriesSynced`, `historyEpochDropped`, `historyBytes`),
+excluded from `deliveryRatio` and from the chat log, and reported on the dashboard. A
+node with no groups arms no beacon chain, so a run that never creates a group consumes no
+extra randomness: **the golden vectors are byte-identical** in both languages.

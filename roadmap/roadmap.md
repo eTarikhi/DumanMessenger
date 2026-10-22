@@ -29,7 +29,24 @@
 - [ ] Seen-cache dedup + TTL (5) + hopCount + flood relay
 - [ ] BATMAN-lite nextHop table (best-next-hop only)
 - [ ] Store-and-forward OppQueue (7-day expiry, 500 msgs cap)
-- [ ] SQLite + CRDT for group/broadcast history (hash beacon anti-entropy)
+- [x] SQLite + CRDT for group/broadcast history (hash beacon anti-entropy)
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §17):** the protocol half is implemented in both
+  engines and measured; SQLite is storage and stays app-side. Each member holds its group messages as a
+  grow-only set keyed by message id — a G-Set CRDT, so merging is a union and beacons may be lost,
+  duplicated or reordered without the protocol caring — and every 10 s offers each co-member it can hear a
+  digest: 16 XOR-folded bucket hashes, **156 characters whether the group has said nothing or 400
+  messages**, i.e. one 256 B BLE packet. A peer whose buckets differ asks for those buckets *and lists the
+  ids it already holds*; the reply is capped at 32 entries. That list is load-bearing: the first version
+  replied with the head of the same sorted list every round and a 20-message absence converged to 8 and
+  stopped. None of it is acknowledged — the next beacon is the retry.
+  Measured: with a five-member group and one member out of range for a whole 20-message conversation,
+  repair recovers **20/20** and converges in **8.8 s** when the membership can hear itself, and **0/20**
+  with beacons switched off. Idle cost is 31 beacons/min and 81 B/s. The boundary is worth knowing before
+  building on it: beacons are peer-to-peer, so what converges is the membership's *peer graph* — a spread
+  membership (6 of 20 directed links, disconnected) recovers the returning member and still never
+  converges, because reach is the scoped flood's job, not repair's. And a key rotation resets what is
+  repairable: history older than the last membership change is unreadable to everybody, so it is never
+  offered (§17.5). `dart run bin/mesh_sim.dart --history` and `npm run history` print both arms.
 - [ ] E2EE round 1: Noise_XX 1:1, SAS verify, padding
   > **Implementation note (Oct 2026 — evidence in `docs/07-e2ee-noise-xx.md` §2-§4):** specified and costed against this mesh, not implemented — `skills/03` says
   *"never custom crypto"*, so the handshake is libsodium work. What is measured here and settles real
