@@ -49,4 +49,16 @@
 > and over BLE at the 512 B MTU even 2 MB takes 4.2 min, which makes the ">5 MB auto-reject" threshold
 > in docs/05 §3.2 generous by about 5×. Broadcast voice ("flood voice clip to all listeners") is **not**
 > implemented — media is 1:1 in both engines and the UI says why.
+>
+> One caveat applies to every media number above, and it is about the radio rather than the
+> protocol: they were measured with `channelAccess: "free"`, a model in which two
+> transmissions can occupy the air at once. On the one radio a phone has (`"halfDuplex"`,
+> shipped off behind that flag) the sliding window's 15.5× becomes **1.6×**, a 10 MB image at
+> three hops takes **3.97 min** instead of 33.00 s, and streamed PTT cannot keep up with its
+> own capture clock beyond two hops — one 500 ms frame needs ≈245 ms of air per hop, so three
+> hops need 735 ms per 500 ms recorded and a 10 s note finishes 17.8 s after the user let go.
+> Window 1 instead of 4 recovers all of the 2.8 points of text delivery a transfer costs
+> there, at no cost in file time; slicing chunks smaller does not, because the fixed part of
+> air time (hop latency plus jitter) is six times the serialization part at 64 KB.
+> `docs/08-media-transport-ptt.md` §12.
 
