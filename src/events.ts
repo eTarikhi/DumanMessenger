@@ -25,6 +25,8 @@ export type EventKind =
   | "transferstall"
   /** Offer this node's group-history digests to its peers (anti-entropy). */
   | "historybeacon"
+  /** This node's radio came free: drain the next queued transmission (docs/08 §12). */
+  | "channel"
   | "traffic";
 
 export interface SimEvent<T = unknown> {

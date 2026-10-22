@@ -18,7 +18,7 @@ import { MeshSimulation, DEFAULT_CONFIG, type SimConfig } from "../src/simulatio
 import { campusQuad, festivalCrowd } from "../src/scenarios";
 import { canReach, effectiveLossProbability, peersInRange } from "../src/rf";
 import { createRng } from "../src/rng";
-import type { MeshNode, NodeId, TransportType } from "../src/types";
+import type { ChannelAccess, MeshNode, NodeId, TransportType } from "../src/types";
 
 /** skills/05: "chunked BLE 512B MTU" — what a file is sliced into when there is no
  *  Wi-Fi Direct group owner to carry it. */
@@ -142,6 +142,11 @@ interface FileResult {
   stalls: number;
   timeoutMs: number;
   transport: TransportType;
+  /** Transmissions that had to wait for a radio, and the total wait (docs/08 §12).
+   *  Zero under the default `channelAccess: "free"`. */
+  deferrals: number;
+  deferMs: number;
+  drops: number;
 }
 
 function runFile(
@@ -178,6 +183,9 @@ function runFile(
     stalls: t.stalls,
     timeoutMs: t.minRttMs === null ? config.mediaAckTimeoutMs : sim.mediaTimeoutMs(t),
     transport: t.transport,
+    deferrals: sim.refresh().channelDeferrals,
+    deferMs: sim.refresh().channelDeferMs,
+    drops: sim.refresh().channelDrops,
   };
 }
 
@@ -533,17 +541,30 @@ interface ContentionArm {
   retries: number;
   exhausted: number;
   transferMs: number | null;
+  /** Radio-side waiting: transmissions deferred, total wait, packets the transmit
+   *  queue could not hold. All zero under `channelAccess: "free"`. */
+  deferrals: number;
+  deferMs: number;
+  drops: number;
 }
 
-function contentionArm(seed: number, withFile: boolean, messages = 60, gapMs = 2000): ContentionArm {
-  const sim = simFor({ ...campusQuad(seed), trafficIntervalMs: 0 });
+function contentionArm(
+  seed: number,
+  withFile: boolean,
+  messages = 60,
+  gapMs = 2000,
+  channelAccess: ChannelAccess = "free",
+  mediaWindow?: number,
+  budgetMs = 0
+): ContentionArm {
+  const sim = simFor({ ...campusQuad(seed), trafficIntervalMs: 0, channelAccess });
   const plan = contentionPlan(seed, sim.nodes.length, messages);
 
   let transfer: ReturnType<MeshSimulation["sendFile"]> = null;
   if (withFile) {
     const a = sim.nodes[plan[0][0]];
     const b = sim.nodes[plan[0][1]];
-    transfer = sim.sendFile(a.id, b.id, 10 * MB);
+    transfer = sim.sendFile(a.id, b.id, 10 * MB, { window: mediaWindow });
   }
 
   let sent = 0;
@@ -553,11 +574,23 @@ function contentionArm(seed: number, withFile: boolean, messages = 60, gapMs = 2
     if (from.isOnline && to.isOnline && sim.sendMessage(from.id, to.id, `c-${i}`, "text")) sent++;
     sim.runFor(gapMs);
   }
+  // Text metrics are snapshotted at the end of the plan, in every arm, over the same
+  // window: a transfer that takes three minutes must not dilute its own damage across a
+  // tail where nothing is competing any more.
   const stats = sim.refresh();
   const uni = sim.deliveries.filter(
     (d) => d.type !== "ack" && d.type !== "broadcast" && !d.groupId && !d.transferId
   );
   const lat = uni.map((d) => d.latencyMs).sort((x, y) => x - y);
+  // ... and only then is the file given the time to finish, so its own duration is
+  // measured rather than censored.
+  if (budgetMs > 0 && transfer && transfer.state === "active") {
+    let waited = 0;
+    while (transfer.state === "active" && waited < budgetMs) {
+      sim.runFor(250);
+      waited += 250;
+    }
+  }
   return {
     sent,
     ratio: uni.length / Math.max(1, sent),
@@ -569,6 +602,9 @@ function contentionArm(seed: number, withFile: boolean, messages = 60, gapMs = 2
     exhausted: stats.retriesExhausted,
     transferMs:
       transfer && transfer.completedAt !== null ? transfer.completedAt - transfer.startedAt : null,
+    deferrals: stats.channelDeferrals,
+    deferMs: stats.channelDeferMs,
+    drops: stats.channelDrops,
   };
 }
 
@@ -623,6 +659,255 @@ function contentionTable(): void {
   );
 }
 
+// ---------------------------------------------------------------------------
+// 7. Channel access: what happens when the radio is actually one radio
+// ---------------------------------------------------------------------------
+
+/**
+ * §6's null result is a property of the model, not a virtue of the design: with
+ * `channelAccess: "free"` a transmission occupies no exclusive resource, so media has no
+ * way to compete with text. This section flips the one switch that gives a device a real
+ * radio — one transmitter, half-duplex, doing one thing at a time — and re-measures the
+ * same questions. Everything here is behind that flag and none of it changes the shipped
+ * default (docs/08 §12).
+ */
+
+/** Delivery/overhead on the 20-node campus under a given channel model, same plan both
+ *  relay policies, so the overhead ratio is comparable to skills/02's "≤70% of flood-all". */
+interface GateRow {
+  ratio: number;
+  within5: number;
+  relayTx: number;
+  overhead: number;
+  superRatio: number;
+  deferrals: number;
+  deferMs: number;
+  drops: number;
+}
+
+function gateRow(seed: number, channelAccess: ChannelAccess, messages = 60): GateRow {
+  const run = (policy: SimConfig["relayPolicy"]) => {
+    const sim = simFor({
+      ...campusQuad(seed),
+      trafficIntervalMs: 0,
+      channelAccess,
+      relayPolicy: policy,
+    });
+    const plan = contentionPlan(seed, sim.nodes.length, messages);
+    let sent = 0;
+    for (const [a, b] of plan) {
+      const from = sim.nodes[a];
+      const to = sim.nodes[b];
+      if (from.isOnline && to.isOnline && sim.sendMessage(from.id, to.id, `g-${a}-${b}`, "text")) sent++;
+      sim.runFor(1000);
+    }
+    const stats = sim.refresh();
+    const uni = sim.deliveries.filter(
+      (d) => d.type !== "ack" && d.type !== "broadcast" && !d.groupId && !d.transferId
+    );
+    return {
+      ratio: uni.length / Math.max(1, sent),
+      within5: uni.filter((d) => d.hops <= 5).length / Math.max(1, sent),
+      relayTx: stats.totalForwarded,
+      superRatio: stats.superRatio,
+      deferrals: stats.channelDeferrals,
+      deferMs: stats.channelDeferMs,
+      drops: stats.channelDrops,
+      sent,
+    };
+  };
+  const mpr = run("mpr");
+  const flood = run("flood-all");
+  return {
+    ratio: mpr.ratio,
+    within5: mpr.within5,
+    relayTx: mpr.relayTx,
+    overhead: mpr.relayTx / Math.max(1, flood.relayTx),
+    superRatio: mpr.superRatio,
+    deferrals: mpr.deferrals,
+    deferMs: mpr.deferMs,
+    drops: mpr.drops,
+  };
+}
+
+function channelTable(): void {
+  console.log("\n=== 7. Channel access: one radio, half-duplex (docs/08 §12) ===");
+  console.log(
+    "`channelAccess: \"free\"` — the default, and the model every number above was measured\n" +
+      "under — gives a device an infinitely wide radio. `\"halfDuplex\"` gives it the one radio a\n" +
+      "phone actually has: it cannot start transmitting while a previous packet is on air, and\n" +
+      "cannot receive while transmitting. Nothing else changes."
+  );
+
+  console.log("\n--- one 10 MB file alone, no other traffic: does the window still buy parallelism? ---");
+  console.log("hops  channel      window  time        throughput   retrans  deferrals  deferred   dropped");
+  for (const hops of [1, 2, 3]) {
+    for (const ch of ["free", "halfDuplex"] as ChannelAccess[]) {
+      const r = runFile({ ...campusQuad(42), channelAccess: ch }, hops, 10 * MB);
+      const kbps = r.ms ? ((r.bytes * 8) / r.ms).toFixed(0) : "—";
+      console.log(
+        `${String(hops).padEnd(5)} ${ch.padEnd(12)} ${String(r.window).padEnd(7)} ` +
+          `${(r.ms === null ? "TIMEOUT" : fmt(r.ms)).padEnd(11)} ${String(kbps).padEnd(12)} ` +
+          `${String(r.retransmitted).padEnd(8)} ${String(r.deferrals).padEnd(10)} ` +
+          `${fmt(r.deferMs).padEnd(10)} ${r.drops}`
+      );
+    }
+  }
+
+  console.log("\n--- window depth under half-duplex: air time is serial, so depth cannot help ---");
+  console.log("window  channel      time        throughput   retrans  stalls  dropped");
+  for (const w of [1, 2, 4, 8, 16]) {
+    for (const ch of ["free", "halfDuplex"] as ChannelAccess[]) {
+      const r = runFile({ ...campusQuad(42), channelAccess: ch }, 1, 10 * MB, { window: w });
+      const kbps = r.ms ? ((r.bytes * 8) / r.ms).toFixed(0) : "—";
+      console.log(
+        `${String(w).padEnd(7)} ${ch.padEnd(12)} ${(r.ms === null ? "TIMEOUT" : fmt(r.ms)).padEnd(11)} ` +
+          `${String(kbps).padEnd(12)} ${String(r.retransmitted).padEnd(8)} ${String(r.stalls).padEnd(7)} ${r.drops}`
+      );
+    }
+  }
+
+  console.log("\n--- a 30 s voice note: half-duplex air time against a 500 ms frame clock ---");
+  console.log("hops  channel      transport    play delay   max gap   underruns  retrans");
+  console.log(
+    "One frame is 500 ms of capture and, at 750 B, fits inside a single BLE packet: its air time\n" +
+      "is hop latency plus jitter, about 245 ms a hop. So a note streamed over N hops needs about\n" +
+      "245N ms of radio for every 500 ms of recording — under half the clock at 1 hop, 490 ms at 2\n" +
+      "(no slack left for jitter or a single retransmission), and more than the clock at 3, where\n" +
+      "the queue grows faster than the radio drains it. That is the prediction; the measurement of\n" +
+      "it is below, and it is the sharpest result in this section."
+  );
+  for (const hops of [1, 2, 3]) {
+    for (const ch of ["free", "halfDuplex"] as ChannelAccess[]) {
+      const v = runVoice({ ...campusQuad(42), channelAccess: ch }, hops, 30, true);
+      console.log(
+        `${String(hops).padEnd(5)} ${ch.padEnd(12)} ${v.transport.padEnd(12)} ` +
+          `${fmt(v.playDelayMs ?? NaN).padEnd(12)} ${fmt(v.maxGapMs).padEnd(9)} ` +
+          `${String(v.underruns).padEnd(10)} ${v.retransmitted}`
+      );
+    }
+  }
+
+  console.log("\n--- the §6 A/B again, this time on a real radio: quiet vs 10 MB in flight ---");
+  console.log(
+    "channel        arm                    delivery   within5   p95 ms   relayTx  retries  parked  deferred  dropped"
+  );
+  for (const ch of ["free", "halfDuplex"] as ChannelAccess[]) {
+    for (const [armName, withFile] of [["quiet", false], ["with a 10 MB file", true]] as [string, boolean][]) {
+      const rows = SEEDS.map((seed) => contentionArm(seed, withFile, 60, 2000, ch));
+      const mean = (f: (r: ContentionArm) => number) =>
+        rows.reduce((a, r) => a + f(r), 0) / rows.length;
+      console.log(
+        `${ch.padEnd(14)} ${armName.padEnd(22)} ${mean((r) => r.ratio).toFixed(4).padEnd(10)} ` +
+          `${mean((r) => r.within5).toFixed(4).padEnd(9)} ${mean((r) => r.p95).toFixed(0).padEnd(8)} ` +
+          `${mean((r) => r.relayTx).toFixed(0).padEnd(8)} ${mean((r) => r.retries).toFixed(0).padEnd(8)} ` +
+          `${mean((r) => r.queued).toFixed(1).padEnd(7)} ${fmt(mean((r) => r.deferMs)).padEnd(9)} ` +
+          `${mean((r) => r.drops).toFixed(0)}`
+      );
+      if (withFile) {
+        console.log(
+          `               per-seed delivery ${rows.map((r) => r.ratio.toFixed(3)).join(", ")}; ` +
+            `transfer ${fmt(mean((r) => r.transferMs ?? NaN))}`
+        );
+      }
+    }
+  }
+
+  console.log("\n--- so is a load gate motivated? Shrink the window and ask again ---");
+  console.log(
+    "Under `free` there was nothing for a gate to protect (§6). Under a real radio there is, so the\n" +
+      "obvious knob — send the file one chunk at a time instead of four, committing less air time\n" +
+      "ahead — is measured here against both the text traffic and the file itself. Same plan, same\n" +
+      "three seeds, and each run waits for the transfer to finish so both sides are one experiment."
+  );
+  console.log("window          delivery   within5   p95 ms   retries  parked  file time    dropped");
+  const gateArms: Array<[string, boolean, number | undefined]> = [
+    ["no file", false, undefined],
+    ["file, window 4", true, undefined],
+    ["file, window 1", true, 1],
+  ];
+  for (const [name, withFile, win] of gateArms) {
+    const rows = SEEDS.map((seed) => contentionArm(seed, withFile, 60, 2000, "halfDuplex", win, 900_000));
+    const mean = (f: (r: ContentionArm) => number) =>
+      rows.reduce((a, r) => a + f(r), 0) / rows.length;
+    console.log(
+      `${name.padEnd(15)} ${mean((r) => r.ratio).toFixed(4).padEnd(10)} ${mean((r) => r.within5).toFixed(4).padEnd(9)} ` +
+        `${mean((r) => r.p95).toFixed(0).padEnd(8)} ${mean((r) => r.retries).toFixed(0).padEnd(8)} ` +
+        `${mean((r) => r.queued).toFixed(1).padEnd(7)} ` +
+        `${(withFile ? fmt(mean((r) => r.transferMs ?? NaN)) : "—").padEnd(12)} ${mean((r) => r.drops).toFixed(0)}`
+    );
+  }
+
+  console.log("\n--- the other knob: chunk size, i.e. how much air time one packet commits ---");
+  console.log(
+    "A window of 1 still puts a whole 64 KB chunk on air at once. Slicing smaller interleaves text\n" +
+      "between chunks instead of behind them, which is what adaptive fragmentation would do. Same\n" +
+      "plan and seeds, transfer allowed to finish, window held at 4 so the two knobs are separable."
+  );
+  console.log("chunk           delivery   within5   p95 ms   retries  parked  file time    dropped");
+  for (const chunk of [64 * 1024, 16 * 1024, 4 * 1024]) {
+    const rows = SEEDS.map((seed) => {
+      const sim = simFor({ ...campusQuad(seed), trafficIntervalMs: 0, channelAccess: "halfDuplex" });
+      const plan = contentionPlan(seed, sim.nodes.length, 60);
+      const a = sim.nodes[plan[0][0]];
+      const b = sim.nodes[plan[0][1]];
+      const t = sim.sendFile(a.id, b.id, 10 * MB, { chunkBytes: chunk });
+      let sent = 0;
+      for (let i = 1; i < plan.length; i++) {
+        const from = sim.nodes[plan[i][0]];
+        const to = sim.nodes[plan[i][1]];
+        if (from.isOnline && to.isOnline && sim.sendMessage(from.id, to.id, `k-${i}`, "text")) sent++;
+        sim.runFor(2000);
+      }
+      const stats = sim.refresh();
+      const uni = sim.deliveries.filter(
+        (d) => d.type !== "ack" && d.type !== "broadcast" && !d.groupId && !d.transferId
+      );
+      const lat = uni.map((d) => d.latencyMs).sort((x, y) => x - y);
+      let waited = 0;
+      while (t && t.state === "active" && waited < 900_000) {
+        sim.runFor(250);
+        waited += 250;
+      }
+      return {
+        ratio: uni.length / Math.max(1, sent),
+        within5: uni.filter((d) => d.hops <= 5).length / Math.max(1, sent),
+        p95: lat.length ? lat[Math.floor(lat.length * 0.95)] : 0,
+        retries: stats.retriesSent,
+        queued: stats.totalQueued,
+        drops: stats.channelDrops,
+        ms: t && t.completedAt !== null ? t.completedAt - t.startedAt : NaN,
+      };
+    });
+    const mean = (f: (r: (typeof rows)[number]) => number) =>
+      rows.reduce((s, r) => s + f(r), 0) / rows.length;
+    console.log(
+      `${fmtSize(chunk).padEnd(15)} ${mean((r) => r.ratio).toFixed(4).padEnd(10)} ${mean((r) => r.within5).toFixed(4).padEnd(9)} ` +
+        `${mean((r) => r.p95).toFixed(0).padEnd(8)} ${mean((r) => r.retries).toFixed(0).padEnd(8)} ` +
+        `${mean((r) => r.queued).toFixed(1).padEnd(7)} ${fmt(mean((r) => r.ms)).padEnd(12)} ${mean((r) => r.drops).toFixed(0)}`
+    );
+  }
+
+  console.log("\n--- the acceptance gates themselves, under a real radio (20-node campus, 3 seeds) ---");
+  console.log("channel        delivery   within5   overhead vs flood-all   SUPER ratio   deferred              dropped");
+  for (const ch of ["free", "halfDuplex"] as ChannelAccess[]) {
+    const rows = SEEDS.map((seed) => gateRow(seed, ch));
+    const mean = (f: (r: GateRow) => number) => rows.reduce((a, r) => a + f(r), 0) / rows.length;
+    console.log(
+      `${ch.padEnd(14)} ${mean((r) => r.ratio).toFixed(4).padEnd(10)} ${mean((r) => r.within5).toFixed(4).padEnd(9)} ` +
+        `${(mean((r) => r.overhead) * 100).toFixed(1).padEnd(6)}%${"".padEnd(18)} ` +
+        `${(mean((r) => r.superRatio) * 100).toFixed(1).padEnd(6)}%${"".padEnd(7)} ` +
+        `${fmt(mean((r) => r.deferMs))} over ${mean((r) => r.deferrals).toFixed(0)} tx`.padEnd(21) +
+        ` ${mean((r) => r.drops).toFixed(0)}`
+    );
+  }
+  console.log(
+    "\nGates: skills/02 wants delivery ≥90% at 3 hops and overhead ≤70% of flood-all; skills/08 wants\n" +
+      "delivery ≥90% within 5 hops and overhead down 30% versus naive flood. Both were written against\n" +
+      "an infinitely wide radio, which is why `channelAccess` ships as `free`."
+  );
+}
+
 /** Row label for a timer sweep: a fixed value, or what the adaptive timer converged on. */
 function label(timer: number | "adaptive", rs: { timeoutMs: number }[]): string {
   if (timer !== "adaptive") return `${timer} ms`;
@@ -662,6 +947,7 @@ function main(): void {
   retryTimerTable();
   acceptanceTable();
   contentionTable();
+  channelTable();
   console.log("\nDone.");
 }
 

@@ -2400,3 +2400,150 @@ describe("media under load, measured without confounding the A/B (docs/08 §9)",
     expect(loss()).toBe(quiet); // ... and unchanged on the other side of it
   });
 });
+
+describe("channel access: one radio, half-duplex (docs/08 §12)", () => {
+  /** The same 20 m line the media tests use: hop count is the index distance, so every
+   *  assertion here is about the radio rather than about who happened to be in range. */
+  function lineWorld(n = 4, over: Partial<SimConfig> = {}): MeshSimulation {
+    const sim = new MeshSimulation({
+      ...DEFAULT_CONFIG,
+      nodeCount: n,
+      stationaryRatio: 1,
+      chargingRatio: 0,
+      trafficIntervalMs: 0,
+      enableSuperElection: false,
+      warmupMs: 0,
+      obstacles: [],
+      ...over,
+    });
+    sim.nodes.forEach((node, i) => {
+      node.pos = { x: 10 + i * 20, y: 10 };
+      node.home = { x: 10 + i * 20, y: 10 };
+      node.target = { x: 10 + i * 20, y: 10 };
+      node.stationary = true;
+      node.mobility = 0;
+      node.isOnline = true;
+      node.battery = 1;
+      node.txPower = DEFAULT_CONFIG.txPowerDbm;
+    });
+    sim.runFor(20000);
+    sim.clearRecords();
+    return sim;
+  }
+
+  function runUntil(sim: MeshSimulation, done: () => boolean, budgetMs: number): boolean {
+    let elapsed = 0;
+    while (!done() && elapsed < budgetMs) {
+      sim.runFor(100);
+      elapsed += 100;
+    }
+    return done();
+  }
+
+  it("occupies no radio by default: nothing is ever deferred, and nothing is ever dropped", () => {
+    // `channelAccess: "free"` is an infinitely wide radio, and it is what every other
+    // number in this repository was measured under. Asserting the counters are exactly
+    // zero is what keeps that from drifting by accident.
+    const sim = new MeshSimulation({ ...campusQuad(42), trafficIntervalMs: 1000 });
+    sim.runFor(120000);
+    const stats = sim.refresh();
+    expect(stats.totalForwarded).toBeGreaterThan(100);
+    expect(stats.channelDeferrals).toBe(0);
+    expect(stats.channelDeferMs).toBe(0);
+    expect(stats.channelDrops).toBe(0);
+  });
+
+  it("makes a packet wait its turn, and still delivers it", () => {
+    const sim = lineWorld(2, { channelAccess: "halfDuplex" });
+    const [a, b] = sim.nodes;
+    for (let i = 0; i < 4; i++) sim.sendMessage(a.id, b.id, `hd-${i}`, "text");
+    runUntil(sim, () => sim.deliveries.filter((d) => d.to === b.id).length >= 4, 10000);
+
+    const stats = sim.refresh();
+    expect(sim.deliveries.filter((d) => d.to === b.id).length).toBe(4);
+    expect(stats.channelDeferrals).toBeGreaterThan(0);
+    expect(stats.channelDeferMs).toBeGreaterThan(0);
+    // One radio, so the four copies land one air time apart rather than together. The
+    // same burst under the default model arrives inside a single hop latency.
+    const lat = sim.deliveries.filter((d) => d.to === b.id).map((d) => d.latencyMs).sort((x, y) => x - y);
+    expect(lat[3] - lat[0]).toBeGreaterThan(DEFAULT_CONFIG.hopLatencyBleMs);
+  });
+
+  it("wakes a radio that went busy with an empty queue", () => {
+    // Regression. The first implementation only scheduled a drain when it left packets
+    // behind, so a radio that finished its queue while still busy had nothing to wake it:
+    // the next packet handed to it waited for some *other* transmission to come along. In
+    // a quiet mesh that is forever, and the symptom was a delivery ratio of 0.37 on a
+    // campus with no media in flight at all.
+    const sim = lineWorld(2, { channelAccess: "halfDuplex" });
+    const [a, b] = sim.nodes;
+    const texts = () => sim.deliveries.filter((d) => d.to === b.id && d.type === "text").length;
+    sim.sendMessage(a.id, b.id, "first", "text");
+    sim.runFor(50); // on air, queue drained, radio still busy
+    sim.sendMessage(a.id, b.id, "second", "text");
+    expect(runUntil(sim, () => texts() >= 2, 5000)).toBe(true);
+  });
+
+  it("sheds load when the queue is full instead of promising air time it does not have", () => {
+    const sim = lineWorld(2, { channelAccess: "halfDuplex", channelQueueDepth: 1 });
+    const [a, b] = sim.nodes;
+    for (let i = 0; i < 6; i++) sim.sendMessage(a.id, b.id, `drop-${i}`, "text");
+    runUntil(sim, () => sim.refresh().channelDrops > 0, 5000);
+
+    const stats = sim.refresh();
+    expect(stats.channelDrops).toBeGreaterThan(0);
+    // Bounded is the point: an unbounded queue does not deliver those packets later, it
+    // delivers them after the run is over.
+    expect(sim.deliveries.filter((d) => d.to === b.id).length).toBeLessThan(6);
+  });
+
+  it("takes the parallelism out of the sliding window, which is the whole finding", () => {
+    // On an infinitely wide radio a window of 4 is four transmissions at once, and it is
+    // worth 15x. On one radio they are four transmissions in a row, so the window can
+    // only hide ACK latency -- and under load it fills the queue and loses chunks, which
+    // is why docs/08 §12 recommends window 1 for the model that has a real radio.
+    const MB = 1048576;
+    const time = (channelAccess: SimConfig["channelAccess"], window: number) => {
+      const sim = lineWorld(2, { channelAccess });
+      const [a, b] = sim.nodes;
+      const t = sim.sendFile(a.id, b.id, 10 * MB, { window })!;
+      runUntil(sim, () => t.state === "complete", 900000);
+      expect(t.state).toBe("complete");
+      return (t.completedAt ?? 0) - t.startedAt;
+    };
+
+    const free1 = time("free", 1);
+    const free4 = time("free", 4);
+    const hd1 = time("halfDuplex", 1);
+    const hd4 = time("halfDuplex", 4);
+
+    // Measured on this pair: 35.0 s -> 9.2 s with the window open, 105.4 s -> 96.4 s on
+    // one radio. The window is worth 3.8x on an infinitely wide radio and 1.1x on a real
+    // one -- and the real one is ten times slower overall, which is the actual cost.
+    expect(free1 / free4).toBeGreaterThan(3);
+    expect(hd1 / hd4).toBeLessThan(1.5);
+    expect(hd4).toBeGreaterThan(free4 * 5);
+  });
+
+  it("keeps up with the capture clock at one hop and falls behind at three", () => {
+    // A 500 ms frame is 750 B, which is one BLE packet, so its air time is hop latency
+    // plus jitter: about 245 ms a hop. At one hop that is half the capture clock and
+    // streaming holds. At three hops it is 735 ms of radio for every 500 ms recorded, so
+    // the queue grows for as long as you keep talking. Nothing is lost -- the note arrives
+    // complete -- but it arrives long after you let go.
+    const delayAfterRelease = (hops: number, channelAccess: SimConfig["channelAccess"]) => {
+      const sim = lineWorld(hops + 1, { channelAccess });
+      const note = sim.sendVoice(sim.nodes[0].id, sim.nodes[hops].id, 10, { stream: true })!;
+      expect(runUntil(sim, () => note.state === "complete", 200000)).toBe(true);
+      expect(note.received).toBe(note.chunks);
+      return (note.completedAt ?? 0) - (note.releasedAt ?? note.startedAt);
+    };
+
+    expect(delayAfterRelease(1, "halfDuplex")).toBeLessThan(1000); // measured 307 ms
+    const threeOnOneRadio = delayAfterRelease(3, "halfDuplex"); // measured 17.8 s
+    const threeOnFreeRadio = delayAfterRelease(3, "free"); // measured 757 ms
+    expect(threeOnOneRadio).toBeGreaterThan(10000);
+    expect(threeOnFreeRadio).toBeLessThan(2000);
+    expect(threeOnOneRadio).toBeGreaterThan(threeOnFreeRadio * 10);
+  });
+});

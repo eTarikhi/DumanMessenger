@@ -35,6 +35,31 @@ export type MsgType =
  */
 export type RelayPolicy = "mpr" | "route-flood" | "flood-all";
 
+/**
+ * How much of a radio a device has (docs/08 §12).
+ *
+ * - `free`       the model every other number in this repository was measured
+ *                under: an infinitely wide radio. A transmission occupies no
+ *                exclusive resource, so two packets on air at the same instant
+ *                both succeed and a 10 MB file cannot cost anybody else anything.
+ *                This is what made the first contention measurement in docs/08 §9
+ *                come out null — correctly null, but null for a reason that has
+ *                nothing to do with mesh etiquette.
+ * - `halfDuplex` one radio per device, and it does one thing at a time. Packets
+ *                go into a bounded FIFO and on air when the radio comes free;
+ *                when the FIFO is full the newest packet is dropped, because a
+ *                real radio sheds load rather than promising air time it does
+ *                not have. Two things it still does not model, both optimistic:
+ *                a busy *receiver* can still take a packet (no capture effect),
+ *                and packets waiting their turn do not collide.
+ *
+ * Ships as `free` because every acceptance gate in skills/02 and skills/08 was
+ * written against it and because the honest reading of `halfDuplex` results is
+ * that they belong to a different (harder) network than the one the roadmap
+ * specifies. Flip it to measure what a shared medium would cost.
+ */
+export type ChannelAccess = "free" | "halfDuplex";
+
 export interface Vec2 {
   x: number;
   y: number;

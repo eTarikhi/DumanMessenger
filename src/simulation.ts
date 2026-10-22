@@ -18,6 +18,7 @@ import type {
   NodeId,
   OGM,
   Obstacle,
+  ChannelAccess,
   RelayPolicy,
   Role,
 } from "./types";
@@ -73,6 +74,18 @@ export interface SpawnCluster {
   radius: number;
   count: number;
   label: string;
+}
+
+/** One node's radio under `channelAccess: "halfDuplex"`: the instant it comes free
+ *  again, and the bounded FIFO of packets waiting for it (docs/08 §12). */
+interface ChannelState {
+  busyUntil: number;
+  queue: Array<{ msg: MeshMessage; targetId: NodeId; queuedAt: number }>;
+  /** Whether a `channel` drain event is already in the queue for this radio. Without
+   *  it, a packet that arrives while the radio is busy but the queue was empty at the
+   *  last drain has nothing to wake the radio up, and waits for the next transmission
+   *  to be handed to it — which is how a mesh stalls (docs/08 §12.1). */
+  drainScheduled: boolean;
 }
 
 export interface SimConfig {
@@ -207,6 +220,17 @@ export interface SimConfig {
    *  busy enough to inflate every round trip (docs/08 §7). */
   adaptiveMediaAck: boolean;
   maxRetries: number;
+
+  /** How much of a radio a device has. `free` (default) is an infinitely wide
+   *  radio; `halfDuplex` gives it one transmitter that does one thing at a time,
+   *  which is the mechanism that lets media actually compete with text
+   *  (docs/08 §12). */
+  channelAccess: ChannelAccess;
+  /** How many packets a node's transmitter will hold while it is busy, under
+   *  `channelAccess: "halfDuplex"`. Bounded on purpose: an unbounded queue lets the
+   *  radio commit air time arbitrarily far into the future, and the mesh then spends
+   *  its whole run waiting for a horizon that keeps moving (docs/08 §12.1). */
+  channelQueueDepth: number;
 
   txPowerDbm: number;
   rxSensitivityDbm: number;
@@ -352,6 +376,8 @@ export const DEFAULT_CONFIG: SimConfig = {
   mediaAckTimeoutMs: 600,
   adaptiveMediaAck: false,
   maxRetries: 2,
+  channelAccess: "free",
+  channelQueueDepth: 8,
 
   txPowerDbm: DEFAULT_TX_POWER_DBM,
   rxSensitivityDbm: DEFAULT_RX_SENSITIVITY_DBM,
@@ -434,6 +460,14 @@ export interface SimulationStats {
   bundlesPruned: number;
   dtnSuperCarries: number;
   sentChunks: number;
+  /** Channel access (docs/08 §12): transmissions that had to wait for a radio to
+   *  come free, and how long they waited in total. Both stay 0 under the default
+   *  `channelAccess: "free"`, where nothing is ever occupied. */
+  channelDeferrals: number;
+  channelDeferMs: number;
+  /** Packets a busy transmitter could not hold: the queue was full, so they were
+   *  dropped at the radio rather than lost on a link. */
+  channelDrops: number;
   /** Anti-entropy packets put on air: beacons, bucket requests and replies. */
   sentSync: number;
   bytesDelivered: number;
@@ -825,6 +859,13 @@ export class MeshSimulation {
 
   // counters
   private relayTx = 0;
+  private channelDeferrals = 0;
+  private channelDeferMs = 0;
+  private channelDrops = 0;
+  /** One radio per node: when it comes free, and what is waiting for it. Only
+   *  maintained under `channelAccess: "halfDuplex"` — under `"free"` a radio is never
+   *  busy, so the map stays empty and costs nothing. */
+  private channel = new Map<NodeId, ChannelState>();
   private ogmTx = 0;
   private lostDataTx = 0;
   private lostOgmTx = 0;
@@ -913,6 +954,10 @@ export class MeshSimulation {
     this.roleEvents = [];
     this.traces.clear();
     this.relayTx = 0;
+    this.channelDeferrals = 0;
+    this.channelDeferMs = 0;
+    this.channelDrops = 0;
+    this.channel.clear();
     this.ogmTx = 0;
     this.lostDataTx = 0;
     this.lostOgmTx = 0;
@@ -1045,6 +1090,15 @@ export class MeshSimulation {
       case "msg":
         this.onMsgReceive(nodeId, payload as MsgPayload);
         break;
+      case "channel": {
+        const node = this.byId(nodeId);
+        if (node && node.isOnline) {
+          const ch = this.channel.get(node.id);
+          if (ch) ch.drainScheduled = false;
+          this.drainChannel(node);
+        }
+        break;
+      }
       case "mpr":
         this.onMprDecide(nodeId, payload as MeshMessage);
         break;
@@ -1102,6 +1156,10 @@ export class MeshSimulation {
         node.reasonTrace = "Battery depleted";
         this.queue.cancel("ogm", node.id);
         this.queue.cancel("scan", node.id);
+        // A dead radio is an idle radio: whatever it had committed to is gone, and a
+        // node that comes back must not inherit a busy transmitter.
+        this.channel.delete(node.id);
+        this.queue.cancel("channel", node.id);
       }
     }
     this.queue.push(this.now + this.config.physicsIntervalMs, "physics", "*");
@@ -1976,9 +2034,84 @@ export class MeshSimulation {
   }
 
   /** One radio transmission: rolls link loss, then schedules the hop. */
+  /**
+   * Hand a packet to the radio.
+   *
+   * Under the default `channelAccess: "free"` it goes on air immediately, which is what
+   * every number in docs/06-08 was measured under. Under `"halfDuplex"` the node has one
+   * transmitter doing one thing at a time, so the packet joins a bounded FIFO and waits
+   * for the radio; if the FIFO is full it is dropped (docs/08 §12).
+   */
   private transmit(node: MeshNode, msg: MeshMessage, targetId: NodeId): void {
     const target = this.byId(targetId);
     if (!target || !target.isOnline || target.id === node.id) return;
+    if (this.config.channelAccess === "free") {
+      this.onAir(node, msg, targetId);
+      return;
+    }
+    let ch = this.channel.get(node.id);
+    if (!ch) {
+      ch = { busyUntil: 0, queue: [], drainScheduled: false };
+      this.channel.set(node.id, ch);
+    }
+    if (ch.queue.length >= this.config.channelQueueDepth) {
+      // Drop-tail. The radio is committed as far ahead as it is allowed to be, and a
+      // queue that grows without bound does not deliver packets later — it delivers
+      // them after the run is over.
+      this.channelDrops++;
+      this.pushLog(
+        "loss",
+        node.id,
+        `${msg.id} → ${targetId} dropped: transmit queue full (${this.config.channelQueueDepth})`,
+        { peerId: targetId, msgId: msg.id, msgType: msg.type, hop: msg.hopCount }
+      );
+      return;
+    }
+    ch.queue.push({ msg, targetId, queuedAt: this.now });
+    this.drainChannel(node);
+  }
+
+  /** Put the next queued packet on air if the radio is free, and schedule the drain that
+   *  releases the one behind it. */
+  private drainChannel(node: MeshNode): void {
+    const ch = this.channel.get(node.id);
+    if (!ch) return;
+    // A radio does not spend air time on a transmission nobody can receive, so packets
+    // whose target went offline while they waited are discarded before anything else.
+    while (ch.queue.length > 0) {
+      const head = this.byId(ch.queue[0].targetId);
+      if (head && head.isOnline) break;
+      ch.queue.shift();
+    }
+    if (ch.queue.length === 0) return;
+    if (ch.busyUntil > this.now) {
+      // Still on air. Make sure something wakes this radio when it is not.
+      if (!ch.drainScheduled) {
+        ch.drainScheduled = true;
+        this.queue.push(ch.busyUntil, "channel", node.id);
+      }
+      return;
+    }
+    const next = ch.queue.shift()!;
+    const waited = this.now - next.queuedAt;
+    if (waited > 0) {
+      this.channelDeferrals++;
+      this.channelDeferMs += waited;
+    }
+    const airTime = this.onAir(node, next.msg, next.targetId);
+    ch.busyUntil = this.now + airTime;
+    if (ch.queue.length > 0 && !ch.drainScheduled) {
+      ch.drainScheduled = true;
+      this.queue.push(ch.busyUntil, "channel", node.id);
+    }
+  }
+
+  /**
+   * The packet goes on air: counters, loss draw, log, delivery event. Returns the air
+   * time it occupied — a lost packet still occupied the radio for all of it.
+   */
+  private onAir(node: MeshNode, msg: MeshMessage, targetId: NodeId): number {
+    const target = this.byId(targetId)!;
     node.txCount++;
     this.relayTx++;
     const loss = effectiveLossProbability(node, target, this.rf, this.config.linkRetries);
@@ -1993,7 +2126,12 @@ export class MeshSimulation {
         hop: msg.hopCount,
         rssi,
       });
-      return;
+      // Air time without the jitter draw: consuming a random number here would move the
+      // stream the default `free` model depends on, and the golden vectors with it.
+      return (
+        (msg.transport === "wifiDirect" ? this.config.hopLatencyWifiMs : this.config.hopLatencyBleMs) +
+        this.serializationMs(msg.sizeBytes, msg.transport)
+      );
     }
     this.recordTxOutcome(node, 1);
     this.pushLog("tx", node.id, `${msg.id} → ${targetId} (${msg.type}, hop ${msg.hopCount}, ${rssi.toFixed(0)} dBm)`, {
@@ -2004,11 +2142,16 @@ export class MeshSimulation {
       rssi,
     });
     const base = msg.transport === "wifiDirect" ? this.config.hopLatencyWifiMs : this.config.hopLatencyBleMs;
-    const delay =
+    // Air time: what the payload physically occupies the radio for. The loss draw and
+    // the jitter draw happen in the same order under both channel models, so
+    // `channelAccess` changes *when* a packet lands and never which random numbers a
+    // transmission consumes.
+    const airTime =
       base +
       this.serializationMs(msg.sizeBytes, msg.transport) +
       randRange(this.rng, this.config.jitterMinMs, this.config.jitterMaxMs);
-    this.queue.push(this.now + delay, "msg", targetId, { msg, via: node.id } as MsgPayload);
+    this.queue.push(this.now + airTime, "msg", targetId, { msg, via: node.id } as MsgPayload);
+    return airTime;
   }
 
   private recordTxOutcome(node: MeshNode, ok: number): void {
@@ -2621,6 +2764,8 @@ export class MeshSimulation {
       node.offlineAt = this.now;
       this.queue.cancel("ogm", node.id);
       this.queue.cancel("scan", node.id);
+      this.channel.delete(node.id);
+      this.queue.cancel("channel", node.id);
     } else {
       node.battery = Math.max(node.battery, 0.3);
       node.uptimeMin = 0;
@@ -2800,6 +2945,9 @@ export class MeshSimulation {
       bundlesPruned: this.bundlesPruned,
       dtnSuperCarries: this.dtnSuperCarries,
       sentChunks: this.sentChunks,
+      channelDeferrals: this.channelDeferrals,
+      channelDeferMs: this.channelDeferMs,
+      channelDrops: this.channelDrops,
       sentSync: this.sentSync,
       bytesDelivered: this.bytesDelivered,
       batteryPercentPerHourNormal: drainPerHour("NORMAL"),
