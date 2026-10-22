@@ -704,7 +704,11 @@ class MeshNode {
   final List<MeshMessage> inbox = <MeshMessage>[];
   final List<MeshMessage> sentLog = <MeshMessage>[];
   final double txPower;
-  final bool stationary;
+
+  /// Drawn once from `stationaryRatio` and then mutable, matching the TypeScript engine:
+  /// a harness that models "this phone is sitting on a café counter" has to be able to say
+  /// so, and `isCommunityRelay` reads it (docs/06 §19).
+  bool stationary;
   int demoteCounter = 0;
   bool wasSuper = false;
 
