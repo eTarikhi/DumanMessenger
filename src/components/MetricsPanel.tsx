@@ -7,6 +7,14 @@ import { HISTORY_BUCKETS, type MeshNode } from "../types";
  *  (docs/06 §17). */
 const BEACON_CHARS = 156;
 
+/** Cumulative radio waiting, which runs to minutes once a file is in flight. */
+function fmtWait(ms: number): string {
+  if (ms >= 3600000) return `${(ms / 3600000).toFixed(1)} h`;
+  if (ms >= 60000) return `${(ms / 60000).toFixed(1)} min`;
+  if (ms >= 1000) return `${(ms / 1000).toFixed(1)} s`;
+  return `${ms.toFixed(0)} ms`;
+}
+
 function fmtBytes(bytes: number): string {
   if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(bytes >= 10485760 ? 0 : 1)} MB`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -210,6 +218,29 @@ export function MetricsPanel({ stats, dutyCycleEnabled, nodes, config }: Props) 
             than one huge transmission. Merging is a set union — a grow-only CRDT — so beacons can be lost,
             duplicated or reordered without the protocol caring, and a copy one member lost can reach it
             through another. None of it is acknowledged: the next beacon is the retry.
+          </div>
+        </section>
+      )}
+
+      {(stats.channelDeferrals > 0 || stats.channelDrops > 0) && (
+        <section style={{ marginTop: 14 }}>
+          <div style={sectionStyle}>📻 Radio channel (docs/08 §12)</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <Counter label="Transmissions deferred" value={`${stats.channelDeferrals}`} accent="#7fb3ff" />
+            <Counter label="Time spent waiting" value={fmtWait(stats.channelDeferMs)} accent="#7fb3ff" />
+            <Counter
+              label="Dropped at the queue"
+              value={`${stats.channelDrops}`}
+              accent={stats.channelDrops === 0 ? "#b6ff4a" : "#ff6b6b"}
+            />
+          </div>
+          <div style={{ fontSize: 10, color: "#5a6a7a", marginTop: 6, lineHeight: 1.5 }}>
+            Only <code>channelAccess: "halfDuplex"</code> produces these: a device with one transmitter queues each
+            packet until the radio is free, and drops it when the {config?.channelQueueDepth ?? 8}-deep queue is full,
+            because a real radio sheds load rather than promising air time it does not have. Under the shipped{" "}
+            <code>"free"</code> model both counters stay at zero by construction — there is no shared medium, so a
+            transmission cannot delay another one, which is why a 10 MB file costs nobody else anything there and
+            costs 2.8 points of delivery here.
           </div>
         </section>
       )}

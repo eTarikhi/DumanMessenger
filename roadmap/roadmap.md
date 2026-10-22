@@ -247,6 +247,19 @@
   setup latency rather than as a second RF budget (`rf.ts` is deliberately untouched, so every earlier
   measurement stands).
 
+> **Correction note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/08-media-transport-ptt.md` §12):** every number in the note above was
+  measured with a radio that has no channel: `channelAccess: "free"` lets two transmissions occupy the air at
+  once, so a transfer costs nothing but its own time. Giving the device the one radio it actually has —
+  `channelAccess: "halfDuplex"`, a bounded transmit queue that drops at the tail, shipped **off** because this
+  exit criterion and skills/02's and skills/08's gates were written against the channel-free model — moves the
+  same three clauses: the 10 MB image takes **3.97 min** at three hops instead of 33.00 s, and a streamed note
+  at three hops arrives **17.8 s after the user let go** for a 10 s recording (757 ms under `free`), because one
+  frame needs ≈245 ms of air per hop against a 500 ms capture clock. At one hop both still pass, and at two the
+  note is already marginal. Two consequences worth carrying into the platform work: the sliding window's 15.5×
+  is **1.6×** on a real radio, since there is one transmitter to fill; and a load gate on transfers *is*
+  motivated there — window 1 instead of 4 recovers all 2.8 points of text delivery a file costs, at no cost in
+  file time, while slicing chunks smaller (the intuitive alternative) costs 3.2× the transfer time for 2 points.
+
 > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §11.3):** the SOS clause is met in simulation and needs a denominator to be
   meaningful: over the sender's radio-connected component, reach is **100%** in all four worlds, while
   raw reach is 27% in `sparse_village` and 44% in `partitioned_pair` because 8 of 11 and 5 of 9 online

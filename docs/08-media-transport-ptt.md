@@ -465,16 +465,19 @@ claim about *harm* is withdrawn.
 ### 9.2 The consequence for the obvious next feature
 
 The natural response to §9's first version was a load gate: refuse or shrink a transfer's
-window while the mesh is busy. **It is not implemented, and on this evidence it should not
-be** — there is nothing for it to protect. A gate here would slow transfers in exchange for
-a benefit the model cannot express, which is how a plausible-sounding feature ends up
-costing users time for nothing.
+window while the mesh is busy. **On this model's evidence it should not be built** — there is
+nothing for it to protect. A gate here would slow transfers in exchange for a benefit the
+model cannot express, which is how a plausible-sounding feature ends up costing users time
+for nothing.
 
 The gate becomes a real question only once the missing mechanism exists: a channel-access
-model where concurrent transmissions defer or collide (§11). That is the prerequisite, and it
-is named in §11 as the largest limitation in this document. Until it exists, every "media
-under load" number in this repository — including this section's null result — describes a
-mesh with an infinitely wide radio.
+model where concurrent transmissions compete for one radio. That model was then built,
+behind a flag that defaults to the behaviour measured here, and it reverses this
+recommendation — §12.5 finds the gate is worth 2.8 points of everybody else's delivery at no
+cost in file time, and that the right knob is the window rather than the chunk size. Both
+results are reported because they are both true, of different networks: §9 describes the
+model the roadmap's acceptance gates were written against, §12 describes the radio a phone
+carries.
 
 ## 10. Acceptance mapping
 
@@ -515,12 +518,14 @@ Stated so no number above is read as more than it is:
   budget. `rf.ts` is deliberately untouched, which is why every measurement in
   `docs/06` and `docs/07` still stands and why the SOS flood can be said to ride "all
   transports" (`docs/06` §11).
-* **Channel access — the largest limitation here.** No CSMA, no collisions, no
-  shared-medium contention. Three consequences, all of them in the optimistic direction:
-  a deep window (§4) and duplicate retransmissions (§7) are charged nothing for filling the
-  air, so both results are upper bounds; and media cannot harm text traffic at all (§9), so
-  every contention number in this document describes a mesh with an infinitely wide radio.
-  A load gate on transfers is unmotivated until this exists.
+* **Channel access — the largest limitation here, and now a flag (§12).** Everything above
+  §12 was measured with no CSMA, no collisions and no shared medium, all of it in the
+  optimistic direction: a deep window (§4) and duplicate retransmissions (§7) are charged
+  nothing for filling the air, so both results are upper bounds, and media cannot harm text
+  traffic at all (§9). `channelAccess: "halfDuplex"` supplies the missing mechanism and
+  re-measures; it ships off, because the acceptance gates in skills/02 and skills/08 were
+  written against a radio with no channel. Even on, two things stay unmodelled and both are
+  optimistic: a busy receiver can still take a packet, and queued packets do not collide.
 * **A codec.** Opus is represented by frame *size* only. MOS, intelligibility, packet
   loss concealment and the 20 ms-frame batching are out of scope; underruns are inferred
   from arrival gaps against a `frameMs + jitterBufferMs` threshold, not from a playout
@@ -533,13 +538,193 @@ Stated so no number above is read as more than it is:
 
 ---
 
-## 12. Reproducing
+## 12. Channel access: what one radio changes
+
+§9's null result is a property of the model, and §11 named it as the largest limitation
+here: with no shared medium, a transmission occupies no exclusive resource, so media has
+no mechanism by which it could compete with text. This section closes that gap behind a
+flag — `channelAccess` — and re-measures the same questions on the radio a phone actually
+has.
+
+`"free"` ships and is the default: an infinitely wide radio, exactly what every number in
+this document so far was measured under, byte-identical golden vectors included.
+`"halfDuplex"` gives each device one transmitter doing one thing at a time. Packets join a
+bounded FIFO (`channelQueueDepth`, 8) and go on air when the radio comes free; when the
+FIFO is full the newest packet is dropped, because a real radio sheds load rather than
+promising air time it does not have. Air time is what §2 already computes: hop latency plus
+serialization plus jitter — and a packet that is *lost* still occupied the radio for all of
+it. Two things remain unmodelled, both in the optimistic direction: a busy **receiver** can
+still take a packet (no capture effect), and packets waiting their turn do not collide.
+
+### 12.1 Two wrong implementations, kept on the record
+
+The flag took three attempts, and the first two failures are more instructive than the
+result.
+
+**Committing air time instead of queueing it.** The first implementation let `transmit()`
+schedule a delivery at `max(now, radioFreeAt)` and push `radioFreeAt` forward, for both
+endpoints. Nothing bounded how far ahead a radio could be committed, so a busy node's
+horizon ran away: delivery fell to **0.37 on a 20-node campus with no media in flight at
+all**, with 957 minutes of "deferred" air time over 1,202 transmissions — an average wait
+of 47 s per packet. The packets were not late, they were scheduled past the end of the run.
+It was an open-loop queue with no shedding: every retry added air time to a horizon that
+was already unreachable, which produced more retries. Bounding the queue and dropping at
+the tail is what makes the model a radio rather than an arithmetic accident.
+
+**A radio that never woke up.** The second implementation queued correctly but only
+scheduled a drain event when it left packets behind. So a radio that finished its queue
+while still busy had nothing pending to wake it, and the next packet handed to it waited
+for some *other* transmission to come along — in a quiet mesh, forever. Same symptom,
+different cause: 0.37 delivery, no media. Both are pinned by tests now
+(`wakes a radio that went busy with an empty queue`, `sheds load when the queue is full`).
+
+### 12.2 One file, alone: the window's parallelism was imaginary
+
+10 MB, one transfer, nothing else in the world, mean of the probe's pair selection:
+
+| hops | `free` | `halfDuplex` | throughput | dropped |
+|---|---|---|---|---|
+| 1 | **7.60 s** | **1.45 min** | 11,039 → 962 kbit/s | 0 → 239 |
+| 2 | 17.99 s | 2.21 min | 4,663 → 632 kbit/s | 0 → 449 |
+| 3 | 33.00 s | 3.97 min | 2,542 → 352 kbit/s | 0 → 6,235 |
+
+§4 measured the sliding window as the lever that turns 31.98 s into 2.06 s — 15.5×. That
+was four transmissions happening *at once*, which one radio cannot do:
+
+| window | `free`, 1 hop | `halfDuplex`, 1 hop | dropped |
+|---|---|---|---|
+| 1 | 31.98 s | 1.78 min | 20 |
+| 2 | 15.31 s | 1.84 min | 36 |
+| 4 | 7.60 s | 1.45 min | 239 |
+| 8 | 3.82 s | 1.32 min | 270 |
+| 16 | 2.06 s | 1.11 min | 368 |
+
+On a real radio the same sweep is worth **1.6× instead of 15.5×**, and what it is worth is
+only ACK-latency hiding — the radio was always going to spend the same air time. Note the
+drop column: depth does not merely stop paying, it starts costing, because a deeper window
+commits more chunks than the queue can hold and the transfer retransmits them. On the
+2-node pair the tests pin, window 1 → 4 is 3.8× under `free` and 1.1× under `halfDuplex`,
+while the whole transfer is 10× slower.
+
+### 12.3 Voice: the capture clock is the limit, not the codec
+
+A 500 ms frame is 750 B (§5), which fits in one BLE packet, so its air time is hop latency
+plus jitter: about **245 ms per hop**. Streaming over N hops therefore needs ≈245N ms of
+radio for every 500 ms of recording. That is arithmetic, and it predicts the result before
+any measurement: sustainable at one hop, no slack at two (490 ms against a 500 ms clock, so
+one retransmission starts a queue that never drains), and impossible at three.
+
+| hops | `free` play delay | `halfDuplex` play delay | underruns |
+|---|---|---|---|
+| 1 | 488 ms | **449 ms** | 0 → 0 |
+| 2 | 1.22 s | **51.56 s** | 3 → 29 |
+| 3 | 1.17 s | unfinished in 150 s | 2 → 27 |
+
+The 30 s note at three hops on the campus world did not finish inside the probe's 150 s
+budget. On the quiet 4-node line the tests use, a 10 s note finishes — 17.8 s after the
+user let go, against 757 ms under `free`, a 23× difference — and a 30 s note finishes 60.6 s
+after release, i.e. it takes three times the length of the note to deliver the note.
+Nothing is lost; every frame arrives. It arrives long after it was worth hearing, which is
+a different failure and a worse one for push-to-talk.
+
+### 12.4 The §9 A/B again, on a real radio
+
+Same fixed plan, same three seeds, text metrics snapshotted at the end of the plan in every
+arm so a transfer that takes minutes cannot dilute its own damage across a tail where
+nothing competes:
+
+| | `free` quiet | `free` + 10 MB | `halfDuplex` quiet | `halfDuplex` + 10 MB |
+|---|---|---|---|---|
+| delivery ratio | 0.9944 | 0.9944 | **0.9831** | **0.9548** |
+| within 5 hops | 0.9944 | 0.9944 | 0.9774 | 0.9435 |
+| p95 latency | 4,472 ms | 3,275 ms | 5,077 ms | 7,954 ms |
+| retries sent | 11 | 59 | 17 | 272 |
+| messages parked | 1.0 | 1.0 | 4.0 | 12.3 |
+| queue drops | 0 | 0 | 248 | 2,409 |
+| deferred air time | 0 | 0 | 17.3 min | 46.8 min |
+
+Two things to read carefully. Text alone is barely hurt by having a real radio (0.9944 →
+0.9831): 250-byte packets are short, and a 20-node campus at one message per two seconds is
+nowhere near the air-time budget. **A 10 MB file costs 2.8 points of delivery, 3.4 points of
+within-5, and 2.9 s of p95** — so §9's conclusion holds exactly as far as its model does,
+and no further.
+
+### 12.5 So is a load gate motivated? Yes — and it is the window, not the chunk size
+
+With the transfer allowed to finish, so both sides of the trade are one experiment:
+
+| | delivery | within 5 | p95 | parked | file time | dropped |
+|---|---|---|---|---|---|---|
+| no file | 0.9831 | 0.9774 | 5,077 ms | 4.0 | — | 248 |
+| file, window 4 (ships) | **0.9548** | 0.9435 | 7,954 ms | 12.3 | 3.33 min | 2,409 |
+| file, window 1 | **0.9887** | 0.9831 | 7,047 ms | 7.0 | **3.30 min** | 2,191 |
+
+Committing one chunk at a time instead of four recovers **all** of the lost delivery — it
+lands slightly *above* the no-file arm, which is within one message of noise and should be
+read as "back to baseline" — and costs **nothing** in file time, because the air time was
+serial anyway. That is the whole gate: no load sensor, no policy engine, one integer.
+
+The intuitive alternative is wrong, and worth recording because it is the first thing an
+engineer reaches for. Slicing the file smaller interleaves text *between* chunks instead of
+*behind* them:
+
+| chunk | delivery | p95 | file time | dropped |
+|---|---|---|---|---|
+| 64 KB (ships) | 0.9548 | 7,954 ms | 3.33 min | 2,409 |
+| 16 KB | 0.9774 | 8,867 ms | **10.74 min** | 3,447 |
+| 4 KB | 0.9718 | **16,839 ms** | unfinished in 15 min | 2,609 |
+
+Adaptive fragmentation buys ~2 points of delivery and pays 3.2× in file time and 2.1× in
+p95, and at 4 KB the transfer never finishes. The reason is §2's own arithmetic: air time is
+`base + serialization + jitter`, and at 64 KB on Wi-Fi the fixed part (40 ms hop latency +
+~125 ms jitter) is six times the serialization part (26 ms). Slicing 16× finer barely
+reduces the air time of a byte and multiplies the fixed cost 16×: 10 MB is 30.6 s of air as
+160 chunks and 427 s as 2,560. **Being polite in smaller pieces is not cheaper; it is much
+more expensive.** The unit of politeness is how far ahead you commit, not how big you
+commit.
+
+### 12.6 The acceptance gates under a real radio
+
+Same 20-node campus, same three seeds, no media:
+
+| gate | `free` | `halfDuplex` | skills/02 and /08 want |
+|---|---|---|---|
+| delivery ratio | 0.9889 | **0.9556** | ≥ 0.90 ✓ |
+| within 5 hops | 0.9889 | 0.9556 | ≥ 0.90 ✓ |
+| overhead vs flood-all | 9.3 % | **38.6 %** | ≤ 70 % ✓ |
+| SUPER ratio | 21.7 % | 25.0 % | 15–25 % ✓ (at the edge) |
+
+The gates still pass, but the numbers are not the same network: overhead quadruples because
+flood-all — which the ratio is measured against — is *also* slowed by the radio, and MPR's
+advantage shrinks when air time rather than packet count is the scarce resource. That is
+the honest reading, and it is why `halfDuplex` is a flag rather than a default: skills/02
+and skills/08 were written against a model with no channel, and changing the shipped model
+would silently redefine every acceptance number in the roadmap.
+
+### 12.7 What ships, and what would change it
+
+* `channelAccess: "free"` and `channelQueueDepth: 8` are in `DEFAULT_CONFIG`, and `free` is
+  inert by construction: no counters move, no random draw changes order, golden vectors are
+  byte-identical.
+* If the team decides the real radio is the model to plan against, the one change with
+  evidence behind it is **`transferWindow: 1`** (§12.5) — free in file time, worth 2.8
+  points of everybody else's delivery.
+* Push-to-talk beyond two hops needs a decision, not a parameter: at three hops a streamed
+  note cannot keep up with its own capture clock on one radio (§12.3). Either the path is
+  capped at two hops for streaming and longer notes are sent as blobs, or voice gets
+  priority in the transmit queue — which this model does not implement, and which would be
+  the next thing to measure.
+* Not modelled, and the direction of the error is known: receiver-side capture and
+  collisions between waiting packets. Both would make `halfDuplex` worse, so every number
+  here is the optimistic end of a real radio.
+
+## 13. Reproducing
 
 ```bash
 npm run media                                            # TypeScript probe, every table above
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media --no-check
-npm test                                                 # 216 TS tests, incl. 18 media cases
-cd sim/mesh_sim && dart test                             # 18 Dart media cases
+npm test                                                 # 243 TS tests, incl. 18 media + 6 channel cases
+cd sim/mesh_sim && dart test                             # 18 Dart media cases + test/channel_test.dart
 ```
 
 Engine surface: `sendFile(from, to, bytes, {chunkBytes, window, transport})`,
@@ -547,9 +732,11 @@ Engine surface: `sendFile(from, to, bytes, {chunkBytes, window, transport})`,
 `mediaTimeoutMs(transfer)`, `sim.transfers`, and the config keys `bleKbps`,
 `wifiDirectKbps`, `transferChunkBytes`, `transferWindow`, `transferStallMs`,
 `mediaAckTimeoutMs`, `adaptiveMediaAck`, `voiceKbps`, `voiceFrameMs`, `jitterBufferMs`,
-`voiceTtl`, `maxTransferBytes`.
+`voiceTtl`, `maxTransferBytes`, `channelAccess`, `channelQueueDepth`.
 
 Tests that pin this document's claims: `media transport (docs/05 §3.2-3.3, roadmap
-Phase 3)` and `media against skills/05 (Voice PTT & Media)` in
-`src/__tests__/simulation.test.ts`, `media transport in the UI` in
-`src/__tests__/components.test.tsx`, and `test/media_test.dart`.
+Phase 3)`, `media against skills/05 (Voice PTT & Media)`, `media under load, measured
+without confounding the A/B (docs/08 §9)` and `channel access: one radio, half-duplex
+(docs/08 §12)` in `src/__tests__/simulation.test.ts`, `media transport in the UI` in
+`src/__tests__/components.test.tsx`, and `test/media_test.dart` plus `test/channel_test.dart`
+in the Dart engine.

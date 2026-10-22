@@ -7,6 +7,7 @@ import { MeshLogPanel } from "../components/MeshLogPanel";
 import { MetricsPanel } from "../components/MetricsPanel";
 import { ChatPanel } from "../components/ChatPanel";
 import { NodeInspector } from "../components/NodeInspector";
+import { ConfigPanel } from "../components/ConfigPanel";
 
 /**
  * Render smoke tests. The components have no unit coverage otherwise, and a
@@ -498,5 +499,49 @@ describe("mesh log panel", () => {
       />
     );
     expect(html).toContain(`only ${target!.msgId}`);
+  });
+});
+
+describe("the radio channel in the UI (docs/08 §12)", () => {
+  it("shows waiting and drops under half-duplex, and nothing at all under the shipped model", () => {
+    const busy = world({ channelAccess: "halfDuplex" });
+    expect(busy.stats.channelDeferrals).toBeGreaterThan(0);
+    const html = renderToStaticMarkup(
+      <MetricsPanel stats={busy.stats} dutyCycleEnabled={false} nodes={busy.nodes} config={busy.config} />
+    );
+    expect(html).toContain("Radio channel");
+    expect(html).toContain("Transmissions deferred");
+    expect(html).toContain("Dropped at the queue");
+
+    // Under `free` the counters are zero by construction — there is no shared medium —
+    // so the section must not appear and imply that a radio was ever occupied.
+    const free = world();
+    expect(free.stats.channelDeferrals).toBe(0);
+    expect(free.stats.channelDrops).toBe(0);
+    expect(
+      renderToStaticMarkup(
+        <MetricsPanel stats={free.stats} dutyCycleEnabled={false} nodes={free.nodes} config={free.config} />
+      )
+    ).not.toContain("Radio channel");
+  });
+
+  it("offers both channel models in the config panel, and says which one ships", () => {
+    const sim = world();
+    const html = renderToStaticMarkup(
+      <ConfigPanel
+        config={sim.config}
+        onChange={() => null}
+        showLinks={false}
+        showRanges={false}
+        onToggleLinks={() => null}
+        onToggleRanges={() => null}
+        autoTraffic={false}
+        onToggleAutoTraffic={() => null}
+      />
+    );
+    expect(html).toContain("Radio channel");
+    expect(html).toContain("Free (ships)");
+    expect(html).toContain("Half-duplex");
+    expect(html).toContain("aria-pressed=\"true\"");
   });
 });

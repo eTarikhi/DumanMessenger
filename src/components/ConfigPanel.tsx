@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { SimConfig } from "../simulation";
-import type { RelayPolicy } from "../types";
+import type { ChannelAccess, RelayPolicy } from "../types";
 
 interface Props {
   config: SimConfig;
@@ -22,6 +22,7 @@ type Draft = {
   chargingRatio: number;
   seed: number;
   relayPolicy: RelayPolicy;
+  channelAccess: ChannelAccess;
   enableSuperElection: boolean;
   enableMobility: boolean;
   enableDtn: boolean;
@@ -43,6 +44,7 @@ function toDraft(c: SimConfig): Draft {
     chargingRatio: c.chargingRatio,
     seed: c.seed,
     relayPolicy: c.relayPolicy,
+    channelAccess: c.channelAccess,
     enableSuperElection: c.enableSuperElection,
     enableMobility: c.enableMobility,
     enableDtn: c.enableDtn,
@@ -88,6 +90,7 @@ export function ConfigPanel({
       chargingRatio: draft.chargingRatio,
       seed: draft.seed,
       relayPolicy: draft.relayPolicy,
+      channelAccess: draft.channelAccess,
       enableSuperElection: draft.enableSuperElection,
       enableMobility: draft.enableMobility,
       enableDtn: draft.enableDtn,
@@ -150,6 +153,35 @@ export function ConfigPanel({
           <b style={{ color: "#9fb0c3" }}>route-flood</b> vs{" "}
           <b style={{ color: "#9fb0c3" }}>flood-all</b> is the value of route knowledge. skills/02
           measures mpr against the naive arm.
+        </span>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontSize: 11, color: "#9fb0c3" }}>Radio channel</span>
+        <div style={{ display: "flex", gap: 6 }}>
+          {(["free", "halfDuplex"] as const).map((p) => (
+            <button
+              key={p}
+              aria-pressed={draft.channelAccess === p}
+              onClick={() => set("channelAccess", p)}
+              style={{
+                flex: 1, padding: "6px 8px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 700,
+                border: "1px solid #1e2a3a",
+                background: draft.channelAccess === p ? "rgba(77,224,255,0.18)" : "rgba(255,255,255,0.03)",
+                color: draft.channelAccess === p ? "#4de0ff" : "#9fb0c3",
+              }}
+            >
+              {CHANNEL_LABELS[p]}
+            </button>
+          ))}
+        </div>
+        <span style={{ fontSize: 10, color: "#5a6a7a", lineHeight: 1.5 }}>
+          <b style={{ color: "#9fb0c3" }}>Free</b> is an infinitely wide radio: two packets on air at once both
+          succeed, so a 10 MB file costs nobody else anything (docs/08 §9).{" "}
+          <b style={{ color: "#9fb0c3" }}>Half-duplex</b> is the one radio a phone has — a bounded transmit queue
+          that drops at the tail when it is full — and on it the same file costs 2.8 points of everybody else's
+          delivery (docs/08 §12). Ships free, because that is the model the roadmap's acceptance gates were
+          written against.
         </span>
       </div>
 
@@ -231,6 +263,11 @@ function dutySummary(d: Draft): string {
     ` (${(perHour * 8).toFixed(1)}% per 8 h)`
   );
 }
+
+const CHANNEL_LABELS: Record<ChannelAccess, string> = {
+  free: "Free (ships)",
+  halfDuplex: "Half-duplex",
+};
 
 const POLICY_LABELS: Record<RelayPolicy, string> = {
   mpr: "MPR (super-node)",
