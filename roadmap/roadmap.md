@@ -349,6 +349,20 @@
   phone (13 → 14 SUPERs, tablets unchanged). Ships at 0, i.e. off. The useful question this leaves is not how to
   elect more tablets but whether a plugged node should be *preferred* as an MPR and as a bundle carrier.
 
+> **Measurement note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §19.5):** that question was then asked of both
+  places, and the answer is no twice. `communityRelayPreference` inserts "is a plugged, stationary node" into
+  the MPR tie-break chain ahead of SUPER status: it wins the tie it was written for, never overrides a
+  coverage gain, and in the crowd moves **0.6 of 100 MPR slots** while delivery, p95, relay transmissions,
+  both burden counts and NORMAL drain stay identical to the digit across three seeds and three tablet
+  counts — because who transmits is decided per packet from what a node actually heard, not from the MPR
+  label. `dtnPreferCommunity` hands a routeless bundle to a reachable plugged carrier instead of a SUPER: it
+  fires **40-51 times a run**, grows parked bundles **27-55%**, and buys at most **0.7** extra opportunistic
+  deliveries a run, with delivery flat to 1.1 points worse. A stationary node is the best place to *leave* a
+  bundle and the worst place to *carry* one, because carrying is movement — the same failure class as
+  skills/04's "prefer SUPER as bundle carrier" (`docs/06` §20.4). Both flags ship off. What is left of the
+  community-relay programme is the finding §19.2 already had: six plugged tablets take 18.6% of the radio
+  work off everybody else because they are elected and plugged in, not because anything prefers them.
+
 ---
 
 ### Risk Mitigations Across Roadmap

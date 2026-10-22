@@ -49,7 +49,14 @@ OppQueue {max=500, expiry=7days}
 > fixes above and **−3.5 points after them**, because spraying toward SUPERs duplicates work into the
 > busiest nodes' queues. The intuition is about who should *hold* a bundle, not who should be handed extra
 > copies — if the product wants community relays carrying bundles, the lever is a storage/battery-aware
-> eviction preference. And **"gossip ACK (so relays can prune)"** is implemented exactly as written — the
+> eviction preference. **That lever was then built and measured, and it is off too**
+> (`dtnPreferCommunity`, `docs/06-simulator-findings.md` §19.5): handing a routeless bundle to a plugged,
+> stationary node fires 40-51 times a run in a 60-node crowd with six tablets, grows parked bundles 27-55%,
+> and buys at most 0.7 extra opportunistic deliveries a run, with delivery flat to 1.1 points worse. A
+> stationary node is the best place to *leave* a bundle and the worst place to *carry* one, because carrying
+> is movement — so both readings of this rule fail the same way, by choosing a carrier on who it is rather
+> than on where it is going. The reading that could work is contact-prediction-aware (who meets the
+> destination next), which neither engine models. And **"gossip ACK (so relays can prune)"** is implemented exactly as written — the
 > bundle is acknowledged to the carrier that handed it over, and any node that hears the ACK drops its copy —
 > and it pruned **zero** bundles in six seeds across four worlds, because the ACK is a unicast along the
 > reverse path and the other holders are not on it. The cap never binds in any world measured (97 of 500 at
