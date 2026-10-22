@@ -15,6 +15,7 @@
 - `docs/06-simulator-findings.md` — Simulator calibration evidence, protocol corrections & the one documented limitation
 - `docs/07-e2ee-noise-xx.md` — Noise_XX as a *mesh* protocol: measured handshake cost, when to negotiate, packet/padding sizes
 - `docs/08-media-transport-ptt.md` — What a byte costs on this mesh: chunked files, streamed push-to-talk, the retry timer, and skills/05's acceptance boxes
+- `docs/09-field-test-plan.md` — The one criterion that needs a building: capture schema, analyzer, protocol, and what the simulator predicts
 - `sim/mesh_sim/` — **Dart mesh simulator** (authoritative headless engine + CLI)
 - `src/` — **TypeScript mesh simulator** (reference engine + React visualiser)
 - `test-fixtures/golden-vectors.json` — cross-language determinism contract asserted by both engines
@@ -56,6 +57,8 @@ npm run dev       # canvas: watch SUPERs get elected, MPR suppress floods, bundl
 npm run golden    # regenerate test-fixtures/golden-vectors.json after an engine change
 npm run media     # the media transport probe behind docs/08 (files, PTT, retry timer, contention)
 npm run history   # group-history anti-entropy, with and without repair (docs/06 §17)
+npm run field:capture -- campus_quad 42 /tmp/cap.jsonl [flood-all]   # a field-test capture, from a run
+npm run field:report  -- /tmp/cap.jsonl /tmp/base.jsonl              # the roadmap's field numbers (docs/09)
 ```
 
 Scenarios: `campus_quad` (20 nodes — the `skills/02` + `skills/08` acceptance
@@ -118,6 +121,13 @@ the audio. Chunks are counted apart from 1:1 traffic so one file cannot flatter 
 chat panel renders a transfer as one progress row instead of 160 empty bubbles, and
 `dart run bin/mesh_sim.dart --media` / `npm run media` print every table in
 [`docs/08-media-transport-ptt.md`](docs/08-media-transport-ptt.md).
+
+**Field-test instrumentation** (roadmap Phase 2, `docs/09`): the one acceptance item that needs a
+building is prepared for instead of guessed at. A JSONL capture schema, an analyzer that turns a capture
+into delivery-vs-flood-all, the SUPER ratio and battery %/h, and an RF calibration fit that decides
+whether the simulator's radio model is *this* building's model — all validated against a synthetic
+capture whose ground truth is known, where the fit recovers −55.0 dBm / 20.0 dB per decade / 31.6 m to
+three significant figures.
 
 **Group history repair** (roadmap Phase 1's "CRDT for group/broadcast history (hash beacon
 anti-entropy)"): every member holds its group's messages as a grow-only set keyed by message id, so

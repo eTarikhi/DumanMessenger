@@ -86,6 +86,19 @@
   - Weights w1..w5 verified as specified (0.30/0.25/0.20/0.15/0.10): `campus_quad` over six seeds gives SUPER 20-25%, delivery 97.3-100%, 97.3-100% within 5 hops, 7-9% of the naive flood-all relay budget, ≤0.22 elections/node/min.
   - Three spec defects found while tuning and corrected in `docs/03`: the proximity guard's hard-coded −60 dBm; MPR suppression gated on "heard a SUPER" instead of on coverage (cost 16-29 delivery points in a 60-node crowd); and tq kept per route entry instead of per link, which made the `tq > 0.6` gate reject nearly every route and silently disabled multi-hop unicast. Evidence: `docs/06-simulator-findings.md`.
 - [ ] Field test 1: campus quad / office floor mapping: atrium should become SUPER, packet delivery ratio vs flood-all baseline
+> **Instrumentation note (Oct 2026 — `tool/capture-json.ts` + `tool/field-report.ts`, plan in `docs/09-field-test-plan.md`):** still blocked on
+  hardware, and deliberately not ticked — its subject is a building. Everything except the walk is built
+  and tested: a JSONL capture schema the phones will emit (tx/deliver/loss/duplicate/decision/queue/
+  election/sample/calibration), an analyzer that turns a capture into this item's three numbers — delivery
+  ratio against a flood-all baseline, the SUPER ratio the election settles on, battery %/h per role with
+  the duty cycle on — plus the RF calibration fit that decides whether the simulator's radio model is this
+  building's model. It is validated against a synthetic capture whose ground truth is known
+  (`npm run field:capture`): the least-squares fit recovers the model's own parameters exactly
+  (**−55.0 dBm at 1 m, 20.0 dB/decade, 31.6 m line of sight, 0.00 dB residual**), delivery reads 0.9867
+  against the engine's 0.9833, and the A/B overhead reads 14.8% against a flood-all baseline that reaches
+  100% delivery for 6.7× the relays. §5 of the plan tabulates the prediction for every criterion with the
+  evidence section behind it, and §6 lists where a real building will diverge (no channel-access model, so
+  real delivery will be lower and real overhead higher).
 - [x] Metrics dashboard: delivery ratio, overhead ratio, latency by hop, battery %/h
   - Delivered in the React visualiser (`src/components/MetricsPanel.tsx`) and in the headless CLI (`--json` emits the same fields, plus a hop table in the text report). Delivery and overhead ratio were already in the stats bar; latency by hop (count/avg/p95 per bucket, first-attempt routed unicast only) and measured battery %/h per role are new — `docs/06-simulator-findings.md` §10.3-10.5 has the numbers.
 

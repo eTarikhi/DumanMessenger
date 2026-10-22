@@ -20,7 +20,9 @@
     "../src/**/*.ts",
     "generate-golden.ts",
     "media-probe.ts",
-    "history-probe.ts"
+    "history-probe.ts",
+    "capture-json.ts",
+    "field-report.ts"
   ],
   "exclude": [
     "../src/**/*.tsx",
