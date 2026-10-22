@@ -381,7 +381,18 @@ String _pct(double v) => (v * 100).toStringAsFixed(0);
 
 /// Role decision with hysteresis and the SUPER proximity guard (docs/03 §3, §5).
 /// Pure apart from the demote counter, which is the hysteresis state itself.
-ElectionOutcome electRole(MeshNode node, List<MeshNode> allNodes, RfParams rf) {
+/// A community relay: plugged in and not moving, which is what "keep Duman running on the
+/// café's tablet" means in the model (roadmap Phase 5, docs/06 §19). Both flags are already
+/// read by the coverage score — `charging` for the +0.10 bonus, `stationary` for the
+/// stability term — so this adds no new state, only a name for the combination.
+bool isCommunityRelay(MeshNode node) => node.charging && node.stationary;
+
+/// [communityRelayQuota] reserves that share of the top-20% cap for community relays; a
+/// value of 1 or more exempts them from the cap altogether. It ships at 0 because the
+/// mechanism it was proposed for is not the one operating: a tablet that fails to be
+/// elected lost to other tablets, not to phones (docs/06 §19.4).
+ElectionOutcome electRole(MeshNode node, List<MeshNode> allNodes, RfParams rf,
+    [double communityRelayQuota = 0]) {
   // skills/02 acceptance: "SUPER opt-out respected; NORMAL never auto-promoted
   // if battery saver on". Both are explicit user or OS intent, so they are
   // checked before any scoring and demote immediately rather than waiting out
@@ -414,17 +425,44 @@ ElectionOutcome electRole(MeshNode node, List<MeshNode> allNodes, RfParams rf) {
   // that have declined the router role are not candidates: counting them would
   // burn top-20% slots on nodes that can never promote, so a crowd of opt-outs
   // would leave the mesh with too few SUPERs to cover it (skills/02's 15-25%).
-  final scores = <double>[node.score];
+  final candidates = <({double score, bool community})>[
+    (score: node.score, community: isCommunityRelay(node)),
+  ];
   for (final p in peers) {
     final heard = node.ogmTable[p.id];
     final declined =
         heard != null ? heard.declinedRouter : (p.superOptOut || p.batterySaver);
     if (declined) continue;
-    scores.add(heard != null ? heard.score : p.score);
+    candidates.add(
+        (score: heard != null ? heard.score : p.score, community: isCommunityRelay(p)));
   }
+  final scores = candidates.map((c) => c.score).toList();
   final strictlyBetter = scores.where((s) => s > node.score).length;
   final top20Count = math.max(1, (scores.length * topPercent).ceil());
-  final inTop20 = strictlyBetter < top20Count;
+  var inTop20 = strictlyBetter < top20Count;
+  if (communityRelayQuota >= 1 && isCommunityRelay(node)) {
+    // A quota of 1 or more means the cap does not bind a community relay: it still has to
+    // clear the promote threshold and the 30 m proximity guard below, but it does not have
+    // to beat its neighbours.
+    inTop20 = true;
+  } else if (communityRelayQuota > 0) {
+    // Split the cap rather than widen it: `reserved` slots are competed for by community
+    // relays only and the rest by everybody, so a plugged tablet displaces a
+    // battery-powered router instead of adding to the elected set. Reserved slots that no
+    // community relay can fill fall back to the open competition, and with no community
+    // relays in range at all the reserved count is zero and this is the unmodified rule.
+    final communityCount = candidates.where((c) => c.community).length;
+    final reserved =
+        math.min((top20Count * communityRelayQuota).floor(), communityCount);
+    final open = top20Count - reserved;
+    final betterCommunity =
+        candidates.where((c) => c.community && c.score > node.score).length;
+    final betterOpen =
+        candidates.where((c) => !c.community && c.score > node.score).length;
+    inTop20 = candidates[0].community
+        ? betterCommunity < reserved || strictlyBetter < top20Count
+        : betterOpen < open;
+  }
   final rankLabel = '${strictlyBetter + 1}/${scores.length}';
 
   final shouldBeSuper = node.score > superPromoteThreshold && inTop20;

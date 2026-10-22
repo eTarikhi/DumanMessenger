@@ -87,6 +87,7 @@ class SimConfig {
     this.historyBeaconMs = 10000,
     this.historyReplyMax = 32,
     this.dtnPreferSuper = false,
+    this.communityRelayQuota = 0,
     this.maxRetries = 2,
     this.txPowerDbm = defaultTxPowerDbm,
     this.rxSensitivityDbm = defaultRxSensitivityDbm,
@@ -265,6 +266,14 @@ class SimConfig {
   /// per run (docs/06 §20.4). The intuition behind the rule is about who should *hold* a
   /// bundle, not about who should be handed extra copies.
   final bool dtnPreferSuper;
+
+  /// Share of the top-20% SUPER cap reserved for community relays — plugged, stationary
+  /// nodes such as a café's tablet (roadmap Phase 5). 0 disables it, which is what ships,
+  /// and 1 or more exempts them from the cap entirely. Measured and rejected: a tablet
+  /// that is not elected lost to other tablets, and the exemption raises everybody else's
+  /// transmissions 12% while pushing the SUPER ratio to the top of skills/02's band
+  /// (docs/06 §19.4).
+  final double communityRelayQuota;
   final int maxRetries;
 
   final double txPowerDbm;
@@ -321,6 +330,7 @@ class SimConfig {
     double? historyBeaconMs,
     int? historyReplyMax,
     bool? dtnPreferSuper,
+    double? communityRelayQuota,
     double? voiceKbps,
     double? voiceFrameMs,
     double? jitterBufferMs,
@@ -366,6 +376,7 @@ class SimConfig {
         historyBeaconMs: historyBeaconMs ?? this.historyBeaconMs,
         historyReplyMax: historyReplyMax ?? this.historyReplyMax,
         dtnPreferSuper: dtnPreferSuper ?? this.dtnPreferSuper,
+        communityRelayQuota: communityRelayQuota ?? this.communityRelayQuota,
         voiceKbps: voiceKbps ?? this.voiceKbps,
         voiceFrameMs: voiceFrameMs ?? this.voiceFrameMs,
         jitterBufferMs: jitterBufferMs ?? this.jitterBufferMs,
@@ -1559,7 +1570,7 @@ class MeshSimulation {
   void _electOne(MeshNode node) {
     node.score = computeScore(node, nodes, rf);
     if (!config.enableSuperElection) return;
-    final outcome = electRole(node, nodes, rf);
+    final outcome = electRole(node, nodes, rf, config.communityRelayQuota);
     if (outcome.role != node.role) {
       node.wasSuper = node.role == Role.superNode;
       node.roleTransitions++;
