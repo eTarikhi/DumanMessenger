@@ -437,8 +437,13 @@ void main() {
     test('selects transport by payload size', () {
       expect(selectTransport(1024), equals(TransportType.ble));
       expect(selectTransport(1025), equals(TransportType.wifiDirect));
-      expect(
-          createMessage('m1', 0, 'a', 'b', 'x' * 400).transport,
+      // 400 characters is a 512 B packet under skills/03's layout (95 B of header,
+      // nonce, tag, sender and timestamp, padded up to a 256 B block), so it rides
+      // BLE. Under the old `64 + 4 bytes per character` heuristic it was 1 664 B and
+      // flipped to Wi-Fi Direct — see the packet-size group below and docs/07 §4.
+      expect(createMessage('m1', 0.0, 'a', 'b', 'x' * 400).transport,
+          equals(TransportType.ble));
+      expect(createMessage('m2', 0.0, 'a', 'b', 'x' * 930).transport,
           equals(TransportType.wifiDirect));
     });
 
