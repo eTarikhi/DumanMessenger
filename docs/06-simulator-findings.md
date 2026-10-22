@@ -1345,3 +1345,79 @@ On the day the criterion to check is not "the phone in the atrium is SUPER" but:
 Both engines assert the healthy-node result in all four worlds and the score arithmetic
 above (`the atrium becomes a router`, in `src/__tests__/simulation.test.ts` and its Dart
 twin).
+
+---
+
+## 19. The community relay programme does not do what it sounds like
+
+**Roadmap Phase 5 proposes: "Community relay program: *Keep Duman on a plugged tablet at
+your café/campus → community SUPER*". It is one line, it sounds free, and it is simulatable
+today — a plugged tablet is a node with `charging: true`, `stationary: true`, a full battery
+and no opt-out, which is exactly what the coverage score's +0.10 charging bonus and
+`skills/02`'s opt-out rules already model. So it was measured before it was believed.**
+
+`festival_crowd`, seed 42, 60 nodes, 100 messages at 1 s intervals, identical traffic plan
+in every arm (§7's rule: an A/B that draws fresh traffic per arm is two experiments). The
+tablets are the most open positions in the crowd — a café on a corner, not a phone in a
+pocket.
+
+| arm | delivery | relay tx | SUPER ratio | tablets elected | tx by *other* nodes | tx by tablets | NORMAL %/h |
+|---|---|---|---|---|---|---|---|
+| none | 0.910 | 21,639 | 18.3% | — | 21,639 | 0 | 3.005 |
+| 3 tablets | 0.900 | 26,973 | 20.0% | **3 of 3** | **23,630** (+9.2%) | 3,343 | 2.957 |
+| 6 tablets | 0.890 | 26,659 | 21.7% | **4 of 6** | 20,637 (−4.6%) | 6,022 | 2.877 |
+| flood-all baseline, either | 1.000 | ~213,000 | — | — | — | — | — |
+
+### 19.1 Three readings
+
+**1. The election half works, immediately.** Every plugged, stationary, well-placed tablet
+is elected SUPER in the first two cycles at three devices. That much of the roadmap line is
+true and needs no qualification: the +0.10 charging bonus plus the peer count these
+positions already have is decisive (§18 explains why the position alone would not be).
+
+**2. At three tablets the programme adds radio work rather than moving it.** A SUPER relays
+everything by design (roadmap Phase 2 item 65), so adding always-on SUPERs adds relays
+*everywhere*: total relay traffic rises 24.6% and — the number that matters for the
+programme's premise — transmissions by **other** nodes rise 9.2%. The tablets are not
+taking load off the crowd at that scale; they are adding a second set of relays to it.
+
+**3. The burden only moves once tablets displace battery-powered SUPERs.** At six devices
+other nodes' transmissions fall 4.6% below baseline and NORMAL drain falls 4.3%, because the
+tablets are now crowding phones out of the elected set rather than joining it. But the
+top-20% cap is nearly full at 21.7%, so **only four of the six get elected** — a plugged
+tablet competes with the nodes the score already favours, and loses two of six times.
+
+Delivery drifts *down* the whole way (0.910 → 0.900 → 0.890) while naive flood-all reaches
+1.000 in both arms for roughly ten times the transmissions, which is the same trade §6 and
+§16 already documented. So the programme must not be sold as coverage.
+
+### 19.2 What the roadmap line should say instead
+
+The claim it can support is narrow and real: **a plugged tablet makes the phones around it
+drain more slowly** — 3.005 → 2.957 → 2.877 %/h for NORMAL nodes at 0/3/6 tablets — and the
+effect grows with the number of tablets, because they displace battery-powered routers
+instead of adding to them.
+
+Two consequences for whoever builds it:
+
+* **Promotion has to be cap-aware.** Adding a community SUPER on top of an already-full
+  elected set is the expensive case (three tablets: +9.2% work for everybody else). The
+  useful version displaces a battery-powered SUPER, which means the election needs to know
+  a candidate is community-hosted *before* it counts the top 20%, not after — e.g. reserve
+  part of the cap for charging, stationary nodes, or score them so that a tablet beats a
+  phone at equal position. Neither is implemented, and both are one-line changes to
+  `computeScore`/`electRole` that this section's harness can measure the day they are.
+* **Six is not three.** The benefit is a function of how much of the elected set the
+  programme occupies. A single tablet in a café is a role change with a small battery
+  dividend; a programme is a quota.
+
+### 19.3 Scope of the claim
+
+Measured in the TypeScript reference engine (`community relays` in
+`src/__tests__/simulation.test.ts`), one seed, one world, `festival_crowd` — the case where
+the idea has the most to gain, because a crowd is where battery-powered SUPERs are most
+likely to be moving and drained. The 9.2% and 4.6% figures are single-seed and the delivery
+differences are one or two messages out of a hundred, i.e. inside the band §16.4 warns
+about; the direction of the battery and transmission figures is consistent across the three
+arms, which is why they are reported as a trend and not as a coefficient. A six-seed run is
+the next step if this item is ever prioritised, and the harness above is what would run it.

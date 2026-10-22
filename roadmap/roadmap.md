@@ -216,6 +216,19 @@
 - [ ] Plugin API: `offline-protocol`-like SDK for other apps to join Duman mesh [3](https://www.offlineprotocol.com/guides/quickstart)
 - [ ] Mesh analytics (opt-in only, local-first): anonymous hop counts to improve scoring
 - [ ] Community relay program: “Keep Duman on a plugged tablet at your café/campus → community SUPER”
+> **Measurement note (Oct 2026 — `src/__tests__/simulation.test.ts` `community relays`, evidence in `docs/06-simulator-findings.md` §19):** simulated before
+  being believed, in the world where it has the most to gain (`festival_crowd`, 60 nodes, 100 messages,
+  identical traffic plan in every arm). The election half works: every plugged, stationary, well-placed
+  tablet is elected SUPER within two cycles. The rest does not work the way the line reads. At **three**
+  tablets, total relay traffic rises 24.6% and transmissions by *other* nodes rise **9.2%** — a SUPER relays
+  everything by design (Phase 2 item 65), so adding always-on SUPERs adds relays everywhere. Only at **six**
+  does the burden move off other people's phones (−4.6%), because the tablets start displacing
+  battery-powered SUPERs instead of joining them, and the top-20% cap then elects only **four of the six**.
+  Delivery drifts down the whole way (0.910 → 0.900 → 0.890), so this is not a coverage programme.
+  What it can honestly claim: NORMAL battery drain falls **3.005 → 2.957 → 2.877 %/h** at 0/3/6 tablets.
+  §19.2 says what to change before building it — promotion has to be cap-aware (reserve part of the top 20%
+  for charging, stationary nodes, or score a tablet above a phone at equal position), and the benefit is a
+  quota, not a single tablet.
 
 ---
 

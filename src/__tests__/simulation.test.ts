@@ -18,6 +18,7 @@ import {
   sparseVillage,
 } from "../scenarios";
 import { canReach, peersInRange, rssiModel } from "../rf";
+import { createRng } from "../rng";
 import { createMessage, deliverToInbox, selectTransport, wireSizeOf } from "../routing";
 import { makeNode, rfWith } from "./helpers";
 import { BATTERY_FLOOR, CHARGING_BONUS, WEIGHTS, computeScore } from "../election";
@@ -1945,4 +1946,158 @@ describe("the atrium becomes a router (roadmap Phase 2 field test, docs/09 §5)"
       expect(atrium.score).toBeGreaterThanOrEqual(meanScore - 1e-9);
     });
   }
+});
+
+describe("community relays (roadmap Phase 5: a plugged tablet in a café)", () => {
+  const MESSAGES = 100;
+  const GAP_MS = 1000;
+
+  /** Identical traffic for both arms: drawing pairs from the simulation's own RNG would
+   *  make the A/B two different experiments, because the relay policy changes event
+   *  interleaving (the confound `acceptance.test.ts` was written around). */
+  function plan(seed: number, nodeCount: number): Array<[number, number]> {
+    const rng = createRng((seed ^ 0x5bf03635) >>> 0);
+    const out: Array<[number, number]> = [];
+    for (let i = 0; i < MESSAGES; i++) {
+      const from = Math.floor(rng() * nodeCount);
+      let to = Math.floor(rng() * nodeCount);
+      let guard = 0;
+      while (to === from && guard++ < 32) to = Math.floor(rng() * nodeCount);
+      if (to !== from) out.push([from, to]);
+    }
+    return out;
+  }
+
+  interface Arm {
+    sent: number;
+    delivered: number;
+    ratio: number;
+    relayTx: number;
+    superRatio: number;
+    relaysAreSuper: number;
+    /** Radio transmissions by nodes that are *not* community relays: the burden the
+     *  programme is supposed to move off other people's batteries. `txCount` rather than
+     *  the capture log, which a 60-node crowd cannot afford to keep. */
+    burdenOnOthers: number;
+    /** The same count for the tablets themselves, which are plugged in. */
+    burdenOnRelays: number;
+    normalPctPerHour: number;
+  }
+
+  function runArm(seed: number, relays: number, policy: SimConfig["relayPolicy"]): Arm {
+    const world = festivalCrowd(seed);
+    const sim = new MeshSimulation({ ...world, relayPolicy: policy });
+    sim.runFor(20000);
+
+    const relayIds = new Set<string>();
+    if (relays > 0) {
+      // The `relays` most open positions in the crowd: a café on a corner, not a phone
+      // in somebody's pocket. Charging, stationary, full, and not opted out — which is
+      // what "keep Duman on a plugged tablet" means in the model.
+      const online = sim.nodes.filter((n) => n.isOnline);
+      const ranked = [...online].sort((a, b) => {
+        const pa = peersInRange(a, online, sim.rf).length;
+        const pb = peersInRange(b, online, sim.rf).length;
+        return pb - pa || (a.id < b.id ? -1 : 1);
+      });
+      for (const node of ranked.slice(0, relays)) {
+        node.charging = true;
+        node.stationary = true;
+        node.battery = 1;
+        node.superOptOut = false;
+        node.batterySaver = false;
+        node.uptimeMin = 600;
+        relayIds.add(node.id);
+      }
+    }
+    sim.clearRecords();
+
+    const p = plan(seed, sim.nodes.length);
+    let sent = 0;
+    for (let i = 0; i < p.length; i++) {
+      const from = sim.nodes[p[i][0]];
+      const to = sim.nodes[p[i][1]];
+      if (from.isOnline && to.isOnline && sim.sendMessage(from.id, to.id, `cr-${i}`, "text")) sent++;
+      sim.runFor(GAP_MS);
+    }
+    const stats = sim.refresh();
+    const uni = sim.deliveries.filter(
+      (d) => d.type !== "ack" && d.type !== "broadcast" && !d.groupId && !d.transferId
+    );
+    let byOthers = 0;
+    let byRelays = 0;
+    for (const node of sim.nodes) {
+      if (relayIds.has(node.id)) byRelays += node.txCount;
+      else byOthers += node.txCount;
+    }
+    return {
+      sent,
+      delivered: uni.length,
+      ratio: uni.length / Math.max(1, sent),
+      relayTx: stats.totalForwarded,
+      superRatio: stats.superRatio,
+      relaysAreSuper: [...relayIds].filter((id) => sim.byId(id)?.role === "SUPER").length,
+      burdenOnOthers: byOthers,
+      burdenOnRelays: byRelays,
+      normalPctPerHour: stats.batteryPercentPerHourNormal,
+    };
+  }
+
+  it("elects the plugged tablets and moves relay work off other people's batteries", () => {
+    const seed = 42;
+    const baseMpr = runArm(seed, 0, "mpr");
+    const baseFlood = runArm(seed, 0, "flood-all");
+    const relayMpr = runArm(seed, 3, "mpr");
+    const relayFlood = runArm(seed, 3, "flood-all");
+    const sixMpr = runArm(seed, 6, "mpr");
+
+    // eslint-disable-next-line no-console
+    console.log(
+      JSON.stringify(
+        {
+          baseMpr,
+          baseFloodRelays: baseFlood.relayTx,
+          baseFloodRatio: Number(baseFlood.ratio.toFixed(4)),
+          relayMpr,
+          relayFloodRelays: relayFlood.relayTx,
+          relayFloodRatio: Number(relayFlood.ratio.toFixed(4)),
+          sixMpr,
+        },
+        null,
+        1
+      )
+    );
+
+    // The programme's own claim: a plugged, stationary, well-placed tablet becomes a
+    // router. The charging bonus is +0.10 of score and these nodes also have the peers.
+    expect(relayMpr.relaysAreSuper).toBe(3);
+
+    // What it is *not*: a delivery fix. Three tablets cost one message out of a hundred
+    // (0.910 -> 0.900) and six cost two (0.890), against a naive flood-all baseline that
+    // reaches 1.000 in both arms for ~10x the transmissions. Coverage is not what this
+    // programme buys.
+    expect(Math.abs(relayMpr.ratio - baseMpr.ratio)).toBeLessThanOrEqual(0.02);
+    expect(sixMpr.ratio).toBeLessThan(1);
+    expect(baseFlood.ratio).toBe(1);
+
+    // What three tablets actually do: a SUPER relays everything by design (roadmap Phase
+    // 2 item 65), so adding always-on SUPERs adds relays *everywhere* — total traffic
+    // rises ~25% and other nodes transmit ~9% more, not less. The burden only moves once
+    // the tablets start displacing battery-powered SUPERs, which the top-20% cap makes a
+    // six-device proposition in a 60-node crowd.
+    expect(relayMpr.relayTx).toBeGreaterThan(baseMpr.relayTx);
+    expect(relayMpr.burdenOnOthers).toBeGreaterThan(baseMpr.burdenOnOthers);
+    expect(relayMpr.burdenOnRelays).toBeGreaterThan(0);
+    expect(sixMpr.burdenOnOthers).toBeLessThan(relayMpr.burdenOnOthers);
+    expect(sixMpr.burdenOnOthers).toBeLessThan(baseMpr.burdenOnOthers);
+    // Two of the six do not get elected: the cap is nearly full at 21.7%, so a plugged
+    // tablet competes with the nodes the score already favours.
+    expect(sixMpr.relaysAreSuper).toBeGreaterThanOrEqual(3);
+    expect(sixMpr.relaysAreSuper).toBeLessThan(6);
+
+    // Battery drain on NORMAL nodes falls either way, and further at six — which is the
+    // one claim the programme can make: 3.005 -> 2.957 -> 2.877 %/h.
+    expect(relayMpr.normalPctPerHour).toBeLessThan(baseMpr.normalPctPerHour);
+    expect(sixMpr.normalPctPerHour).toBeLessThan(relayMpr.normalPctPerHour);
+  });
 });
