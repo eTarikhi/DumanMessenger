@@ -13,7 +13,9 @@ hop transparency (roadmap Phase 4) and group channels (roadmap Phase 1) are
 implemented and measured (§11, §13, §14), and a protocol defect both engines
 shared — a node re-flooding copies of its own message — was found by a render test
 and removed (§12), cutting relay transmissions 18.3% in the warm 20-node world.
-One secondary target remains open in the 60-node crowd (§6, "Still open").
+The documented 10-200 node range is now measured end to end, which found a
+quadratic cliff at the top of it and fixed it (§15). One secondary target remains
+open in the 60-node crowd (§6, "Still open").
 **Date:** Oct 2026
 
 ---
@@ -891,3 +893,121 @@ over 1:1 channels (docs/04's actual key-agreement scheme), QR invites, rejoin
 history sync, and CRDT anti-entropy for group history (roadmap Phase 1 item 32).
 The simulator models *who may read what, and what it costs to get it there*; the
 key agreement underneath is the research item.
+
+---
+
+## 15. Scale: 10-200 nodes, and the quadratic cliff at the top of the range
+
+`skills/08` asks for *"nodeCount 10-200, area 100×100 m"*. Nothing above 60 nodes
+had ever been run. Running the whole range on `campus_quad`'s geometry (20 messages,
+seed 42, **before** the fix in §15.2):
+
+| nodes | online | delivery | ≤5 hops | avg hops | p95 | relay tx | tx/msg | OGM tx | mean peers | max peers | wall clock |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 10 | 10 | 100% | 100% | 1.70 | 1 034 ms | 136 | 6.8 | 4 482 | 5.6 | 7 | 0.1 s |
+| 20 | 20 | 100% | 100% | 2.35 | 1 596 ms | 568 | 28.4 | 15 480 | 7.3 | 11 | 0.2 s |
+| 50 | 50 | 100% | 100% | 1.60 | 1 135 ms | 3 409 | 170.4 | 153 888 | 32.0 | 42 | 0.9 s |
+| 100 | 100 | 100% | 100% | 1.40 | 984 ms | 20 280 | 1 014.0 | 738 894 | 79.6 | 92 | 4.8 s |
+| 150 | 150 | 100% | 100% | 1.15 | 495 ms | 46 | 2.3 | 1 816 031 | 129.4 | 143 | 12.1 s |
+| 200 | 200 | 100% | 100% | 1.30 | 1 040 ms | 15 933 | 531.1 | 3 355 408 | 179.3 | 192 | 24.6 s |
+
+Delivery never drops — but look at the relay column. 150 nodes costs **46**
+transmissions for 20 messages and 200 nodes costs **15 933**. That is not a trend, it
+is a cliff, and it is worth more than the headline "10-200 works".
+
+### 15.1 Diagnosis: a beacon cannot describe a 179-peer neighbourhood
+
+Counting transmissions per message id and reading the hop traces put the whole cost
+in four messages:
+
+| message | transmissions | hops | nodes that accepted a copy | relays | reasons on the path |
+| --- | --- | --- | --- | --- | --- |
+| `m6` | 7 038 | 3 | 187 | 185 | route via node-7 / node-10 / node-0 |
+| `m23` | 3 681 | 3 | 183 | 181 | MPR fallback: SUPER heard but my neighbours are not covered |
+| `m5` | 218 | 4 | 110 | 105 | MPR fallback: no relay heard |
+| `m24` | 90 | 3 | 39 | 34 | MPR: heard relays cover all my neighbours |
+
+The mechanism: `MPR_NEIGHBOR_ADVERTISE_LIMIT` is 30, so at 200 nodes a beacon
+advertises 30 of a node's ~179 neighbours. `relaysCoverPeers` compares the union of
+the heard relays' *advertised* lists against this node's own peer list — 30 entries
+against 179 — and can only answer "no". Every relay therefore takes the fallback, and
+the fallback flooded to **all** peers. One message, 185 relays, ~180 peers each:
+7 038 transmissions to move a message three hops.
+
+At 150 nodes the same truncation exists but the routes happened to resolve, so the
+fallback never fired and the run cost 46. The cliff is not density itself; it is
+density *plus* a coverage test that cannot be answered.
+
+### 15.2 Fix: bound the fallback, and bound it by direction
+
+The fallback now caps its fan-out at `DENSE_FALLBACK_FANOUT` = 6 peers, **only** when
+the node has more peers than one beacon can advertise. Below that limit the peer list
+is complete, the coverage answer is exact, and the branch is not taken: `campus_quad`
+peaks at 12 peers and `festival_crowd` at 24, so every measurement elsewhere in this
+document stands and the golden vectors are byte-identical.
+
+The six are chosen **one per angular sector**, best link per sector, then
+strongest-first to fill any empty sector. Direction is the point: the strongest links
+are the nearest peers, and the nearest peers are all on one side of a node, so
+choosing by RSSI fans out into a wedge and leaves the rest of the world to chance.
+The tie-break is on the peer id as well as the link, because JavaScript and Dart sort
+equal keys differently and the two engines must pick the same six peers.
+
+Measured at 200 nodes, 30 messages, seeds 42 and 7:
+
+| fallback | delivery | tx per message | p95 |
+| --- | --- | --- | --- |
+| unbounded (all peers) | 100% | 531.1 | 1 367 ms |
+| capped at 6, strongest RSSI | 96.7% | 204.8 | 1 415 ms |
+| **capped at 6, one per sector** | **98.3%** | **125.5** | **1 294 ms** |
+
+Across the range, before → after (transmissions per message):
+
+| nodes | before | after | change | delivery |
+| --- | --- | --- | --- | --- |
+| 20 | 21.9 | 21.9 | inert | 100% → 100% |
+| 50 | 170.4 | 56.7 | **−67%** | 100% → 100% |
+| 100 | 1 014.0 | 141.4 | **−86%** | 100% → 100% |
+| 150 | 2.3 | 2.3 | inert | 100% → 100% |
+| 200 | 531.1 | 125.5 | **−76%** | 100% → **98.3%** |
+
+200 nodes is the only place the cap costs anything, and it costs one message in 60
+(both seeds 97%). It buys a 4.2× cut in transmissions and stays inside the documented
+≥90% bar; a test in each engine pins both numbers so neither can drift silently.
+
+### 15.3 The alternative that was tried and rejected
+
+Assume coverage instead of bounding the fan-out: if a heard relay's advertised list is
+truncated *and* its own peer count is at least ours, treat our neighbours as covered
+and stay quiet. It is cheaper still — 11 474 transmissions at 200 nodes — but it
+delivers **95.0%**, and it is worse than bounding at 50 and 100 nodes too (1 710 and
+5 996 tx against 922 and 4 849).
+
+The reason is worth keeping: *assuming* coverage loses messages, because the
+assumption is wrong for the ~10% of the world that any one relay cannot hear.
+*Bounding* the fan-out does not lose them, because a K-ary fan-out still covers a
+homogeneous dense world in log_K(N) hops — every relay's peers are everyone's peers.
+
+### 15.4 What the density numbers do **not** claim
+
+Two limitations, stated because the table above is easy to over-read.
+
+**There is no collision model.** At 200 nodes in 10 000 m² every node hears ~179
+others; on real BLE that channel is interference-limited and marginal link quality
+would be far worse than a distance-plus-walls model says. These figures bound the
+*protocol's* behaviour in a dense geometry, not a deployment's.
+
+**`ogmTx` counts receptions, not transmissions.** Each OGM is accounted once per
+receiving peer, so control traffic reads as O(N²): 3 355 408 at 200 nodes against
+4 482 at 10. On a real radio a discovery beacon is *one* advertising packet heard by
+everyone in range, so transmission cost is O(N) and only reception cost is O(N²).
+Splitting that counter in two is a legitimate follow-up; it would move the golden
+fixture's `ogmTx` field, so it was not folded into this change.
+
+**Wall clock.** A 200-node run of 38 simulated seconds takes 24.6 s, about 0.65× real
+time. That is why the scale case lives in the two test suites (six messages each)
+rather than in the CI acceptance matrix, which runs at 20 nodes.
+
+Battery at density is unremarkable and consistent with §10: NORMAL burns 2.40-2.51%
+per hour always-scanning (19-20% per 8 h, above the `skills/07` budget), and the duty
+cycle is what brings it inside.

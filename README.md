@@ -75,6 +75,15 @@ nothing over four when the gap is *radius* rather than loss. TTL is the radius k
 documented 5, except in `festival_crowd`, which is 6+ hops across from an edge sender
 (`docs/06-simulator-findings.md` §11).
 
+**Scale** (`skills/08`: nodeCount 10-200): measured end to end, and the top of the
+range had a cliff — at 200 nodes in a 100×100 m area every node hears ~179 of the
+other 199, so a beacon that advertises at most 30 neighbours cannot answer the MPR
+coverage question, and every relay fell back to flooding all of its peers (one 3-hop
+delivery: 7,038 transmissions). Bounding that fallback to six **direction-spread**
+peers cuts the worst case 76% and 100 nodes by 86%, costs one message in 60 at 200
+nodes, and is inert below 30 peers — so the 20- and 60-node evidence, and the golden
+vectors, are unchanged (`docs/06-simulator-findings.md` §15).
+
 **Group channels** (`docs/04` §4, roadmap Phase 1): 3-10 members, an admin, and a key epoch that
 rotates on every membership change — so a node that leaves keeps relaying group traffic but can no
 longer read it, and a node that joins cannot read the history it missed. Delivery ships in two
