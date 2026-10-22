@@ -4,7 +4,15 @@ export type MsgId = string;
 export type Role = "SUPER" | "NORMAL";
 export type TransportType = "ble" | "wifiDirect" | "multipeer";
 
-export type MsgType = "text" | "broadcast" | "voice" | "sos" | "ack" | "ogm";
+export type MsgType =
+  | "text"
+  | "broadcast"
+  | "voice"
+  /** One chunk of a large transfer (docs/05 §3.2: 64 KB slices, sliding-window ACK). */
+  | "file"
+  | "sos"
+  | "ack"
+  | "ogm";
 
 /** Flood-suppression policy for the data plane (docs/03 §6). */
 /**
@@ -81,6 +89,9 @@ export interface MeshMessage {
    *  member but holds a different epoch cannot decrypt it — which is exactly what
    *  "groupKey rotated on member leave" (docs/04 §4) is for. */
   groupEpoch?: number;
+  /** Set on one chunk of a large transfer, with its position in it. */
+  transferId?: string;
+  chunkIndex?: number;
   /** Byte size, used by transport selection. */
   sizeBytes: number;
 }
@@ -183,6 +194,8 @@ export type MeshLogKind =
   | "sos"
   /** Group membership: created, joined, left, key rotated, or a stale epoch rejected. */
   | "group"
+  /** A large transfer: one chunk on air, or the whole file complete. */
+  | "transfer"
   | "ogm";
 
 /**

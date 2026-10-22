@@ -1,6 +1,7 @@
+import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import type { Group, MeshNode, MeshMessage } from "../types";
-import type { DeliveryRecord, SentRecord } from "../simulation";
+import type { DeliveryRecord, SentRecord, Transfer } from "../simulation";
 
 interface Props {
   nodes: MeshNode[];
@@ -26,9 +27,30 @@ interface Props {
   groupMode?: "scoped-flood" | "per-member-unicast";
   /** Flips the group delivery mode without rebuilding the world. */
   onToggleGroupMode?: () => void;
+  /** Media transport (roadmap Phase 3): a chunked file, or a push-to-talk note.
+   *  Both are 1:1, so the buttons are disabled while a group or everybody is the
+   *  destination. */
+  onSendFile?: (from: string, to: string, megabytes: number) => void;
+  onSendVoice?: (from: string, to: string, seconds: number, stream: boolean) => void;
+  /** Live and finished transfers, rendered as progress bars. */
+  transfers?: Transfer[];
 }
 
-export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, deliveries, onTrace, traceMsgId, sosRepeats, groups, groupMode, onToggleGroupMode }: Props) {
+/** The media buttons' look: enabled is a soft blue, disabled explains itself. */
+function mediaBtnStyle(enabled: boolean): React.CSSProperties {
+  return {
+    padding: "5px 10px",
+    borderRadius: 6,
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: enabled ? "pointer" : "default",
+    border: "1px solid #1e2a3a",
+    background: enabled ? "rgba(127,179,255,0.14)" : "rgba(255,255,255,0.03)",
+    color: enabled ? "#7fb3ff" : "#5a6a7a",
+  };
+}
+
+export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, deliveries, onTrace, traceMsgId, sosRepeats, groups, groupMode, onToggleGroupMode, onSendFile, onSendVoice, transfers }: Props) {
   const onlineNodes = nodes.filter((n) => n.isOnline);
   // Seeded from the node list rather than left to an effect: the composer should
   // have a valid sender on the very first render (and a server-side render, where
@@ -37,6 +59,12 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, d
   const [toId, setToId] = useState<string>("BROADCAST");
   const [body, setBody] = useState("");
   const [msgType, setMsgType] = useState<"text" | "broadcast" | "sos">("text");
+  const [mediaMb, setMediaMb] = useState(10);
+  const [voiceSec, setVoiceSec] = useState(3);
+  // Media is 1:1: a scoped flood cannot carry 160 chunks, and a group has no single
+  // receiver to slide a window against.
+  const mediaTarget =
+    !!fromId && toId !== "BROADCAST" && !(groups ?? []).some((g) => g.id === toId);
   const logEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -82,7 +110,10 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, d
   // four near-identical bubbles.
   const cards: { entry: SentRecord; floods: SentRecord[] }[] = [];
   const bySos = new Map<string, { entry: SentRecord; floods: SentRecord[] }>();
-  for (const entry of sentRecords) {
+  // A chunk is not a message: 160 of them are one file, and the transfer rows below
+  // already show its progress. Rendering them as bubbles would bury the chat.
+  const chatRecords = sentRecords.filter((r) => !r.transferId);
+  for (const entry of chatRecords) {
     // In `per-member-unicast` mode one user action is N radio messages, all created
     // at the same instant for the same group: one card, like the SOS collapse.
     if (entry.groupId && groupMode === "per-member-unicast") {
@@ -133,7 +164,10 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, d
       }}>
         <span style={{ color: "#4de0ff" }}>💬</span> Mesh chat
         <span style={{ fontSize: 11, color: "#9fb0c3", fontWeight: 400 }}>
-          ({onlineNodes.length} online · {sentRecords.length} sent)
+          ({onlineNodes.length} online · {chatRecords.length} sent
+          {sentRecords.length > chatRecords.length
+            ? ` · ${sentRecords.length - chatRecords.length} media chunks`
+            : ""})
         </span>
         {onToggleGroupMode && groupMode && (
           <button
@@ -234,10 +268,96 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, d
             Send
           </button>
         </div>
+
+        {(onSendFile || onSendVoice) && (
+          <div
+            style={{
+              display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap",
+              paddingTop: 8, borderTop: "1px solid #141d29",
+            }}
+          >
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#9fb0c3" }}>
+              📎 {mediaMb} MB
+              <input
+                type="range" min={1} max={20} step={1} value={mediaMb}
+                aria-label="File size in megabytes"
+                onChange={(e) => setMediaMb(Number(e.target.value))}
+              />
+            </label>
+            <button
+              onClick={() => onSendFile?.(fromId, toId, mediaMb)}
+              disabled={!mediaTarget}
+              title={mediaTarget ? "Slice into 64 KB chunks and slide them across the mesh" : "Pick one person — a file transfer is 1:1"}
+              style={mediaBtnStyle(mediaTarget)}
+            >
+              Send file
+            </button>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#9fb0c3" }}>
+              🎙 {voiceSec} s
+              <input
+                type="range" min={1} max={30} step={1} value={voiceSec}
+                aria-label="Voice note length in seconds"
+                onChange={(e) => setVoiceSec(Number(e.target.value))}
+              />
+            </label>
+            <button
+              onClick={() => onSendVoice?.(fromId, toId, voiceSec, true)}
+              disabled={!mediaTarget}
+              title={mediaTarget ? "Stream 500 ms Opus frames while the button is held" : "Pick one person — push-to-talk is 1:1"}
+              style={mediaBtnStyle(mediaTarget)}
+            >
+              PTT · stream
+            </button>
+            <button
+              onClick={() => onSendVoice?.(fromId, toId, voiceSec, false)}
+              disabled={!mediaTarget}
+              title={mediaTarget ? "Send the whole note as one blob at release — the design streaming is measured against" : "Pick one person — push-to-talk is 1:1"}
+              style={mediaBtnStyle(mediaTarget)}
+            >
+              PTT · blob
+            </button>
+          </div>
+        )}
+
+        {(transfers ?? []).length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingTop: 6 }}>
+            {(transfers ?? []).slice(-4).map((t) => {
+              const pct = t.chunks > 0 ? (t.received / t.chunks) * 100 : 0;
+              const peer = nodes.find((n) => n.id === (t.from === fromId ? t.to : t.from));
+              return (
+                <div key={t.id} style={{ fontSize: 11, color: "#9fb0c3" }} data-testid={`transfer-${t.id}`}>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <span>{t.kind === "voice" ? "🎙" : "📦"}</span>
+                    <span>
+                      {t.from === fromId ? "→" : "←"} {peer?.name ?? (t.from === fromId ? t.to : t.from)} ·{" "}
+                      {t.totalBytes >= 1048576
+                        ? `${(t.totalBytes / 1048576).toFixed(1)} MB`
+                        : `${(t.totalBytes / 1024).toFixed(0)} KB`}{" "}
+                      over {t.transport} · {t.received}/{t.chunks}
+                      {t.completedAt !== null
+                        ? ` · done in ${((t.completedAt - t.startedAt) / 1000).toFixed(1)} s`
+                        : t.stalls > 0
+                        ? ` · ${t.stalls} stall${t.stalls === 1 ? "" : "s"}`
+                        : ""}
+                    </span>
+                  </div>
+                  <div style={{ height: 4, background: "#141d29", borderRadius: 2, overflow: "hidden" }}>
+                    <div
+                      style={{
+                        width: `${pct}%`, height: "100%",
+                        background: t.completedAt !== null ? "#b6ff4a" : "#7fb3ff",
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
-        {sentRecords.length === 0 && (
+        {chatRecords.length === 0 && (
           <div style={{ textAlign: "center", color: "#5a6a7a", fontSize: 13, marginTop: 20 }}>
             No messages yet. Send one to watch it route through the mesh.
           </div>

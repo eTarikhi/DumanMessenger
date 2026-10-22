@@ -229,6 +229,90 @@ describe("SOS in the UI", () => {
   });
 });
 
+/** A settled campus world with one file transfer and one voice note in it. */
+function mediaWorld(over: Partial<SimConfig> = {}): MeshSimulation {
+  const sim = new MeshSimulation({ ...campusQuad(42), ...over });
+  sim.runFor(90000);
+  sim.clearRecords();
+  const online = sim.nodes.filter((n) => n.isOnline);
+  sim.sendFile(online[0].id, online[1].id, 1024 * 1024);
+  sim.sendVoice(online[2].id, online[3].id, 1);
+  sim.runFor(60000);
+  sim.refresh();
+  return sim;
+}
+
+describe("media transport in the UI", () => {
+  it("offers the file and push-to-talk controls, and explains why they are greyed out", () => {
+    const sim = mediaWorld();
+    const html = renderToStaticMarkup(
+      <ChatPanel
+        nodes={sim.nodes}
+        selectedNodeId={sim.nodes[0].id}
+        onSendMessage={() => null}
+        sentRecords={sim.sentRecords}
+        deliveries={sim.deliveries}
+        onSendFile={() => {}}
+        onSendVoice={() => {}}
+        transfers={[...sim.transfers.values()]}
+      />
+    );
+    expect(html).toContain("Send file");
+    expect(html).toContain("PTT · stream");
+    expect(html).toContain("PTT · blob");
+    expect(html).toContain("File size in megabytes");
+    expect(html).toContain("Voice note length in seconds");
+    // The composer starts on "everybody", and media is 1:1.
+    expect(html).toContain("a file transfer is 1:1");
+    expect(html).toContain("disabled");
+  });
+
+  it("shows one progress row per transfer, with the radio it is riding", () => {
+    const sim = mediaWorld();
+    const transfers = [...sim.transfers.values()];
+    expect(transfers.length).toBe(2);
+    const html = renderToStaticMarkup(
+      <ChatPanel
+        nodes={sim.nodes}
+        selectedNodeId={transfers[0].from}
+        onSendMessage={() => null}
+        sentRecords={sim.sentRecords}
+        deliveries={sim.deliveries}
+        transfers={transfers}
+      />
+    );
+    expect(html).toContain(`data-testid="transfer-${transfers[0].id}"`);
+    expect(html).toContain(`data-testid="transfer-${transfers[1].id}"`);
+    expect(html).toContain("1.0 MB");   // the file
+    expect(html).toContain("1 KB");     // two 500 ms Opus frames at 12 kbps
+    expect(html).toContain("wifiDirect");
+    expect(html).toContain("over ble"); // a voice frame stays inside one BLE packet
+    expect(html).toContain("/16");      // 1 MB in 64 KB chunks
+    // The chunks are counted as media, not rendered as chat bubbles.
+    expect(html).toContain("media chunks");
+    expect((html.match(/Amir-0 → Bianca-1/g) ?? []).length).toBe(0);
+  });
+
+  it("counts media on the dashboard, and only once there is any", () => {
+    const busy = mediaWorld();
+    const html = renderToStaticMarkup(
+      <MetricsPanel stats={busy.stats} dutyCycleEnabled={false} config={busy.config} />
+    );
+    expect(html).toContain("Media transport");
+    expect(html).toContain("Chunks on air");
+    expect(html).toContain("Window stalls");
+    expect(html).toContain("Payload delivered");
+    // The footnote quotes the sizing the engine is actually running with.
+    expect(html).toContain("64 KB chunks");
+    expect(html).toContain("250×");
+
+    const quiet = world();
+    expect(
+      renderToStaticMarkup(<MetricsPanel stats={quiet.stats} dutyCycleEnabled={false} />)
+    ).not.toContain("Media transport");
+  });
+});
+
 describe("metrics dashboard", () => {
   it("renders the battery, radio and hop-budget figures", () => {
     const sim = world();

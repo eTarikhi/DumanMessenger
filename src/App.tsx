@@ -137,6 +137,18 @@ export function App() {
     rerender();
   };
 
+  /** A file goes out as 64 KB chunks behind a sliding window; a voice note as 500 ms
+   *  Opus frames while the button is held (roadmap Phase 3, docs/08). */
+  const handleSendFile = (from: string, to: string, megabytes: number) => {
+    sim.sendFile(from, to, Math.round(megabytes * 1048576));
+    rerender();
+  };
+
+  const handleSendVoice = (from: string, to: string, seconds: number, stream: boolean) => {
+    sim.sendVoice(from, to, seconds, { stream });
+    rerender();
+  };
+
   const handleToggleOgm = () => {
     const next = !captureOgm;
     sim.config.captureOgm = next;
@@ -253,7 +265,12 @@ export function App() {
             />
           </div>
 
-          <MetricsPanel stats={sim.stats} dutyCycleEnabled={sim.config.dutyCycleEnabled} nodes={sim.nodes} />
+          <MetricsPanel
+              stats={sim.stats}
+              dutyCycleEnabled={sim.config.dutyCycleEnabled}
+              nodes={sim.nodes}
+              config={sim.config}
+            />
 
           <div className="duman-chat-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <div style={{ height: 380 }}>
@@ -272,6 +289,9 @@ export function App() {
                 groups={[...sim.groups.values()]}
                 groupMode={sim.config.groupMode}
                 onToggleGroupMode={handleToggleGroupMode}
+                onSendFile={handleSendFile}
+                onSendVoice={handleSendVoice}
+                transfers={[...sim.transfers.values()]}
               />
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

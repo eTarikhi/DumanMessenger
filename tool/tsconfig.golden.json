@@ -18,7 +18,8 @@
   },
   "include": [
     "../src/**/*.ts",
-    "generate-golden.ts"
+    "generate-golden.ts",
+    "media-probe.ts"
   ],
   "exclude": [
     "../src/**/*.tsx",

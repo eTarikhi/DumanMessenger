@@ -1218,3 +1218,263 @@ describe("power policy and telemetry (skills/02, skills/07, roadmap Phase 2)", (
     });
   });
 });
+
+describe("media transport (docs/05 §3.2-3.3, roadmap Phase 3)", () => {
+  /**
+   * A line of nodes 20 m apart: within the 31.6 m LOS budget for a neighbour and
+   * outside it for the next one along (at 40 m the model gives −87 dBm against a
+   * −85 dBm sensitivity), so hop count is exactly the distance in indices and every
+   * assertion below is about the media plane rather than about who happened to be in
+   * range.
+   */
+  function lineWorld(n = 4, over: Partial<SimConfig> = {}): MeshSimulation {
+    const sim = new MeshSimulation({
+      ...DEFAULT_CONFIG,
+      nodeCount: n,
+      stationaryRatio: 1,
+      chargingRatio: 0,
+      trafficIntervalMs: 0,
+      enableSuperElection: false,
+      warmupMs: 0,
+      // DEFAULT_CONFIG carries walls, and a wall between two nodes 20 m apart turns
+      // the "line" into a partition. The geometry has to be the only variable here.
+      obstacles: [],
+      ...over,
+    });
+    sim.nodes.forEach((node, i) => {
+      node.pos = { x: 10 + i * 20, y: 10 };
+      node.home = { x: 10 + i * 20, y: 10 };
+      node.target = { x: 10 + i * 20, y: 10 };
+      node.stationary = true;
+      node.mobility = 0;
+      node.isOnline = true;
+      node.battery = 1;
+      node.txPower = DEFAULT_CONFIG.txPowerDbm;
+    });
+    sim.runFor(20000); // beacons settle, routes form
+    sim.clearRecords();
+    return sim;
+  }
+
+  function runUntil(sim: MeshSimulation, done: () => boolean, budgetMs: number): boolean {
+    let elapsed = 0;
+    while (!done() && elapsed < budgetMs) {
+      sim.runFor(100);
+      elapsed += 100;
+    }
+    return done();
+  }
+
+  it("charges air time only for the part of a payload above one packet", () => {
+    const sim = lineWorld(2);
+    // A text message, an OGM and an ACK all sit under the 1024 B ceiling, so the
+    // hop latency they were calibrated with is untouched — that is what keeps the
+    // golden vectors byte-identical.
+    expect(sim.serializationMs(0, "ble")).toBe(0);
+    expect(sim.serializationMs(1024, "ble")).toBe(0);
+    expect(sim.serializationMs(1024, "wifiDirect")).toBe(0);
+    // 64 KB slice: (65536 − 1024) × 8 bits over the link rate.
+    expect(sim.serializationMs(65536, "wifiDirect")).toBeCloseTo(((65536 - 1024) * 8) / 20000, 6);
+    expect(sim.serializationMs(65536, "ble")).toBeCloseTo(((65536 - 1024) * 8) / 80, 6);
+    // docs/05 §3.2's "250× faster than BLE" is what the two rates reproduce.
+    const ratio = sim.serializationMs(65536, "ble") / sim.serializationMs(65536, "wifiDirect");
+    expect(ratio).toBeCloseTo(250, 6);
+    expect(sim.config.wifiDirectKbps / sim.config.bleKbps).toBe(250);
+  });
+
+  it("sends a file as 64 KB chunks and completes the transfer", () => {
+    const sim = lineWorld(3);
+    const [a, , c] = sim.nodes;
+    const t = sim.sendFile(a.id, c.id, 256 * 1024);
+    expect(t).not.toBeNull();
+    expect(t!.chunks).toBe(4); // 256 KB / 64 KB
+    expect(t!.kind).toBe("file");
+    expect(runUntil(sim, () => t!.state === "complete", 120000)).toBe(true);
+    expect(t!.received).toBe(4);
+    expect(t!.completedAt).not.toBeNull();
+    expect(c.inbox.filter((m) => m.type === "file")).toHaveLength(4);
+
+    const stats = sim.refresh();
+    expect(stats.transfersStarted).toBe(1);
+    expect(stats.transfersCompleted).toBe(1);
+    expect(stats.bytesDelivered).toBe(256 * 1024);
+    expect(stats.sentChunks).toBeGreaterThanOrEqual(4);
+    // Two hops apart, so the chunks rode the radio that can actually carry them.
+    expect(t!.transport).toBe("wifiDirect");
+  });
+
+  it("keeps media out of the 1:1 delivery metrics", () => {
+    const sim = lineWorld(3);
+    const [a, , c] = sim.nodes;
+    const t = sim.sendFile(a.id, c.id, 256 * 1024)!;
+    runUntil(sim, () => t.state === "complete", 120000);
+    const stats = sim.refresh();
+    // A 10 MB file is 160 chunks: folded into deliveryRatio it would make the
+    // metric about the file instead of about the mesh.
+    expect(stats.sentUnicast).toBe(0);
+    expect(stats.sentChunks).toBeGreaterThanOrEqual(4);
+    // The only records in the run are the chunks and their ACKs.
+    expect(sim.sentRecords.filter((r) => !r.transferId)).toHaveLength(0);
+    expect(
+      sim.deliveries.filter((d) => d.type !== "ack").every((d) => d.transferId !== undefined)
+    ).toBe(true);
+  });
+
+  it("slides a window instead of putting the whole file on air at once", () => {
+    const sim = lineWorld(4, { transferWindow: 2 });
+    const [a, , , d] = sim.nodes;
+    const t = sim.sendFile(a.id, d.id, 8 * 64 * 1024)!;
+    expect(t.chunks).toBe(8);
+    expect(t.window).toBe(2);
+    // Nothing has arrived yet, so only the window is in flight.
+    expect(sim.refresh().sentChunks).toBe(2);
+    expect(runUntil(sim, () => t.state === "complete", 300000)).toBe(true);
+    expect(t.received).toBe(8);
+    // A deeper window is measurably faster: this is the lever docs/08 §4 reports.
+    const wide = lineWorld(4, { transferWindow: 8 });
+    const t2 = wide.sendFile(wide.nodes[0].id, wide.nodes[3].id, 8 * 64 * 1024)!;
+    expect(runUntil(wide, () => t2.state === "complete", 300000)).toBe(true);
+    expect(t2.completedAt! - t2.startedAt).toBeLessThan(t.completedAt! - t.startedAt);
+  });
+
+  it("slices to the BLE ceiling when there is no Wi-Fi Direct capacity", () => {
+    const sim = lineWorld(2, { transferChunkBytes: 1024 });
+    const [a, b] = sim.nodes;
+    const t = sim.sendFile(a.id, b.id, 64 * 1024)!;
+    expect(t.chunks).toBe(64);
+    expect(t.transport).toBe("ble");
+    expect(runUntil(sim, () => t.state === "complete", 300000)).toBe(true);
+    expect(t.received).toBe(64);
+  });
+
+  it("keeps a 500 ms Opus frame inside one BLE packet at 12 kbps, and not at 24", () => {
+    // frameBytes = frameMs × kbps / 8. Under the 1024 B ceiling the frame rides BLE,
+    // which is the radio that is guaranteed to be up; over it, the note would
+    // silently need Wi-Fi Direct. That is why docs/05 §3.3 says 6-12 kbps.
+    const ble = lineWorld(2, { voiceKbps: 12 });
+    const note = ble.sendVoice(ble.nodes[0].id, ble.nodes[1].id, 1)!;
+    expect(note.chunkBytes).toBe(750);
+    expect(note.transport).toBe("ble");
+
+    const wifi = lineWorld(2, { voiceKbps: 24 });
+    const loud = wifi.sendVoice(wifi.nodes[0].id, wifi.nodes[1].id, 1)!;
+    expect(loud.chunkBytes).toBe(1500);
+    expect(loud.transport).toBe("wifiDirect");
+    expect((1024 * 8) / wifi.config.voiceFrameMs).toBeCloseTo(16.384, 3);
+  });
+
+  it("streams a note while it is being recorded, so audio starts before release", () => {
+    const sim = lineWorld(2);
+    const [a, b] = sim.nodes;
+    const t = sim.sendVoice(a.id, b.id, 3)!;
+    expect(t.chunks).toBe(6); // 3 s / 500 ms
+    expect(t.releasedAt).toBeCloseTo(t.startedAt + 3000, 6);
+    expect(runUntil(sim, () => t.state === "complete", 30000)).toBe(true);
+    // The first frame is playable long before the button is let go — that is the
+    // whole point of streaming, and the blob's disadvantage.
+    expect(t.firstChunkAt!).toBeLessThan(t.releasedAt!);
+    expect(t.firstChunkAt! - t.startedAt).toBeLessThan(1500);
+
+    const blobSim = lineWorld(2);
+    const blob = blobSim.sendVoice(blobSim.nodes[0].id, blobSim.nodes[1].id, 3, { stream: false })!;
+    expect(blob.chunks).toBe(1);
+    expect(blob.totalBytes).toBe(6 * 750);
+    expect(runUntil(blobSim, () => blob.state === "complete", 30000)).toBe(true);
+    expect(blob.firstChunkAt!).toBeGreaterThanOrEqual(blob.releasedAt!);
+  });
+
+  it("meets the roadmap's push-to-talk budget at 1 and 3 hops", () => {
+    // "PTT Opus note plays in <3s 1-hop / <8s 3-hop", measured from release to the
+    // last frame arriving plus the 200 ms jitter buffer.
+    const sim = lineWorld(4);
+    const near = sim.sendVoice(sim.nodes[0].id, sim.nodes[1].id, 3)!;
+    expect(runUntil(sim, () => near.state === "complete", 30000)).toBe(true);
+    const nearDelay = near.completedAt! + sim.config.jitterBufferMs - near.releasedAt!;
+    expect(nearDelay).toBeGreaterThan(0);
+    expect(nearDelay).toBeLessThan(3000);
+
+    const far = sim.sendVoice(sim.nodes[0].id, sim.nodes[3].id, 3)!;
+    expect(runUntil(sim, () => far.state === "complete", 30000)).toBe(true);
+    const farDelay = far.completedAt! + sim.config.jitterBufferMs - far.releasedAt!;
+    expect(farDelay).toBeLessThan(8000);
+    expect(farDelay).toBeGreaterThan(nearDelay);
+  });
+
+  it("carries a 10 MB image three hops on Wi-Fi Direct inside a minute", () => {
+    // The roadmap's exit criterion: "2 phones exchange image <10 MB over WiFi Direct
+    // mesh". Three hops is the distance the criterion's latency budget is written for.
+    const sim = lineWorld(4);
+    const t = sim.sendFile(sim.nodes[0].id, sim.nodes[3].id, 10 * 1024 * 1024)!;
+    expect(t.chunks).toBe(160);
+    expect(runUntil(sim, () => t.state === "complete", 180000)).toBe(true);
+    expect(t.transport).toBe("wifiDirect");
+    expect(t.received).toBe(160);
+    const elapsed = t.completedAt! - t.startedAt;
+    expect(elapsed).toBeLessThan(60000);
+    expect(sim.refresh().bytesDelivered).toBe(10 * 1024 * 1024);
+  });
+
+  it("cannot carry a 10 MB image over BLE in any reasonable time", () => {
+    // Which is what docs/05 §3.2's "auto-reject files >5 MB on BLE-only with a
+    // 'move closer to SUPER' hint" is protecting the user from.
+    const sim = lineWorld(2, { transferChunkBytes: 1024 });
+    const t = sim.sendFile(sim.nodes[0].id, sim.nodes[1].id, 10 * 1024 * 1024)!;
+    expect(t.chunks).toBe(10240);
+    expect(t.transport).toBe("ble");
+    sim.runFor(60000);
+    expect(t.state).toBe("active");
+    expect(t.received / t.chunks).toBeLessThan(0.2);
+  });
+
+  it("re-sends the chunks a stalled window is missing, and resumes when the peer returns", () => {
+    const sim = lineWorld(3);
+    const [a, , c] = sim.nodes;
+    const t = sim.sendFile(a.id, c.id, 8 * 64 * 1024, { window: 2 })!;
+    // The receiver walks away: the window stops moving. Without a watchdog the
+    // transfer would hang forever, because a chunk whose retries ran out sits in the
+    // OppQueue and its logical id is never seen again.
+    sim.toggleNodeOnline(c.id);
+    expect(runUntil(sim, () => t.stalls > 0, 60000)).toBe(true);
+    expect(sim.refresh().transferStalls).toBeGreaterThan(0);
+    expect(t.state).toBe("active");
+
+    // "Resume on reconnect" (docs/05 §3.2): the peer comes back and the missing
+    // chunks are re-sent, so the transfer finishes rather than being abandoned.
+    sim.toggleNodeOnline(c.id);
+    expect(runUntil(sim, () => t.state === "complete", 300000)).toBe(true);
+    expect(t.received).toBe(8);
+  });
+
+  it("retries a chunk on the media timer, not the text plane's", () => {
+    const sim = lineWorld(2);
+    const t = sim.sendFile(sim.nodes[0].id, sim.nodes[1].id, 64 * 1024)!;
+    // Cold start, before any ACK has measured the path.
+    expect(sim.mediaTimeoutMs(t)).toBe(sim.config.mediaAckTimeoutMs);
+    expect(sim.config.mediaAckTimeoutMs).toBeLessThan(sim.config.ackTimeoutMs);
+    expect(runUntil(sim, () => t.state === "complete", 60000)).toBe(true);
+
+    // With the adaptive rule on, the timer is built from the round trips this
+    // transfer's own ACKs reported: 2 × minRtt + 200, clamped to [300, ackTimeoutMs].
+    const adaptive = lineWorld(4, { adaptiveMediaAck: true });
+    const t2 = adaptive.sendFile(adaptive.nodes[0].id, adaptive.nodes[3].id, 4 * 64 * 1024)!;
+    expect(runUntil(adaptive, () => t2.state === "complete", 120000)).toBe(true);
+    expect(t2.minRttMs).not.toBeNull();
+    expect(sim.mediaTimeoutMs(t2)).toBe(
+      Math.min(
+        adaptive.config.ackTimeoutMs,
+        Math.max(300, 2 * t2.minRttMs! + 200)
+      )
+    );
+    expect(t2.srttMs).not.toBeNull();
+  });
+
+  it("refuses media from a node that is offline or to nobody", () => {
+    const sim = lineWorld(3);
+    sim.toggleNodeOnline(sim.nodes[0].id);
+    expect(sim.sendFile(sim.nodes[0].id, sim.nodes[2].id, 64 * 1024)).toBeNull();
+    expect(sim.sendVoice(sim.nodes[0].id, sim.nodes[2].id, 3)).toBeNull();
+    expect(sim.sendFile(sim.nodes[1].id, sim.nodes[2].id, 0)).toBeNull();
+    expect(sim.sendVoice(sim.nodes[1].id, sim.nodes[2].id, 0)).toBeNull();
+    expect(sim.refresh().transfersStarted).toBe(0);
+  });
+});

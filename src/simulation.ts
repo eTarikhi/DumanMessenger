@@ -5,6 +5,7 @@ import {
 } from "./types";
 import type {
   Group,
+  TransportType,
   HopAction,
   HopRecord,
   MeshLogEntry,
@@ -44,9 +45,10 @@ import {
   receiveOGM,
 } from "./election";
 import {
+  BLE_MAX_BYTES,
+  MPR_WAIT_MS,
   createMessage,
   decideForward,
-  seenKey,
   deliverToInbox,
   enqueueOpp,
   isSeen,
@@ -55,7 +57,8 @@ import {
   pruneSeenCache,
   resolveMprWait,
   scanOppQueue,
-  MPR_WAIT_MS,
+  seenKey,
+  selectTransport,
 } from "./routing";
 import type { EventKind } from "./events";
 import { EventQueue } from "./events";
@@ -128,6 +131,27 @@ export interface SimConfig {
    *  are. */
   groupMode: "scoped-flood" | "per-member-unicast";
 
+  /** Link throughput, for the serialization time a large payload occupies the radio
+   *  with. The 250× ratio is not a guess: docs/05 §3.2 puts Wi-Fi Direct at "250×
+   *  faster than BLE" for images, so 80 kbit/s against 20 Mbit/s reproduces exactly
+   *  that claim (docs/08 §1). */
+  bleKbps: number;
+  wifiDirectKbps: number;
+  /** Chunk size for a large transfer (docs/05 §3.2: "64 KB slices"). */
+  transferChunkBytes: number;
+  /** Chunks in flight before waiting for an ACK ("sliding-window ACK"). */
+  transferWindow: number;
+  /** How long a transfer may make no progress before the sender re-sends the chunks
+   *  the receiver is still missing. Without it, a chunk whose retries ran out parks in
+   *  the OppQueue and the window never advances: the transfer hangs forever. That is
+   *  what "resume on reconnect" (docs/05 §3.2) has to mean in practice (docs/08 §6). */
+  transferStallMs: number;
+  /** Opus framing for push-to-talk (docs/05 §3.3: 500 ms frames, 6-12 kbps). */
+  voiceKbps: number;
+  voiceFrameMs: number;
+  /** Receiver buffer before playback can start (docs/05 §3.3: "jitter buffer 200 ms"). */
+  jitterBufferMs: number;
+
   enableSuperElection: boolean;
   enableMobility: boolean;
   enableDtn: boolean;
@@ -142,6 +166,16 @@ export interface SimConfig {
   /** Source retransmission when no ACK returns (docs/03 §6 "ACK via reverse
    *  path"). 0 disables retries. */
   ackTimeoutMs: number;
+  /** First retry timer for one chunk of a transfer, before any ACK has come back to
+   *  measure the path. Media cannot wait as long as text: 4 s is eight 500 ms voice
+   *  frames, and one lost frame then leaves a four-second hole in the audio that a
+   *  200 ms jitter buffer cannot cover (docs/08 §5). */
+  mediaAckTimeoutMs: number;
+  /** Grow that timer from the round trips the transfer's own ACKs report, instead of
+   *  holding it fixed. Off by default: measured against a fixed 600 ms it wins for a
+   *  voice note two hops away and loses for a file, where the window keeps the radio
+   *  busy enough to inflate every round trip (docs/08 §7). */
+  adaptiveMediaAck: boolean;
   maxRetries: number;
 
   txPowerDbm: number;
@@ -192,6 +226,14 @@ export const DEFAULT_CONFIG: SimConfig = {
   sosRepeatMs: 5000,
   sosRepeats: 3,
   groupMode: "scoped-flood",
+  bleKbps: 80,
+  wifiDirectKbps: 20000,
+  transferChunkBytes: 65536,
+  transferWindow: 4,
+  transferStallMs: 3000,
+  voiceKbps: 12,
+  voiceFrameMs: 500,
+  jitterBufferMs: 200,
 
   enableSuperElection: true,
   enableMobility: true,
@@ -204,6 +246,8 @@ export const DEFAULT_CONFIG: SimConfig = {
   jitterMaxMs: 200,
   mprWaitMs: MPR_WAIT_MS,
   ackTimeoutMs: 4000,
+  mediaAckTimeoutMs: 600,
+  adaptiveMediaAck: false,
   maxRetries: 2,
 
   txPowerDbm: DEFAULT_TX_POWER_DBM,
@@ -266,6 +310,15 @@ export interface SimulationStats {
   groupDeliveryRatio: number;
   /** Copies a *member* could not decrypt because the key had rotated since. */
   groupEpochRejected: number;
+  /** Large transfers started and finished, chunks put on air, and bytes delivered
+   *  (docs/08). Chunks are kept out of `sentUnicast`/`deliveryRatio` on purpose:
+   *  one 10 MB file is 160 of them. */
+  transfersStarted: number;
+  transfersCompleted: number;
+  /** Windows that stopped moving and had to be kicked (docs/08 §6). */
+  transferStalls: number;
+  sentChunks: number;
+  bytesDelivered: number;
 
   /** skills/07 telemetry: "Battery %/h per role, scans/sec, relays/sec".
    *  Measured from the battery snapshot taken when metrics were cleared, over
@@ -294,6 +347,58 @@ export interface LatencyByHop {
   p95Ms: number;
 }
 
+/**
+ * One large transfer in flight: a file chopped into chunks, or a push-to-talk note
+ * streamed as Opus frames (docs/05 §3.2-3.3).
+ *
+ * Chunks are ordinary unicasts, so they inherit everything the data plane already
+ * does — ACKs, retransmission, and the OppQueue as a last resort, which is what
+ * makes "resume on reconnect" (docs/05 §3.2) fall out instead of needing its own
+ * mechanism.
+ */
+export interface Transfer {
+  id: string;
+  kind: "file" | "voice";
+  from: NodeId;
+  to: NodeId;
+  totalBytes: number;
+  chunkBytes: number;
+  chunks: number;
+  /** Chunks the receiver has, in arrival order-independent count. */
+  received: number;
+  /** Chunks that took at least one retransmission to arrive. */
+  retransmitted: number;
+  /** Chunk indices the receiver has, so a retry that arrives twice is not counted. */
+  receivedChunks: Set<number>;
+  /** Chunk indices the sender has actually put on air. A voice note is captured in
+   *  real time, so frames that have not been recorded yet are missing without being
+   *  lost — and re-sending them would be meaningless. */
+  onAir: Set<number>;
+  /** Next chunk index the sender may put on air (the sliding window's right edge). */
+  nextToSend: number;
+  window: number;
+  /** Times the window stopped moving and missing chunks had to be re-sent. */
+  stalls: number;
+  /** Round trips this transfer's own ACKs have reported. Null until the first one:
+   *  `mediaAckTimeoutMs` covers the cold start. `minRttMs` is the one the timer is
+   *  built from, because the smoothed average measures the queue the transfer is
+   *  creating for itself (docs/08 §7). */
+  srttMs: number | null;
+  rttVarMs: number;
+  minRttMs: number | null;
+  /** Simulation time the last chunk arrived: the stall watchdog's reference. */
+  lastProgressAt: number;
+  startedAt: number;
+  /** When the receiver got chunk 0: streaming playback can begin here. */
+  firstChunkAt: number | null;
+  /** When the last chunk arrived. */
+  completedAt: number | null;
+  /** For a voice note: when capture ended, i.e. when the user let go of the button. */
+  releasedAt: number | null;
+  transport: TransportType;
+  state: "active" | "complete";
+}
+
 export interface DeliveryRecord {
   msgId: string;
   from: NodeId;
@@ -314,6 +419,12 @@ export interface DeliveryRecord {
   hopTrace: HopRecord[];
   /** Set on group traffic, so it can be accounted separately from 1:1. */
   groupId?: string;
+  /** Set on one chunk of a large transfer. */
+  transferId?: string;
+  /** Its position in that transfer, so arrival gaps can be measured per frame. */
+  chunkIndex?: number;
+  /** Whether this copy needed a retransmission to arrive. */
+  retransmitted?: boolean;
   /** The key epoch this copy was sent under. */
   groupEpoch?: number;
 }
@@ -362,6 +473,9 @@ export interface SentRecord {
   /** Set on group traffic, so a UI can show one card per send even in
    *  `per-member-unicast` mode, where one user action is N radio messages. */
   groupId?: string;
+  /** Set on one chunk of a large transfer, so a UI can show the file rather than
+   *  160 empty messages. */
+  transferId?: string;
 }
 
 export interface RoleEvent {
@@ -545,6 +659,11 @@ interface PathTrace {
  * are all real protocol durations instead of wall-clock artefacts. Nothing in
  * here touches `Date.now()` or `Math.random()`.
  */
+interface ChunkPayload {
+  transferId: string;
+  index: number;
+}
+
 interface SosRepeatPayload {
   sosId: string;
   body: string;
@@ -574,7 +693,10 @@ export class MeshSimulation {
   private msgCounter = 0;
   private traces = new Map<string, PathTrace>();
   /** Logical msgId -> the originator still waiting for its ACK. */
-  private pendingAcks = new Map<string, { msg: MeshMessage; from: NodeId; attempts: number }>();
+  private pendingAcks = new Map<
+    string,
+    { msg: MeshMessage; from: NodeId; attempts: number; sentAt: number }
+  >();
   private listeners = new Set<() => void>();
 
   // counters
@@ -590,6 +712,14 @@ export class MeshSimulation {
   private groupReceipts = 0;
   private groupExpected = 0;
   private groupEpochRejected = 0;
+  private transfersStarted = 0;
+  private transfersCompleted = 0;
+  private transferStalls = 0;
+  private sentChunks = 0;
+  private bytesDelivered = 0;
+  private transferSeq = 0;
+  /** Live and finished large transfers, keyed by transfer id. */
+  readonly transfers = new Map<string, Transfer>();
   private sentUnicast = 0;
   private sentBroadcast = 0;
   private superSamples = 0;
@@ -660,6 +790,13 @@ export class MeshSimulation {
     this.groupReceipts = 0;
     this.groupExpected = 0;
     this.groupEpochRejected = 0;
+    this.transfers.clear();
+    this.transferSeq = 0;
+    this.transfersStarted = 0;
+    this.transfersCompleted = 0;
+    this.transferStalls = 0;
+    this.sentChunks = 0;
+    this.bytesDelivered = 0;
     this.superSamples = 0;
     this.superSampleSum = 0;
     this.retriesSent = 0;
@@ -770,6 +907,15 @@ export class MeshSimulation {
         break;
       case "sosrepeat":
         this.onSosRepeat(nodeId, payload as SosRepeatPayload);
+        break;
+      case "transferchunk": {
+        const chunk = payload as ChunkPayload;
+        const t = this.transfers.get(chunk.transferId);
+        if (t && t.state === "active" && this.byId(nodeId)?.isOnline) this.sendChunk(t, chunk.index);
+        break;
+      }
+      case "transferstall":
+        this.onTransferStall(nodeId, (payload as ChunkPayload).transferId);
         break;
       case "traffic":
         this.onTraffic();
@@ -993,12 +1139,238 @@ export class MeshSimulation {
   }
 
   /** Inject a user message into the mesh. Returns the message, or null. */
+  /**
+   * How long a payload occupies the radio on top of the calibrated hop latency.
+   *
+   * `hopLatencyBleMs` 120 already *includes* one GATT write of a full-sized packet, so
+   * only the excess over that packet is charged. That leaves every latency measured so
+   * far — and the golden vectors — exactly where they are, while making a 64 KB chunk
+   * cost what a 64 KB chunk costs (docs/08 §2).
+   */
+  serializationMs(bytes: number, transport: TransportType): number {
+    const excess = Math.max(0, bytes - BLE_MAX_BYTES);
+    if (excess === 0) return 0;
+    const kbps = transport === "wifiDirect" ? this.config.wifiDirectKbps : this.config.bleKbps;
+    return (excess * 8) / kbps; // bits over kbit/s is milliseconds
+  }
+
+  /**
+   * Send a large file: sliced into `transferChunkBytes` chunks and pushed through a
+   * sliding window of unacknowledged chunks (docs/05 §3.2, "64 KB slices,
+   * sliding-window ACK").
+   *
+   * Every chunk is an ordinary unicast, so it inherits ACKs, retransmission and the
+   * OppQueue as a last resort — which is what makes "resume on reconnect" work without
+   * any media-specific state machine. Returns null if the sender is offline.
+   */
+  sendFile(
+    fromId: NodeId,
+    toId: NodeId,
+    totalBytes: number,
+    opts?: { chunkBytes?: number; window?: number }
+  ): Transfer | null {
+    const from = this.byId(fromId);
+    if (!from || !from.isOnline || totalBytes <= 0) return null;
+    const chunkBytes = Math.max(64, opts?.chunkBytes ?? this.config.transferChunkBytes);
+    const chunks = Math.max(1, Math.ceil(totalBytes / chunkBytes));
+    const t = this.newTransfer("file", fromId, toId, totalBytes, chunkBytes, chunks, opts?.window);
+    this.pushWindow(t);
+    return t;
+  }
+
+  /**
+   * Start a push-to-talk note. `seconds` is how long the button is held, and the note
+   * is captured and streamed at the same time: frame i covers the capture window
+   * `[i, i+1) × voiceFrameMs`, so it can only leave at the *end* of that window
+   * (docs/05 §3.3, "500 ms frames at 6-12 kbps"). The last frame therefore departs at
+   * the moment of release — the honest worst case, and the one the roadmap's
+   * "<3 s 1-hop" budget has to cover.
+   *
+   * `stream: false` sends the finished note as one blob at release instead, which is
+   * the alternative the streaming design is measured against in docs/08 §5.
+   */
+  sendVoice(
+    fromId: NodeId,
+    toId: NodeId,
+    seconds: number,
+    opts?: { stream?: boolean }
+  ): Transfer | null {
+    const from = this.byId(fromId);
+    if (!from || !from.isOnline || seconds <= 0) return null;
+    const frameMs = this.config.voiceFrameMs;
+    const frames = Math.max(1, Math.ceil((seconds * 1000) / frameMs));
+    const frameBytes = Math.max(1, Math.ceil((frameMs * this.config.voiceKbps) / 8));
+    const stream = opts?.stream ?? true;
+    // Capture ends one `seconds` from now either way, and nothing can leave the
+    // phone before it has been recorded.
+    const releasedAt = this.now + seconds * 1000;
+    const totalBytes = frames * frameBytes;
+
+    if (!stream) {
+      // One blob of the whole note, sent when the button is released.
+      const t = this.newTransfer("voice", fromId, toId, totalBytes, totalBytes, 1, 1);
+      t.releasedAt = releasedAt;
+      this.queue.push(releasedAt, "transferchunk", fromId, { transferId: t.id, index: 0 });
+      return t;
+    }
+
+    const t = this.newTransfer("voice", fromId, toId, totalBytes, frameBytes, frames, 1);
+    t.releasedAt = releasedAt;
+    for (let i = 0; i < frames; i++) {
+      const departsAt = this.now + Math.min((i + 1) * frameMs, seconds * 1000);
+      this.queue.push(departsAt, "transferchunk", fromId, { transferId: t.id, index: i });
+    }
+    return t;
+  }
+
+  private newTransfer(
+    kind: "file" | "voice",
+    fromId: NodeId,
+    toId: NodeId,
+    totalBytes: number,
+    chunkBytes: number,
+    chunks: number,
+    window?: number
+  ): Transfer {
+    const id = `transfer-${this.transferSeq++}`;
+    const t: Transfer = {
+      id,
+      kind,
+      from: fromId,
+      to: toId,
+      totalBytes,
+      chunkBytes,
+      chunks,
+      received: 0,
+      retransmitted: 0,
+      receivedChunks: new Set<number>(),
+      onAir: new Set<number>(),
+      nextToSend: 0,
+      window: Math.max(1, window ?? this.config.transferWindow),
+      stalls: 0,
+      srttMs: null,
+      rttVarMs: 0,
+      minRttMs: null,
+      lastProgressAt: this.now,
+      startedAt: this.now,
+      firstChunkAt: null,
+      completedAt: null,
+      releasedAt: null,
+      transport: selectTransport(chunkBytes),
+      state: "active",
+    };
+    this.transfers.set(id, t);
+    this.transfersStarted++;
+    this.queueStallCheck(id, fromId);
+    return t;
+  }
+
+  /** (Re)arm the stall watchdog. It stops by itself once the transfer completes. */
+  private queueStallCheck(transferId: string, nodeId: NodeId): void {
+    this.queue.push(this.now + this.config.transferStallMs, "transferstall", nodeId, { transferId });
+  }
+
+  /** Put chunks on air for as long as the sliding window has room. */
+  private pushWindow(t: Transfer): void {
+    while (t.nextToSend < t.chunks && t.nextToSend < t.received + t.window) {
+      this.sendChunk(t, t.nextToSend++);
+    }
+  }
+
+  private sendChunk(t: Transfer, index: number): void {
+    const bytes = Math.min(t.chunkBytes, t.totalBytes - index * t.chunkBytes);
+    if (bytes <= 0 || index >= t.chunks) return;
+    t.onAir.add(index);
+    this.sendMessage(t.from, t.to, "", "file", undefined, { transferId: t.id, index, bytes });
+  }
+
+  /**
+   * The window has not moved for `transferStallMs`: re-send the chunks the receiver is
+   * still missing.
+   *
+   * This is what makes a transfer survive the two things a mesh actually does to it — a
+   * chunk whose retries ran out (it goes to the OppQueue and its logical id is never
+   * seen again), and a link that came back after a node walked out of range. The
+   * receiver dedupes by chunk index, so a re-send that was not needed costs radio time
+   * and nothing else.
+   */
+  private onTransferStall(nodeId: NodeId, transferId: string): void {
+    const t = this.transfers.get(transferId);
+    if (!t || t.state !== "active") return;
+    const node = this.byId(nodeId);
+    // A transfer three hops away legitimately hears nothing for longer than the stall
+    // threshold, so the threshold follows the retry timer it is backstopping.
+    const stallMs = Math.max(
+      this.config.transferStallMs,
+      this.transferTimeoutMs(t) * (this.config.maxRetries + 1) * 1.25
+    );
+    if (node && node.isOnline && this.now - t.lastProgressAt >= stallMs) {
+      // Only chunks that were put on air and never arrived. Frames still being
+      // recorded are not missing, they are not due yet.
+      const missing: number[] = [];
+      for (const i of t.onAir) if (!t.receivedChunks.has(i)) missing.push(i);
+      missing.sort((x, y) => x - y);
+      if (missing.length > 0) {
+        t.stalls++;
+        this.transferStalls++;
+        t.lastProgressAt = this.now;
+        this.pushLog(
+          "transfer",
+          nodeId,
+          `${t.id} stalled — nothing arrived for ${stallMs.toFixed(0)} ms, re-sending ` +
+            `${Math.min(missing.length, t.window)} of ${missing.length} missing chunk${missing.length === 1 ? "" : "s"} (stall ${t.stalls})`,
+          { msgType: "file" }
+        );
+        for (const i of missing.slice(0, t.window)) this.sendChunk(t, i);
+      }
+    }
+    this.queueStallCheck(transferId, nodeId);
+  }
+
+  /**
+   * The receiver got a chunk: slides the window on, and completes the transfer when
+   * the last one lands. A duplicate (a retry that arrived after the original) is
+   * ignored, exactly as the inbox ignores a duplicate message.
+   */
+  private onChunkArrived(msg: MeshMessage, node: MeshNode): void {
+    const t = this.transfers.get(msg.transferId!);
+    if (!t || t.to !== node.id || t.state !== "active") return;
+    const index = msg.chunkIndex ?? 0;
+    if (t.receivedChunks.has(index)) return;
+    t.receivedChunks.add(index);
+    t.received++;
+    t.lastProgressAt = this.now;
+    t.transport = msg.transport;
+    if (msg.attempt > 0) t.retransmitted++;
+    if (index === 0) t.firstChunkAt = this.now;
+
+    if (t.received === t.chunks) {
+      t.completedAt = this.now;
+      t.state = "complete";
+      this.transfersCompleted++;
+      this.bytesDelivered += t.totalBytes;
+      const kb = (t.totalBytes / 1024).toFixed(t.totalBytes < 1048576 ? 1 : 0);
+      this.pushLog(
+        "transfer",
+        node.id,
+        `${t.id} ${t.kind} ${t.totalBytes >= 1048576 ? `${(t.totalBytes / 1048576).toFixed(1)} MB` : `${kb} KB`} complete: ` +
+          `${t.chunks} chunk${t.chunks === 1 ? "" : "s"} in ${(this.now - t.startedAt).toFixed(0)} ms` +
+          (t.retransmitted ? `, ${t.retransmitted} retransmitted` : "") +
+          ` over ${t.transport}`,
+        { peerId: t.from, msgId: msg.id, msgType: msg.type }
+      );
+      return;
+    }
+    if (t.kind === "file") this.pushWindow(t);
+  }
+
   sendMessage(
     fromId: NodeId,
     toId: NodeId | "BROADCAST",
     body: string,
     type: MsgType = "text",
-    groupCtx?: { id: string; epoch: number }
+    groupCtx?: { id: string; epoch: number },
+    chunk?: { transferId: string; index: number; bytes: number }
   ): MeshMessage | null {
     const from = this.byId(fromId);
     if (!from || !from.isOnline) return null;
@@ -1039,6 +1411,14 @@ export class MeshSimulation {
       msg.groupId = groupCtx.id;
       msg.groupEpoch = groupCtx.epoch;
     }
+    if (chunk) {
+      // A chunk's size is the payload it carries, not the empty body it was built
+      // from — and that size is what picks the transport and the air time.
+      msg.sizeBytes = chunk.bytes;
+      msg.transport = selectTransport(chunk.bytes);
+      msg.transferId = chunk.transferId;
+      msg.chunkIndex = chunk.index;
+    }
     if (msgType === "sos") {
       const sosId = `sos-${fromId}-${Math.round(this.now)}`;
       this.decorateSos(msg, from, 0, sosId);
@@ -1064,11 +1444,13 @@ export class MeshSimulation {
         recipients: 0,
         sosId: msg.sosId,
         groupId: msg.groupId,
+        transferId: msg.transferId,
       });
       // Group traffic gets its own counters: folding it into `sentUnicast` would
       // let a 10-member group flatter `deliveryRatio`, and folding it into
       // `sentBroadcast` would deflate `broadcastReach`.
-      if (groupCtx) this.sentGroup++;
+      if (chunk) this.sentChunks++;
+      else if (groupCtx) this.sentGroup++;
       else if (toId === "BROADCAST") this.sentBroadcast++;
       else this.sentUnicast++;
     }
@@ -1105,8 +1487,8 @@ export class MeshSimulation {
       msgType !== "ack" &&
       this.config.maxRetries > 0
     ) {
-      this.pendingAcks.set(msg.id, { msg, from: fromId, attempts: 0 });
-      this.queue.push(this.now + this.config.ackTimeoutMs, "acktimeout", fromId, msg.id);
+      this.pendingAcks.set(msg.id, { msg, from: fromId, attempts: 0, sentAt: this.now });
+      this.queue.push(this.now + this.ackTimeoutFor(msg), "acktimeout", fromId, msg.id);
     }
 
     const decision = decideForward(
@@ -1254,7 +1636,53 @@ export class MeshSimulation {
       this.config.relayPolicy
     );
     this.applyDecision(node, retry, decision);
-    this.queue.push(this.now + this.config.ackTimeoutMs, "acktimeout", nodeId, msgId);
+    this.queue.push(this.now + this.ackTimeoutFor(retry), "acktimeout", nodeId, msgId);
+  }
+
+  /** The ACK timeout that applies to this message: media retries far sooner than text,
+   *  and by default on a timer measured from the path rather than a constant. */
+  private ackTimeoutFor(msg: MeshMessage): number {
+    if (!msg.transferId) return this.config.ackTimeoutMs;
+    const t = this.transfers.get(msg.transferId);
+    return t ? this.transferTimeoutMs(t) : this.config.mediaAckTimeoutMs;
+  }
+
+  /** The retry timer one transfer is using right now. */
+  private transferTimeoutMs(t: Transfer): number {
+    return this.config.adaptiveMediaAck ? this.mediaTimeoutMs(t) : this.config.mediaAckTimeoutMs;
+  }
+
+  /**
+   * The retry timer for a transfer, from the round trips its own ACKs have reported.
+   *
+   * Twice the fastest round trip this transfer has seen, plus 200 ms of slack, clamped
+   * to [300 ms, `ackTimeoutMs`]. Measured rather than fixed because the right value is a
+   * property of the path and the path is not known in advance: a round trip is ~0.5 s at
+   * one hop and ~1.5 s at three, so any constant is wrong for one of them.
+   *
+   * The *minimum* rather than RFC 6298's `srtt + 4·rttvar`, because with a window of
+   * chunks in flight the smoothed average measures the queue the transfer is creating
+   * for itself and drifts to the ceiling — measured in docs/08 §7.
+   */
+  mediaTimeoutMs(t: Transfer): number {
+    if (t.minRttMs === null) return this.config.mediaAckTimeoutMs;
+    return Math.min(this.config.ackTimeoutMs, Math.max(300, 2 * t.minRttMs + 200));
+  }
+
+  /** Fold one ACK's round trip into the transfer's estimate. */
+  private observeAck(msg: MeshMessage, sentAt: number): void {
+    if (!msg.transferId) return;
+    const t = this.transfers.get(msg.transferId);
+    if (!t) return;
+    const rtt = this.now - sentAt;
+    if (t.minRttMs === null || rtt < t.minRttMs) t.minRttMs = rtt;
+    if (t.srttMs === null) {
+      t.srttMs = rtt;
+      t.rttVarMs = rtt / 2;
+      return;
+    }
+    t.rttVarMs = 0.75 * t.rttVarMs + 0.25 * Math.abs(t.srttMs - rtt);
+    t.srttMs = 0.875 * t.srttMs + 0.125 * rtt;
   }
 
   /** Pick a random online pair and send a message (used by UI + traffic gen). */
@@ -1365,7 +1793,10 @@ export class MeshSimulation {
       rssi,
     });
     const base = msg.transport === "wifiDirect" ? this.config.hopLatencyWifiMs : this.config.hopLatencyBleMs;
-    const delay = base + randRange(this.rng, this.config.jitterMinMs, this.config.jitterMaxMs);
+    const delay =
+      base +
+      this.serializationMs(msg.sizeBytes, msg.transport) +
+      randRange(this.rng, this.config.jitterMinMs, this.config.jitterMaxMs);
     this.queue.push(this.now + delay, "msg", targetId, { msg, via: node.id } as MsgPayload);
   }
 
@@ -1458,7 +1889,11 @@ export class MeshSimulation {
     if (msg.to === node.id) {
       if (msg.type === "ack") {
         const ackedId = msg.body.slice(4);
-        if (this.pendingAcks.has(ackedId)) this.pendingAcks.delete(ackedId);
+        const pending = this.pendingAcks.get(ackedId);
+        if (pending) {
+          this.pendingAcks.delete(ackedId);
+          this.observeAck(pending.msg, pending.sentAt);
+        }
         this.acksReceived++;
         this.pushLog("ack", node.id, `${ackedId} acknowledged`, { msgId: ackedId, peerId: via });
       }
@@ -1466,7 +1901,10 @@ export class MeshSimulation {
       // carries the final action rather than the provisional one.
       if (hopRecord) hopRecord.action = "delivered";
       const fresh = deliverToInbox(node, msg);
-      if (fresh) this.recordDelivery(node, msg, trace);
+      if (fresh) {
+        this.recordDelivery(node, msg, trace);
+        if (msg.transferId) this.onChunkArrived(msg, node);
+      }
       this.pushLog(
         "deliver",
         node.id,
@@ -1614,6 +2052,9 @@ export class MeshSimulation {
       hopTrace: trace ? trace.hops.slice() : [],
       groupId: msg.groupId,
       groupEpoch: msg.groupEpoch,
+      transferId: msg.transferId,
+      chunkIndex: msg.chunkIndex,
+      retransmitted: msg.attempt > 0,
       timestamp: this.now,
       attempt: msg.attempt,
       dtn: msg.carried,
@@ -1768,8 +2209,10 @@ export class MeshSimulation {
 
     // Group traffic is neither: it has its own denominator (`groupExpected`), and
     // folding it in here would let a 10-member group flatter `deliveryRatio`.
+    // Media chunks are excluded as well: a 10 MB file is 160 of them, and letting
+    // them into the ratio would make delivery about the file rather than the mesh.
     const unicastDeliveries = this.deliveries.filter(
-      (d) => d.type !== "ack" && d.type !== "broadcast" && !d.groupId
+      (d) => d.type !== "ack" && d.type !== "broadcast" && !d.groupId && !d.transferId
     );
     const dataDeliveries = this.deliveries.filter((d) => d.type !== "ack");
     const latencies = unicastDeliveries.map((d) => d.latencyMs).sort((a, b) => a - b);
@@ -1875,6 +2318,11 @@ export class MeshSimulation {
       groupDeliveryRatio:
         this.groupExpected > 0 ? this.groupReceipts / this.groupExpected : 0,
       groupEpochRejected: this.groupEpochRejected,
+      transfersStarted: this.transfersStarted,
+      transfersCompleted: this.transfersCompleted,
+      transferStalls: this.transferStalls,
+      sentChunks: this.sentChunks,
+      bytesDelivered: this.bytesDelivered,
       batteryPercentPerHourNormal: drainPerHour("NORMAL"),
       batteryPercentPerHourSuper: drainPerHour("SUPER"),
       scansPerSec: this.scanCount / elapsedSec,

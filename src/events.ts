@@ -19,6 +19,10 @@ export type EventKind =
   | "acktimeout"
   /** Repeat an SOS flood (docs/05: "SOS mode: repeated flood of GPS + text"). */
   | "sosrepeat"
+  /** Put one push-to-talk frame on air at its capture time (docs/05 §3.3). */
+  | "transferchunk"
+  /** Re-send whatever a stalled transfer is still missing (docs/05 §3.2 "resume"). */
+  | "transferstall"
   | "traffic";
 
 export interface SimEvent<T = unknown> {

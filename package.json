@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "media": "tsc -p tool/tsconfig.golden.json && node -e \"require('fs').writeFileSync('tool/.build/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\" && node tool/.build/tool/media-probe.js",
     "golden": "tsc -p tool/tsconfig.golden.json && node -e \"require('fs').writeFileSync('tool/.build/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\" && node tool/.build/tool/generate-golden.js"
   },
   "dependencies": {

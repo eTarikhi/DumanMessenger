@@ -1,5 +1,12 @@
-import type { SimulationStats } from "../simulation";
+import type { SimConfig, SimulationStats } from "../simulation";
 import type { MeshNode } from "../types";
+
+/** Human-readable payload size, for the media row. */
+function fmtBytes(bytes: number): string {
+  if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(bytes >= 10485760 ? 0 : 1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${bytes} B`;
+}
 
 interface Props {
   stats: SimulationStats;
@@ -7,6 +14,8 @@ interface Props {
   dutyCycleEnabled: boolean;
   /** Needed for the SOS row: which nodes are holding an alert right now. */
   nodes?: MeshNode[];
+  /** Media sizing and link throughput, quoted in the media row's footnote. */
+  config?: SimConfig;
 }
 
 /**
@@ -16,7 +25,8 @@ interface Props {
  * per-role battery burn (skills/07's telemetry row) and the latency distribution
  * broken out by hop count instead of blended into one p95.
  */
-export function MetricsPanel({ stats, dutyCycleEnabled, nodes }: Props) {
+export function MetricsPanel({ stats, dutyCycleEnabled, nodes, config }: Props) {
+  const chunkKb = Math.round((config?.transferChunkBytes ?? 65536) / 1024);
   // skills/07 acceptance: "Android 8h NORMAL: <15% extra drain vs idle".
   const BUDGET_8H = 15;
   const hopRows = stats.latencyByHop;
@@ -162,6 +172,40 @@ export function MetricsPanel({ stats, dutyCycleEnabled, nodes }: Props) {
             <code>deliveryRatio</code> nor deflate <code>broadcastReach</code>. "Stale key epoch" is
             the security property doing work: copies a member cannot decrypt because the key rotated
             when somebody left or joined — the node still relayed them, it just could not read them.
+          </div>
+        </section>
+      )}
+
+      {stats.transfersStarted > 0 && (
+        <section style={{ marginTop: 14 }}>
+          <div style={sectionStyle}>📦 Media transport (docs/05 §3.2–3.3, roadmap Phase 3)</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <Counter
+              label="Transfers done"
+              value={`${stats.transfersCompleted}/${stats.transfersStarted}`}
+              accent={stats.transfersCompleted === stats.transfersStarted ? "#b6ff4a" : "#7fb3ff"}
+            />
+            <Counter label="Chunks on air" value={`${stats.sentChunks}`} accent="#4de0ff" />
+            <Counter
+              label="Window stalls"
+              value={`${stats.transferStalls}`}
+              accent={stats.transferStalls === 0 ? "#b6ff4a" : "#ff9f4d"}
+            />
+            <Counter label="Payload delivered" value={fmtBytes(stats.bytesDelivered)} accent="#b6ff4a" />
+          </div>
+          <div style={{ fontSize: 10, color: "#5a6a7a", marginTop: 6, lineHeight: 1.5 }}>
+            A file is sliced into {chunkKb} KB chunks and pushed through a{" "}
+            {config?.transferWindow ?? 4}-deep sliding window. Each chunk is an ordinary unicast, so it inherits ACKs,
+            retransmission and the OppQueue — which is what makes "resume on reconnect" need no media-specific code.
+            Chunks are counted apart from 1:1 traffic: one 10 MB file is {Math.max(1, Math.round(10485760 / (config?.transferChunkBytes ?? 65536)))} of
+            them, and folding them into <code>deliveryRatio</code> would make the metric about the file rather than
+            the mesh. Air time is charged per hop above {chunkKb} KB at {config?.bleKbps ?? 80} kbit/s (BLE) /{" "}
+            {((config?.wifiDirectKbps ?? 20000) / 1000).toFixed(0)} Mbit/s (Wi-Fi Direct) — the{" "}
+            {Math.round((config?.wifiDirectKbps ?? 20000) / (config?.bleKbps ?? 80))}× ratio docs/05 §3.2 claims. A
+            chunk retries after {config?.mediaAckTimeoutMs ?? 600} ms rather than the{" "}
+            {((config?.ackTimeoutMs ?? 4000) / 1000).toFixed(0)} s a text message waits, because one lost voice frame
+            is a hole in the audio; "window stalls" counts the times nothing arrived for that long and the missing
+            chunks had to be re-sent.
           </div>
         </section>
       )}
