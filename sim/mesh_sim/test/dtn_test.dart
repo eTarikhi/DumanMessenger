@@ -1,6 +1,8 @@
 import 'package:duman_mesh_sim/mesh_sim.dart';
 import 'package:test/test.dart';
 
+import 'helpers.dart';
+
 /// Store-carry-forward against `skills/04` (docs/06 §20).
 ///
 /// Mirrors `store-carry-forward against skills/04` in
