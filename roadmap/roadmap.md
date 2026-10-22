@@ -47,6 +47,16 @@
   converges, because reach is the scoped flood's job, not repair's. And a key rotation resets what is
   repairable: history older than the last membership change is unreadable to everybody, so it is never
   offered (§17.5). `dart run bin/mesh_sim.dart --history` and `npm run history` print both arms.
+> **Prediction note (Oct 2026 — evidence in `docs/06-simulator-findings.md` §18):** the *atrium* half of this criterion has been answered in
+  simulation, with a condition the criterion does not mention. The most open node in a world — most peers,
+  strongest average RSSI — becomes SUPER within two election cycles in **all four worlds** when it is also
+  healthy, and stays NORMAL in three of four when it is not: a drained phone at **199 peers** scores 0.688
+  against a healthy phone at **nine** scoring 0.708, because the peer term is normalised logarithmically
+  against 50 and so saturates, while battery, uptime and packet-loss rate carry an uncompressed 0.45 of the
+  score. So the walk has to record battery, uptime and loss next to placement (`docs/09` §4's `sample`
+  records exist for this), and the criterion to check is that the elected set is the top 20% by score — not
+  that a particular spot wins. If the atrium phone loses while healthy, §18.2 names the lever: normalise the
+  peer count against the observed maximum in the world rather than a fixed 50.
 - [ ] E2EE round 1: Noise_XX 1:1, SAS verify, padding
   > **Implementation note (Oct 2026 — evidence in `docs/07-e2ee-noise-xx.md` §2-§4):** specified and costed against this mesh, not implemented — `skills/03` says
   *"never custom crypto"*, so the handshake is libsodium work. What is measured here and settles real

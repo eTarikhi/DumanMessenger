@@ -9,10 +9,18 @@ import {
   historyDigest,
   type SimConfig,
 } from "../simulation";
-import { campusQuad, festivalCrowd, partitionedPair, sparseVillage } from "../scenarios";
-import { canReach, peersInRange } from "../rf";
+import {
+  buildScenario,
+  campusQuad,
+  festivalCrowd,
+  partitionedPair,
+  scenarioNames,
+  sparseVillage,
+} from "../scenarios";
+import { canReach, peersInRange, rssiModel } from "../rf";
 import { createMessage, deliverToInbox, selectTransport, wireSizeOf } from "../routing";
-import { makeNode } from "./helpers";
+import { makeNode, rfWith } from "./helpers";
+import { BATTERY_FLOOR, CHARGING_BONUS, WEIGHTS, computeScore } from "../election";
 import { HISTORY_BUCKETS, type HistoryEntry, type MeshMessage, type MeshNode } from "../types";
 
 /**
@@ -1826,4 +1834,115 @@ describe("group history anti-entropy (roadmap Phase 1: hash beacon)", () => {
     expect(off.sim.groupHistoryOf(off.ids[2], off.group.id)).toHaveLength(0);
     expect(off.sim.historyConverged(off.group)).toBe(false);
   });
+});
+
+describe("the atrium becomes a router (roadmap Phase 2 field test, docs/09 §5)", () => {
+  /**
+   * The roadmap's field-test criterion names a building feature — "atrium should become
+   * SUPER" — and the simulator can answer it before anybody travels: the node with the
+   * most open position hears the most peers through the fewest walls, which is exactly
+   * what the coverage score's first two terms reward (docs/03 §3, weights 0.30 peer
+   * count and 0.25 average RSSI).
+   *
+   * The most open point in each world is found rather than assumed: the position, out of
+   * every node's own, that reaches the most peers with the least wall attenuation.
+   */
+  function mostOpenNode(sim: MeshSimulation): MeshNode {
+    const online = sim.nodes.filter((n) => n.isOnline);
+    let best = online[0];
+    let bestScore = -1;
+    for (const n of online) {
+      const peers = peersInRange(n, online, sim.rf);
+      let rssiSum = 0;
+      for (const p of peers) rssiSum += rssiModel(n, p, sim.rf);
+      const avg = peers.length > 0 ? rssiSum / peers.length : -120;
+      const score = peers.length * 100 + avg;
+      if (score > bestScore) {
+        bestScore = score;
+        best = n;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Openness is only 55% of the coverage score — 0.30 on peer count and 0.25 on average
+   * RSSI (docs/03 §3) — so the roadmap's "atrium should become SUPER" is a statement
+   * about a *healthy* phone in the atrium. This is the trade-off, measured directly
+   * against `computeScore` rather than through a world, so the numbers are not confounded
+   * by whoever else happened to spawn nearby.
+   */
+  it("weighs openness against health, and says where the crossover is", () => {
+    const rf = rfWith();
+    expect(WEIGHTS.peers + WEIGHTS.rssi).toBeCloseTo(0.55, 9);
+    expect(
+      WEIGHTS.peers + WEIGHTS.rssi + WEIGHTS.battery + WEIGHTS.stability + WEIGHTS.pdr
+    ).toBeCloseTo(1, 9);
+    expect(CHARGING_BONUS).toBe(0.1);
+    expect(BATTERY_FLOOR).toBe(0.25);
+
+    /** A candidate with `peerCount` peers 12 m away in every direction. */
+    function score(peerCount: number, over: Partial<MeshNode>): number {
+      const node = makeNode("candidate", 50, 50, over);
+      const all = [node];
+      for (let i = 0; i < peerCount; i++) {
+        const a = (i / Math.max(1, peerCount)) * 2 * Math.PI;
+        all.push(makeNode(`p${i}`, 50 + Math.cos(a) * 12, 50 + Math.sin(a) * 12));
+      }
+      return computeScore(node, all, rf);
+    }
+
+    // The atrium phone at the end of a long day, against a corridor phone that has been
+    // sitting on a desk all week.
+    const openButDrained = score(19, { battery: 0.3, uptimeMin: 20, pdr: 0.9 });
+    const closedButHealthy = score(9, { battery: 1, uptimeMin: 600, pdr: 0.99 });
+    expect(closedButHealthy).toBeGreaterThan(openButDrained);
+
+    // How many peers the drained phone needs to overtake it: the price of a bad day.
+    // The answer is "more than any world in this repository has nodes", because the
+    // peer term is normalised logarithmically against 50 peers (docs/03 §3) and so
+    // saturates: at 199 peers — the largest world §15 of docs/06 measures — it still
+    // loses to a healthy phone with nine.
+    expect(score(199, { battery: 0.3, uptimeMin: 20, pdr: 0.9 })).toBeLessThan(closedButHealthy);
+    expect(score(60, { battery: 0.3, uptimeMin: 20, pdr: 0.9 })).toBeLessThan(closedButHealthy);
+    // Health has more range than position: the two position terms can contribute at most
+    // 0.30 x log(1+P)/log(51) + 0.25, while battery, stability and pdr contribute up to
+    // 0.45 between them.
+    expect(WEIGHTS.battery + WEIGHTS.stability + WEIGHTS.pdr).toBeCloseTo(0.45, 9);
+    // Which is the right way round for a mesh that has to survive a day without chargers,
+    // and the reason the field test has to record battery and uptime next to placement.
+    // Plugging in changes the answer without changing the position: the 0.1 charging
+    // bonus is worth roughly what a doubling of peer count is not.
+    expect(score(9, { battery: 0.3, uptimeMin: 20, pdr: 0.9, charging: true })).toBeGreaterThan(
+      score(9, { battery: 0.4, uptimeMin: 20, pdr: 0.9, charging: false })
+    );
+  });
+
+  for (const name of scenarioNames()) {
+    it(`elects a healthy open node in ${name} within two cycles`, () => {
+      const sim = new MeshSimulation({ ...buildScenario(name, 42), enableMobility: false });
+      sim.runFor(20000); // let the peer lists settle before judging who is open
+      const atrium = mostOpenNode(sim);
+      const peers = peersInRange(atrium, sim.nodes.filter((n) => n.isOnline), sim.rf).length;
+      expect(peers).toBeGreaterThan(0);
+
+      // Healthy as well as open: full battery, ten hours of uptime, a stationary phone
+      // that has not been dropping packets. The second test below shows why both halves
+      // of that are needed.
+      atrium.battery = 1;
+      atrium.uptimeMin = 600;
+      atrium.pdr = 0.99;
+      atrium.mobility = 0;
+
+      // Two election cycles at the 30 s interval: the criterion is not "eventually" but
+      // "before the walk is over".
+      sim.runFor(60000);
+      expect(atrium.role).toBe("SUPER");
+
+      // And it is not luck: its score is at or above the mean of the elected set.
+      const supers = sim.nodes.filter((n) => n.role === "SUPER");
+      const meanScore = supers.reduce((a, n) => a + n.score, 0) / supers.length;
+      expect(atrium.score).toBeGreaterThanOrEqual(meanScore - 1e-9);
+    });
+  }
 });

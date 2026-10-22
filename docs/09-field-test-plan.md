@@ -180,7 +180,8 @@ app build's logger can be checked against a reference file before anybody travel
 | overhead vs flood-all | **9.3%** of naive flood's relays (7-9% over six seeds); flood-all reaches 100% for 7-9× the transmissions | §6 | above 70% → suppression is not firing; check `decision` records for the MPR reason |
 | within 5 hops | 99.7% of sent | §6 | — |
 | SUPER ratio | **20-25%** of nodes, 0.06-0.22 role changes per node per minute | §5 | outside 15-25% → the coverage weights need this building's numbers |
-| atrium node | highest coverage score → SUPER within **2 election cycles** (60 s at a 30 s interval) | §3, §5 | it does not → the score's peer-count term is being beaten by battery/uptime on real hardware |
+| atrium node | SUPER within **2 election cycles** (60 s) **if it is also healthy** — full battery, long uptime, low packet loss. Verified in all four simulated worlds | §18.1 | it does not → read its battery and uptime before reading its position: a drained phone at 199 peers (0.688) still loses to a healthy one at nine (0.708), because the peer term saturates logarithmically (§18) |
+| atrium node, drained | **NORMAL**, in three of four worlds — health carries 0.45 of the score and position only 0.55 of a compressed term | §18 | if a drained atrium phone *is* elected, something is inflating the position terms: check the RSSI normalization against the calibration fit |
 | latency | p50 ~0.3 s, p95 ~1.3-4.8 s (traffic-dependent); 1 hop ≈ 0.16-0.5 s | §4, §8 | p95 over 5 s at 3 hops → the retry timer, not the routing |
 | NORMAL battery, duty cycle on | **10.0%/8 h** campus, 10.9% crowd, 7.1% stationary | §7 | over 15% → the scan window is not being honoured by the OS |
 | NORMAL battery, always on | 19.4%/8 h campus, 22.5% crowd — **fails the criterion by design** | §7 | this is the prediction, not a surprise |

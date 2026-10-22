@@ -1262,3 +1262,86 @@ Sync packets are counted apart (`sentSync`, `historyBeacons`, `historyRequests`,
 excluded from `deliveryRatio` and from the chat log, and reported on the dashboard. A
 node with no groups arms no beacon chain, so a run that never creates a group consumes no
 extra randomness: **the golden vectors are byte-identical** in both languages.
+
+---
+
+## 18. The atrium does become a router — if it is charged
+
+**Roadmap Phase 2's field-test criterion names a building feature: "atrium should become
+SUPER". It is the rare hardware criterion the simulator can answer in advance, so it was
+answered, and the answer has a condition on it that the criterion does not mention.**
+
+The most open node in a world — the one that hears the most peers at the strongest average
+RSSI, found by measurement rather than assumed from the floor plan — was made healthy
+(battery 1.0, ten hours of uptime, `pdr` 0.99, stationary) and the election was run for two
+cycles. It became SUPER in **all four worlds**: `campus_quad`, `sparse_village`,
+`festival_crowd` and `partitioned_pair`, with a score at or above the mean of the elected
+set in each.
+
+Left as spawned, the same node stayed NORMAL in **three of the four**. That is not noise;
+it is the coverage score doing what `docs/03` §3 specifies.
+
+### 18.1 The decomposition
+
+```
+score = 0.30 · log(1+peers)/log(51)   position
+      + 0.25 · (avgRssi + 100)/70     position
+      + 0.20 · battery                health
+      + 0.15 · min(uptime/60, 1)·(1−mobility)
+      + 0.10 · pdr                    health
+      + 0.10 if charging
+```
+
+Position carries 0.55 of the weight and health 0.45 — but position is *compressed* and
+health is not. The peer term is normalised logarithmically against 50 peers, so it
+saturates: going from 19 peers to 199 buys 0.175 of the term, i.e. 0.053 of score, while
+going from a drained phone to a healthy one moves up to 0.35.
+
+A drained atrium phone (battery 0.30, 20 minutes of uptime, `pdr` 0.90) against a healthy
+corridor phone with nine peers, both with peers 12 m away in every direction:
+
+| candidate | peers | peer term | total score |
+|---|---|---|---|
+| drained | 19 | 0.229 | 0.5122 |
+| drained | 60 | 0.314 | 0.5973 |
+| drained | **199** — more peers than any world in §15 has nodes | 0.404 | **0.6879** |
+| healthy | 9 | 0.176 | **0.7083** |
+
+**No peer count available in a ≤200-node world lets a drained phone outrank a healthy one
+with nine peers.** The drained phone at 199 peers does clear the 0.60 promotion threshold;
+it simply is not in the top 20%, because healthier nodes are above it.
+
+### 18.2 Is the weighting right?
+
+Arguably yes, and for the reason this product exists: a mesh that has supposed to survive a
+day without chargers should not elect a router that is about to die. `docs/03` §3's weights
+say so explicitly, and §5's hysteresis (demote below 0.50 for two cycles) is the same
+instinct applied over time. The charging bonus of +0.10 points the same way, and
+`skills/02`'s "NORMAL never auto-promoted if battery saver is on" is the hard edge of it.
+
+The limitation is worth naming anyway, because a field test could hit it: the logarithmic
+normalisation means the score **cannot express "dramatically better placed"**. A node
+hearing 199 peers and one hearing 60 differ by 0.09 of score. In a deployment whose whole
+topology rests on one unusually open position — a courtyard, an atrium, a ridge — the
+weights under-reward exactly the node the roadmap expects to win. The obvious alternative
+is to normalise peer count against the *observed* maximum in the world rather than a fixed
+50, which would make openness decisive in sparse worlds and still bounded in crowds. It is
+**not shipped**: §15 is the record of what happens when a coverage rule assumes "everyone
+hears everyone" and meets a 200-node world, and this is the same trap approached from the
+other side. If the field test shows the atrium losing to a corridor, that is the lever to
+pull, and it needs six seeds before anybody believes it (§16.4).
+
+### 18.3 What the field test has to record
+
+`docs/09` §5 now predicts the atrium result *conditionally*, and the capture schema's
+`sample` records carry `role`, `battery`, `charging` and `awake` for exactly this reason.
+On the day the criterion to check is not "the phone in the atrium is SUPER" but:
+
+1. the elected set is the top 20% by score, and
+2. the atrium phone is in it **if** it is healthy — with battery, uptime and packet loss
+   recorded next to its placement, because without those three columns a win is a
+   coincidence and a loss is uninterpretable.
+
+Both engines assert the healthy-node result in all four worlds and the score arithmetic
+above (`the atrium becomes a router`, in `src/__tests__/simulation.test.ts` and its Dart
+twin).
