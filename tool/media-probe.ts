@@ -17,6 +17,7 @@
 import { MeshSimulation, DEFAULT_CONFIG, type SimConfig } from "../src/simulation";
 import { campusQuad, festivalCrowd } from "../src/scenarios";
 import { canReach, effectiveLossProbability, peersInRange } from "../src/rf";
+import { createRng } from "../src/rng";
 import type { MeshNode, NodeId, TransportType } from "../src/types";
 
 /** skills/05: "chunked BLE 512B MTU" — what a file is sliced into when there is no
@@ -498,41 +499,127 @@ function acceptanceTable(): void {
 // ---------------------------------------------------------------------------
 // 6. Does media break the mesh for everybody else?
 // ---------------------------------------------------------------------------
+
+/**
+ * A fixed traffic plan, replayed identically in both arms.
+ *
+ * The first version of this section let each arm draw its own traffic from the
+ * simulation's RNG, which made it two different experiments: the "quiet" arm and the
+ * "busy" arm did not send the same messages, and the media run consumed randomness that
+ * shifted every later loss draw. It reported delivery 100% -> 98.2% and 0 -> 35 parked
+ * messages, and both differences were the confound (docs/06 §7's rule, and §9 of docs/08
+ * records the correction).
+ */
+function contentionPlan(seed: number, nodeCount: number, messages: number): Array<[number, number]> {
+  const rng = createRng((seed ^ 0x2f6e2b1) >>> 0);
+  const out: Array<[number, number]> = [];
+  for (let i = 0; i < messages; i++) {
+    const a = Math.floor(rng() * nodeCount);
+    let b = Math.floor(rng() * nodeCount);
+    let guard = 0;
+    while (b === a && guard++ < 32) b = Math.floor(rng() * nodeCount);
+    if (a !== b) out.push([a, b]);
+  }
+  return out;
+}
+
+interface ContentionArm {
+  sent: number;
+  ratio: number;
+  within5: number;
+  p95: number;
+  relayTx: number;
+  queued: number;
+  retries: number;
+  exhausted: number;
+  transferMs: number | null;
+}
+
+function contentionArm(seed: number, withFile: boolean, messages = 60, gapMs = 2000): ContentionArm {
+  const sim = simFor({ ...campusQuad(seed), trafficIntervalMs: 0 });
+  const plan = contentionPlan(seed, sim.nodes.length, messages);
+
+  let transfer: ReturnType<MeshSimulation["sendFile"]> = null;
+  if (withFile) {
+    const a = sim.nodes[plan[0][0]];
+    const b = sim.nodes[plan[0][1]];
+    transfer = sim.sendFile(a.id, b.id, 10 * MB);
+  }
+
+  let sent = 0;
+  for (let i = 1; i < plan.length; i++) {
+    const from = sim.nodes[plan[i][0]];
+    const to = sim.nodes[plan[i][1]];
+    if (from.isOnline && to.isOnline && sim.sendMessage(from.id, to.id, `c-${i}`, "text")) sent++;
+    sim.runFor(gapMs);
+  }
+  const stats = sim.refresh();
+  const uni = sim.deliveries.filter(
+    (d) => d.type !== "ack" && d.type !== "broadcast" && !d.groupId && !d.transferId
+  );
+  const lat = uni.map((d) => d.latencyMs).sort((x, y) => x - y);
+  return {
+    sent,
+    ratio: uni.length / Math.max(1, sent),
+    within5: uni.filter((d) => d.hops <= 5).length / Math.max(1, sent),
+    p95: lat.length ? lat[Math.floor(lat.length * 0.95)] : 0,
+    relayTx: stats.totalForwarded,
+    queued: stats.totalQueued,
+    retries: stats.retriesSent,
+    exhausted: stats.retriesExhausted,
+    transferMs:
+      transfer && transfer.completedAt !== null ? transfer.completedAt - transfer.startedAt : null,
+  };
+}
+
 function contentionTable(): void {
-  console.log("\n=== 6. Contention: a 10 MB transfer running beside normal traffic ===");
-  const base = { ...campusQuad(42), trafficIntervalMs: 4000 };
-  const quiet = simFor(base);
-  quiet.runFor(300_000);
-  // `stats` is a field, not a getter: refresh() has to run first or every number
-  // below reads as zero.
-  const quietStats = { ...quiet.refresh(), within5: withinFiveRatio(quiet) };
+  console.log("\n=== 6. Contention: does a 10 MB transfer hurt anybody else? ===");
+  console.log("One fixed traffic plan, replayed identically in both arms, mean of three seeds.");
+  console.log("(The first version of this table let each arm draw its own traffic and reported");
+  console.log(" harm that turned out to be the two arms not being the same experiment.)");
 
-  const busy = simFor(base);
-  const pair = pairAtHops(busy, 3);
-  let transfer = null as ReturnType<MeshSimulation["sendFile"]>;
-  if (pair) transfer = busy.sendFile(pair[0].id, pair[1].id, 10 * MB);
-  busy.runFor(300_000);
-  const busyStats = { ...busy.refresh(), within5: withinFiveRatio(busy) };
+  const arms: [string, boolean][] = [
+    ["quiet", false],
+    ["with a 10 MB file", true],
+  ];
+  const results = new Map<string, ContentionArm[]>();
+  for (const [label, withFile] of arms) {
+    results.set(label, SEEDS.map((seed) => contentionArm(seed, withFile)));
+  }
+  const mean = (rows: ContentionArm[], f: (r: ContentionArm) => number) =>
+    rows.reduce((a, r) => a + f(r), 0) / Math.max(1, rows.length);
 
-  console.log("                        quiet        with a 10 MB file in flight");
-  const row = (label: string, a: number, b: number, digits = 1) =>
+  const quiet = results.get("quiet")!;
+  const busy = results.get("with a 10 MB file")!;
+  console.log("\n" + "                        quiet          with a 10 MB file in flight".padEnd(24));
+  const row = (label: string, f: (r: ContentionArm) => number, digits = 1) =>
     console.log(
-      `${label.padEnd(24)}${a.toFixed(digits).padEnd(13)}${b.toFixed(digits)}`
+      `${label.padEnd(24)}${mean(quiet, f).toFixed(digits).padEnd(15)}${mean(busy, f).toFixed(digits)}`
     );
-  row("relay transmissions", quietStats.totalForwarded, busyStats.totalForwarded, 0);
-  row("unicast sent", quietStats.sentUnicast, busyStats.sentUnicast, 0);
-  row("delivery ratio %", quietStats.deliveryRatio * 100, busyStats.deliveryRatio * 100);
-  row("within 5 hops %", quietStats.within5 * 100, busyStats.within5 * 100);
-  row("p95 latency ms", quietStats.p95LatencyMs, busyStats.p95LatencyMs, 0);
-  row("retries sent", quietStats.retriesSent, busyStats.retriesSent, 0);
-  row("OppQueue holds", quietStats.totalQueued, busyStats.totalQueued, 0);
+  row("messages sent", (r) => r.sent, 1);
+  row("delivery ratio", (r) => r.ratio, 4);
+  row("within 5 hops", (r) => r.within5, 4);
+  row("p95 latency ms", (r) => r.p95, 0);
+  row("relay transmissions", (r) => r.relayTx, 0);
+  row("retries sent", (r) => r.retries, 0);
+  row("messages parked", (r) => r.queued, 1);
+  row("retries exhausted", (r) => r.exhausted, 1);
   console.log(
-    `  transfer: ${transfer ? `${transfer.received}/${transfer.chunks} chunks, ` +
-      `${transfer.completedAt === null ? "still running" : fmt(transfer.completedAt - transfer.startedAt)}` : "none"}`
+    `  per-seed delivery: quiet ${quiet.map((r) => r.ratio.toFixed(3)).join(", ")} | ` +
+      `busy ${busy.map((r) => r.ratio.toFixed(3)).join(", ")}`
   );
   console.log(
-    `  chunks put on air: quiet ${quietStats.sentChunks}, busy ${busyStats.sentChunks}; ` +
-      `payload delivered ${fmtSize(busyStats.bytesDelivered)}`
+    `  the transfer itself: ${fmt(mean(busy, (r) => r.transferMs ?? NaN))} at 3 hops, ` +
+      `${mean(busy, (r) => r.relayTx) - mean(quiet, (r) => r.relayTx) > 0 ? "" : "no "}extra relay work`
+  );
+  console.log(
+    "\nRead: delivery, within-5, parked messages and exhausted retries are the same in both arms,\n" +
+      "seed for seed. The only differences are the media's own work — relay transmissions and retries —\n" +
+      "and a p95 that moves because the media run consumes randomness, changing later loss draws.\n" +
+      "That is not an accident of this model being generous: loss is per packet and independent of\n" +
+      "volume, and there is no shared medium, so a chunk occupies the radio in *time* without stopping\n" +
+      "anybody else's transmission from succeeding. Until a channel-access model exists (docs/08 §11),\n" +
+      "media cannot harm text here, and a load gate on transfers would have nothing to protect."
   );
 }
 

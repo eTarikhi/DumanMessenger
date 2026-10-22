@@ -415,41 +415,66 @@ the spec, and the omission is stated here rather than buried.
 
 ---
 
-## 9. Contention: what one file does to everybody else
+## 9. Contention: what one file does to everybody else — and a correction
 
-Same world, 300 s of simulated time, background traffic every 4 s, with and without a
-10 MB transfer at three hops running alongside it:
+The first version of this section reported that a 10 MB transfer in flight cost the mesh
+1.8 points of delivery, pushed 35 messages into store-carry-forward, and moved p95 latency.
+**That measurement was wrong, and the reason is worth more than the numbers.**
+
+Each arm had drawn its own traffic from the simulation's RNG. So the "quiet" arm and the
+"busy" arm did not send the same messages, and — because a media run consumes randomness
+for every chunk's jitter and loss — every later draw in the busy arm was different. It was
+two experiments wearing one table, which is exactly the confound `docs/06` §7 warns about
+and §16.4 measures the size of.
+
+Re-run properly — one fixed traffic plan of 60 messages replayed identically in both arms,
+mean of three seeds, the file started before the first message:
 
 | | quiet | with a 10 MB file in flight |
 |---|---|---|
-| relay transmissions | 2,780 | **32,604** (11.7×) |
-| unicast messages sent | 57 | 55 |
-| delivery ratio | 100.0% | 98.2% |
-| within 5 hops | 63.2% | 67.3% |
-| p95 latency | 4,706 ms | 1,331 ms |
-| retries sent | 7 | 331 |
-| OppQueue holds | 0 | **35** |
-| the transfer itself | 33.00 s | 36.79 s (+11%) |
+| messages sent | 59.0 | 59.0 |
+| delivery ratio | **0.9944** | **0.9944** |
+| within 5 hops | 0.9944 | 0.9944 |
+| p95 latency | 4,472 ms | 3,275 ms |
+| relay transmissions | 1,728 | **5,311** |
+| retries sent | 11 | **59** |
+| messages parked | 1.0 | 1.0 |
+| retries exhausted | 1.0 | 1.0 |
+| the transfer itself | — | 10.71 s |
 
-Read carefully, because two of these rows are noise: `within 5 hops` and `p95 latency`
-are computed over 55-57 messages, and they moved in the *favourable* direction — that
-is sampling, not an effect. The rows that mean something are the counts:
+Per seed, delivery is `0.983, 1.000, 1.000` in **both** arms. The only differences are the
+media's own work — relay transmissions triple and retries go from 11 to 59, which is the
+file's 160 chunks and their retransmissions — and a p95 that moves because the sample's
+loss draws moved, not because anything got slower.
 
-* Media is the dominant source of radio work while it runs: **11.7× the relay
-  transmissions** of a quiet mesh, and 331 retries against 7.
-* Text delivery holds up — 98.2% against 100% on 55 messages — so a file does not
-  break the mesh, but it is not free either.
-* **35 messages were pushed into store-carry-forward** that would not have been, which
-  is the mechanism by which a large transfer converts other people's low latency into
-  eventual delivery.
-* The transfer pays for the company: 36.79 s instead of 33.00 s.
+### 9.1 Why the answer is null, and why that is not luck
 
-The actionable consequence is a policy, not a parameter: large transfers should be
-gated on mesh load — refuse or shrink the window while the relay rate is high — and the
-counters to gate on (`sentChunks`, `transferStalls`, `totalForwarded`) are now exposed
-in `stats`. Nothing in this work implements that gate; it is the next thing to measure.
+A 10 MB file does not harm text traffic in this model, and it cannot:
 
----
+* **Loss is per packet and independent of volume.** `effectiveLossProbability` is a function
+  of the link's margin and the retry count. Nothing about how busy the radio is enters it.
+* **There is no shared medium.** Two transmissions at the same instant both succeed. A chunk
+  occupies the radio in *time* — the serialization charge of §2 — but time is not contested,
+  so occupying it does not displace anybody.
+
+So the honest statement is not "media is polite on this mesh" but **"this model has no
+mechanism by which media could be impolite"**. The 11.7× relay-transmission figure from the
+confounded run survives as a fact about *cost* (a file is a lot of radio work) while the
+claim about *harm* is withdrawn.
+
+### 9.2 The consequence for the obvious next feature
+
+The natural response to §9's first version was a load gate: refuse or shrink a transfer's
+window while the mesh is busy. **It is not implemented, and on this evidence it should not
+be** — there is nothing for it to protect. A gate here would slow transfers in exchange for
+a benefit the model cannot express, which is how a plausible-sounding feature ends up
+costing users time for nothing.
+
+The gate becomes a real question only once the missing mechanism exists: a channel-access
+model where concurrent transmissions defer or collide (§11). That is the prerequisite, and it
+is named in §11 as the largest limitation in this document. Until it exists, every "media
+under load" number in this repository — including this section's null result — describes a
+mesh with an infinitely wide radio.
 
 ## 10. Acceptance mapping
 
@@ -490,9 +515,12 @@ Stated so no number above is read as more than it is:
   budget. `rf.ts` is deliberately untouched, which is why every measurement in
   `docs/06` and `docs/07` still stands and why the SOS flood can be said to ride "all
   transports" (`docs/06` §11).
-* **Channel access.** No CSMA, no collisions, no shared-medium contention. A deep
-  window (§4) and duplicate retransmissions (§7) are therefore charged nothing for
-  filling the air, and both of those results are upper bounds.
+* **Channel access — the largest limitation here.** No CSMA, no collisions, no
+  shared-medium contention. Three consequences, all of them in the optimistic direction:
+  a deep window (§4) and duplicate retransmissions (§7) are charged nothing for filling the
+  air, so both results are upper bounds; and media cannot harm text traffic at all (§9), so
+  every contention number in this document describes a mesh with an infinitely wide radio.
+  A load gate on transfers is unmotivated until this exists.
 * **A codec.** Opus is represented by frame *size* only. MOS, intelligibility, packet
   loss concealment and the 20 ms-frame batching are out of scope; underruns are inferred
   from arrival gaps against a `frameMs + jitterBufferMs` threshold, not from a playout

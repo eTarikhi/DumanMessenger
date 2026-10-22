@@ -17,7 +17,7 @@ import {
   scenarioNames,
   sparseVillage,
 } from "../scenarios";
-import { canReach, peersInRange, rssiModel } from "../rf";
+import { canReach, effectiveLossProbability, peersInRange, rssiModel } from "../rf";
 import { createRng } from "../rng";
 import {
   OPP_QUEUE_MAX,
@@ -2291,5 +2291,112 @@ describe("store-carry-forward against skills/04", () => {
     expect(stale.oppQueue).toHaveLength(1);
     pruneOppQueue(stale, OPP_TTL_MS + 1);
     expect(stale.oppQueue).toHaveLength(0);
+  });
+});
+
+describe("media under load, measured without confounding the A/B (docs/08 §9)", () => {
+  const MESSAGES = 40;
+  const GAP_MS = 2000;
+
+  /** One plan, replayed identically in both arms. Letting each arm draw its own traffic
+   *  is what produced the first, wrong contention table: the arms were not the same
+   *  experiment, and a media run consumes randomness that shifts every later loss draw. */
+  function plan(seed: number, nodeCount: number): Array<[number, number]> {
+    const rng = createRng((seed ^ 0x2f6e2b1) >>> 0);
+    const out: Array<[number, number]> = [];
+    for (let i = 0; i < MESSAGES; i++) {
+      const a = Math.floor(rng() * nodeCount);
+      let b = Math.floor(rng() * nodeCount);
+      let guard = 0;
+      while (b === a && guard++ < 32) b = Math.floor(rng() * nodeCount);
+      if (a !== b) out.push([a, b]);
+    }
+    return out;
+  }
+
+  function arm(seed: number, withFile: boolean) {
+    const sim = new MeshSimulation({ ...campusQuad(seed), trafficIntervalMs: 0 });
+    sim.runFor(90000);
+    sim.clearRecords();
+    const p = plan(seed, sim.nodes.length);
+    let transfer: ReturnType<MeshSimulation["sendFile"]> = null;
+    if (withFile) {
+      transfer = sim.sendFile(sim.nodes[p[0][0]].id, sim.nodes[p[0][1]].id, 10 * 1048576);
+    }
+    let sent = 0;
+    for (let i = 1; i < p.length; i++) {
+      const from = sim.nodes[p[i][0]];
+      const to = sim.nodes[p[i][1]];
+      if (from.isOnline && to.isOnline && sim.sendMessage(from.id, to.id, `c-${i}`, "text")) sent++;
+      sim.runFor(GAP_MS);
+    }
+    const stats = sim.refresh();
+    const uni = sim.deliveries.filter(
+      (d) => d.type !== "ack" && d.type !== "broadcast" && !d.groupId && !d.transferId
+    );
+    return {
+      sent,
+      delivered: uni.length,
+      within5: uni.filter((d) => d.hops <= 5).length,
+      relayTx: stats.totalForwarded,
+      queued: stats.totalQueued,
+      exhausted: stats.retriesExhausted,
+      transfer,
+    };
+  }
+
+  it("costs radio work and nothing else: text delivery is identical, seed for seed", () => {
+    for (const seed of [42, 7]) {
+      const quiet = arm(seed, false);
+      const busy = arm(seed, true);
+
+      // The point of the test: with one fixed plan, a 10 MB file in flight does not move
+      // ordinary traffic at all. Not "barely" — identically.
+      expect(busy.sent).toBe(quiet.sent);
+      expect(busy.delivered).toBe(quiet.delivered);
+      expect(busy.within5).toBe(quiet.within5);
+
+      // Not every counter is bit-identical, and it is worth being precise about why: the
+      // media run consumes randomness for each chunk's jitter and loss, so the text
+      // messages' later draws differ between arms. A parked bundle can move by one. That
+      // is an RNG-path difference, not contention — the structural reason is asserted in
+      // the next test, which is why this one is allowed a tolerance at all.
+      expect(Math.abs(busy.queued - quiet.queued)).toBeLessThanOrEqual(1);
+      expect(Math.abs(busy.exhausted - quiet.exhausted)).toBeLessThanOrEqual(1);
+
+      // What it does cost is the media's own radio work.
+      expect(busy.relayTx).toBeGreaterThan(quiet.relayTx);
+      expect(busy.transfer!.received).toBe(busy.transfer!.chunks);
+    }
+  });
+
+  it("has no mechanism by which media could harm text, and says so", () => {
+    // Loss is a pure function of geometry: `packetLossProbability` reads the link margin
+    // and nothing else — not the packet delivery feedback, not how many transmissions are
+    // in flight, not what anybody else is doing. And two transmissions at the same instant
+    // both succeed, because there is no shared medium. So the null result above is a
+    // property of the model rather than a lucky draw, and a load gate on transfers would
+    // have nothing to protect until a channel-access model exists (docs/08 §9.1-9.2, §11).
+    //
+    // Mobility is off so that "before" and "after" differ in one variable only: the media.
+    const sim = new MeshSimulation({ ...campusQuad(42), enableMobility: false });
+    sim.runFor(90000);
+    const a = sim.nodes[0];
+    const b = sim.nodes[5];
+    const loss = () => effectiveLossProbability(a, b, sim.rf, sim.config.linkRetries);
+    const quiet = loss();
+
+    const t = sim.sendFile(a.id, b.id, 10 * 1048576)!;
+    expect(t.chunks).toBe(160);
+    expect(loss()).toBe(quiet); // 160 chunks committed, radio as busy as this model gets
+
+    let elapsed = 0;
+    while (t.state === "active" && elapsed < 180000) {
+      sim.runFor(250);
+      elapsed += 250;
+    }
+    expect(t.state).toBe("complete");
+    expect(sim.refresh().sentChunks).toBeGreaterThanOrEqual(160);
+    expect(loss()).toBe(quiet); // ... and unchanged on the other side of it
   });
 });
