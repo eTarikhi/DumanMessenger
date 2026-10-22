@@ -784,13 +784,16 @@ Map<String, Object?> _mediaProbe(SimConfig config) {
       ? null
       : wifiSim.sendVoice(wifiPair[0].id, wifiPair[1].id, 3.0,
           transport: TransportType.wifiDirect);
-  final wifiOk = wifiNote != null &&
-      runUntil(wifiSim, () => wifiNote.state == TransferState.complete, 30000);
-  final wifiRoundTrip = (wifiOk && wifiNote != null && wifiNote.completedAt != null)
-      ? wifiNote.completedAt! +
+  double? wifiRoundTrip;
+  if (wifiNote != null) {
+    final note = wifiNote;
+    if (runUntil(wifiSim, () => note.state == TransferState.complete, 30000) &&
+        note.completedAt != null) {
+      wifiRoundTrip = note.completedAt! +
           wifiSim.config.jitterBufferMs -
-          (wifiNote.releasedAt ?? wifiNote.startedAt)
-      : null;
+          (note.releasedAt ?? note.startedAt);
+    }
+  }
 
   // [2] "3-hop BLE: voice note arrives intact".
   final bleNoteSim = fresh();
@@ -798,8 +801,12 @@ Map<String, Object?> _mediaProbe(SimConfig config) {
   final bleNote = bleNotePair == null
       ? null
       : bleNoteSim.sendVoice(bleNotePair[0].id, bleNotePair[1].id, 3.0);
-  final bleNoteOk = bleNote != null &&
-      runUntil(bleNoteSim, () => bleNote.state == TransferState.complete, 30000);
+  var bleNoteOk = false;
+  if (bleNote != null) {
+    final note = bleNote;
+    bleNoteOk =
+        runUntil(bleNoteSim, () => note.state == TransferState.complete, 30000);
+  }
 
   // [3] "10 MB image: delivered over WiFi Direct with resume after mid-transfer
   // disconnect". The disconnect is the interesting half.
@@ -913,7 +920,9 @@ Map<String, Object?> _mediaProbe(SimConfig config) {
     'wifiPttBufferExcludedMs':
         wifiRoundTrip == null ? null : _round(wifiRoundTrip - config.jitterBufferMs),
     'wifiPttUnder1s': wifiRoundTrip != null && wifiRoundTrip < 1000,
-    'bleNoteIntact': bleNoteOk && bleNote != null && bleNote.received == bleNote.chunks,
+    'bleNoteIntact': bleNoteOk && bleNote != null
+        ? bleNote.received == bleNote.chunks
+        : false,
     'bleNoteFrames': bleNote?.received ?? 0,
     'bleNoteFrameCount': bleNote?.chunks ?? 0,
     'resumeAfterDisconnect': resume?['complete'] ?? false,

@@ -161,6 +161,12 @@ class MeshMessage {
   final TransportType transport;
   final int sizeBytes;
 
+  /// Set on one chunk of a large transfer, with its position in it, so the receiver
+  /// can dedupe by index and the sender can slide its window (docs/08 §3). Relays
+  /// must carry both: `copyWith` does.
+  final String? transferId;
+  final int? chunkIndex;
+
   /// Stable identity of one emergency across its repeated floods. Each flood is a
   /// *new* message id — the seen-cache is keyed on the id, so a repeat that reused
   /// one would be dropped by every node that already heard it — but receivers

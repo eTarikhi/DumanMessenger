@@ -262,6 +262,7 @@ class SimConfig {
     int? sosRepeats,
     GroupMode? groupMode,
     double? warmupMs,
+    double? trafficIntervalMs,
     int? maxRetries,
     double? ackTimeoutMs,
     double? mediaAckTimeoutMs,
@@ -330,7 +331,7 @@ class SimConfig {
         sosRepeats: sosRepeats ?? this.sosRepeats,
         groupMode: groupMode ?? this.groupMode,
         warmupMs: warmupMs ?? this.warmupMs,
-        trafficIntervalMs: trafficIntervalMs,
+        trafficIntervalMs: trafficIntervalMs ?? this.trafficIntervalMs,
       );
 
   RfParams get rf => RfParams(
@@ -665,6 +666,10 @@ class SentRecord {
   final MsgType type;
   final String body;
   final double timestamp;
+
+  /// Set on a chunk, so a UI can show the file it belongs to rather than 160 empty
+  /// messages (docs/08 §3.1).
+  final String? transferId;
 
   /// Set on every SOS flood of one emergency, so a UI can collapse the repeats
   /// into a single alert exactly as a receiver's inbox does.
