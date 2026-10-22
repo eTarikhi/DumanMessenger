@@ -166,6 +166,14 @@ Two things padding does and does not buy, since both get claimed:
   contacts per node per hour regardless. Length padding is cheap hygiene, not
   traffic-analysis resistance; `docs/04` should not be read as claiming otherwise.
 
+> **Cross-reference (Oct 2026 — `docs/08-media-transport-ptt.md` §5.3, §8):** the padding model above is what sets the
+> ceiling on push-to-talk. A payload stays inside one BLE packet up to **929 B**, so a 500 ms Opus frame
+> stays on BLE only up to **14.9 kbit/s** — and at the documented 12 kbps the padded frame is *exactly*
+> 1024 B, flush against the ceiling with no room for a per-frame nonce to grow into. Media chunks declare
+> their **payload** size rather than their padded size, which is the convention that keeps skills/05's
+> 512 B BLE slice on BLE; the ≤0.2% air-time error on a 64 KB slice is stated in docs/08 §8 rather than
+> buried.
+
 ## 5. Group keys: what §14 of `docs/06` already pins
 
 `skills/03`: *"GroupKey distributed over pairwise Noise channels on create/add member;

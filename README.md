@@ -14,6 +14,7 @@
 - `skills/` — 8 development skill definitions for the build team
 - `docs/06-simulator-findings.md` — Simulator calibration evidence, protocol corrections & the one documented limitation
 - `docs/07-e2ee-noise-xx.md` — Noise_XX as a *mesh* protocol: measured handshake cost, when to negotiate, packet/padding sizes
+- `docs/08-media-transport-ptt.md` — What a byte costs on this mesh: chunked files, streamed push-to-talk, the retry timer, and skills/05's acceptance boxes
 - `sim/mesh_sim/` — **Dart mesh simulator** (authoritative headless engine + CLI)
 - `src/` — **TypeScript mesh simulator** (reference engine + React visualiser)
 - `test-fixtures/golden-vectors.json` — cross-language determinism contract asserted by both engines
@@ -39,6 +40,7 @@ dart run bin/mesh_sim.dart --scenario campus_quad --seed 42  # exits non-zero if
 dart run bin/mesh_sim.dart --scenario festival_crowd --nodes 80 --json
 dart run bin/mesh_sim.dart --duty-cycle   # NORMAL scans 3 s / sleeps 7 s (skills/07)
 dart run bin/mesh_sim.dart --sos          # SOS reach probe: component-relative and raw
+dart run bin/mesh_sim.dart --media        # 10 MB image at 1/2/3 hops, BLE-only ladder, PTT budgets
 dart run bin/mesh_sim.dart --trace        # per-delivery route: dBm, action and reason per hop
 dart run bin/mesh_sim.dart --capture      # pcap-like mesh log tail (--capture-ogm adds beacons)
 ```
@@ -51,6 +53,7 @@ npm test          # 166 tests: RF, election, routing, DTN, power, SOS, hop trace
 npm run dev       # canvas: watch SUPERs get elected, MPR suppress floods, bundles wait for a contact
                   # click a node to decline its router role or turn on battery saver
 npm run golden    # regenerate test-fixtures/golden-vectors.json after an engine change
+npm run media     # the media transport probe behind docs/08 (files, PTT, retry timer, contention)
 ```
 
 Scenarios: `campus_quad` (20 nodes — the `skills/02` + `skills/08` acceptance
@@ -97,6 +100,22 @@ per member**, which is up to 130× cheaper when every member is a direct peer an
 when they are spread across the world. `dart run bin/mesh_sim.dart --group 10` reports both on any
 world and says which is cheaper and why; the visualiser manages membership from the node inspector and
 flips the mode live from the chat header (`docs/06-simulator-findings.md` §14).
+
+**Media transport** (`skills/05`, `docs/05` §3.2-3.3, roadmap Phase 3): a payload now costs what it
+occupies the radio with — `max(0, bytes − 1024) × 8 / kbps` per hop, at 80 kbit/s on BLE against
+20 Mbit/s on Wi-Fi Direct, the 250× ratio `docs/05` claims — and it is inert below one packet, which is
+why every earlier measurement and both golden fixtures are unchanged. Files go out as 64 KB slices
+behind a 4-deep sliding window, each slice an ordinary unicast so it inherits ACKs, retries, the
+OppQueue and the hop trace: a 10 MB image crosses 1/2/3 hops in **7.6 s / 16.9 s / 33.0 s**, and when
+its receiver disappears for 20 s mid-transfer a stall watchdog re-sends what is missing and it finishes
+in 45.0 s (skills/05's "resume" acceptance box). Push-to-talk streams 500 ms Opus frames at 12 kbps —
+750 B, exactly one padded BLE packet — leaving at the end of each capture window, and plays **407 ms**
+after release at one hop and **1.10 s** at three against the roadmap's <3 s / <8 s; media retries on a
+600 ms timer because the text plane's 4 s is eight voice frames and one lost frame left an 8.5 s hole in
+the audio. Chunks are counted apart from 1:1 traffic so one file cannot flatter `deliveryRatio`, the
+chat panel renders a transfer as one progress row instead of 160 empty bubbles, and
+`dart run bin/mesh_sim.dart --media` / `npm run media` print every table in
+[`docs/08-media-transport-ptt.md`](docs/08-media-transport-ptt.md).
 
 **Hop transparency** (roadmap Phase 4): every delivery carries a per-hop trace — arrival time, link
 budget in dBm, who handed it over, the action and the router's own reason — and `deliveredChain()`

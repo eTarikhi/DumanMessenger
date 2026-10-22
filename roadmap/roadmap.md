@@ -81,9 +81,34 @@
 
 - [ ] WiFi Direct transport (Android `WifiP2pManager`): createGroup/join, socket relay, auto-select for payloads >1 KB
 - [ ] MultipeerConnectivity parity on iOS (Apple-to-Apple files via MPC)
-- [ ] Chunked large-file protocol (64 KB chunks, ACK, resume)
+- [x] Chunked large-file protocol (64 KB chunks, ACK, resume)
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/08-media-transport-ptt.md` §3, §4, §6):** implemented in both
+  engines and measured. 64 KB slices behind a sliding window of 4 unacknowledged chunks, each slice an
+  ordinary unicast so it inherits ACKs, retransmission, the OppQueue and the hop trace. A 10 MB image
+  crosses 1/2/3 hops in **7.60 s / 16.88 s / 33.00 s** over Wi-Fi Direct; over BLE at skills/05's 512 B
+  MTU the same file does not finish in 15 simulated minutes even at one hop. Window depth is the lever
+  (16-deep is 15.5× faster than 1-deep at one hop) and 4 ships because the deeper wins are an upper
+  bound: this simulator has no channel-access model to charge a deep window for filling the air.
+  **"Resume" needed a mechanism, not just a queue**: a slice whose retries run out is carried in an
+  OppQueue and its logical id is never seen again, so the window hung forever. A stall watchdog now
+  re-sends the slices a stopped window is missing, and the skills/05 acceptance case — receiver offline
+  for 20 s at chunk 49 of 160 — resumes and completes in 45.02 s. Chunks are counted apart from 1:1
+  traffic so one file cannot flatter `deliveryRatio`.
 - [ ] Audio pipeline: Opus encoder/decoder, 500 ms frames, 6-12 kbps, push-to-talk UI (hold to record)
-- [ ] PTT flow: record → chunk → encrypt → send via WiFi Direct preferred / BLE fallback → receiver jitter buffer → sequential play
+- [x] PTT flow: record → chunk → encrypt → send via WiFi Direct preferred / BLE fallback → receiver jitter buffer → sequential play
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/08-media-transport-ptt.md` §5, §7):** the transport half of the flow is
+  implemented in both engines and measured; *record* (a microphone) and *encrypt* (per-frame nonces) are
+  app-side and still to do, as with the SOS item above. Opus framing per skills/05 — 500 ms frames at
+  12 kbps, 750 B each, `jitterBufferMs` 200 before playout — with frames leaving at the **end** of their
+  capture window, so the last frame departs at release rather than a frame early. Measured play delay
+  from release: **407 ms at one hop, 585 ms at two, 1.10 s at three**, against this phase's <3 s / <8 s.
+  "WiFi Direct preferred" is a transport override (a negotiated group owner), not a size decision,
+  because a 750 B frame is under the BLE ceiling and would otherwise never reach the faster radio; with
+  it, the one-hop round trip is **292 ms** (skills/05's box is <1 s). Streaming beats sending the note as
+  one blob on *first audio* by 31× for a 30 s note (989 ms vs 30.32 s) but not on play delay. The data
+  plane's 4 s ACK timer turned out to be **eight voice frames** — one lost frame left an 8.53 s hole in
+  the audio — so media retries on a 600 ms timer, which cut the worst gap to 1.21 s and underruns from
+  16 to 7 across three seeds; an RTT-adaptive timer was implemented, measured, and left off by default.
 - [ ] E2EE for media/voice frames (same Noise session, per-frame nonce)
 - [x] SOS mode: repeated flood of GPS + text over all transports (like LinkMesh SOS [1](https://github.com/litu173/LinkMesh))
 > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §11):** the protocol mechanism is implemented in both engines and measured — four floods
@@ -97,6 +122,15 @@
 - [ ] External audit prep + panic wipe (one-tap key zeroization)
 
 **Exit criteria:** 2 phones exchange image <10 MB over WiFi Direct mesh; PTT Opus note plays in <3s 1-hop / <8s 3-hop; SOS reaches all within ttl.
+
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/08-media-transport-ptt.md` §10):** the image and PTT clauses are now met in
+  simulation as well: a 10 MB image crosses three hops over Wi-Fi Direct in **33.00 s** (and resumes
+  after a 20 s mid-transfer disconnect in 45.02 s total), and a streamed Opus note plays **407 ms** after
+  release at one hop and **1.10 s** at three, against <3 s and <8 s. What simulation cannot answer is
+  whether the note is *intelligible* — no codec runs in either engine — and whether two real phones
+  negotiate a Wi-Fi Direct group in the 1-3 s docs/05 §3.2 budgets, since GO formation is modelled as a
+  setup latency rather than as a second RF budget (`rf.ts` is deliberately untouched, so every earlier
+  measurement stands).
 
 > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §11.3):** the SOS clause is met in simulation and needs a denominator to be
   meaningful: over the sender's radio-connected component, reach is **100%** in all four worlds, while

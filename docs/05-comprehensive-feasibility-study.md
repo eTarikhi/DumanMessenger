@@ -273,6 +273,16 @@ Rationale:
 | Image/file (<10 MB) | Wi-Fi Direct only | 250× faster than BLE; auto-reject over BLE-only with "move closer to SUPER" hint |
 | Broadcast SOS | All transports, flood (TTL=5) | Maximize reach; no ACK needed |
 
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/08-media-transport-ptt.md` §2, §8):** the two media rows are now
+> simulated, and the "250× faster than BLE" figure is what pins the model: the engine charges a payload
+> `max(0, bytes − 1024) × 8 / kbps` per hop at `bleKbps = 80` against `wifiDirectKbps = 20000`, which
+> reproduces 250× exactly (a 64 KB slice is 26 ms of air time on Wi-Fi Direct and **6.45 s** on BLE).
+> Measured with that model, a 10 MB image crosses 1/2/3 hops in **7.60 s / 16.88 s / 33.00 s** over
+> Wi-Fi Direct. The auto-reject threshold deserves a second look: at skills/05's 512 B BLE MTU, 5 MB
+> does not finish in 5 simulated minutes on a *one-hop* link (4896 of 10240 chunks) and 10 MB does not
+> finish in 15 — so 5 MB is generous by roughly 5× against any "under a couple of minutes" reading, and
+> ~1 MB is the size that actually behaves.
+
 > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §11):** TTL=5 is the engine default (`sosTtl`) and SOS floods to every peer at every
 > hop, bypassing MPR and the route table. Two things the row does not say, both measured: *all
 > transports* is one payload on one radio here (SOS uses Wi-Fi Direct, which in this model buys 40 ms
@@ -338,6 +348,26 @@ Rationale:
 | Audio pipeline | Opus encoder/decoder, 500 ms frames, 6–12 kbps; PTT UI (hold to record); jitter buffer 200 ms | Flutter + Android engineers |
 | E2EE media | Per-frame nonce encryption over existing Noise session | Crypto engineer |
 | SOS mode | Repeated flood of GPS + text over all transports (TTL=5) | Protocol engineer |
+
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/08-media-transport-ptt.md`):** the file-protocol row is implemented
+> in both engines and measured — 64 KB slices behind a 4-deep sliding window, each slice an ordinary
+> unicast so it inherits ACKs, retransmission and the OppQueue, and a **stall watchdog** that re-sends
+> the slices a stopped window is missing. "Resume on reconnect" needed that watchdog: a slice whose
+> retries run out is carried in an OppQueue and its logical id is never seen again, so without it the
+> window hangs forever. With it, a 10 MB image whose receiver disappears for 20 s at chunk 49 resumes
+> and completes in 45.02 s. "Max 10 MB" is enforced (an 11 MB send is refused and logged).
+>
+> The audio row is half-simulated, deliberately: Opus *framing* is modelled (500 ms frames at
+> `voiceKbps`, a `jitterBufferMs` playout delay, frames leaving at the end of their capture window) and
+> the codec is not, so intelligibility and MOS are out of scope. Two findings from the framing half:
+> **12 kbps is the fastest documented rate that keeps a frame on BLE** — `frameBytes = 500 × kbps / 8`
+> stays under 1024 B up to 16.4 kbps raw, and under the padding model in `docs/07` §4 up to 14.9 kbps,
+> with 12 kbps padding to exactly one 1024 B packet — and the data plane's 4 s ACK timer is **eight
+> voice frames long**, so one lost frame leaves a hole the 200 ms buffer cannot cover. Media retries on
+> a 600 ms timer instead, which cut the worst audio gap from 8.53 s to 1.21 s and underruns from 16 to 7
+> across three seeds. PTT plays in **407 ms at one hop and 1.10 s at three** against the roadmap's
+> <3 s / <8 s. E2EE media is unchanged: a 750 B frame pads to exactly 1024 B, so there is no slack for
+> a per-frame nonce to grow into without changing transport.
 
 > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §11.1–§11.2):** implemented and measured. Each flood is a *fresh message id* — the
 > seen-cache is keyed on the id, so a repeat that reused one would be dropped by every node that
