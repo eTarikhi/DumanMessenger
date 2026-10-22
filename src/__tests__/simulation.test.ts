@@ -2036,7 +2036,9 @@ describe("community relays (roadmap Phase 5: a plugged tablet in a café)", () =
       ratio: uni.length / Math.max(1, sent),
       relayTx: stats.totalForwarded,
       superRatio: stats.superRatio,
-      relaysAreSuper: [...relayIds].filter((id) => sim.byId(id)?.role === "SUPER").length,
+      relaysAreSuper: [...relayIds].filter(
+        (id) => sim.nodes.find((n) => n.id === id)?.role === "SUPER"
+      ).length,
       burdenOnOthers: byOthers,
       burdenOnRelays: byRelays,
       normalPctPerHour: stats.batteryPercentPerHourNormal,
