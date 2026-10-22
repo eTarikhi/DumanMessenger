@@ -15,7 +15,10 @@ shared — a node re-flooding copies of its own message — was found by a rende
 and removed (§12), cutting relay transmissions 18.3% in the warm 20-node world.
 The documented 10-200 node range is now measured end to end, which found a
 quadratic cliff at the top of it and fixed it (§15). One secondary target remains
-open in the 60-node crowd (§6, "Still open").
+open in the 60-node crowd (§6) — §16 decomposes that tail message by message,
+measures the two levers that were supposed to close it, and records why neither
+does: faster beacons make it worse, and more retries buy delivery rather than hop
+count.
 **Date:** Oct 2026
 
 ---
@@ -297,6 +300,16 @@ In the 60-node crowd **82.7-89.3%** of sent messages arrive within five hops
 (average 2.6-3.0, p95 4.8-6.4 s), against 97.3-100% in the 20-node case the
 criteria actually name. The tail is 9-12 messages arriving at exactly six hops —
 the ceiling a data `ttl` of 5 allows — plus 7-11 that expire.
+
+**§16 takes this apart and closes the investigation.** Over six seeds the figure is
+84.1%, and the tail decomposes into 2.2% geometric (BFS distance ≥ 6 at send time),
+1.8% with no path at all, 5.8% lost or expired and 5.8% delivered with more hops than
+the send-time shortest path — the last of those being the world moving while the
+message was in flight, since some messages arrive in *fewer* hops than BFS said were
+possible. Neither obvious lever closes it: halving the OGM interval costs 1.95× the
+control traffic and *loses* 1.1 points, and doubling retries buys 1.5 points of
+delivery for 62% more p95 latency and no hop-count gain. The defaults stay where they
+are, and the honest claim is the decomposition rather than a tuning change.
 
 The obvious candidate, raising `ogmTtl` so route discovery sees further, is
 **falsified by measurement**:
@@ -1011,3 +1024,108 @@ rather than in the CI acceptance matrix, which runs at 20 nodes.
 Battery at density is unremarkable and consistent with §10: NORMAL burns 2.40-2.51%
 per hour always-scanning (19-20% per 8 h, above the `skills/07` budget), and the duty
 cycle is what brings it inside.
+
+---
+
+## 16. The crowd's ≤5-hop tail: decomposition, and two levers that do not work
+
+§6 left this open: in `festival_crowd` (60 nodes, 80% mobile, clusters 61-74 m apart
+against a 31.6 m line-of-sight hop) delivery is 91-95% but only ~84% of sent messages
+arrive within five hops, against the 90% bar `skills/08` sets for the 20-node case.
+Two questions: what is the tail actually made of, and can it be bought?
+
+### 16.1 What the tail is made of
+
+For every message, the shortest path in the *real* in-range graph at send time (BFS,
+ignoring loss) was compared with the hops the delivered copy actually took. 450
+messages, seeds 42/7/1234:
+
+| outcome | count | share | addressable? |
+| --- | --- | --- | --- |
+| delivered within 5 hops | 380 | 84.4% | — |
+| BFS distance ≥ 6 at send time | 10 | 2.2% | no — geometry |
+| no path at all at send time | 8 | 1.8% | no — DTN territory |
+| lost or TTL-expired | 26 | 5.8% | in principle |
+| delivered, but with more hops than BFS | 26 | 5.8% | in principle |
+
+The hop-by-hop pairs say where the extra hops come from: `bfs3→hops4` 25 times,
+`bfs5→hops6` 15, `bfs2→hops3` 13, `bfs4→hops6` 9 — and, in the other direction,
+`bfs5→hops4` 3 times and `bfs3→hops2` once. A message that arrives in *fewer* hops
+than the send-time shortest path proves the graph moved while it was in flight, so a
+share of the "+1 hop" cases is churn rather than a routing error.
+
+Routing is not choosing badly: `receiveOGM` already prefers fewest hops and breaks
+ties on link quality, and `decideForward` checks "destination in range" before
+consulting the table at all. There is no shorter path to find.
+
+So the honest arithmetic: 24 of the 70 messages that miss the bar (34%) miss it
+because routing took one or two hops more than the send-time optimum, and 4 of 450
+(0.9%) could not have made it in five hops at any cost. Fixing *all* of the routing
+churn would put w5 at 89.7% — still short, and not achievable anyway, because the
+churn is the world moving.
+
+### 16.2 Two levers, measured, and neither works
+
+`festival_crowd`, 150 messages, **six** seeds (42/7/1234/99/2026/555):
+
+| arm | w5 | delivery | avg hops | p95 | OGM tx | relay tx | retries exhausted |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| as shipped (OGM 2 s, 2 retries) | **84.1%** | 91.7% | 2.83 | 6 700 ms | 817 k | 39 294 | 41.0 |
+| OGM 2 s → 1 s | 83.0% | 89.7% | 2.77 | 5 816 ms | 1 598 k | 40 781 | 40.7 |
+| OGM 2 s → 0.5 s | 82.2% | 88.8% | 2.75 | 6 400 ms | 3 176 k | 42 258 | 40.8 |
+| retries 2 → 4 | 84.3% | **93.2%** | 2.90 | 10 860 ms | 809 k | 51 872 | **33.2** |
+| retries 4 + ACK timeout 2.5 s | 81.0% | 88.1% | 2.77 | 6 591 ms | 796 k | 54 249 | 41.5 |
+| OGM 1 s + retries 4 | 84.7% | 91.9% | 2.84 | 10 566 ms | 1 589 k | 57 876 | 35.5 |
+
+**Faster beacons do not produce fresher routes.** Doubling the OGM rate costs 1.95×
+the control traffic and *loses* 1.1 points of w5 and 2.0 points of delivery;
+quadrupling it costs 3.9× and loses more. The mechanism is visible per seed: with
+1 s beacons, seed 99 collapses from 81% w5 to 62%. A denser beacon stream in a
+60-node mobile world adds contention and more gossiped duplicates through the tq
+windows, and the route it converges on is no better — because the route was never the
+problem (§16.1: the graph moves faster than any beacon interval can track).
+
+**More retries buy delivery, not hop count.** Going from 2 to 4 retries lifts
+delivery 91.7% → 93.2% and cuts give-ups 41.0 → 33.2, which is real, but w5 moves
++0.2 points (inside the noise) and p95 rises 6 700 → 10 860 ms, because a retry costs
+a whole ACK timeout. That is the trade §7 already warns about, and why docs/04's
+per-hop latency budget is measured on first-attempt traffic only.
+
+**Both together** reach w5 84.7% and delivery 91.9% for 1.95× control traffic, +47%
+relay traffic and +58% p95. There is no combination here that reaches 90% w5.
+
+### 16.3 What this changes
+
+Nothing in the defaults, and that is the result: `ogmIntervalMs` stays 2000,
+`maxRetries` stays 2, and `festival_crowd` keeps its shipped parameters. The
+scenario override that §11 did add (`sosTtl` 7) is a different kind of thing — it
+corrects a *radius* the flood physically cannot cross, which no amount of tuning
+fixes. This tail is not that.
+
+The claim this document can defend is narrower and better supported than "tune the
+crowd to 90%":
+
+- at 20 nodes, the acceptance case, w5 is **99.7%** across six seeds (§2);
+- at 60 nodes with 80% mobility and a 3-hop geometric floor between clusters, w5 is
+  **84.1%**, and the tail decomposes into 2.2% geometry, 1.8% no-path, 5.8% loss and
+  5.8% in-flight churn;
+- the two obvious levers are measured and do not close it, one of them actively
+  harms.
+
+What *would* close it is not a protocol knob: more radio range or a denser deployment
+(the 3-hop floor between clusters is geometry), a bar expressed as ≤6 hops for worlds
+whose diameter is 6, or measuring w5 over messages that had a path at send time
+(which puts it at 85.9%, still short). Recording that is more useful than shipping a
+tuning change that three seeds would have justified and six refute.
+
+### 16.4 The methodological point, with numbers
+
+On three seeds, "OGM 1 s" measured **+2.6 points** of w5 and +1.3 of delivery and
+looked like a clear win worth shipping as a scenario override. On six seeds the same
+arm measures **−1.1** and **−2.0**. The sign flipped, not just the magnitude, because
+one hard seed (99) went 81% → 62% and three easy seeds improved.
+
+§7's rule — compare on the mean across seeds, and treat a few points as noise — is
+not a formality. For a 60-node mobile world the band is wide enough to invert a
+conclusion, so any parameter change proposed on this evidence needs six seeds before
+it is believed, and the per-seed spread printed next to the mean.
