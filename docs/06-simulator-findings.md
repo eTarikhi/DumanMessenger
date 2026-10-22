@@ -1348,7 +1348,7 @@ twin).
 
 ---
 
-## 19. The community relay programme does not do what it sounds like
+## 19. The community relay programme: a quota, not a device
 
 **Roadmap Phase 5 proposes: "Community relay program: *Keep Duman on a plugged tablet at
 your café/campus → community SUPER*". It is one line, it sounds free, and it is simulatable
@@ -1363,40 +1363,50 @@ pocket.
 
 | arm | delivery | relay tx | SUPER ratio | tablets elected | tx by *other* nodes | tx by tablets | NORMAL %/h |
 |---|---|---|---|---|---|---|---|
-| none | 0.910 | 21,639 | 18.3% | — | 21,639 | 0 | 3.005 |
-| 3 tablets | 0.900 | 26,973 | 20.0% | **3 of 3** | **23,630** (+9.2%) | 3,343 | 2.957 |
-| 6 tablets | 0.890 | 26,659 | 21.7% | **4 of 6** | 20,637 (−4.6%) | 6,022 | 2.877 |
-| flood-all baseline, either | 1.000 | ~213,000 | — | — | — | — | — |
+| none | 0.910 | 23,518 | 15.0% | — | 23,518 | 0 | 2.914 |
+| 3 tablets | 0.910 | 26,540 (+12.8%) | 20.0% | **3 of 3** | 23,414 (−0.4%) | 3,126 | 2.822 |
+| 6 tablets | **0.980** | 24,444 | 21.7% | **4 of 6** | **19,148** (−18.6%) | 5,296 | 2.877 |
+| flood-all baseline, either | 1.000 | ~205,000 | — | — | — | — | — |
+
+*Measured after the two store-carry-forward fixes in §20.1, which moved every row: with
+bundles actually being carried, six plugged SUPERs deliver seven more messages out of a
+hundred instead of two fewer. The earlier version of this table showed the programme as
+net-negative at three devices and only mildly positive at six; that was a measurement of
+a broken DTN layer, and it is recorded in §20.4 as the reason a lever measured against a
+broken baseline is not a lever.*
 
 ### 19.1 Three readings
 
 **1. The election half works, immediately.** Every plugged, stationary, well-placed tablet
 is elected SUPER in the first two cycles at three devices. That much of the roadmap line is
 true and needs no qualification: the +0.10 charging bonus plus the peer count these
-positions already have is decisive (§18 explains why the position alone would not be).
+positions already have is decisive (§18 explains why the position alone would not be). What
+the cap does is refuse two of the six, which turns out to be the interesting part.
 
-**2. At three tablets the programme adds radio work rather than moving it.** A SUPER relays
-everything by design (roadmap Phase 2 item 65), so adding always-on SUPERs adds relays
-*everywhere*: total relay traffic rises 24.6% and — the number that matters for the
-programme's premise — transmissions by **other** nodes rise 9.2%. The tablets are not
-taking load off the crowd at that scale; they are adding a second set of relays to it.
+**2. At three tablets the programme is close to neutral.** A SUPER relays everything by
+design (roadmap Phase 2 item 65), so total relay traffic rises 12.8%; transmissions by
+**other** nodes are flat (−0.4%), delivery does not move, and NORMAL drain falls 3.2%. Three
+tablets buy a small battery dividend and nothing else.
 
-**3. The burden only moves once tablets displace battery-powered SUPERs.** At six devices
-other nodes' transmissions fall 4.6% below baseline and NORMAL drain falls 4.3%, because the
-tablets are now crowding phones out of the elected set rather than joining it. But the
-top-20% cap is nearly full at 21.7%, so **only four of the six get elected** — a plugged
-tablet competes with the nodes the score already favours, and loses two of six times.
+**3. At six the programme starts to pay.** Delivery rises to **0.980** from 0.910, other
+nodes' transmissions fall **18.6%**, and total relay traffic is *below* baseline. The reason
+six works and three does not is the top-20% cap: at six the tablets displace battery-powered
+SUPERs instead of joining them, so the mesh's relay work moves onto plugged devices. The cap
+still elects only **four of the six** — a plugged tablet competes with the nodes the score
+already favours — and the four that get in are enough.
 
-Delivery drifts *down* the whole way (0.910 → 0.900 → 0.890) while naive flood-all reaches
-1.000 in both arms for roughly ten times the transmissions, which is the same trade §6 and
-§16 already documented. So the programme must not be sold as coverage.
+Naive flood-all reaches 1.000 in both arms for roughly nine times the transmissions, so the
+programme is not a substitute for reach; it is a way of buying the last seven points with
+somebody else's power budget.
 
 ### 19.2 What the roadmap line should say instead
 
-The claim it can support is narrow and real: **a plugged tablet makes the phones around it
-drain more slowly** — 3.005 → 2.957 → 2.877 %/h for NORMAL nodes at 0/3/6 tablets — and the
-effect grows with the number of tablets, because they displace battery-powered routers
-instead of adding to them.
+The claim it can support is real and larger than expected: **six plugged tablets in a
+60-node crowd take 18.6% of the radio work off everybody else, lift delivery from 0.910 to
+0.980, and lower NORMAL drain from 2.914 to 2.877 %/h** — because they displace
+battery-powered routers instead of adding to them. Three tablets buy only the battery
+dividend (2.914 → 2.822 %/h). The difference between three and six is the top-20% cap, so
+the programme's unit is a quota, not a device.
 
 Two consequences for whoever builds it:
 
@@ -1416,8 +1426,130 @@ Two consequences for whoever builds it:
 Measured in the TypeScript reference engine (`community relays` in
 `src/__tests__/simulation.test.ts`), one seed, one world, `festival_crowd` — the case where
 the idea has the most to gain, because a crowd is where battery-powered SUPERs are most
-likely to be moving and drained. The 9.2% and 4.6% figures are single-seed and the delivery
-differences are one or two messages out of a hundred, i.e. inside the band §16.4 warns
-about; the direction of the battery and transmission figures is consistent across the three
-arms, which is why they are reported as a trend and not as a coefficient. A six-seed run is
-the next step if this item is ever prioritised, and the harness above is what would run it.
+likely to be moving and drained. The delivery differences are one to seven messages out of a
+hundred on a single seed, which is inside the band §16.4 warns about, and the ordering
+*between* the three- and six-tablet arms on battery drain (2.822 against 2.877 %/h) is two
+hundredths of a percent and is reported rather than asserted. A six-seed run is the next step
+if this item is ever prioritised, and the harness above is what would run it.
+
+---
+
+## 20. Store-carry-forward: two defects, one rejected lever, one rule that never fires
+
+**`skills/04` specifies the DTN layer in four rules and three acceptance boxes. The queue,
+the cap, the seven-day expiry and the spray limit were all implemented as written; the first
+acceptance box — "A→C: A enqueues for C (C offline); B meets A then later C → C receives" —
+did not pass. Writing the test found two independent reasons, and fixing them moved the
+crowd's delivery ratio by eight points.**
+
+### 20.1 Two defects, and what fixing them was worth
+
+**(a) Sprayed copies reused the source retries' attempt numbers.** A bundle is parked after
+the originator's two retries, which have already used `attempt` 1 and 2. The spray then
+numbered its copies from 1, and since intermediate nodes dedupe on `id#attempt` (exactly so
+that a source retry is not swallowed by nodes that already relayed attempt 0), the first two
+of three copies were thrown away by every relay that had heard the retries. The bundle's
+whole spray budget was spent on copies nobody forwarded. *Fix:* increment relative to the
+attempt the bundle is already on.
+
+**(b) A carried bundle with no route was deleted by flood suppression.** With the destination
+offline, a carrier's route lookup fails, the copy falls through to the flood branch, and a
+NORMAL node suppresses it — the log reads `MPR: heard relays cover all my neighbours`, where
+the "relays" it heard were the originator's own transmissions. MPR suppression exists to
+delete duplicate copies of a *flood*; a bundle that has nowhere to go right now is not a
+duplicate, it is the message. *Fix:* a message already marked `carried` is parked, never
+flooded and never suppressed.
+
+Measured over six seeds per world, 100 messages on an identical traffic plan per arm:
+
+| world | delivery before | after | DTN deliveries per run | parked at end | routed p95 |
+|---|---|---|---|---|---|
+| campus_quad | 0.9933 | 0.9967 | 0.2 → 0 | 1.5 | 2.3 s |
+| sparse_village | 0.2783 | 0.2783 | 0 | 67.3 | 0.3 s |
+| **festival_crowd** | 0.8667 | **0.9467** | 0.5 → **5.0** | 39.3 | 6.6 s |
+| partitioned_pair | 0.4483 | 0.4483 | 0 | 50.8 | 1.0 s |
+
+The crowd is where it shows: **+8.0 delivery points**, and five messages in a hundred now
+arrive by store-carry-forward that previously did not arrive at all. The two sparse and
+partitioned worlds do not move, because there the destination has no chain of links to the
+sender (§11) and carrying cannot substitute for topology.
+
+Note the two p95 columns' worth of difference in the crowd: **6.6 s over routed deliveries
+against 17.8 s over all of them**. That gap is the `carried` flag doing its job — keeping
+opportunistic deliveries out of the latency budget `docs/04` §5 writes for routed traffic —
+and this is the measurement that shows why the separation has to exist rather than being a
+bookkeeping preference.
+
+The golden vectors did not move: the fixture parks no bundles (`totalQueued: 0`), so a run
+that never carries anything cannot be affected by how carrying works.
+
+### 20.2 The other two acceptance boxes
+
+* **Spray limit** — asserted end-to-end from the capture log rather than from queue state:
+  the number of transmissions of one bundle's id by nodes other than its originator is
+  ≤ `SPRAY_LIMIT`. The queue-level version of this test already existed; the network-level
+  one is what the criterion actually says ("same msg not duplicated >3× in network capture").
+* **Expiry** — seven days of simulated time is 2.4 M physics ticks, which is not runnable
+  event by event, so the boundary is asserted on the sweeper: a bundle survives at exactly
+  `OPP_TTL_MS` and is gone at `OPP_TTL_MS + 1`. Stated here because it is the one box that
+  is verified by construction rather than by running the clock.
+
+### 20.3 "Keep newest 500 (LRU by priority)"
+
+The cap evicted the *oldest* bundle whatever its priority, which could throw away a fresh
+bundle to keep one that had already sprayed its three copies and been demoted to low. Now
+priority ranks first and age second, and a test fills the queue to 500 with a mix and asserts
+that both demoted bundles go before any normal one.
+
+### 20.4 A lever the fixes made unnecessary: preferring SUPER as bundle carrier
+
+`skills/04` says *"DO prefer SUPER as bundle carrier (more storage/battery)"*. Implemented
+as: when the carrier has no route of its own, hand the bundle to the strongest SUPER in
+range, still bounded by the spray limit.
+
+* **Measured before the §20.1 fixes:** crowd delivery 0.867 → 0.912 (**+4.5 points**) for
+  +9.9% relay traffic. It looked like a clear win — because a SUPER relays everything, so
+  handing bundles to SUPERs rescued them from the suppression that was deleting them.
+* **Measured after the fixes:** crowd delivery 0.947 → **0.912** (**−3.5 points**), DTN
+  deliveries 5.0 → 2.0, parked bundles 39.3 → 62.5, at 155 SUPER carries per run. In the two
+  partitioned worlds delivery is unchanged and parked bundles grow (67.3 → 97.2 and
+  50.8 → 90.0) for ~10% more relay traffic.
+
+So the lever is **off by default** (`dtnPreferSuper: false`) and stays in the code so the
+measurement can be repeated. The reading: the rule's intuition is about who should *hold* a
+bundle — a plugged, roomy device — not about who should be *handed extra copies*. Spraying
+toward SUPERs duplicates work into the queues of the busiest nodes in the network. If the
+product wants community relays to carry bundles, the lever to build is a storage- and
+battery-aware **eviction** preference, not a spray preference; §19 measures what community
+relays do to the rest of the mesh once they are elected.
+
+The ordering matters more than the numbers: **this lever was measured as a win, then the two
+defects were fixed, then it became a loss.** A lever measured against a broken baseline is
+not a lever, and the same trap sits in front of anybody who re-runs this experiment on an
+engine that has not had §20.1 applied.
+
+### 20.5 "Gossip ACK so relays can prune" prunes nothing
+
+Implemented as specified: a bundle delivered by store-carry-forward is acknowledged to the
+carrier that handed it over rather than to the originator (whose retry timer expired long
+ago), and any node that hears an ACK for a bundle id drops its copy — no new packet type and
+no extra traffic, because the ACK travels the reverse path anyway.
+
+Measured over six seeds and four worlds: **zero bundles pruned.** The carrier that delivered
+has already dropped its own copy on delivery, and other holders are pruned only if they
+happen to relay that particular ACK, which in these worlds they never do. The originator's
+copy waits out the seven-day TTL.
+
+Two options, neither taken: re-flood the prune (in the crowd that is ~5 broadcasts per 100
+messages — cheap, but it is a flood for a housekeeping message), or accept that the cap is
+managed by TTL and LRU alone. The cap never binds in any world measured here (at most 97 of
+500 slots), so the honest position is: keep the free unicast prune, do not add a prune flood
+until a deployment shows cap pressure, and record in the skill that the rule as written does
+not do what it sounds like.
+
+### 20.6 Accounting
+
+Two new counters, `bundlesPruned` and `dtnSuperCarries`, so both of the above can be checked
+without re-deriving them from logs. Queue events are attributed per node, and a test asserts
+that the originator's own queue matches its own queue events — which is how the
+multi-carrier case became visible in the first place.

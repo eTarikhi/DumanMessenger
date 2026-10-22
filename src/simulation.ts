@@ -55,6 +55,7 @@ import {
   enqueueOpp,
   isSeen,
   markSeen,
+  pruneAcked,
   pruneOppQueue,
   pruneSeenCache,
   resolveMprWait,
@@ -168,6 +169,18 @@ export interface SimConfig {
   /** Entries in one anti-entropy reply. Bounded so that repairing a long absence
    *  cannot turn into one huge transmission; the next beacon picks up the rest. */
   historyReplyMax: number;
+
+  /** skills/04: "DO prefer SUPER as bundle carrier (more storage/battery)". When a
+   *  carrier has no route of its own, hand the bundle to the strongest SUPER in range
+   *  instead of waiting for a route to appear. Bounded by the spray limit either way.
+   *
+   *  Implemented, measured, and **off by default**: once a carried bundle is parked
+   *  instead of being deleted by flood suppression, the routing layer delivers it by
+   *  itself, and biasing the spray towards SUPERs duplicates copies into the busiest
+   *  nodes' queues — crowd delivery falls 94.7% to 91.2% over six seeds and parked
+   *  bundles grow 39 to 63 per run (docs/06 §20.4). The intuition behind the rule is
+   *  about who should *hold* a bundle, not about who should be handed extra copies. */
+  dtnPreferSuper: boolean;
 
   enableSuperElection: boolean;
   enableMobility: boolean;
@@ -323,6 +336,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   maxTransferBytes: 10 * 1048576,
   historyBeaconMs: 10000,
   historyReplyMax: 32,
+  dtnPreferSuper: false,
 
   enableSuperElection: true,
   enableMobility: true,
@@ -415,6 +429,10 @@ export interface SimulationStats {
   historyEntriesSynced: number;
   historyEpochDropped: number;
   historyBytes: number;
+  /** DTN (skills/04): bundles dropped because their ACK was overheard, and bundles
+   *  handed to a SUPER because the carrier had no route of its own. */
+  bundlesPruned: number;
+  dtnSuperCarries: number;
   sentChunks: number;
   /** Anti-entropy packets put on air: beacons, bucket requests and replies. */
   sentSync: number;
@@ -827,6 +845,8 @@ export class MeshSimulation {
   private historyEntriesSynced = 0;
   private historyEpochDropped = 0;
   private historyBytes = 0;
+  private bundlesPruned = 0;
+  private dtnSuperCarries = 0;
   /** Nodes with a beacon chain running, so joining a second group does not start a
    *  second one (the beacon covers every group the node is in). */
   private historyBeaconArmed = new Set<NodeId>();
@@ -917,6 +937,8 @@ export class MeshSimulation {
     this.historyEntriesSynced = 0;
     this.historyEpochDropped = 0;
     this.historyBytes = 0;
+    this.bundlesPruned = 0;
+    this.dtnSuperCarries = 0;
     this.sentChunks = 0;
     this.sentSync = 0;
     this.bytesDelivered = 0;
@@ -1224,7 +1246,10 @@ export class MeshSimulation {
     node.mprSet = selectMprSet(node);
 
     if (this.config.enableDtn && node.oppQueue.length > 0) {
-      const scan = scanOppQueue(node, this.nodes, this.rf, this.now);
+      const scan = scanOppQueue(node, this.nodes, this.rf, this.now, {
+        preferSuper: this.config.dtnPreferSuper,
+      });
+      this.dtnSuperCarries += scan.superCarries;
       for (const q of scan.deliver) {
         this.transmit(node, q.msg, q.msg.to as NodeId);
       }
@@ -2072,6 +2097,16 @@ export class MeshSimulation {
       trace.hops.push(hopRecord);
     }
 
+    // skills/04: "On ackReceived from dest: remove + gossip ACK (so relays can prune)".
+    // The ACK comes back along the reverse path, and the nodes on that path are the ones
+    // that were carrying copies, so hearing one is enough to drop the bundle — no extra
+    // traffic and no new packet type. Without it a delivered message holds a slot in
+    // every carrier's queue for the full seven days, and the 500-message cap spends
+    // itself on bundles that have already arrived.
+    if (msg.type === "ack") {
+      this.bundlesPruned += pruneAcked(node, msg.body.slice(4));
+    }
+
     if (msg.to === node.id) {
       if (msg.type === "ack") {
         const ackedId = msg.body.slice(4);
@@ -2103,7 +2138,13 @@ export class MeshSimulation {
         `${msg.id} delivered to ${node.name} via ${via} — ${msg.hopCount + 1} hop${msg.hopCount ? "s" : ""}, ${(this.now - msg.timestamp).toFixed(0)} ms`,
         { peerId: via, msgId: msg.id, msgType: msg.type, hop: msg.hopCount + 1 }
       );
-      if (msg.type !== "ack" && msg.to !== "BROADCAST") this.sendAck(node, msg);
+      if (msg.type !== "ack" && msg.to !== "BROADCAST") {
+        // A bundle that arrived by store-carry-forward is acknowledged to whoever
+        // carried it in, not to the originator: the originator's retry timer expired
+        // long ago, and the carriers are the nodes holding copies that can now be
+        // pruned (skills/04: "remove + gossip ACK (so relays can prune)").
+        this.sendAck(node, msg, msg.carried ? via : undefined);
+      }
       return;
     }
 
@@ -2192,12 +2233,13 @@ export class MeshSimulation {
     this.applyDecision(node, forwarded, decision);
   }
 
-  private sendAck(node: MeshNode, original: MeshMessage): void {
+  private sendAck(node: MeshNode, original: MeshMessage, ackTo?: NodeId): void {
+    const target = ackTo ?? original.from;
     const ack = createMessage(
       this.nextMsgId(),
       this.now,
       node.id,
-      original.from,
+      target,
       `ACK:${original.id}`,
       "ack",
       3,
@@ -2208,7 +2250,7 @@ export class MeshSimulation {
       hops: [],
       createdAt: this.now,
       from: node.id,
-      to: original.from,
+      to: target,
       type: "ack",
     });
     const decision = decideForward(
@@ -2755,6 +2797,8 @@ export class MeshSimulation {
       historyEntriesSynced: this.historyEntriesSynced,
       historyEpochDropped: this.historyEpochDropped,
       historyBytes: this.historyBytes,
+      bundlesPruned: this.bundlesPruned,
+      dtnSuperCarries: this.dtnSuperCarries,
       sentChunks: this.sentChunks,
       sentSync: this.sentSync,
       bytesDelivered: this.bytesDelivered,

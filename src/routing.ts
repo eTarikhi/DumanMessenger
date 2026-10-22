@@ -166,12 +166,19 @@ export function deliverToInbox(node: MeshNode, msg: MeshMessage): boolean {
 
 // --- store-carry-forward (DTN) ----------------------------------------------
 
+/** Park a message that has nowhere to go (skills/04: "DO bound memory strictly"). */
 export function enqueueOpp(node: MeshNode, msg: MeshMessage, nowMs: number): boolean {
   if (msg.to === "BROADCAST") return false; // broadcasts are not queued
   if (node.oppQueue.some((q) => q.msg.id === msg.id)) return false;
   if (node.oppQueue.length >= OPP_QUEUE_MAX) {
-    node.oppQueue.sort((a, b) => a.createdAt - b.createdAt);
+    // skills/04: "keep newest 500 (LRU by priority)". Priority first, then age: a bundle
+    // that has already sprayed its three copies is the one to lose, and among those the
+    // oldest. Evicting purely by age — what this did before — could throw away a fresh
+    // bundle to keep a sprayed-out one.
+    const rank = (q: QueuedMessage): number => (q.msg.priority === "low" ? 0 : 1);
+    node.oppQueue.sort((a, b) => rank(a) - rank(b) || a.createdAt - b.createdAt);
     node.oppQueue.shift();
+    node.oppQueue.sort((a, b) => a.createdAt - b.createdAt);
   }
   // Opportunistic from here on: the bundle waits for a contact rather than being
   // routed, so its end-to-end latency is a meeting time, not a transport time.
@@ -185,6 +192,23 @@ export function enqueueOpp(node: MeshNode, msg: MeshMessage, nowMs: number): boo
 /** Drop expired bundles. `nowMs` is simulation time, so a 7-day TTL is real. */
 export function pruneOppQueue(node: MeshNode, nowMs: number): void {
   node.oppQueue = node.oppQueue.filter((q) => nowMs - q.createdAt <= q.ttlMs);
+}
+
+/**
+ * Drop every copy of a bundle that has been acknowledged, and report how many went.
+ *
+ * skills/04: "On `ackReceived` from dest: remove + gossip ACK (so relays can prune)".
+ * The ACK travels back along the reverse path, and the nodes on that path are exactly
+ * the nodes that were carrying copies — so overhearing one is enough to prune, with no
+ * extra traffic and no new packet type. Without it a delivered bundle holds a slot in
+ * every carrier's queue for the full seven days, and the 500-message cap spends itself
+ * on messages that have already arrived.
+ */
+export function pruneAcked(node: MeshNode, ackedId: string): number {
+  if (node.oppQueue.length === 0) return 0;
+  const before = node.oppQueue.length;
+  node.oppQueue = node.oppQueue.filter((q) => q.msg.id !== ackedId);
+  return before - node.oppQueue.length;
 }
 
 export type ForwardMode = "direct" | "route" | "flood" | "wait-mpr" | "queue" | "drop";
@@ -249,6 +273,18 @@ export function decideForward(
     const nextHop = getNextHop(node, msg.to);
     if (nextHop && peerIds.includes(nextHop)) {
       return { mode: "route", targets: [nextHop], reason: `route via ${nextHop}` };
+    }
+    // A bundle already in DTN circulation has nowhere to go *right now*, which is
+    // exactly why it is being carried. Flooding it would spend the neighbourhood's radio
+    // on a copy with no path, and MPR suppression would delete it outright — measured in
+    // docs/06 §20 as the reason skills/04's carry test could not pass. Park it instead
+    // and let the next contact decide.
+    if (msg.carried) {
+      return {
+        mode: "queue",
+        targets: [],
+        reason: "carried bundle: no route to the destination right now",
+      };
     }
   }
 
@@ -353,15 +389,20 @@ export interface OppScanResult {
   deliver: QueuedMessage[];
   forward: { queued: QueuedMessage; to: NodeId }[];
   keep: QueuedMessage[];
+  /** Forwards that went to a SUPER because the carrier had no route of its own
+   *  (skills/04: "prefer SUPER as bundle carrier"). Counted so the cost of the rule can
+   *  be reported separately from routed forwarding. */
+  superCarries: number;
 }
 
 export function scanOppQueue(
   node: MeshNode,
   allNodes: MeshNode[],
   rf: RfParams,
-  nowMs: number
+  nowMs: number,
+  opts?: { preferSuper?: boolean }
 ): OppScanResult {
-  const result: OppScanResult = { deliver: [], forward: [], keep: [] };
+  const result: OppScanResult = { deliver: [], forward: [], keep: [], superCarries: 0 };
   for (const queued of node.oppQueue) {
     if (nowMs - queued.createdAt > queued.ttlMs) continue; // expired
     const dest = queued.msg.to;
@@ -380,6 +421,15 @@ export function scanOppQueue(
       if (queued.copyCount < SPRAY_LIMIT) {
         result.forward.push({ queued, to: nextHop });
         queued.copyCount++;
+        // A copy handed to a carrier is a *later* copy of the same bundle, and bumping
+        // `attempt` is what says so: intermediate nodes dedupe on `id#attempt`, so without
+        // this a relay that already heard the bundle swallows every later hand-over as a
+        // duplicate and the bundle never moves. The increment has to be relative to the
+        // attempt the bundle is *already* on, because the source retries that put it in
+        // the queue used 1 and 2 first: numbering sprayed copies from 1 collides with
+        // them and the carrier's cache swallows the first two copies of every bundle
+        // (docs/06 §20).
+        queued.msg = { ...queued.msg, attempt: queued.msg.attempt + 1 };
         // docs/03 §8: "if copyCount == 3: keep but lower priority". The bundle
         // stays so it can still be handed straight to the destination later;
         // only the copying stops.
@@ -389,6 +439,31 @@ export function scanOppQueue(
       }
       result.keep.push(queued);
       continue;
+    }
+    // No route of our own. skills/04: "DO prefer SUPER as bundle carrier (more
+    // storage/battery)" — and a SUPER is also the node with the fullest view, since it
+    // scans continuously and relays everything, so handing a bundle to one is the best
+    // available guess about who will meet the destination next. Still bounded by the
+    // spray limit: this is the "spray" half of spray-and-wait, not a flood.
+    if (opts?.preferSuper && queued.copyCount < SPRAY_LIMIT) {
+      const carriers = allNodes.filter(
+        (p) => p.id !== node.id && p.isOnline && p.role === "SUPER" && canReach(node, p, rf)
+      );
+      if (carriers.length > 0) {
+        // Deterministic tie-break: strongest signal, then id.
+        carriers.sort(
+          (a, b) => rssiModel(node, b, rf) - rssiModel(node, a, rf) || (a.id < b.id ? -1 : 1)
+        );
+        result.forward.push({ queued, to: carriers[0].id });
+        result.superCarries++;
+        queued.copyCount++;
+        queued.msg = { ...queued.msg, attempt: queued.msg.attempt + 1 };
+        if (queued.copyCount >= SPRAY_LIMIT) {
+          queued.msg = { ...queued.msg, priority: "low" };
+        }
+        result.keep.push(queued);
+        continue;
+      }
     }
     result.keep.push(queued);
   }
