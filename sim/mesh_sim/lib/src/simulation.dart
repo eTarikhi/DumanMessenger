@@ -71,6 +71,8 @@ class SimConfig {
     this.ackTimeoutMs = 4000,
     this.mediaAckTimeoutMs = 600,
     this.adaptiveMediaAck = false,
+    this.channelAccess = ChannelAccess.free,
+    this.channelQueueDepth = 8,
     this.bleKbps = 80,
     this.wifiDirectKbps = 20000,
     this.transferChunkBytes = 65536,
@@ -186,6 +188,18 @@ class SimConfig {
   /// every round trip (docs/08 §7).
   final bool adaptiveMediaAck;
 
+  /// How much of a radio a device has. [ChannelAccess.free] — the default, and the model
+  /// every other number in this repository was measured under — gives it an infinitely
+  /// wide radio. [ChannelAccess.halfDuplex] gives it the one radio a phone has, which is
+  /// the mechanism that lets media actually compete with text (docs/08 §12).
+  final ChannelAccess channelAccess;
+
+  /// How many packets a node's transmitter will hold while it is busy. Bounded on
+  /// purpose: an unbounded queue lets the radio commit air time arbitrarily far into the
+  /// future, and the mesh then spends its whole run waiting for a horizon that keeps
+  /// moving (docs/08 §12.1).
+  final int channelQueueDepth;
+
   /// Link throughput, for the serialization time a large payload occupies the radio
   /// with. The 250x ratio is not a guess: docs/05 §3.2 puts Wi-Fi Direct at "250x
   /// faster than BLE" for images, so 80 kbit/s against 20 Mbit/s reproduces exactly
@@ -292,6 +306,8 @@ class SimConfig {
     double? ackTimeoutMs,
     double? mediaAckTimeoutMs,
     bool? adaptiveMediaAck,
+    ChannelAccess? channelAccess,
+    int? channelQueueDepth,
     int? transferChunkBytes,
     int? transferWindow,
     double? transferStallMs,
@@ -332,6 +348,8 @@ class SimConfig {
         ackTimeoutMs: ackTimeoutMs ?? this.ackTimeoutMs,
         mediaAckTimeoutMs: mediaAckTimeoutMs ?? this.mediaAckTimeoutMs,
         adaptiveMediaAck: adaptiveMediaAck ?? this.adaptiveMediaAck,
+        channelAccess: channelAccess ?? this.channelAccess,
+        channelQueueDepth: channelQueueDepth ?? this.channelQueueDepth,
         bleKbps: bleKbps,
         wifiDirectKbps: wifiDirectKbps,
         transferChunkBytes: transferChunkBytes ?? this.transferChunkBytes,
@@ -487,6 +505,9 @@ class SimulationStats {
     required this.historyBytes,
     required this.bundlesPruned,
     required this.dtnSuperCarries,
+    required this.channelDeferrals,
+    required this.channelDeferMs,
+    required this.channelDrops,
     required this.batteryPercentPerHourNormal,
     required this.batteryPercentPerHourSuper,
     required this.scansPerSec,
@@ -585,6 +606,13 @@ class SimulationStats {
   /// to a SUPER because the carrier had no route of its own (docs/06 §20).
   final int bundlesPruned;
   final int dtnSuperCarries;
+
+  /// Channel access (docs/08 §12): transmissions that had to wait for a radio, how long
+  /// they waited in total, and packets a full transmit queue could not hold. All zero
+  /// under the default [ChannelAccess.free], where nothing is ever occupied.
+  final int channelDeferrals;
+  final double channelDeferMs;
+  final int channelDrops;
 
   /// skills/07 telemetry: "Battery %/h per role, scans/sec, relays/sec".
   /// Measured from the battery snapshot taken when metrics were cleared, over
@@ -930,6 +958,26 @@ class _MsgPayload {
   final NodeId via;
 }
 
+/// One transmission waiting for its node's radio (docs/08 §12).
+class _QueuedTx {
+  const _QueuedTx(this.msg, this.targetId, this.queuedAt);
+
+  final MeshMessage msg;
+  final NodeId targetId;
+  final double queuedAt;
+}
+
+/// One node's radio under [ChannelAccess.halfDuplex]: the instant it comes free again,
+/// the bounded FIFO waiting for it, and whether a drain event is already scheduled for
+/// it. Without that last flag a packet handed to a busy radio whose queue had just
+/// drained has nothing to wake the radio up, and waits for some other transmission to
+/// come along — which in a quiet mesh is never.
+class _ChannelState {
+  double busyUntil = 0;
+  final List<_QueuedTx> queue = <_QueuedTx>[];
+  bool drainScheduled = false;
+}
+
 class _PathTrace {
   _PathTrace(this.path, this.createdAt, this.from, this.to, this.type);
 
@@ -1123,6 +1171,13 @@ class MeshSimulation {
   /// Simulation time when metrics were last cleared: the telemetry baseline.
   double _measureStartMs = 0;
   int _relayTx = 0;
+  int _channelDeferrals = 0;
+  double _channelDeferMs = 0;
+  int _channelDrops = 0;
+
+  /// One radio per node. Only maintained under [ChannelAccess.halfDuplex] — under
+  /// [ChannelAccess.free] a radio is never busy, so the map stays empty.
+  final Map<NodeId, _ChannelState> _channel = <NodeId, _ChannelState>{};
   int _ogmTx = 0;
   int _lostDataTx = 0;
   int _lostOgmTx = 0;
@@ -1195,6 +1250,10 @@ class MeshSimulation {
     roleEvents = <RoleEvent>[];
     _traces.clear();
     _relayTx = 0;
+    _channelDeferrals = 0;
+    _channelDeferMs = 0;
+    _channelDrops = 0;
+    _channel.clear();
     _ogmTx = 0;
     _lostDataTx = 0;
     _lostOgmTx = 0;
@@ -1310,6 +1369,15 @@ class MeshSimulation {
       case EventKind.msg:
         _onMsgReceive(nodeId, payload! as _MsgPayload);
         break;
+      case EventKind.channel: {
+        final node = _byId(nodeId);
+        if (node != null && node.isOnline) {
+          final ch = _channel[node.id];
+          if (ch != null) ch.drainScheduled = false;
+          _drainChannel(node);
+        }
+        break;
+      }
       case EventKind.mpr:
         _onMprDecide(nodeId, payload! as MeshMessage);
         break;
@@ -1364,6 +1432,10 @@ class MeshSimulation {
         node.reasonTrace = 'Battery depleted';
         _queue.cancel(EventKind.ogm, node.id);
         _queue.cancel(EventKind.scan, node.id);
+        // A dead radio is an idle radio: whatever it had committed to is gone, and a node
+        // that comes back must not inherit a busy transmitter.
+        _channel.remove(node.id);
+        _queue.cancel(EventKind.channel, node.id);
       }
     }
     _queue.push(now + config.physicsIntervalMs, EventKind.physics, '*');
@@ -2191,9 +2263,79 @@ class MeshSimulation {
   }
 
   /// One radio transmission: rolls link loss, then schedules the hop.
+  /// Hand a packet to the radio.
+  ///
+  /// Under the default [ChannelAccess.free] it goes on air immediately, which is what
+  /// every number in docs/06-08 was measured under. Under [ChannelAccess.halfDuplex] the
+  /// node has one transmitter doing one thing at a time, so the packet joins a bounded
+  /// FIFO and waits for the radio; if the FIFO is full it is dropped (docs/08 §12).
   void _transmit(MeshNode node, MeshMessage msg, NodeId targetId) {
     final target = _byId(targetId);
     if (target == null || !target.isOnline || target.id == node.id) return;
+    if (config.channelAccess == ChannelAccess.free) {
+      _onAir(node, msg, targetId);
+      return;
+    }
+    var ch = _channel[node.id];
+    if (ch == null) {
+      ch = _ChannelState();
+      _channel[node.id] = ch;
+    }
+    if (ch.queue.length >= config.channelQueueDepth) {
+      // Drop-tail: the radio is committed as far ahead as it is allowed to be.
+      _channelDrops++;
+      _pushLog(
+          MeshLogKind.loss,
+          node.id,
+          '${msg.id} → $targetId dropped: transmit queue full (${config.channelQueueDepth})',
+          peerId: targetId,
+          msgId: msg.id,
+          msgType: msg.type,
+          hop: msg.hopCount);
+      return;
+    }
+    ch.queue.add(_QueuedTx(msg, targetId, now));
+    _drainChannel(node);
+  }
+
+  /// Put the next queued packet on air if the radio is free, and make sure something
+  /// wakes it when it is not.
+  void _drainChannel(MeshNode node) {
+    final ch = _channel[node.id];
+    if (ch == null) return;
+    // A radio does not spend air time on a transmission nobody can receive, so packets
+    // whose target went offline while they waited are discarded first.
+    while (ch.queue.isNotEmpty) {
+      final head = _byId(ch.queue.first.targetId);
+      if (head != null && head.isOnline) break;
+      ch.queue.removeAt(0);
+    }
+    if (ch.queue.isEmpty) return;
+    if (ch.busyUntil > now) {
+      if (!ch.drainScheduled) {
+        ch.drainScheduled = true;
+        _queue.push(ch.busyUntil, EventKind.channel, node.id);
+      }
+      return;
+    }
+    final next = ch.queue.removeAt(0);
+    final waited = now - next.queuedAt;
+    if (waited > 0) {
+      _channelDeferrals++;
+      _channelDeferMs += waited;
+    }
+    final airTime = _onAir(node, next.msg, next.targetId);
+    ch.busyUntil = now + airTime;
+    if (ch.queue.isNotEmpty && !ch.drainScheduled) {
+      ch.drainScheduled = true;
+      _queue.push(ch.busyUntil, EventKind.channel, node.id);
+    }
+  }
+
+  /// The packet goes on air: counters, loss draw, log, delivery event. Returns the air
+  /// time it occupied — a lost packet still occupied the radio for all of it.
+  double _onAir(MeshNode node, MeshMessage msg, NodeId targetId) {
+    final target = _byId(targetId)!;
     node.txCount++;
     _relayTx++;
     final loss = effectiveLossProbability(node, target, rf, config.linkRetries);
@@ -2210,7 +2352,12 @@ class MeshSimulation {
           msgType: msg.type,
           hop: msg.hopCount,
           rssi: rssi);
-      return;
+      // Air time without the jitter draw: consuming a random number here would move the
+      // stream the default free model depends on, and the golden vectors with it.
+      return (msg.transport == TransportType.wifiDirect
+              ? config.hopLatencyWifiMs
+              : config.hopLatencyBleMs) +
+          serializationMs(msg.sizeBytes, msg.transport);
     }
     _recordTxOutcome(node, 1);
     _pushLog(
@@ -2225,10 +2372,15 @@ class MeshSimulation {
     final base = msg.transport == TransportType.wifiDirect
         ? config.hopLatencyWifiMs
         : config.hopLatencyBleMs;
-    final delay = base +
+    // Air time: what the payload physically occupies the radio for. The loss draw and the
+    // jitter draw happen in the same order under both channel models, so `channelAccess`
+    // changes *when* a packet lands and never which random numbers a transmission
+    // consumes.
+    final airTime = base +
         serializationMs(msg.sizeBytes, msg.transport) +
         randRange(rng, config.jitterMinMs, config.jitterMaxMs);
-    _queue.push(now + delay, EventKind.msg, targetId, _MsgPayload(msg, node.id));
+    _queue.push(now + airTime, EventKind.msg, targetId, _MsgPayload(msg, node.id));
+    return airTime;
   }
 
   void _recordTxOutcome(MeshNode node, int ok) {
@@ -2846,6 +2998,8 @@ class MeshSimulation {
       node.offlineAt = now;
       _queue.cancel(EventKind.ogm, node.id);
       _queue.cancel(EventKind.scan, node.id);
+      _channel.remove(node.id);
+      _queue.cancel(EventKind.channel, node.id);
     } else {
       node.battery = math.max(node.battery, 0.3);
       node.uptimeMin = 0;
@@ -3033,6 +3187,9 @@ class MeshSimulation {
       historyBytes: _historyBytes,
       bundlesPruned: _bundlesPruned,
       dtnSuperCarries: _dtnSuperCarries,
+      channelDeferrals: _channelDeferrals,
+      channelDeferMs: _channelDeferMs,
+      channelDrops: _channelDrops,
       batteryPercentPerHourNormal: drainPerHour(Role.normal),
       batteryPercentPerHourSuper: drainPerHour(Role.superNode),
       scansPerSec: _scanCount / elapsedSec,

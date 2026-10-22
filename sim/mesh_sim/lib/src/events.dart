@@ -28,6 +28,9 @@ enum EventKind {
 
   /// Offer this node's group-history digests to its peers (anti-entropy).
   historyBeacon,
+
+  /// This node's radio came free: drain the next queued transmission (docs/08 §12).
+  channel,
   traffic
 }
 

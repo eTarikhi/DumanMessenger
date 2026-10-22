@@ -369,6 +369,31 @@ void main(List<String> args) {
       stdout.writeln('    [ ] 11 MB send → '
           '${acc['overCeilingRefused'] == true ? 'refused' : 'ACCEPTED'} '
           '(skills/05 "Max 10 MB")');
+      final ch = media['channel'] as Map<String, Object?>?;
+      if (ch != null) {
+        stdout.writeln('  channel access (docs/08 §12) — `free` is the shipped model:');
+        stdout.writeln('    ${'model'.padRight(11)}${'window'.padRight(7)}'
+            '${'10 MB @3 hops'.padRight(15)}retrans  dropped');
+        for (final f in (ch['files'] as List).cast<Map<String, Object?>>()) {
+          final ms = f['ms'];
+          stdout.writeln('    ${'${f['channel']}'.padRight(11)}'
+              '${'${f['window']}'.padRight(7)}'
+              '${(f['complete'] == true ? '${ms} ms' : 'TIMEOUT').padRight(15)}'
+              '${'${f['retransmitted']}'.padRight(8)}${f['drops']}');
+        }
+        stdout.writeln('    ${'model'.padRight(11)}${'arm'.padRight(11)}'
+            '${'delivery'.padRight(10)}${'retries'.padRight(8)}'
+            '${'parked'.padRight(7)}${'deferred'.padRight(10)}'
+            '${'dropped'.padRight(9)}file done');
+        for (final t in (ch['text'] as List).cast<Map<String, Object?>>()) {
+          stdout.writeln('    ${'${t['channel']}'.padRight(11)}'
+              '${'${t['arm']}'.padRight(11)}${'${t['ratio']}'.padRight(10)}'
+              '${'${t['retries']}'.padRight(8)}${'${t['parked']}'.padRight(7)}'
+              '${'${t['deferMs']} ms'.padRight(10)}'
+              '${'${t['drops']}'.padRight(9)}'
+              '${t['arm'] == 'quiet' ? '—' : (t['fileComplete'] == true ? 'yes' : 'no')}');
+        }
+      }
       stdout.writeln('  ${media['verdict']}');
     }
 
@@ -956,12 +981,134 @@ Map<String, Object?> _mediaProbe(SimConfig config) {
     'overCeilingRefused': refused == null,
   };
 
+  // --- channel access: the one radio a phone actually has (docs/08 §12) ------
+  //
+  // Everything above was measured under `ChannelAccess.free`, which gives a device an
+  // infinitely wide radio: a transmission occupies no exclusive resource, so two packets
+  // on air at once both succeed and a 10 MB file cannot cost anybody else anything. That
+  // is why the contention A/B in docs/08 §9 comes out null. These rows flip the one
+  // switch that gives the device a real radio and re-measure the same questions.
+
+  /// A fixed traffic plan, replayed identically in every arm. Letting each arm draw its
+  /// own traffic is what produced the first, wrong contention table (docs/08 §9).
+  List<List<int>> textPlan(int seed, int nodeCount, int messages) {
+    final rng = createRng(seed ^ 0x2f6e2b1);
+    final out = <List<int>>[];
+    for (var i = 0; i < messages; i++) {
+      final a = (rng() * nodeCount).floor();
+      var b = (rng() * nodeCount).floor();
+      var guard = 0;
+      while (b == a && guard++ < 32) {
+        b = (rng() * nodeCount).floor();
+      }
+      if (a != b) out.add(<int>[a, b]);
+    }
+    return out;
+  }
+
+  /// Text traffic under one channel model, with and without a 10 MB file in flight.
+  /// The text metrics are snapshotted at the end of the plan so a transfer that takes
+  /// minutes cannot dilute its own damage across a tail where nothing competes.
+  Map<String, Object?> textArm(ChannelAccess ca, int seed, bool withFile,
+      {int? window}) {
+    final sim = MeshSimulation(
+        config.copyWith(trafficIntervalMs: 0, channelAccess: ca));
+    sim.runFor(90000);
+    sim.clearRecords();
+    final p = textPlan(seed, sim.nodes.length, 40);
+    Transfer? transfer;
+    if (withFile && p.isNotEmpty) {
+      transfer = sim.sendFile(sim.nodes[p[0][0]].id, sim.nodes[p[0][1]].id, tenMb,
+          window: window);
+    }
+    var sent = 0;
+    for (var i = 1; i < p.length; i++) {
+      final from = sim.nodes[p[i][0]];
+      final to = sim.nodes[p[i][1]];
+      if (from.isOnline &&
+          to.isOnline &&
+          sim.sendMessage(from.id, to.id, 'c-$i') != null) {
+        sent++;
+      }
+      sim.runFor(2000);
+    }
+    final stats = sim.refresh();
+    final uni = sim.deliveries
+        .where((d) =>
+            d.type != MsgType.ack &&
+            d.type != MsgType.broadcast &&
+            d.groupId == null &&
+            d.transferId == null)
+        .toList();
+    return <String, Object?>{
+      'channel': ca.name,
+      'arm': withFile ? 'file w${window ?? config.transferWindow}' : 'quiet',
+      'sent': sent,
+      'delivered': uni.length,
+      'ratio': _round(uni.length / math.max(1, sent)),
+      'retries': stats.retriesSent,
+      'parked': stats.totalQueued,
+      'deferrals': stats.channelDeferrals,
+      'deferMs': _round(stats.channelDeferMs),
+      'drops': stats.channelDrops,
+      // Whether the file finished inside the traffic plan's own window. Under a real
+      // radio a 10 MB transfer outlives 80 s of text traffic by minutes, which is itself
+      // part of the finding.
+      'fileComplete': transfer?.state == TransferState.complete,
+    };
+  }
+
+  /// One 10 MB file at three hops, alone, under each channel model and window depth:
+  /// the sliding window is worth several-fold on a free radio and almost nothing on a
+  /// real one, because there is only one transmitter to fill.
+  final channelFiles = <Map<String, Object?>>[];
+  for (final ca in <ChannelAccess>[
+    ChannelAccess.free,
+    ChannelAccess.halfDuplex
+  ]) {
+    for (final w in <int>[1, config.transferWindow]) {
+      final sim = MeshSimulation(
+          config.copyWith(trafficIntervalMs: 0, channelAccess: ca));
+      sim.runFor(90000);
+      sim.clearRecords();
+      final pair = pairAt(sim, 3);
+      if (pair == null) continue;
+      final t = sim.sendFile(pair[0].id, pair[1].id, tenMb, window: w);
+      if (t == null) continue;
+      final done =
+          runUntil(sim, () => t.state == TransferState.complete, 600000);
+      channelFiles.add(<String, Object?>{
+        'channel': ca.name,
+        'window': w,
+        'complete': done,
+        'ms': t.completedAt == null ? null : _round(t.completedAt! - t.startedAt),
+        'retransmitted': t.retransmitted,
+        'drops': sim.refresh().channelDrops,
+      });
+    }
+  }
+
+  final channelText = <Map<String, Object?>>[
+    for (final ca in <ChannelAccess>[
+      ChannelAccess.free,
+      ChannelAccess.halfDuplex
+    ]) ...<Map<String, Object?>>[
+      textArm(ca, config.seed, false),
+      textArm(ca, config.seed, true),
+      if (ca == ChannelAccess.halfDuplex) textArm(ca, config.seed, true, window: 1),
+    ],
+  ];
+
   return <String, Object?>{
     'files': files,
     'bleOnly': bleOnly,
     'bleLadder': bleLadder,
     'voice': voice,
     'acceptance': acceptance,
+    'channel': <String, Object?>{
+      'files': channelFiles,
+      'text': channelText,
+    },
     'pttMeetsBudget': pttOk,
     'imageMeetsBudget': filesOk,
     'verdict': verdict,

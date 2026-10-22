@@ -49,6 +49,21 @@ enum Priority { low, normal, high }
 ///   flood-all") and skills/08 ("overhead down 30% vs naive flood") name.
 enum RelayPolicy { mpr, routeFlood, floodAll }
 
+/// How much of a radio a device has (docs/08 §12).
+///
+/// [ChannelAccess.free] is an infinitely wide radio: a transmission occupies no exclusive
+/// resource, so two packets on air at the same instant both succeed and a 10 MB file
+/// cannot cost anybody else anything. It is the default, and the model every acceptance
+/// gate in skills/02 and skills/08 was written against.
+///
+/// [ChannelAccess.halfDuplex] is the one radio a phone actually has: packets go into a
+/// bounded FIFO and on air when the radio comes free, and when the FIFO is full the newest
+/// packet is dropped, because a real radio sheds load rather than promising air time it
+/// does not have. Two things it still does not model, both optimistic: a busy *receiver*
+/// can still take a packet (no capture effect), and packets waiting their turn do not
+/// collide.
+enum ChannelAccess { free, halfDuplex }
+
 /// Address of a scoped group flood. Not a node id, and deliberately distinct from
 /// `broadcastAddress`: a broadcast is public by design (docs/04 §4), a group flood
 /// is delivered only to members holding the current key epoch.
