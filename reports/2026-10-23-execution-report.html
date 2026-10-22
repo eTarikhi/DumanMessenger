@@ -144,12 +144,82 @@ The ordering is not monotonic and the differences at three hops are inside the s
 that ships is "well under one second", not "600 ms is optimal". Two adaptive timers were built and
 measured and both lose - see &sect;8.</p>
 
-<h3>What one file does to everybody else</h3>
-<table class=""><thead><tr><th></th><th>quiet mesh</th><th>with a 10 MB file in flight</th><th>change</th></tr></thead><tbody><tr><td>relay transmissions</td><td>2,780</td><td>32,604</td><td>11.7x</td></tr><tr><td>unicast messages sent</td><td>57</td><td>55</td><td>-</td></tr><tr><td>delivery ratio</td><td>100.0%</td><td>98.2%</td><td>-1.8 pt</td></tr><tr><td>retries sent</td><td>7</td><td>331</td><td>47x</td></tr><tr><td>OppQueue holds</td><td>0</td><td>35</td><td>+35</td></tr><tr><td>the 10 MB transfer itself</td><td>33.00 s</td><td>36.79 s</td><td>+11%</td></tr></tbody></table>
-<p class="sub">300 s of simulated time with traffic every 4 s. The two latency rows moved in the
-favourable direction on a 55-message sample, which is sampling rather than an effect; the counts are the
-finding. Media does not break text delivery, but it is the dominant source of radio work while it runs
-and it pushes other people's messages into store-carry-forward.</p>
+<h3>What one file does to everybody else &mdash; and a withdrawn claim</h3>
+<div class="note warn">The first version of this table reported that a 10 MB transfer cost the mesh
+1.8 points of delivery and pushed 35 messages into store-carry-forward. <strong>That measurement was
+wrong</strong>: each arm drew its own traffic from the simulation's RNG, so the &quot;quiet&quot; and
+&quot;busy&quot; arms did not send the same messages, and the media run consumed randomness that shifted
+every later loss draw. Two experiments wearing one table. Re-run with one fixed plan replayed
+identically in both arms, mean of three seeds:</div>
+<table><thead><tr><th></th><th>quiet</th><th>with a 10 MB file in flight</th><th>change</th></tr></thead><tbody>
+<tr><td>messages sent</td><td class="num">59.0</td><td class="num">59.0</td><td>&mdash;</td></tr>
+<tr><td>delivery ratio</td><td class="num">0.9944</td><td class="num">0.9944</td><td class="pass">none</td></tr>
+<tr><td>within 5 hops</td><td class="num">0.9944</td><td class="num">0.9944</td><td class="pass">none</td></tr>
+<tr><td>p95 latency</td><td class="num">4,472 ms</td><td class="num">3,275 ms</td><td>sampling</td></tr>
+<tr><td>relay transmissions</td><td class="num">1,728</td><td class="num">5,311</td><td>3.1x</td></tr>
+<tr><td>retries sent</td><td class="num">11</td><td class="num">59</td><td>5.4x</td></tr>
+<tr><td>messages parked</td><td class="num">1.0</td><td class="num">1.0</td><td class="pass">none</td></tr>
+<tr><td>retries exhausted</td><td class="num">1.0</td><td class="num">1.0</td><td class="pass">none</td></tr>
+<tr><td>the transfer itself</td><td>&mdash;</td><td class="num">10.71 s</td><td>&mdash;</td></tr>
+</tbody></table>
+<p class="sub">Per seed, delivery is 0.983 / 1.000 / 1.000 in <em>both</em> arms. The null result is
+structural rather than lucky: <code>packetLossProbability</code> reads the link margin and nothing else,
+and two transmissions at the same instant both succeed because there is no shared medium. A chunk
+occupies the radio in <em>time</em>, and time is not contested &mdash; so a load gate on transfers has
+nothing to protect in this model, and building one would cost users transfer time for a benefit the
+model cannot express.</p>
+
+<h3>Channel access: the same questions on the one radio a phone has</h3>
+<p class="sub">That null result is a property of the model, and the model was missing a mechanism. It is
+now behind a flag &mdash; <code>channelAccess</code> &mdash; which ships <code>&quot;free&quot;</code>
+(the infinitely wide radio every other number here was measured under, golden vectors byte-identical)
+and offers <code>&quot;halfDuplex&quot;</code>: one transmitter per device, an 8-deep FIFO, drop-tail
+when full, because a real radio sheds load rather than promising air time it does not have.</p>
+<table><thead><tr><th>measurement</th><th><code>free</code> (ships)</th><th><code>halfDuplex</code></th></tr></thead><tbody>
+<tr><td>10 MB at 1 hop</td><td class="num">7.60 s</td><td><div class="bar"><div class="fill" style="width:11.50%;background:#ff9f4d"></div><span class="barlabel">1.45 min (11.5x slower)</span></div></td></tr>
+<tr><td>10 MB at 2 hops</td><td class="num">17.99 s</td><td><div class="bar"><div class="fill" style="width:17.50%;background:#ff9f4d"></div><span class="barlabel">2.21 min</span></div></td></tr>
+<tr><td>10 MB at 3 hops</td><td class="num">33.00 s</td><td><div class="bar"><div class="fill" style="width:31.50%;background:#ff9f4d"></div><span class="barlabel">3.97 min</span></div></td></tr>
+<tr><td>window 1 &rarr; 16 at 1 hop</td><td class="num">31.98 s &rarr; 2.06 s (15.5x)</td><td class="num">1.78 min &rarr; 1.11 min (1.6x)</td></tr>
+<tr><td>10 s voice note, 1 hop: delay after release</td><td class="num">307 ms</td><td class="num">307 ms</td></tr>
+<tr><td>10 s voice note, 3 hops: delay after release</td><td class="num">757 ms</td><td><div class="bar"><div class="fill" style="width:100.00%;background:#ff6b6b"></div><span class="barlabel">17.8 s &mdash; 23x, and 1.8x the note's own length</span></div></td></tr>
+<tr><td>text delivery, quiet mesh</td><td class="num">0.9944</td><td class="num">0.9831</td></tr>
+<tr><td>text delivery, 10 MB in flight</td><td class="num">0.9944</td><td><div class="bar"><div class="fill" style="width:95.48%;background:#ffd166"></div><span class="barlabel">0.9548 &mdash; media now costs 2.8 points</span></div></td></tr>
+<tr><td>p95 latency, 10 MB in flight</td><td class="num">3,275 ms</td><td class="num">7,954 ms</td></tr>
+<tr><td>queue drops, 10 MB in flight</td><td class="num">0</td><td class="num">2,409</td></tr>
+</tbody></table>
+<p class="sub">Voice is arithmetic before it is measurement: a 500 ms frame is 750 B, one BLE packet, so
+its air time is hop latency plus jitter &mdash; about 245 ms a hop. Three hops need 735 ms of radio for
+every 500 ms of recording, so the queue grows for as long as the user keeps talking. Nothing is lost;
+every frame arrives, long after it was worth hearing.</p>
+
+<h3>So is a load gate motivated? Yes &mdash; and it is the window, not the chunk size</h3>
+<table><thead><tr><th>arm (half-duplex, same plan, three seeds)</th><th>delivery</th><th>p95</th><th>parked</th><th>file time</th><th>dropped</th></tr></thead><tbody>
+<tr><td>no file</td><td class="num">0.9831</td><td class="num">5,077 ms</td><td class="num">4.0</td><td>&mdash;</td><td class="num">248</td></tr>
+<tr><td>file, window 4 <span class="tag">ships</span></td><td class="num part">0.9548</td><td class="num">7,954 ms</td><td class="num">12.3</td><td class="num">3.33 min</td><td class="num">2,409</td></tr>
+<tr><td>file, window 1</td><td class="num pass">0.9887</td><td class="num">7,047 ms</td><td class="num">7.0</td><td class="num">3.30 min</td><td class="num">2,191</td></tr>
+<tr><td>file, 16 KB chunks instead of 64 KB</td><td class="num">0.9774</td><td class="num">8,867 ms</td><td class="num">7.0</td><td class="num part">10.74 min</td><td class="num">3,447</td></tr>
+<tr><td>file, 4 KB chunks</td><td class="num">0.9718</td><td class="num part">16,839 ms</td><td class="num">8.0</td><td class="num part">unfinished</td><td class="num">2,609</td></tr>
+</tbody></table>
+<p class="sub">Committing one chunk at a time instead of four recovers <em>all</em> of the lost delivery
+and costs nothing in file time, because the air time was serial anyway. The intuitive alternative is
+wrong: slicing the file smaller buys about 2 points and pays 3.2x in transfer time and 2.1x in p95,
+because at 64 KB the fixed part of air time (40 ms hop latency + ~125 ms jitter) is six times the
+serialization part (26 ms) &mdash; slicing 16x finer multiplies the fixed cost 16x. <strong>The unit of
+politeness is how far ahead you commit, not how big you commit.</strong></p>
+<table><thead><tr><th>acceptance gate, 20-node campus</th><th><code>free</code></th><th><code>halfDuplex</code></th><th>required</th></tr></thead><tbody>
+<tr><td>delivery ratio</td><td class="num">0.9889</td><td class="num">0.9556</td><td class="pass">&ge; 0.90</td></tr>
+<tr><td>within 5 hops</td><td class="num">0.9889</td><td class="num">0.9556</td><td class="pass">&ge; 0.90</td></tr>
+<tr><td>overhead vs flood-all</td><td class="num">9.3%</td><td class="num">38.6%</td><td class="pass">&le; 70%</td></tr>
+<tr><td>SUPER ratio</td><td class="num">21.7%</td><td class="num">25.0%</td><td class="part">15&ndash;25%, at the edge</td></tr>
+</tbody></table>
+<p class="sub">The gates still pass, but overhead quadruples because flood-all &mdash; the denominator
+&mdash; is slowed by the radio too, and MPR's advantage shrinks when air time rather than packet count is
+the scarce resource. That is why the flag ships off: skills/02 and skills/08 were written against a radio
+with no channel, and changing the default would silently redefine every acceptance number in the roadmap.
+Two wrong implementations are recorded in <code>docs/08</code> &sect;12.1 and pinned by tests: committing
+air time instead of queueing it (delivery 0.37 with no media in flight, 47 s average deferral), and a
+drain event that was only scheduled when packets were left behind, so a radio that went busy with an
+empty queue never woke up.</p>
 
 <h2>6. Group history anti-entropy (docs/06 &sect;17)</h2>
 <table class=""><thead><tr><th>membership</th><th>beacon links</th><th>recovered</th><th>converged</th><th>seconds</th><th>packets</th><th>payload</th></tr></thead><tbody><tr><td>5 members, spread</td><td>6 of 20</td><td class="num">20/20</td><td class="part">no</td><td class="num">&gt;300</td><td class="num">171</td><td class="num">29.8 KB</td></tr><tr><td>5 members, 5 nearest</td><td>20 of 20</td><td class="num">20/20</td><td class="pass">yes</td><td class="num">8.8</td><td class="num">60</td><td class="num">15.7 KB</td></tr><tr><td>either, beacons off</td><td>-</td><td class="num">0/20</td><td class="blocked">no</td><td class="num">-</td><td class="num">0</td><td class="num">0</td></tr></tbody></table>
@@ -252,7 +322,7 @@ which is which, because a field report has to say which one it is quoting.</p>
 <h3>Reproducing everything above</h3>
 <pre>npm ci &amp;&amp; npm test                # 235 TypeScript tests
 npm run golden                     # regenerate and diff the cross-language vectors
-npm run media                      # docs/08: files, PTT, retry timer, contention
+npm run media                      # docs/08: files, PTT, retry timer, contention, channel access
 npm run history                    # docs/06 §17: repair against the same world with it off
 npm run field:capture -- campus_quad 42 /tmp/cap.jsonl [flood-all]
 npm run field:report  -- /tmp/cap.jsonl /tmp/base.jsonl
@@ -268,23 +338,27 @@ dart run bin/mesh_sim.dart --duty-cycle --json                       # skills/07
 <p>Twenty-nine roadmap items are still open, and every one of them is app or platform work rather than
 protocol work: the BLE GATT hello and iOS beacon, permissions flows, the foreground service, SQLite,
 <code>WifiP2pManager</code> and MultipeerConnectivity, the Opus codec, QR pairing, distribution, legal.
-Four things on the simulation side are named in the evidence documents as the next lever to pull if their
-item is ever prioritised:</p>
+Two things on the simulation side are named in the evidence documents as the next lever to pull; a
+third and a fourth &mdash; a channel-access model and media gating on mesh load &mdash; were built and
+measured while writing this report, and their results are in &sect;5.</p>
 <ul>
 <li><strong>Cap-aware community-relay promotion</strong> - reserve part of the top 20% for charging,
 stationary nodes, or score a tablet above a phone at equal position (&sect;19.2).</li>
 <li><strong>Peer-count normalisation against the observed maximum</strong> - the lever if a healthy atrium
 phone loses an election on real hardware (&sect;18.2).</li>
-<li><strong>A channel-access model</strong> - no CSMA and no collisions means every media and density
-result here is an upper bound, and the direction of the error is on the record (docs/08 &sect;11,
-docs/09 &sect;6).</li>
-<li><strong>Media gating on mesh load</strong> - a file transfer is 11.7x the relay traffic of a quiet mesh
-and pushed 35 messages into store-carry-forward; the counters to gate on now exist (docs/08 &sect;9).</li>
+<li><strong>Receiver-side capture and collisions</strong> - the half-duplex model
+deferres rather than drops when two packets meet, and lets a busy receiver take a packet. Both omissions
+are optimistic, so every <code>halfDuplex</code> number is the good end of a real radio (docs/08
+&sect;12.7).</li>
+<li><strong>Voice priority in the transmit queue</strong> - at three hops a streamed note cannot keep up
+with its own capture clock on one radio, so either streaming is capped at two hops and longer notes are
+sent as blobs, or voice jumps the queue. Not implemented; it is the next thing to measure (docs/08
+&sect;12.3).</li>
 </ul>
 
 <footer>
-Generated 2026-10-23 from branch <code>arena/acc5e9a6-dumanmessenger</code> at <code>a99856c</code>. Evidence:
-<code>docs/06-simulator-findings.md</code> &sect;1-19, <code>docs/07-e2ee-noise-xx.md</code>,
+Generated 2026-10-23 from branch <code>arena/acc5e9a6-dumanmessenger</code> at <code>6f29bf8</code>. Evidence:
+<code>docs/06-simulator-findings.md</code> &sect;1-20, <code>docs/07-e2ee-noise-xx.md</code>,
 <code>docs/08-media-transport-ptt.md</code>, <code>docs/09-field-test-plan.md</code>. Probes:
 <code>tool/media-probe.ts</code>, <code>tool/history-probe.ts</code>, <code>tool/capture-json.ts</code>,
 <code>tool/field-report.ts</code>, <code>tool/generate-golden.ts</code>.
