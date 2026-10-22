@@ -151,6 +151,13 @@ export interface SimConfig {
   voiceFrameMs: number;
   /** Receiver buffer before playback can start (docs/05 §3.3: "jitter buffer 200 ms"). */
   jitterBufferMs: number;
+  /** TTL for one voice chunk. skills/05 puts `VOICE_CHUNK` at `prio=high, ttl=3`:
+   *  a frame that needs four hops is stale by the time it arrives, so it is not
+   *  worth the radio time. */
+  voiceTtl: number;
+  /** skills/05: "Max 10 MB". A larger send is refused rather than attempted, because
+   *  on this mesh it would occupy the radio for minutes (docs/08 §8). */
+  maxTransferBytes: number;
 
   enableSuperElection: boolean;
   enableMobility: boolean;
@@ -234,6 +241,8 @@ export const DEFAULT_CONFIG: SimConfig = {
   voiceKbps: 12,
   voiceFrameMs: 500,
   jitterBufferMs: 200,
+  voiceTtl: 3,
+  maxTransferBytes: 10 * 1048576,
 
   enableSuperElection: true,
   enableMobility: true,
@@ -396,6 +405,11 @@ export interface Transfer {
   /** For a voice note: when capture ended, i.e. when the user let go of the button. */
   releasedAt: number | null;
   transport: TransportType;
+  /** skills/05: "Send ... via best transport (WiFi Direct if GO connected, else
+   *  chunked BLE 512B MTU)". A Wi-Fi Direct group owner that is already negotiated
+   *  means the radio is available whatever the payload size says, so the caller can
+   *  force it; null leaves the size-based choice in `selectTransport`. */
+  forcedTransport: TransportType | null;
   state: "active" | "complete";
 }
 
@@ -1167,13 +1181,34 @@ export class MeshSimulation {
     fromId: NodeId,
     toId: NodeId,
     totalBytes: number,
-    opts?: { chunkBytes?: number; window?: number }
+    opts?: { chunkBytes?: number; window?: number; transport?: TransportType }
   ): Transfer | null {
     const from = this.byId(fromId);
     if (!from || !from.isOnline || totalBytes <= 0) return null;
+    if (totalBytes > this.config.maxTransferBytes) {
+      // skills/05: "Max 10 MB". Refusing is the honest behaviour: docs/08 §8
+      // measures what attempting it would cost the mesh.
+      this.pushLog(
+        "transfer",
+        fromId,
+        `refused ${(totalBytes / 1048576).toFixed(1)} MB to ${toId} — over the ` +
+          `${(this.config.maxTransferBytes / 1048576).toFixed(0)} MB ceiling (skills/05)`,
+        { msgType: "file" }
+      );
+      return null;
+    }
     const chunkBytes = Math.max(64, opts?.chunkBytes ?? this.config.transferChunkBytes);
     const chunks = Math.max(1, Math.ceil(totalBytes / chunkBytes));
-    const t = this.newTransfer("file", fromId, toId, totalBytes, chunkBytes, chunks, opts?.window);
+    const t = this.newTransfer(
+      "file",
+      fromId,
+      toId,
+      totalBytes,
+      chunkBytes,
+      chunks,
+      opts?.window,
+      opts?.transport
+    );
     this.pushWindow(t);
     return t;
   }
@@ -1193,7 +1228,7 @@ export class MeshSimulation {
     fromId: NodeId,
     toId: NodeId,
     seconds: number,
-    opts?: { stream?: boolean }
+    opts?: { stream?: boolean; transport?: TransportType }
   ): Transfer | null {
     const from = this.byId(fromId);
     if (!from || !from.isOnline || seconds <= 0) return null;
@@ -1208,13 +1243,31 @@ export class MeshSimulation {
 
     if (!stream) {
       // One blob of the whole note, sent when the button is released.
-      const t = this.newTransfer("voice", fromId, toId, totalBytes, totalBytes, 1, 1);
+      const t = this.newTransfer(
+        "voice",
+        fromId,
+        toId,
+        totalBytes,
+        totalBytes,
+        1,
+        1,
+        opts?.transport
+      );
       t.releasedAt = releasedAt;
       this.queue.push(releasedAt, "transferchunk", fromId, { transferId: t.id, index: 0 });
       return t;
     }
 
-    const t = this.newTransfer("voice", fromId, toId, totalBytes, frameBytes, frames, 1);
+    const t = this.newTransfer(
+      "voice",
+      fromId,
+      toId,
+      totalBytes,
+      frameBytes,
+      frames,
+      1,
+      opts?.transport
+    );
     t.releasedAt = releasedAt;
     for (let i = 0; i < frames; i++) {
       const departsAt = this.now + Math.min((i + 1) * frameMs, seconds * 1000);
@@ -1230,7 +1283,8 @@ export class MeshSimulation {
     totalBytes: number,
     chunkBytes: number,
     chunks: number,
-    window?: number
+    window?: number,
+    forced?: TransportType
   ): Transfer {
     const id = `transfer-${this.transferSeq++}`;
     const t: Transfer = {
@@ -1256,7 +1310,8 @@ export class MeshSimulation {
       firstChunkAt: null,
       completedAt: null,
       releasedAt: null,
-      transport: selectTransport(chunkBytes),
+      transport: forced ?? selectTransport(chunkBytes),
+      forcedTransport: forced ?? null,
       state: "active",
     };
     this.transfers.set(id, t);
@@ -1281,7 +1336,14 @@ export class MeshSimulation {
     const bytes = Math.min(t.chunkBytes, t.totalBytes - index * t.chunkBytes);
     if (bytes <= 0 || index >= t.chunks) return;
     t.onAir.add(index);
-    this.sendMessage(t.from, t.to, "", "file", undefined, { transferId: t.id, index, bytes });
+    // skills/05: a voice note goes out as VOICE_CHUNK packets, prio=high and ttl=3,
+    // which `sendMessage` derives from the "voice" type.
+    this.sendMessage(t.from, t.to, "", t.kind === "voice" ? "voice" : "file", undefined, {
+      transferId: t.id,
+      index,
+      bytes,
+      transport: t.forcedTransport,
+    });
   }
 
   /**
@@ -1370,7 +1432,7 @@ export class MeshSimulation {
     body: string,
     type: MsgType = "text",
     groupCtx?: { id: string; epoch: number },
-    chunk?: { transferId: string; index: number; bytes: number }
+    chunk?: { transferId: string; index: number; bytes: number; transport?: TransportType | null }
   ): MeshMessage | null {
     const from = this.byId(fromId);
     if (!from || !from.isOnline) return null;
@@ -1403,7 +1465,8 @@ export class MeshSimulation {
 
     // docs/05 §"Broadcast SOS | All transports, flood (TTL=5)". Reach comes from
     // repeating the flood, not from a longer TTL — see onSosRepeat.
-    const ttl = type === "sos" ? this.config.sosTtl : 5;
+    const ttl =
+      type === "sos" ? this.config.sosTtl : type === "voice" ? this.config.voiceTtl : 5;
     const priority = type === "sos" || type === "voice" ? "high" : "normal";
     const msgType: MsgType = toId === "BROADCAST" && type === "text" ? "broadcast" : type;
     const msg = createMessage(this.nextMsgId(), this.now, fromId, toId, body, msgType, ttl, priority);
@@ -1415,7 +1478,7 @@ export class MeshSimulation {
       // A chunk's size is the payload it carries, not the empty body it was built
       // from — and that size is what picks the transport and the air time.
       msg.sizeBytes = chunk.bytes;
-      msg.transport = selectTransport(chunk.bytes);
+      msg.transport = chunk.transport ?? selectTransport(chunk.bytes);
       msg.transferId = chunk.transferId;
       msg.chunkIndex = chunk.index;
     }

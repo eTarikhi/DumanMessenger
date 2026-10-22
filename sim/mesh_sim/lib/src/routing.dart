@@ -84,8 +84,13 @@ MeshMessage createMessage(
   TransportType? transport,
   String? groupId,
   int? groupEpoch,
+  int? sizeBytes,
+  String? transferId,
+  int? chunkIndex,
 }) {
-  final sizeBytes = wireSizeOf(body.length);
+  // A chunk's size is the payload it carries, not the empty body it was built
+  // from — and that size is what picks the transport and the air time.
+  final wireBytes = sizeBytes ?? wireSizeOf(body.length);
   return MeshMessage(
     id: id,
     type: type,
@@ -100,13 +105,15 @@ MeshMessage createMessage(
     priority: priority,
     timestamp: nowMs,
     encrypted: type != MsgType.broadcast,
-    transport: transport ?? selectTransport(sizeBytes),
-    sizeBytes: sizeBytes,
+    transport: transport ?? selectTransport(wireBytes),
+    sizeBytes: wireBytes,
     sosId: sosId,
     sosRepeat: sosRepeat,
     sosPos: sosPos,
     groupId: groupId,
     groupEpoch: groupEpoch,
+    transferId: transferId,
+    chunkIndex: chunkIndex,
   );
 }
 

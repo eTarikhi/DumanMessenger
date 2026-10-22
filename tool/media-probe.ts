@@ -19,6 +19,10 @@ import { campusQuad, festivalCrowd } from "../src/scenarios";
 import { canReach, effectiveLossProbability, peersInRange } from "../src/rf";
 import type { MeshNode, NodeId, TransportType } from "../src/types";
 
+/** skills/05: "chunked BLE 512B MTU" — what a file is sliced into when there is no
+ *  Wi-Fi Direct group owner to carry it. */
+const BLE_MTU_BYTES = 512;
+
 const MB = 1048576;
 const SEEDS = [42, 7, 1234];
 
@@ -76,7 +80,9 @@ function fmt(ms: number): string {
 }
 
 function fmtSize(bytes: number): string {
-  return bytes >= MB ? `${(bytes / MB).toFixed(1)} MB` : `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes >= MB) return `${(bytes / MB).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${bytes} B`;
 }
 
 function simFor(config: SimConfig): MeshSimulation {
@@ -141,7 +147,7 @@ function runFile(
   config: SimConfig,
   hops: number,
   bytes: number,
-  opts: { window?: number; chunkBytes?: number; budgetMs?: number } = {}
+  opts: { window?: number; chunkBytes?: number; budgetMs?: number; transport?: TransportType } = {}
 ): FileResult {
   const sim = simFor(config);
   const pair = pairAtHops(sim, hops);
@@ -150,6 +156,7 @@ function runFile(
   const t = sim.sendFile(a.id, b.id, bytes, {
     window: opts.window,
     chunkBytes: opts.chunkBytes,
+    transport: opts.transport,
   });
   if (!t) throw new Error("sendFile refused");
   const budget = opts.budgetMs ?? 900_000;
@@ -204,10 +211,11 @@ function fileTable(): void {
   }
 
   console.log("\n--- the same file with no Wi-Fi Direct peer: BLE only ---");
-  console.log("A BLE-only mesh cannot carry a 64 KB slice, so the app would slice to the packet");
-  console.log("ceiling instead (docs/05 §3.2: 'auto-reject files >5 MB on BLE-only').");
+  console.log("A BLE-only mesh cannot carry a 64 KB slice, so skills/05 slices to the BLE MTU");
+  console.log(`(${BLE_MTU_BYTES} B) instead, and docs/05 §3.2 has the app auto-reject >5 MB with a`);
+  console.log("'move closer to SUPER' hint. This is what that rule protects the user from.");
   for (const hops of [1, 2]) {
-    const r = runFile({ ...campusQuad(42) }, hops, 10 * MB, { chunkBytes: 1024, window: 4 });
+    const r = runFile({ ...campusQuad(42) }, hops, 10 * MB, { chunkBytes: BLE_MTU_BYTES, window: 4 });
     console.log(
       `  ${hops} hop${hops > 1 ? "s" : ""}: ${r.chunks} × ${fmtSize(r.chunkBytes)} chunks over ${r.transport} → ` +
         `${r.ms === null ? "did not finish in 15 min" : fmt(r.ms)}` +
@@ -216,7 +224,7 @@ function fileTable(): void {
   }
   console.log("\n--- what size a BLE-only mesh can still do in a minute ---");
   for (const size of [0.25 * MB, MB, 2 * MB, 5 * MB]) {
-    const r = runFile({ ...campusQuad(42) }, 1, size, { chunkBytes: 1024, window: 4, budgetMs: 300_000 });
+    const r = runFile({ ...campusQuad(42) }, 1, size, { chunkBytes: BLE_MTU_BYTES, window: 4, budgetMs: 300_000 });
     console.log(
       `  ${fmtSize(size).padEnd(9)} → ${r.ms === null ? ">5 min" : fmt(r.ms).padEnd(9)} ` +
         `(${r.received}/${r.chunks} chunks${r.retransmitted ? `, ${r.retransmitted} retransmitted` : ""})`
@@ -252,13 +260,14 @@ function runVoice(
   config: SimConfig,
   hops: number,
   seconds: number,
-  stream: boolean
+  stream: boolean,
+  transport?: TransportType
 ): VoiceResult {
   const sim = simFor(config);
   const pair = pairAtHops(sim, hops);
   if (!pair) throw new Error(`no pair ${hops} hops apart`);
   const [a, b] = pair;
-  const t = sim.sendVoice(a.id, b.id, seconds, { stream });
+  const t = sim.sendVoice(a.id, b.id, seconds, { stream, transport });
   if (!t) throw new Error("sendVoice refused");
   const budget = seconds * 1000 + 120_000;
   let elapsed = 0;
@@ -328,6 +337,18 @@ function voiceTable(): void {
       }
     }
   }
+  console.log("\n--- one hop with a Wi-Fi Direct group owner already negotiated ---");
+  console.log("skills/05's modes table puts streaming PTT at 150-300 ms here, and its acceptance");
+  console.log("box at <1 s round trip. The buffer-excluded figure is the one to compare.");
+  for (const seconds of [3, 30]) {
+    const r = runVoice(cfg, 1, seconds, true, "wifiDirect");
+    console.log(
+      `  ${seconds} s note: ${r.transport}, first audio ${fmt(r.firstPlayableMs ?? NaN)}, ` +
+        `play delay ${fmt(r.playDelayMs ?? NaN)}, buffer excluded ` +
+        `${((r.playDelayMs ?? NaN) - 200).toFixed(0)} ms, ${r.underruns} underruns`
+    );
+  }
+
   console.log("\n--- streaming against a crowd, where the path is longer and lossier ---");
   for (const hops of [1, 2, 3]) {
     const r = runVoice({ ...festivalCrowd(42) }, hops, 3, true);
@@ -409,10 +430,76 @@ function retryTimerTable(): void {
 }
 
 // ---------------------------------------------------------------------------
-// 5. Does media break the mesh for everybody else?
+// 5. skills/05's three acceptance boxes, measured
+// ---------------------------------------------------------------------------
+function acceptanceTable(): void {
+  console.log("\n=== 5. skills/05 acceptance, measured ===");
+
+  // Box 1: "1-hop WiFi: PTT round-trip <1s, intelligible (MOS proxy test)".
+  // The modes table above it puts streaming PTT at 150-300 ms on one Wi-Fi Direct
+  // hop, which reads as excluding the jitter buffer; both numbers are reported.
+  const wifi = runVoice({ ...campusQuad(42) }, 1, 3, true, "wifiDirect");
+  const wifiDelay = wifi.playDelayMs ?? Number.POSITIVE_INFINITY;
+  const hopOnly = wifiDelay - 200;
+  console.log(
+    `[1] 1-hop Wi-Fi PTT round trip ${fmt(wifiDelay)} (buffer excluded: ${hopOnly.toFixed(0)} ms) ` +
+      `→ ${wifiDelay < 1000 ? "PASS <1 s" : "FAIL"}; modes table 150-300 ms → ` +
+      `${hopOnly >= 150 && hopOnly <= 300 ? "inside" : "outside"} the band. ` +
+      `"Intelligible" is not simulatable: no codec runs here.`
+  );
+
+  // Box 2: "3-hop BLE: voice note arrives intact, Opus decode clean".
+  const ble = runVoice({ ...campusQuad(42) }, 3, 3, true);
+  console.log(
+    `[2] 3-hop BLE voice note over ${ble.transport}: ${ble.received}/${ble.frames} frames arrived ` +
+      `→ ${ble.received === ble.frames ? "intact PASS" : "INCOMPLETE"}; play delay ` +
+      `${fmt(ble.playDelayMs ?? NaN)}, ${ble.underruns} arrival gaps longer than frame+buffer, ` +
+      `which is the only proxy available for "decode clean": a gap is a hole the decoder conceals.`
+  );
+
+  // Box 3: "10 MB image: delivered over WiFi Direct with resume after mid-transfer
+  // disconnect". The disconnect is the interesting half.
+  const sim = simFor({ ...campusQuad(42), captureLog: true });
+  const pair = pairAtHops(sim, 3);
+  if (!pair) throw new Error("no 3-hop pair");
+  const [a, b] = pair;
+  const t = sim.sendFile(a.id, b.id, 10 * MB, { transport: "wifiDirect" })!;
+  const started = sim.now;
+  while (t.received < Math.floor(t.chunks * 0.3) && sim.now - started < 120_000) {
+    sim.runFor(100);
+  }
+  const progressed = t.received;
+  sim.toggleNodeOnline(b.id); // the receiver walks away mid-transfer
+  sim.runFor(20_000);
+  const stallsWhileAway = t.stalls;
+  sim.toggleNodeOnline(b.id); // ... and comes back
+  let elapsed = 0;
+  while (t.state === "active" && elapsed < 600_000) {
+    sim.runFor(250);
+    elapsed += 250;
+  }
+  console.log(
+    `[3] 10 MB over Wi-Fi Direct, receiver offline at ${progressed}/${t.chunks} chunks for 20 s: ` +
+      `${t.received}/${t.chunks} arrived, ${t.stalls} window stalls (${stallsWhileAway} while it was ` +
+      `away), ${t.retransmitted} retransmitted → ` +
+      `${t.state === "complete" ? `resumed and completed in ${fmt((t.completedAt ?? 0) - t.startedAt)} PASS` : "DID NOT RESUME"}`
+  );
+
+  // The ceiling itself.
+  const ceiling = simFor({ ...campusQuad(42), captureLog: true });
+  const cp = pairAtHops(ceiling, 1);
+  const refused = cp ? ceiling.sendFile(cp[0].id, cp[1].id, 11 * MB) : null;
+  console.log(
+    `[ ] 11 MB send → ${refused === null ? "refused" : "accepted"} (skills/05 "Max 10 MB"); ` +
+      `log: ${ceiling.log.find((l) => l.kind === "transfer")?.detail ?? "(none)"}`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 6. Does media break the mesh for everybody else?
 // ---------------------------------------------------------------------------
 function contentionTable(): void {
-  console.log("\n=== 5. Contention: a 10 MB transfer running beside normal traffic ===");
+  console.log("\n=== 6. Contention: a 10 MB transfer running beside normal traffic ===");
   const base = { ...campusQuad(42), trafficIntervalMs: 4000 };
   const quiet = simFor(base);
   quiet.runFor(300_000);
@@ -486,6 +573,7 @@ function main(): void {
   fileTable();
   voiceTable();
   retryTimerTable();
+  acceptanceTable();
   contentionTable();
   console.log("\nDone.");
 }

@@ -1478,3 +1478,129 @@ describe("media transport (docs/05 §3.2-3.3, roadmap Phase 3)", () => {
     expect(sim.refresh().transfersStarted).toBe(0);
   });
 });
+
+describe("media against skills/05 (Voice PTT & Media)", () => {
+  /** The same 20 m line the media block uses: hop count is the index distance. */
+  function line(n = 4, over: Partial<SimConfig> = {}): MeshSimulation {
+    const sim = new MeshSimulation({
+      ...DEFAULT_CONFIG,
+      nodeCount: n,
+      stationaryRatio: 1,
+      chargingRatio: 0,
+      trafficIntervalMs: 0,
+      enableSuperElection: false,
+      warmupMs: 0,
+      obstacles: [],
+      ...over,
+    });
+    sim.nodes.forEach((node, i) => {
+      node.pos = { x: 10 + i * 20, y: 10 };
+      node.home = { x: 10 + i * 20, y: 10 };
+      node.target = { x: 10 + i * 20, y: 10 };
+      node.stationary = true;
+      node.mobility = 0;
+      node.isOnline = true;
+      node.battery = 1;
+    });
+    sim.runFor(20000);
+    sim.clearRecords();
+    return sim;
+  }
+
+  function runUntil(sim: MeshSimulation, done: () => boolean, budgetMs: number): boolean {
+    let elapsed = 0;
+    while (!done() && elapsed < budgetMs) {
+      sim.runFor(100);
+      elapsed += 100;
+    }
+    return done();
+  }
+
+  it("sends voice chunks as VOICE_CHUNK: type voice, priority high, ttl 3", () => {
+    const sim = line(3, { captureLog: true });
+    const t = sim.sendVoice(sim.nodes[0].id, sim.nodes[2].id, 1)!;
+    runUntil(sim, () => t.state === "complete", 60000);
+    const frames = sim.nodes[2].inbox.filter((m) => m.transferId === t.id);
+    expect(frames).toHaveLength(2);
+    for (const f of frames) {
+      expect(f.type).toBe("voice");
+      expect(f.priority).toBe("high");
+      // skills/05: "VOICE_CHUNK packets prio=high, ttl=3". A frame that needs four
+      // hops is stale on arrival, so it is not worth the radio time.
+      expect(f.ttl).toBeLessThanOrEqual(3);
+      expect(f.sizeBytes).toBe(750);
+      expect(f.transport).toBe("ble");
+    }
+    // A file chunk is not a voice chunk: it keeps the data plane's ttl.
+    const file = sim.sendFile(sim.nodes[0].id, sim.nodes[2].id, 128 * 1024)!;
+    runUntil(sim, () => file.state === "complete", 60000);
+    const slices = sim.nodes[2].inbox.filter((m) => m.transferId === file.id);
+    expect(slices.every((m) => m.type === "file")).toBe(true);
+    expect(slices[0].ttl).toBeLessThanOrEqual(5);
+  });
+
+  it("rides Wi-Fi Direct for a voice note when the group owner is already connected", () => {
+    // skills/05: "Send: VOICE_CHUNK packets ... via best transport (WiFi Direct if GO
+    // connected, else chunked BLE 512B MTU)". The transport is a property of what has
+    // been negotiated, not only of the payload size.
+    const sim = line(2);
+    const t = sim.sendVoice(sim.nodes[0].id, sim.nodes[1].id, 1, { transport: "wifiDirect" })!;
+    expect(t.forcedTransport).toBe("wifiDirect");
+    expect(runUntil(sim, () => t.state === "complete", 60000)).toBe(true);
+    expect(t.transport).toBe("wifiDirect");
+    const delay = t.completedAt! + sim.config.jitterBufferMs - t.releasedAt!;
+    // skills/05 acceptance: "1-hop WiFi: PTT round-trip <1s".
+    expect(delay).toBeLessThan(1000);
+    // Its modes table puts streaming PTT at 150-300 ms on one Wi-Fi Direct hop; the
+    // model's floor is the 40 ms hop plus 50-200 ms of jitter.
+    expect(delay - sim.config.jitterBufferMs).toBeLessThan(300);
+  });
+
+  it("refuses a transfer over the 10 MB ceiling", () => {
+    const sim = line(2, { captureLog: true });
+    expect(sim.config.maxTransferBytes).toBe(10 * 1048576);
+    expect(sim.sendFile(sim.nodes[0].id, sim.nodes[1].id, 10 * 1048576)).not.toBeNull();
+    expect(sim.sendFile(sim.nodes[0].id, sim.nodes[1].id, 10 * 1048576 + 1)).toBeNull();
+    expect(sim.log.some((l) => l.kind === "transfer" && l.detail.includes("ceiling"))).toBe(true);
+  });
+
+  it("resumes a 10 MB Wi-Fi Direct image after a mid-transfer disconnect", () => {
+    // skills/05 acceptance, verbatim: "10 MB image: delivered over WiFi Direct with
+    // resume after mid-transfer disconnect". Three hops, receiver gone for 20 s at
+    // about a third of the way in.
+    const sim = line(4, { captureLog: true });
+    const t = sim.sendFile(sim.nodes[0].id, sim.nodes[3].id, 10 * 1048576, {
+      transport: "wifiDirect",
+    })!;
+    expect(t.chunks).toBe(160);
+    expect(runUntil(sim, () => t.received >= Math.floor(t.chunks * 0.3), 120000)).toBe(true);
+    const atDisconnect = t.received;
+
+    sim.toggleNodeOnline(sim.nodes[3].id);
+    sim.runFor(20000);
+    expect(t.state).toBe("active");
+    expect(t.received).toBe(atDisconnect); // nothing arrives while it is away
+    expect(t.stalls).toBeGreaterThan(0); // ... and the watchdog notices
+
+    sim.toggleNodeOnline(sim.nodes[3].id);
+    expect(runUntil(sim, () => t.state === "complete", 600000)).toBe(true);
+    expect(t.received).toBe(160);
+    expect(t.transport).toBe("wifiDirect");
+    expect(sim.refresh().bytesDelivered).toBeGreaterThanOrEqual(10 * 1048576);
+  });
+
+  it("slices to the 512 B BLE MTU when there is no Wi-Fi Direct capacity", () => {
+    // skills/05: "else chunked BLE 512B MTU". Half the packet ceiling, so a slice
+    // stays on BLE with room for its header, and a 10 MB image becomes 20480 of them
+    // — which is what docs/05's auto-reject rule is for (docs/08 §8).
+    const sim = line(2);
+    const t = sim.sendFile(sim.nodes[0].id, sim.nodes[1].id, 10 * 1048576, {
+      chunkBytes: 512,
+    })!;
+    expect(t.chunks).toBe(20480);
+    expect(t.transport).toBe("ble");
+    sim.runFor(60000);
+    expect(t.state).toBe("active");
+    expect(t.received / t.chunks).toBeLessThan(0.1);
+  });
+});

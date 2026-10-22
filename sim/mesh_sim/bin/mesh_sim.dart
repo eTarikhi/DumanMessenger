@@ -68,6 +68,10 @@ Duman mesh simulator (headless)
   --group [N]         create an N-member group (default 5, spread across the
                       world) and report what a group message costs in both
                       delivery modes -- the docs/06 §14 measurement
+  --media             run the media transport in a separate world and report what
+                      a 10 MB image costs at 1/2/3 hops, what a BLE-only mesh can
+                      still carry, and whether a push-to-talk note plays inside the
+                      roadmap's budget (docs/08)
   --sos               fire an SOS from the edge of the world in a separate run
                       and report how far it got (roadmap Phase 3 exit criterion:
                       "SOS reaches all within ttl")
@@ -96,6 +100,7 @@ void main(List<String> args) {
   final dutyCycle = args.contains('--duty-cycle');
   final showTrace = args.contains('--trace');
   final sosProbe = args.contains('--sos');
+  final mediaProbe = args.contains('--media');
   final groupProbe = args.contains('--group');
   final groupSize = int.parse(_arg(args, '--group', '5'));
   final capture = args.contains('--capture');
@@ -161,6 +166,9 @@ void main(List<String> args) {
   final group = (groupProbe || args.contains('--group'))
       ? _groupProbe(config, groupSize)
       : null;
+  // Separate again: one 10 MB file is 160 chunks and thousands of relays, and
+  // folding that into this run would report a file transfer's cost as routing's.
+  final media = mediaProbe ? _mediaProbe(config) : null;
 
   final s = sim.stats;
   final unicast = sim.deliveries
@@ -243,6 +251,7 @@ void main(List<String> args) {
           .toList(),
     if (sos != null) 'sos': sos,
     if (group != null) 'group': group,
+    if (media != null) 'media': media,
     'latencyByHop': s.latencyByHop.map((b) => <String, Object?>{
           'hops': b.hops,
           'count': b.count,
@@ -277,6 +286,38 @@ void main(List<String> args) {
       }
       stdout.writeln('  ${(group['verdict'] as String)}');
     }
+    if (media != null) {
+      stdout.writeln('\nMedia probe (10 MB image, 64 KB chunks behind a '
+          '${config.transferWindow}-deep window; 3 s Opus note in '
+          '${config.voiceFrameMs.toStringAsFixed(0)} ms frames at '
+          '${config.voiceKbps.toStringAsFixed(0)} kbit/s)');
+      stdout.writeln('  ${'hops'.padRight(5)}${'transport'.padRight(12)}'
+          '${'chunks'.padRight(8)}${'time'.padRight(11)}${'kbit/s'.padRight(9)}'
+          '${'retrans'.padRight(9)}stalls');
+      for (final f in (media['files'] as List).cast<Map<String, Object?>>()) {
+        stdout.writeln('  ${'${f['hops']}'.padRight(5)}${'${f['transport']}'.padRight(12)}'
+            '${'${f['chunks']}'.padRight(8)}'
+            '${(f['ms'] == null ? 'TIMEOUT' : '${f['ms']} ms').padRight(11)}'
+            '${'${f['kbps'] ?? '-'}'.padRight(9)}${'${f['retransmitted']}'.padRight(9)}'
+            '${f['stalls']}');
+      }
+      final ble = media['bleOnly'] as Map<String, Object?>;
+      stdout.writeln('  BLE-only (1 KB slices, no Wi-Fi Direct peer): '
+          '${ble['complete'] == true ? '${ble['ms']} ms' : 'not finished in 15 min'} '
+          'for 10 MB over ${ble['chunks']} chunks');
+      stdout.writeln('  ${'note'.padRight(6)}${'mode'.padRight(10)}${'hops'.padRight(6)}'
+          '${'radio'.padRight(12)}${'first audio'.padRight(13)}${'play delay'.padRight(12)}'
+          '${'max gap'.padRight(10)}${'underruns'.padRight(11)}budget');
+      for (final v in (media['voice'] as List).cast<Map<String, Object?>>()) {
+        stdout.writeln('  ${'3 s'.padRight(6)}${'${v['mode']}'.padRight(10)}${'${v['hops']}'.padRight(6)}'
+            '${'${v['transport']}'.padRight(12)}${'${v['firstAudioMs']} ms'.padRight(13)}'
+            '${(v['playDelayMs'] == null ? 'TIMEOUT' : '${v['playDelayMs']} ms').padRight(12)}'
+            '${'${v['maxGapMs']} ms'.padRight(10)}${'${v['underruns']}'.padRight(11)}'
+            '${v['meetsBudget'] == true ? 'PASS' : 'FAIL'} (<${(v['budgetMs'] as num) ~/ 1000} s)');
+      }
+      stdout.writeln('  ${media['verdict']}');
+    }
+
     if (sos != null) {
       stdout.writeln('\nSOS probe (edge sender ${sos['sender']}, ttl '
           '${config.sosTtl}, ${config.sosRepeats} repeats, '
@@ -555,6 +596,209 @@ Map<String, Object?> _groupProbe(SimConfig config, int size) {
     'sends': sends,
     GroupMode.scopedFlood.name: modes[GroupMode.scopedFlood.name],
     GroupMode.perMemberUnicast.name: modes[GroupMode.perMemberUnicast.name],
+    'verdict': verdict,
+  };
+}
+
+/// Run the media transport end to end and report what it costs (roadmap Phase 3
+/// exit criteria, docs/08).
+///
+/// Separate world, like the SOS and group probes: one 10 MB file is 160 chunks and
+/// thousands of relays, which would otherwise be reported as routing overhead.
+Map<String, Object?> _mediaProbe(SimConfig config) {
+  const tenMb = 10 * 1048576;
+
+  MeshSimulation fresh() {
+    final sim = MeshSimulation(config.copyWith(trafficIntervalMs: 0));
+    sim.runFor(90000);
+    sim.clearRecords();
+    return sim;
+  }
+
+  bool runUntil(MeshSimulation sim, bool Function() done, double budgetMs) {
+    var elapsed = 0.0;
+    while (!done() && elapsed < budgetMs) {
+      sim.runFor(250);
+      elapsed += 250;
+    }
+    return done();
+  }
+
+  /// Shortest hop count from [from] to every online node, over links that can carry
+  /// a packet right now.
+  Map<NodeId, int> bfs(MeshSimulation sim, MeshNode from) {
+    final online = sim.nodes.where((n) => n.isOnline).toList();
+    final dist = <NodeId, int>{from.id: 0};
+    final queue = <MeshNode>[from];
+    while (queue.isNotEmpty) {
+      final n = queue.removeAt(0);
+      final d = dist[n.id]!;
+      for (final p in peersInRange(n, online, sim.rf)) {
+        if (!dist.containsKey(p.id)) {
+          dist[p.id] = d + 1;
+          queue.add(p);
+        }
+      }
+    }
+    return dist;
+  }
+
+  /// A pair exactly [hops] apart, preferring clean endpoint radios so the
+  /// measurement is about distance rather than about retransmission.
+  List<MeshNode>? pairAt(MeshSimulation sim, int hops) {
+    final online = sim.nodes.where((n) => n.isOnline).toList();
+    double bestLeg(MeshNode n) {
+      final peers = peersInRange(n, online, sim.rf);
+      if (peers.isEmpty) return 1.0;
+      return peers
+          .map((p) =>
+              effectiveLossProbability(n, p, sim.rf, config.linkRetries))
+          .reduce((x, y) => x < y ? x : y);
+    }
+
+    List<MeshNode>? best;
+    var bestLoss = 2.0;
+    for (final a in online) {
+      final dist = bfs(sim, a);
+      for (final b in online) {
+        if (b.id == a.id || dist[b.id] != hops) continue;
+        if (hops == 1 && !canReach(a, b, sim.rf)) continue;
+        final loss = math.max(bestLeg(a), bestLeg(b));
+        if (loss < bestLoss) {
+          bestLoss = loss;
+          best = <MeshNode>[a, b];
+        }
+      }
+    }
+    return best;
+  }
+
+  // --- a 10 MB image at 1, 2 and 3 hops ------------------------------------
+  final files = <Map<String, Object?>>[];
+  for (final hops in <int>[1, 2, 3]) {
+    final sim = fresh();
+    final pair = pairAt(sim, hops);
+    if (pair == null) {
+      files.add(<String, Object?>{'hops': hops, 'error': 'no pair that far apart'});
+      continue;
+    }
+    final t = sim.sendFile(pair[0].id, pair[1].id, tenMb);
+    if (t == null) {
+      files.add(<String, Object?>{'hops': hops, 'error': 'sender offline'});
+      continue;
+    }
+    final done =
+        runUntil(sim, () => t.state == TransferState.complete, 600000);
+    files.add(<String, Object?>{
+      'hops': hops,
+      'chunks': t.chunks,
+      'transport': t.transport.name,
+      'complete': done,
+      'ms': t.completedAt == null ? null : _round(t.completedAt! - t.startedAt),
+      'kbps': t.completedAt == null
+          ? null
+          : _round(tenMb * 8 / (t.completedAt! - t.startedAt)),
+      'retransmitted': t.retransmitted,
+      'stalls': t.stalls,
+    });
+  }
+
+  // --- the same file with no Wi-Fi Direct peer ------------------------------
+  final bleSim = fresh();
+  final blePair = pairAt(bleSim, 1);
+  final ble = blePair == null
+      ? null
+      : bleSim.sendFile(blePair[0].id, blePair[1].id, tenMb, chunkBytes: 1024);
+  final bleDone = ble == null
+      ? false
+      : runUntil(bleSim, () => ble.state == TransferState.complete, 900000);
+  final bleOnly = <String, Object?>{
+    'chunks': ble?.chunks ?? 0,
+    'transport': ble?.transport.name ?? 'ble',
+    'complete': bleDone,
+    'ms': (ble == null || ble.completedAt == null)
+        ? null
+        : _round(ble.completedAt! - ble.startedAt),
+    'receivedIn15Min': ble?.received ?? 0,
+  };
+
+  // --- push-to-talk: streamed against one blob ------------------------------
+  final voice = <Map<String, Object?>>[];
+  for (final hops in <int>[1, 2, 3]) {
+    for (final stream in <bool>[true, false]) {
+      final sim = fresh();
+      final pair = pairAt(sim, hops);
+      if (pair == null) continue;
+      final t = sim.sendVoice(pair[0].id, pair[1].id, 3.0, stream: stream);
+      if (t == null) continue;
+      runUntil(sim, () => t.state == TransferState.complete, 60000);
+
+      final arrivals = sim.deliveries
+          .where((d) => d.transferId == t.id && d.chunkIndex != null)
+          .toList()
+        ..sort((x, y) => x.chunkIndex!.compareTo(y.chunkIndex!));
+      var underruns = 0;
+      var maxGap = 0.0;
+      for (var i = 1; i < arrivals.length; i++) {
+        final gap = arrivals[i].timestamp - arrivals[i - 1].timestamp;
+        if (gap > maxGap) maxGap = gap;
+        // Playback underruns when the next frame is not in the buffer by the time
+        // the current one finishes.
+        if (gap > config.voiceFrameMs + config.jitterBufferMs) underruns++;
+      }
+      final released = t.releasedAt ?? t.startedAt;
+      final budget = hops >= 3 ? 8000.0 : 3000.0;
+      final playDelay = t.completedAt == null
+          ? null
+          : t.completedAt! + config.jitterBufferMs - released;
+      voice.add(<String, Object?>{
+        'hops': hops,
+        'mode': stream ? 'streamed' : 'blob',
+        'transport': t.transport.name,
+        'frames': t.chunks,
+        'firstAudioMs': t.firstChunkAt == null
+            ? null
+            : _round(t.firstChunkAt! + config.jitterBufferMs - t.startedAt),
+        'playDelayMs': playDelay == null ? null : _round(playDelay),
+        'maxGapMs': _round(maxGap),
+        'underruns': underruns,
+        'retransmitted': t.retransmitted,
+        'budgetMs': budget,
+        'meetsBudget': playDelay != null && playDelay < budget,
+      });
+    }
+  }
+
+  final streamed = voice.where((v) => v['mode'] == 'streamed').toList();
+  final blob = voice.where((v) => v['mode'] == 'blob').toList();
+  final pttOk =
+      streamed.isNotEmpty && streamed.every((v) => v['meetsBudget'] == true);
+  final filesOk = files.isNotEmpty && files.every((f) => f['complete'] == true);
+  num minOf(Iterable<Map<String, Object?>> rows) =>
+      rows.map((v) => (v['firstAudioMs'] as num?) ?? 0).reduce((x, y) => x < y ? x : y);
+  final firstStreamed = streamed.isEmpty ? null : minOf(streamed);
+  final firstBlob = blob.isEmpty ? null : minOf(blob);
+
+  final verdict = <String>[
+    filesOk
+        ? 'a 10 MB image crosses 1-3 hops on Wi-Fi Direct'
+        : 'a 10 MB image did NOT cross every distance tried',
+    if (files.isNotEmpty && files.last['ms'] != null)
+      '3 hops in ${(files.last['ms'] as num).toInt() ~/ 1000} s',
+    'BLE-only: ${bleOnly['complete'] == true ? '${bleOnly['ms']} ms' : 'unfinished in 15 min'}',
+    pttOk
+        ? 'push-to-talk plays inside the budget at every hop count'
+        : 'push-to-talk BUSTS the budget somewhere',
+    if (firstStreamed != null && firstBlob != null)
+      'streaming starts audio at ${firstStreamed.toInt()} ms against ${firstBlob.toInt()} ms for one blob',
+  ].join('; ');
+
+  return <String, Object?>{
+    'files': files,
+    'bleOnly': bleOnly,
+    'voice': voice,
+    'pttMeetsBudget': pttOk,
+    'imageMeetsBudget': filesOk,
     'verdict': verdict,
   };
 }

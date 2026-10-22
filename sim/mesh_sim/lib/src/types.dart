@@ -16,7 +16,18 @@ extension RoleName on Role {
 
 enum TransportType { ble, wifiDirect, multipeer }
 
-enum MsgType { text, broadcast, voice, sos, ack, ogm }
+enum MsgType {
+  text,
+  broadcast,
+  voice,
+
+  /// One chunk of a large transfer (docs/05 §3.2: 64 KB slices behind a
+  /// sliding-window ACK).
+  file,
+  sos,
+  ack,
+  ogm
+}
 
 enum Priority { low, normal, high }
 
@@ -115,6 +126,8 @@ class MeshMessage {
     this.sosPos,
     this.groupId,
     this.groupEpoch,
+    this.transferId,
+    this.chunkIndex,
   });
 
   final MsgId id;
@@ -206,6 +219,10 @@ class MeshMessage {
         // addressed to that group under that epoch.
         groupId: groupId,
         groupEpoch: groupEpoch,
+        // Nor these: a relayed chunk is still one slice of the same transfer, and
+        // the receiver dedupes on the index.
+        transferId: transferId,
+        chunkIndex: chunkIndex,
       );
 }
 
@@ -336,6 +353,10 @@ enum MeshLogKind {
   /// Group membership: created, joined, left, key rotated, or a stale epoch
   /// rejected.
   group,
+
+  /// A large transfer: one chunk on air, a stalled window, or the whole file
+  /// complete.
+  transfer,
   ogm
 }
 

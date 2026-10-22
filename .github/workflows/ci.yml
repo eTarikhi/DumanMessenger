@@ -277,3 +277,38 @@ jobs:
           dart run bin/mesh_sim.dart --scenario ${{ matrix.scenario }} --seed 42
           ${{ matrix.power == 'duty-cycle' && '--duty-cycle' || '' }}
           ${{ matrix.scenario == 'campus_quad' && '' || '--no-check' }}
+
+  probes:
+    name: CLI probes (SOS, groups, media)
+    runs-on: ubuntu-latest
+    needs: dart
+    defaults:
+      run:
+        working-directory: sim/mesh_sim
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
+      # Each probe runs in its own world, so what a mechanism costs is reported
+      # without contaminating the acceptance run's overhead ratio. --no-check
+      # because a probe's numbers are about the mechanism under test, not about
+      # the connected-world delivery gate.
+      - name: SOS flood reach (roadmap Phase 3)
+        run: >-
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --sos
+          --no-check
+
+      - name: Group delivery modes (docs/06 §14)
+        run: >-
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --group 5
+          --no-check
+
+      # The roadmap Phase 3 media exit criteria: a <10 MB image across a Wi-Fi
+      # Direct mesh, and a push-to-talk note that plays in <3 s at one hop and
+      # <8 s at three (docs/08).
+      - name: Media transport and push-to-talk (docs/08)
+        run: >-
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media
+          --no-check

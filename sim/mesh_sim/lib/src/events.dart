@@ -19,6 +19,12 @@ enum EventKind {
 
   /// Repeat an SOS flood (docs/05: "SOS mode: repeated flood of GPS + text").
   sosRepeat,
+
+  /// Put one push-to-talk frame on air at its capture time (docs/05 §3.3).
+  transferChunk,
+
+  /// Re-send whatever a stalled transfer is still missing (docs/05 §3.2 "resume").
+  transferStall,
   traffic
 }
 
