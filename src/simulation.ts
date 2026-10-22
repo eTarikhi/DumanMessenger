@@ -265,6 +265,16 @@ export interface SimConfig {
    *  against the largest peer count this node has heard (docs/06 §18.2). */
   peerNorm: PeerNorm;
 
+  /** When two relays cover the same neighbours, pick the plugged one: a community relay's
+   *  transmission costs nobody's battery and its position does not change. Off by default,
+   *  and measured rather than assumed — see docs/06 §19.5. */
+  communityRelayPreference: boolean;
+
+  /** Hand a parked bundle to a plugged, stationary carrier instead of a SUPER when the
+   *  carrier has no route of its own (skills/04's "prefer SUPER as bundle carrier", read
+   *  for the community-relay programme). Off by default; docs/06 §19.5 measures it. */
+  dtnPreferCommunity: boolean;
+
   txPowerDbm: number;
   rxSensitivityDbm: number;
   wallPenaltyDb: number;
@@ -414,6 +424,8 @@ export const DEFAULT_CONFIG: SimConfig = {
   channelPriority: "fifo",
   communityRelayQuota: 0,
   peerNorm: "fixed",
+  communityRelayPreference: false,
+  dtnPreferCommunity: false,
 
   txPowerDbm: DEFAULT_TX_POWER_DBM,
   rxSensitivityDbm: DEFAULT_RX_SENSITIVITY_DBM,
@@ -495,6 +507,8 @@ export interface SimulationStats {
    *  handed to a SUPER because the carrier had no route of its own. */
   bundlesPruned: number;
   dtnSuperCarries: number;
+  /** Bundles handed to a community relay as carrier (`dtnPreferCommunity`). */
+  dtnCommunityCarries: number;
   sentChunks: number;
   /** Channel access (docs/08 §12): transmissions that had to wait for a radio to
    *  come free, and how long they waited in total. Both stay 0 under the default
@@ -924,6 +938,7 @@ export class MeshSimulation {
   private historyBytes = 0;
   private bundlesPruned = 0;
   private dtnSuperCarries = 0;
+  private dtnCommunityCarries = 0;
   /** Nodes with a beacon chain running, so joining a second group does not start a
    *  second one (the beacon covers every group the node is in). */
   private historyBeaconArmed = new Set<NodeId>();
@@ -1020,6 +1035,7 @@ export class MeshSimulation {
     this.historyBytes = 0;
     this.bundlesPruned = 0;
     this.dtnSuperCarries = 0;
+    this.dtnCommunityCarries = 0;
     this.sentChunks = 0;
     this.sentSync = 0;
     this.bytesDelivered = 0;
@@ -1337,13 +1353,15 @@ export class MeshSimulation {
     pruneSeenCache(node, this.now);
     pruneStaleEntries(node, this.now, NEIGHBOR_SCORE_TTL_MS);
     pruneOppQueue(node, this.now);
-    node.mprSet = selectMprSet(node);
+    node.mprSet = selectMprSet(node, this.nodes, this.config.communityRelayPreference);
 
     if (this.config.enableDtn && node.oppQueue.length > 0) {
       const scan = scanOppQueue(node, this.nodes, this.rf, this.now, {
         preferSuper: this.config.dtnPreferSuper,
+        preferCommunity: this.config.dtnPreferCommunity,
       });
       this.dtnSuperCarries += scan.superCarries;
+      this.dtnCommunityCarries += scan.communityCarries;
       for (const q of scan.deliver) {
         this.transmit(node, q.msg, q.msg.to as NodeId);
       }
@@ -3019,6 +3037,7 @@ export class MeshSimulation {
       historyBytes: this.historyBytes,
       bundlesPruned: this.bundlesPruned,
       dtnSuperCarries: this.dtnSuperCarries,
+      dtnCommunityCarries: this.dtnCommunityCarries,
       sentChunks: this.sentChunks,
       channelDeferrals: this.channelDeferrals,
       channelDeferMs: this.channelDeferMs,

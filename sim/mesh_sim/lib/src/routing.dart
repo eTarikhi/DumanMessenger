@@ -412,6 +412,12 @@ class OppScanResult {
   /// (skills/04: "prefer SUPER as bundle carrier"). Counted so the cost of the rule can be
   /// reported separately from routed forwarding — it is off by default, see docs/06 §20.4.
   int superCarries = 0;
+
+  /// Forwards that went to a plugged, stationary carrier rather than a SUPER
+  /// (`preferCommunity`). Off by default and measured as a negative: a node that does not
+  /// move is the best place to leave a bundle and the worst place to carry one
+  /// (docs/06 §19.5).
+  int communityCarries = 0;
 }
 
 class OppForward {
@@ -427,6 +433,7 @@ OppScanResult scanOppQueue(
   RfParams rf,
   double nowMs, {
   bool preferSuper = false,
+  bool preferCommunity = false,
 }) {
   final result = OppScanResult();
   for (final queued in node.oppQueue) {
@@ -487,13 +494,20 @@ OppScanResult scanOppQueue(
     // scans continuously and relays everything. Still bounded by the spray limit: this is
     // the spray half of spray-and-wait, not a flood. Off by default, because once carried
     // bundles are parked rather than suppressed this costs delivery (docs/06 §20.4).
-    if (preferSuper && queued.copyCount < sprayLimit) {
+    // skills/04's "prefer SUPER as bundle carrier" and the community-relay reading of the
+    // same line: a plugged tablet has the storage and the mains power, and it is not going
+    // to walk away. Both are guesses about who meets the destination next, and they guess
+    // differently — a SUPER because it sees the most traffic, a community relay because it
+    // stays put. Measured against each other in docs/06 §19.5.
+    if ((preferCommunity || preferSuper) && queued.copyCount < sprayLimit) {
       final carriers = allNodes
           .where((p) =>
               p.id != node.id &&
               p.isOnline &&
-              p.role == Role.superNode &&
-              canReach(node, p, rf))
+              canReach(node, p, rf) &&
+              (preferCommunity
+                  ? isCommunityRelay(p)
+                  : p.role == Role.superNode))
           .toList()
         ..sort((a, b) {
           final byRssi = rssiModel(node, b, rf).compareTo(rssiModel(node, a, rf));
@@ -501,7 +515,11 @@ OppScanResult scanOppQueue(
         });
       if (carriers.isNotEmpty) {
         result.forward.add(OppForward(queued, carriers.first.id));
-        result.superCarries++;
+        if (preferCommunity) {
+          result.communityCarries++;
+        } else {
+          result.superCarries++;
+        }
         queued.copyCount++;
         queued.msg = queued.msg.copyWith(attempt: queued.msg.attempt + 1);
         if (queued.copyCount >= sprayLimit) {

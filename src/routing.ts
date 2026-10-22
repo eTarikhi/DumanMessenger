@@ -393,6 +393,9 @@ export interface OppScanResult {
    *  (skills/04: "prefer SUPER as bundle carrier"). Counted so the cost of the rule can
    *  be reported separately from routed forwarding. */
   superCarries: number;
+  /** Bundles handed to a plugged, stationary carrier rather than a SUPER
+   *  (`preferCommunity`, docs/06 §19.5). */
+  communityCarries: number;
 }
 
 export function scanOppQueue(
@@ -400,9 +403,15 @@ export function scanOppQueue(
   allNodes: MeshNode[],
   rf: RfParams,
   nowMs: number,
-  opts?: { preferSuper?: boolean }
+  opts?: { preferSuper?: boolean; preferCommunity?: boolean }
 ): OppScanResult {
-  const result: OppScanResult = { deliver: [], forward: [], keep: [], superCarries: 0 };
+  const result: OppScanResult = {
+    deliver: [],
+    forward: [],
+    keep: [],
+    superCarries: 0,
+    communityCarries: 0,
+  };
   for (const queued of node.oppQueue) {
     if (nowMs - queued.createdAt > queued.ttlMs) continue; // expired
     const dest = queued.msg.to;
@@ -445,9 +454,19 @@ export function scanOppQueue(
     // scans continuously and relays everything, so handing a bundle to one is the best
     // available guess about who will meet the destination next. Still bounded by the
     // spray limit: this is the "spray" half of spray-and-wait, not a flood.
-    if (opts?.preferSuper && queued.copyCount < SPRAY_LIMIT) {
+    // skills/04's "prefer SUPER as bundle carrier" and the community-relay reading of the
+    // same line — a plugged tablet has the storage and the mains power, and it is not going
+    // to walk away. Both are guesses about who meets the destination next, and they guess
+    // differently: a SUPER because it sees the most traffic, a community relay because it
+    // stays put. Measured against each other in docs/06 §19.5.
+    const wantCommunity = opts?.preferCommunity === true;
+    if ((wantCommunity || opts?.preferSuper) && queued.copyCount < SPRAY_LIMIT) {
       const carriers = allNodes.filter(
-        (p) => p.id !== node.id && p.isOnline && p.role === "SUPER" && canReach(node, p, rf)
+        (p) =>
+          p.id !== node.id &&
+          p.isOnline &&
+          canReach(node, p, rf) &&
+          (wantCommunity ? p.charging && p.stationary : p.role === "SUPER")
       );
       if (carriers.length > 0) {
         // Deterministic tie-break: strongest signal, then id.
@@ -455,7 +474,8 @@ export function scanOppQueue(
           (a, b) => rssiModel(node, b, rf) - rssiModel(node, a, rf) || (a.id < b.id ? -1 : 1)
         );
         result.forward.push({ queued, to: carriers[0].id });
-        result.superCarries++;
+        if (wantCommunity) result.communityCarries++;
+        else result.superCarries++;
         queued.copyCount++;
         queued.msg = { ...queued.msg, attempt: queued.msg.attempt + 1 };
         if (queued.copyCount >= SPRAY_LIMIT) {

@@ -159,8 +159,26 @@ export function buildOGM(node: MeshNode, hopCount = 0): OGM {
  * then better tq, then id so the result is deterministic. O(k^2) with k <= 30,
  * which is the "no Dijkstra on phones, just local sort" budget docs/03 §3 sets.
  */
-export function selectMprSet(node: MeshNode): NodeId[] {
+/**
+ * [allNodes] and [preferCommunity] are optional so every existing call site keeps working.
+ * With `preferCommunity`, a plugged and stationary peer wins an equal-coverage tie against
+ * a phone — the relay work is the same either way, but one of them is running on somebody's
+ * battery (roadmap Phase 5, docs/06 §19.4).
+ *
+ * A real deployment has to learn those two bits from the beacon rather than from a node
+ * table: `declinedRouter` is already advertised for exactly this kind of decision, and
+ * `charging` and `stationary` would be two more flags in the same OGM.
+ */
+export function selectMprSet(
+  node: MeshNode,
+  allNodes: MeshNode[] = [],
+  preferCommunity = false
+): NodeId[] {
   const peers = node.peerIds;
+  const community = new Set<NodeId>();
+  if (preferCommunity) {
+    for (const n of allNodes) if (isCommunityRelay(n)) community.add(n.id);
+  }
   const direct = new Set<NodeId>(peers);
   const uncovered = new Set<NodeId>();
   for (const p of peers) {
@@ -174,6 +192,7 @@ export function selectMprSet(node: MeshNode): NodeId[] {
     let best: NodeId | null = null;
     let bestGain = 0;
     let bestSuper = false;
+    let bestCommunity = false;
     let bestTq = -1;
     for (const p of peers) {
       if (selected.includes(p)) continue;
@@ -181,16 +200,26 @@ export function selectMprSet(node: MeshNode): NodeId[] {
       for (const q of node.twoHopView[p] ?? []) if (uncovered.has(q)) gain++;
       if (gain === 0) continue;
       const isSuper = node.ogmTable[p]?.isSuper === true;
+      const isCommunity = community.has(p);
       const tq = node.nextHopTable[p]?.tq ?? 0;
       const better =
         gain > bestGain ||
-        (gain === bestGain && isSuper && !bestSuper) ||
-        (gain === bestGain && isSuper === bestSuper && tq > bestTq) ||
-        (gain === bestGain && isSuper === bestSuper && tq === bestTq && (best === null || p < best));
+        (gain === bestGain && isCommunity && !bestCommunity) ||
+        (gain === bestGain && isCommunity === bestCommunity && isSuper && !bestSuper) ||
+        (gain === bestGain &&
+          isCommunity === bestCommunity &&
+          isSuper === bestSuper &&
+          tq > bestTq) ||
+        (gain === bestGain &&
+          isCommunity === bestCommunity &&
+          isSuper === bestSuper &&
+          tq === bestTq &&
+          (best === null || p < best));
       if (better) {
         best = p;
         bestGain = gain;
         bestSuper = isSuper;
+        bestCommunity = isCommunity;
         bestTq = tq;
       }
     }

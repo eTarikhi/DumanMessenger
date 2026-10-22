@@ -159,8 +159,21 @@ Ogm buildOgm(MeshNode node, [int hopCount = 0]) {
 /// neighbour covering the most still-uncovered 2-hop nodes, preferring SUPERs,
 /// then better tq, then id so the result is deterministic. O(k^2) with k <= 30,
 /// the "no Dijkstra on phones, just local sort" budget docs/03 §3 sets.
-List<NodeId> selectMprSet(MeshNode node) {
+/// [allNodes] and [preferCommunity] are optional so every existing call site keeps working.
+/// With `preferCommunity`, a plugged and stationary peer wins an equal-coverage tie against a
+/// phone: the relay work is the same either way, but one of them is running on somebody's
+/// battery (roadmap Phase 5, docs/06 §19.5). A real deployment has to learn those two bits
+/// from the beacon rather than from a node table — `declinedRouter` is already advertised for
+/// exactly this kind of decision.
+List<NodeId> selectMprSet(MeshNode node,
+    [List<MeshNode> allNodes = const <MeshNode>[], bool preferCommunity = false]) {
   final peers = node.peerIds;
+  final community = <NodeId>{};
+  if (preferCommunity) {
+    for (final n in allNodes) {
+      if (isCommunityRelay(n)) community.add(n.id);
+    }
+  }
   final direct = peers.toSet();
   final uncovered = <NodeId>{};
   for (final p in peers) {
@@ -174,6 +187,7 @@ List<NodeId> selectMprSet(MeshNode node) {
     NodeId? best;
     var bestGain = 0;
     var bestSuper = false;
+    var bestCommunity = false;
     var bestTq = -1.0;
     for (final p in peers) {
       if (selected.contains(p)) continue;
@@ -183,11 +197,17 @@ List<NodeId> selectMprSet(MeshNode node) {
       }
       if (gain == 0) continue;
       final isSuper = node.ogmTable[p]?.isSuper ?? false;
+      final isCommunity = community.contains(p);
       final tq = node.nextHopTable[p]?.tq ?? 0.0;
       final better = gain > bestGain ||
-          (gain == bestGain && isSuper && !bestSuper) ||
-          (gain == bestGain && isSuper == bestSuper && tq > bestTq) ||
+          (gain == bestGain && isCommunity && !bestCommunity) ||
+          (gain == bestGain && isCommunity == bestCommunity && isSuper && !bestSuper) ||
           (gain == bestGain &&
+              isCommunity == bestCommunity &&
+              isSuper == bestSuper &&
+              tq > bestTq) ||
+          (gain == bestGain &&
+              isCommunity == bestCommunity &&
               isSuper == bestSuper &&
               tq == bestTq &&
               (best == null || p.compareTo(best) < 0));
@@ -195,6 +215,7 @@ List<NodeId> selectMprSet(MeshNode node) {
         best = p;
         bestGain = gain;
         bestSuper = isSuper;
+        bestCommunity = isCommunity;
         bestTq = tq;
       }
     }

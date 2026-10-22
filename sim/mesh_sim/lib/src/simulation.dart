@@ -89,6 +89,8 @@ class SimConfig {
     this.dtnPreferSuper = false,
     this.communityRelayQuota = 0,
     this.peerNorm = PeerNorm.fixed,
+    this.communityRelayPreference = false,
+    this.dtnPreferCommunity = false,
     this.maxRetries = 2,
     this.txPowerDbm = defaultTxPowerDbm,
     this.rxSensitivityDbm = defaultRxSensitivityDbm,
@@ -280,6 +282,18 @@ class SimConfig {
   /// the largest peer count this node has heard. Measured and rejected: it lifts every open
   /// node's score and changes no election (docs/06 §18.4).
   final PeerNorm peerNorm;
+
+  /// When two relays cover the same neighbours, pick the plugged one. Off by default and
+  /// measured as a null result: it moves 0.6 of 100 MPR slots in a crowd and nothing
+  /// downstream, because who transmits is decided per packet from what was actually heard
+  /// (docs/06 §19.5).
+  final bool communityRelayPreference;
+
+  /// Hand a parked bundle to a plugged, stationary carrier instead of a SUPER when the
+  /// holder has no route of its own. Off by default and measured as a negative: parked
+  /// bundles grow 27-55% for at most 0.7 extra opportunistic deliveries a run
+  /// (docs/06 §19.5).
+  final bool dtnPreferCommunity;
   final int maxRetries;
 
   final double txPowerDbm;
@@ -338,6 +352,8 @@ class SimConfig {
     bool? dtnPreferSuper,
     double? communityRelayQuota,
     PeerNorm? peerNorm,
+    bool? communityRelayPreference,
+    bool? dtnPreferCommunity,
     double? voiceKbps,
     double? voiceFrameMs,
     double? jitterBufferMs,
@@ -385,6 +401,9 @@ class SimConfig {
         dtnPreferSuper: dtnPreferSuper ?? this.dtnPreferSuper,
         communityRelayQuota: communityRelayQuota ?? this.communityRelayQuota,
         peerNorm: peerNorm ?? this.peerNorm,
+        communityRelayPreference:
+            communityRelayPreference ?? this.communityRelayPreference,
+        dtnPreferCommunity: dtnPreferCommunity ?? this.dtnPreferCommunity,
         voiceKbps: voiceKbps ?? this.voiceKbps,
         voiceFrameMs: voiceFrameMs ?? this.voiceFrameMs,
         jitterBufferMs: jitterBufferMs ?? this.jitterBufferMs,
@@ -532,6 +551,7 @@ class SimulationStats {
     required this.historyBytes,
     required this.bundlesPruned,
     required this.dtnSuperCarries,
+    required this.dtnCommunityCarries,
     required this.channelDeferrals,
     required this.channelDeferMs,
     required this.channelDrops,
@@ -633,6 +653,9 @@ class SimulationStats {
   /// to a SUPER because the carrier had no route of its own (docs/06 §20).
   final int bundlesPruned;
   final int dtnSuperCarries;
+
+  /// Bundles handed to a community relay as carrier (`dtnPreferCommunity`, docs/06 §19.5).
+  final int dtnCommunityCarries;
 
   /// Channel access (docs/08 §12): transmissions that had to wait for a radio, how long
   /// they waited in total, and packets a full transmit queue could not hold. All zero
@@ -1248,6 +1271,7 @@ class MeshSimulation {
   int _historyBytes = 0;
   int _bundlesPruned = 0;
   int _dtnSuperCarries = 0;
+  int _dtnCommunityCarries = 0;
 
   /// Nodes with a beacon chain running, so joining a second group does not start a
   /// second one (the beacon covers every group the node is in).
@@ -1326,6 +1350,7 @@ class MeshSimulation {
     _historyBytes = 0;
     _bundlesPruned = 0;
     _dtnSuperCarries = 0;
+    _dtnCommunityCarries = 0;
     _superSamples = 0;
     _superSampleSum = 0;
     _retriesSent = 0;
@@ -1633,12 +1658,15 @@ class MeshSimulation {
     pruneSeenCache(node, now);
     pruneStaleEntries(node, now, neighborScoreTtlMs);
     pruneOppQueue(node, now);
-    node.mprSet = selectMprSet(node);
+    node.mprSet =
+        selectMprSet(node, nodes, config.communityRelayPreference);
 
     if (config.enableDtn && node.oppQueue.isNotEmpty) {
       final scan = scanOppQueue(node, nodes, rf, now,
-          preferSuper: config.dtnPreferSuper);
+          preferSuper: config.dtnPreferSuper,
+          preferCommunity: config.dtnPreferCommunity);
       _dtnSuperCarries += scan.superCarries;
+      _dtnCommunityCarries += scan.communityCarries;
       for (final q in scan.deliver) {
         _transmit(node, q.msg, q.msg.to);
       }
@@ -3266,6 +3294,7 @@ class MeshSimulation {
       historyBytes: _historyBytes,
       bundlesPruned: _bundlesPruned,
       dtnSuperCarries: _dtnSuperCarries,
+      dtnCommunityCarries: _dtnCommunityCarries,
       channelDeferrals: _channelDeferrals,
       channelDeferMs: _channelDeferMs,
       channelDrops: _channelDrops,

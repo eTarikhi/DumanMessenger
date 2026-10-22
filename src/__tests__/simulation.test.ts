@@ -32,7 +32,14 @@ import {
   wireSizeOf,
 } from "../routing";
 import { makeNode, rfWith } from "./helpers";
-import { BATTERY_FLOOR, CHARGING_BONUS, WEIGHTS, computeScore } from "../election";
+import {
+  BATTERY_FLOOR,
+  CHARGING_BONUS,
+  WEIGHTS,
+  computeScore,
+  isCommunityRelay,
+  selectMprSet,
+} from "../election";
 import {
   HISTORY_BUCKETS,
   type HistoryEntry,
@@ -2890,5 +2897,155 @@ describe("observed-maximum peer normalisation, measured and rejected (docs/06 §
     // Seed 99 lands exactly on the floor, which is the practical objection: the lever buys
     // nothing measurable and spends the band's margin doing it.
     expect(Math.min(...ratios)).toBeCloseTo(0.15, 6);
+  });
+});
+
+describe("preferring a community relay, measured and rejected (docs/06 §19.5)", () => {
+  it("wins an equal-coverage MPR tie, which is the only thing it can change", () => {
+    // Two peers that cover exactly the same 2-hop node, neither a SUPER, neither with a
+    // route entry, so every tie-break below the coverage gain is a draw except the one this
+    // flag adds and the node id at the end of the chain.
+    const me = makeNode("me", 0, 0);
+    const phone = makeNode("phone", 20, 0);
+    const plug = makeNode("plug", 10, 0, { charging: true, stationary: true });
+    me.peerIds = ["phone", "plug"];
+    me.twoHopView = { phone: ["far"], plug: ["far"] };
+
+    expect(isCommunityRelay(plug)).toBe(true);
+    expect(isCommunityRelay(phone)).toBe(false);
+    // Without the flag the chain runs to the id tie-break and "phone" sorts first.
+    expect(selectMprSet(me, [me, phone, plug], false)).toEqual(["phone"]);
+    // With it, the plugged node takes the same slot: identical coverage, identical
+    // transmissions, and nobody's battery pays for them.
+    expect(selectMprSet(me, [me, phone, plug], true)).toEqual(["plug"]);
+    // And it changes nothing when the coverage is not equal — gain still outranks it, which
+    // is why a crowd measurement of this flag comes out flat (§19.5).
+    const greedy = makeNode("greedy", 30, 0);
+    me.twoHopView = { phone: ["far", "far2"], plug: ["far"] };
+    expect(selectMprSet(me, [me, phone, plug, greedy], true)).toEqual(["phone"]);
+  });
+
+  /** A-B-C in a line, 20 m apart, so A cannot reach C. C is offline from t=0 rather than
+   *  walking away mid-run: a destination nobody ever heard from has no route anywhere, which
+   *  is the only situation in which the carrier preference is consulted at all. A bundle
+   *  whose holder still has a route travels on that route, and the preference never fires. */
+  function routelessWorld(over: Partial<SimConfig> = {}) {
+    const sim = new MeshSimulation({
+      ...DEFAULT_CONFIG,
+      nodeCount: 3,
+      stationaryRatio: 1,
+      chargingRatio: 0,
+      trafficIntervalMs: 0,
+      enableSuperElection: false,
+      warmupMs: 0,
+      obstacles: [],
+      ...over,
+    });
+    sim.nodes.forEach((node, i) => {
+      node.pos = { x: 10 + i * 20, y: 10 };
+      node.home = { x: 10 + i * 20, y: 10 };
+      node.target = { x: 10 + i * 20, y: 10 };
+      node.stationary = true;
+      node.mobility = 0;
+      node.isOnline = true;
+      node.battery = 1;
+    });
+    const b = sim.nodes[1];
+    b.charging = true; // the café tablet in the middle
+    b.stationary = true;
+    sim.toggleNodeOnline(sim.nodes[2].id); // C is gone before anybody hears it
+    sim.runFor(20000);
+    sim.clearRecords();
+    return sim;
+  }
+
+  it("hands a routeless bundle to a plugged carrier when asked, and parks it when not", () => {
+    const park = (prefer: boolean) => {
+      const sim = routelessWorld({ dtnPreferCommunity: prefer });
+      const a = sim.nodes[0];
+      const b = sim.nodes[1];
+      const c = sim.nodes[2];
+      sim.sendMessage(a.id, c.id, "carry me", "text");
+      sim.runFor(120000);
+      return { a, b, stats: sim.refresh() };
+    };
+
+    const off = park(false);
+    expect(off.stats.dtnCommunityCarries).toBe(0);
+    expect(off.a.oppQueue.length).toBe(1);
+    expect(off.b.oppQueue.length).toBe(0); // nobody else ever holds it
+
+    const on = park(true);
+    // skills/04's "prefer SUPER as bundle carrier" read for the community-relay programme:
+    // a plugged node has the storage and the mains power, so it is the better guess about
+    // who will still be here. It does get the bundle, and it gets copies until the spray
+    // limit stops it.
+    expect(on.stats.dtnCommunityCarries).toBeGreaterThan(0);
+    expect(on.b.oppQueue.length).toBe(1);
+    expect(on.stats.totalQueued).toBe(off.stats.totalQueued + 1);
+  });
+
+  it("and that is where the benefit stops: the bundle waits on a node that never moves", () => {
+    // The same tablet that is a good place to *leave* a bundle is a bad place to *carry*
+    // one, because carrying is movement. Measured over three seeds in the 60-node crowd
+    // (docs/06 §19.5): 40-51 hand-overs a run, parked bundles up 27-55%, delivery flat to
+    // 1.1 points worse, p95 up 2.1 s at three tablets. Asserted here on one seed as the
+    // direction, not the magnitude.
+    const run = (prefer: boolean) => {
+      const sim = new MeshSimulation({
+        ...festivalCrowd(42),
+        dtnPreferCommunity: prefer,
+        trafficIntervalMs: 0,
+      });
+      sim.runFor(20000);
+      const online = sim.nodes.filter((n) => n.isOnline);
+      const ranked = [...online].sort(
+        (x, y) =>
+          peersInRange(y, online, sim.rf).length - peersInRange(x, online, sim.rf).length ||
+          (x.id < y.id ? -1 : 1)
+      );
+      for (const n of ranked.slice(0, 6)) {
+        n.charging = true;
+        n.stationary = true;
+        n.battery = 1;
+        n.uptimeMin = 600;
+      }
+      sim.clearRecords();
+      const rng = createRng((42 ^ 0x5bf03635) >>> 0);
+      let sent = 0;
+      for (let i = 0; i < 40; i++) {
+        const f = Math.floor(rng() * sim.nodes.length);
+        let t = Math.floor(rng() * sim.nodes.length);
+        let g = 0;
+        while (t === f && g++ < 32) t = Math.floor(rng() * sim.nodes.length);
+        const from = sim.nodes[f];
+        const to = sim.nodes[t];
+        if (f !== t && from.isOnline && to.isOnline && sim.sendMessage(from.id, to.id, `pc-${i}`, "text")) sent++;
+        sim.runFor(1000);
+      }
+      sim.runFor(120000); // give store-carry-forward time to be wrong
+      const stats = sim.refresh();
+      const uni = sim.deliveries.filter(
+        (d) => d.type !== "ack" && d.type !== "broadcast" && !d.groupId && !d.transferId
+      );
+      return {
+        carries: stats.dtnCommunityCarries,
+        parked: stats.totalQueued,
+        ratio: uni.length / Math.max(1, sent),
+        dtn: sim.deliveries.filter((d) => d.dtn).length,
+      };
+    };
+
+    const off = run(false);
+    const on = run(true);
+    expect(off.carries).toBe(0);
+    // The preference fires, and fires often: forty-one hand-overs in one run.
+    expect(on.carries).toBeGreaterThan(20);
+    // What it buys is nothing that arrives. Parked bundles do not fall, and not one extra
+    // message is delivered opportunistically: the bundle is now sitting on a node that does
+    // not move, in a mesh where movement is the delivery mechanism.
+    expect(on.parked).toBeGreaterThanOrEqual(off.parked);
+    expect(on.dtn).toBe(0);
+    expect(off.dtn).toBe(0);
   });
 });

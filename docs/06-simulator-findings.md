@@ -1548,7 +1548,67 @@ written — two plugged nodes in the same café should not both be routers.
 at a mechanism that is not operating. If the roadmap's community-relay programme is ever
 prioritised, the useful question is not how to elect more tablets — six plugged nodes in one
 crowd get four elected and the other two are correctly redundant — but whether a tablet
-should be *preferred* as an MPR and as a bundle carrier, where the work actually is.
+should be *preferred* as an MPR and as a bundle carrier, where the work actually is. §19.5
+asks that question, and the answer is no for both.
+
+### 19.5 Preferring a community relay, in the two places the work is chosen
+
+Two flags, one hypothesis: a plugged, stationary node is a cheaper relay (no battery cost)
+and a safer store (it does not walk away), so where the protocol *chooses* who does the work,
+choose it.
+
+**As an MPR — `communityRelayPreference`.** `selectMprSet` breaks an equal-coverage tie on
+SUPER status, then link quality, then node id; the flag inserts "is a community relay" ahead
+of SUPER status. It does what it says: in a constructed tie the plugged node takes the slot
+that the id tie-break would have given the phone, and it never overrides a coverage gain. In
+the crowd it changes almost nothing, because ties are rare and the community node usually
+already wins on the later tie-breaks — and what it does change has no consequence:
+
+| tablets | preference | delivery | p95 | relay tx | tx by others | tx by tablets | NORMAL %/h | tablet-held MPR slots |
+|---|---|---|---|---|---|---|---|---|
+| 0 | off / on | 0.9333 / 0.9333 | 5,257 / 5,257 ms | 10,565 / 10,565 | 10,565 / 10,565 | 0 / 0 | 2.873 / 2.873 | 0.0 / 0.0 of 96 |
+| 3 | off / on | 0.9389 / 0.9389 | 6,245 / 6,245 ms | 13,152 / 13,152 | 11,595 / 11,595 | 1,557 / 1,557 | 2.803 / 2.803 | 15.7 / **16.3** of 100 |
+| 6 | off / on | 0.9444 / 0.9444 | 5,708 / 5,708 ms | 12,063 / 12,063 | 9,418 / 9,418 | 2,645 / 2,645 | 2.775 / 2.775 | 23.3 / 23.3 of 107 |
+
+Mean of three seeds, `festival_crowd`, 60 messages at 1 s. Every column is identical to the
+digit except one: at three tablets the preference moves **0.6 of 100 MPR slots**. The reason
+nothing downstream moves is that in a crowd the MPR label is not what decides who transmits —
+a SUPER relays everything by design (Phase 2 item 65) and a NORMAL node forwards or stays
+quiet on the heard-relay coverage check (§6). The MPR set is how a node *plans* coverage; the
+transmission decision is made again, per packet, from what it actually heard.
+
+**As a bundle carrier — `dtnPreferCommunity`.** skills/04's "prefer SUPER as bundle carrier
+(more storage/battery)" read for the programme: when the holder has no route of its own, hand
+the bundle to a reachable plugged node instead. This one fires — 40 hand-overs a run at three
+tablets, 51 at six — and it is the same failure class as §20.4's `dtnPreferSuper`:
+
+| tablets | carrier rule | delivery | p95 | DTN deliveries | parked | hand-overs | tx by others | NORMAL %/h |
+|---|---|---|---|---|---|---|---|---|
+| 3 | none | 0.9556 | 6.2 s | 0.3 | 17.0 | 0 | 12,165 | 2.805 |
+| 3 | community | 0.9556 | **8.3 s** | 1.0 | **26.3** | 40.0 | 12,436 | 2.796 |
+| 3 | SUPER (§20.4) | 0.9500 | 6.8 s | 0.3 | **33.0** | 80.3 | 12,339 | 2.873 |
+| 6 | none | 0.9667 | 5.7 s | 1.0 | 22.0 | 0 | 10,318 | 2.781 |
+| 6 | community | 0.9556 | 5.9 s | 1.0 | **28.0** | 51.3 | 10,080 | **2.733** |
+| 6 | SUPER (§20.4) | 0.9667 | 5.6 s | 0.7 | 24.3 | 52.3 | 9,283 | 2.751 |
+
+Mean of three seeds, 60 messages at 1 s plus 60 s of store-carry-forward. Parked bundles grow
+27-55%, delivery is flat to 1.1 points worse, p95 is 2.1 s worse at three tablets, and the
+extra hand-overs produce at most 0.7 additional opportunistic deliveries a run. The two small
+gains — 2% fewer transmissions by other nodes and NORMAL drain 2.781 → 2.733 %/h at six
+tablets — are the same shape as §19.2's battery dividend and are not worth 6 more parked
+bundles.
+
+The mechanism is plain once stated: **a stationary node is the best place to leave a bundle
+and the worst place to carry one, because carrying is movement.** Both preferences choose a
+carrier by *who it is* rather than by *where it is going*, which is why §20.4's SUPER version
+and this one fail the same way.
+
+**Verdict:** both flags implemented, both default off, both documented as rejected. The
+programme's real benefit stands where §19.2 left it — six plugged tablets take 18.6% of the
+radio work off everybody else because they are *elected and plugged in*, not because anything
+prefers them. The one place a preference could still be worth measuring is a carrier choice
+based on predicted *contact* with the destination (a mobility-aware rule), which neither
+engine models; that is a different feature and it belongs with §20's DTN work, not here.
 
 ---
 

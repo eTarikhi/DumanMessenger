@@ -1,6 +1,8 @@
 import 'package:duman_mesh_sim/mesh_sim.dart';
 import 'package:test/test.dart';
 
+import 'helpers.dart';
+
 /// Cap-aware community-relay promotion, built and rejected (roadmap Phase 5,
 /// docs/06 §19.4).
 ///
@@ -92,5 +94,80 @@ void main() {
         .where((n) => n.role == Role.superNode && !isCommunityRelay(n))
         .length;
     expect(phoneSupers(reserved), phoneSupers(plain) + 1);
+  });
+
+  test('wins an equal-coverage MPR tie, which is the only thing it can change', () {
+    // Two peers that cover exactly the same 2-hop node, neither a SUPER, neither with a
+    // route entry, so every tie-break below the coverage gain is a draw except the one this
+    // flag adds and the node id at the end of the chain.
+    final me = makeNode('me', 0, 0);
+    final phone = makeNode('phone', 20, 0);
+    final plug = makeNode('plug', 10, 0, charging: true, stationary: true);
+    me.peerIds.addAll(<String>['phone', 'plug']);
+    me.twoHopView['phone'] = <String>['far'];
+    me.twoHopView['plug'] = <String>['far'];
+
+    expect(isCommunityRelay(plug), isTrue);
+    expect(isCommunityRelay(phone), isFalse);
+    // Without the flag the chain runs to the id tie-break and 'phone' sorts first.
+    expect(selectMprSet(me, <MeshNode>[me, phone, plug], false),
+        equals(<String>['phone']));
+    // With it the plugged node takes the same slot: identical coverage, identical
+    // transmissions, and nobody's battery pays for them.
+    expect(selectMprSet(me, <MeshNode>[me, phone, plug], true),
+        equals(<String>['plug']));
+    // And it never overrides a coverage gain, which is why a crowd measurement of this flag
+    // comes out flat (docs/06 §19.5).
+    me.twoHopView['phone'] = <String>['far', 'far2'];
+    expect(selectMprSet(me, <MeshNode>[me, phone, plug], true),
+        equals(<String>['phone']));
+  });
+
+  test('hands a routeless bundle to a plugged carrier when asked, and parks it when not', () {
+    /// A-B-C in a line, 20 m apart, with C offline from t=0: a destination nobody ever
+    /// heard from has no route anywhere, which is the only situation in which the carrier
+    /// preference is consulted at all.
+    ({MeshNode a, MeshNode b, SimulationStats stats}) routeless(bool prefer) {
+      final sim = MeshSimulation(defaultConfig.copyWith(
+        nodeCount: 3,
+        stationaryRatio: 1.0,
+        chargingRatio: 0.0,
+        trafficIntervalMs: 0.0,
+        enableSuperElection: false,
+        warmupMs: 0.0,
+        obstacles: const <Obstacle>[],
+        dtnPreferCommunity: prefer,
+      ));
+      for (var i = 0; i < sim.nodes.length; i++) {
+        final node = sim.nodes[i];
+        node.pos = Vec2(10.0 + i * 20, 10);
+        node.target = Vec2(10.0 + i * 20, 10);
+        node.mobility = 0;
+        node.isOnline = true;
+        node.battery = 1.0;
+      }
+      final b = sim.nodes[1];
+      b.charging = true; // the café tablet in the middle
+      b.stationary = true;
+      sim.toggleNodeOnline(sim.nodes[2].id); // gone before anybody hears it
+      sim.runFor(20000);
+      sim.clearRecords();
+      sim.sendMessage(sim.nodes[0].id, sim.nodes[2].id, 'carry me');
+      sim.runFor(120000);
+      return (a: sim.nodes[0], b: b, stats: sim.refresh());
+    }
+
+    final off = routeless(false);
+    expect(off.stats.dtnCommunityCarries, 0);
+    expect(off.a.oppQueue.length, 1);
+    expect(off.b.oppQueue.length, 0); // nobody else ever holds it
+
+    final on = routeless(true);
+    // skills/04's "prefer SUPER as bundle carrier" read for the community-relay programme:
+    // a plugged node has the storage and the mains power, so it is the better guess about
+    // who will still be here. It does get the bundle.
+    expect(on.stats.dtnCommunityCarries, greaterThan(0));
+    expect(on.b.oppQueue.length, 1);
+    expect(on.stats.totalQueued, off.stats.totalQueued + 1);
   });
 }
