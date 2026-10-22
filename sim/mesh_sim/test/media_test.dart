@@ -20,6 +20,7 @@ void main() {
     int transferChunkBytes = 65536,
     double voiceKbps = 12,
     bool adaptiveMediaAck = false,
+    bool captureLog = false,
   }) {
     final sim = MeshSimulation(SimConfig(
       nodeCount: n,
@@ -35,6 +36,7 @@ void main() {
       transferChunkBytes: transferChunkBytes,
       voiceKbps: voiceKbps,
       adaptiveMediaAck: adaptiveMediaAck,
+      captureLog: captureLog,
     ));
     for (var i = 0; i < sim.nodes.length; i++) {
       final node = sim.nodes[i];
@@ -281,6 +283,102 @@ void main() {
       expect(sim.sendFile(sim.nodes[1].id, sim.nodes[2].id, 0), isNull);
       expect(sim.sendVoice(sim.nodes[1].id, sim.nodes[2].id, 0), isNull);
       expect(sim.refresh().transfersStarted, equals(0));
+    });
+  });
+
+  group('media against skills/05 (Voice PTT & Media)', () {
+    test('sends voice chunks as VOICE_CHUNK: type voice, priority high, ttl 3', () {
+      final sim = lineWorld(n: 3, captureLog: true);
+      final t = sim.sendVoice(sim.nodes[0].id, sim.nodes[2].id, 1.0)!;
+      runUntil(sim, () => t.state == TransferState.complete, 60000);
+      final frames =
+          sim.nodes[2].inbox.where((m) => m.transferId == t.id).toList();
+      expect(frames.length, equals(2));
+      for (final f in frames) {
+        expect(f.type, equals(MsgType.voice));
+        expect(f.priority, equals(Priority.high));
+        // skills/05: "VOICE_CHUNK packets prio=high, ttl=3". A frame that needs
+        // four hops is stale on arrival, so it is not worth the radio time.
+        expect(f.ttl, lessThanOrEqualTo(3));
+        expect(f.sizeBytes, equals(750));
+        expect(f.transport, equals(TransportType.ble));
+      }
+      // A file chunk is not a voice chunk: it keeps the data plane's ttl.
+      final file = sim.sendFile(sim.nodes[0].id, sim.nodes[2].id, 128 * 1024)!;
+      runUntil(sim, () => file.state == TransferState.complete, 60000);
+      final slices =
+          sim.nodes[2].inbox.where((m) => m.transferId == file.id).toList();
+      expect(slices.every((m) => m.type == MsgType.file), isTrue);
+      expect(slices.first.ttl, lessThanOrEqualTo(5));
+    });
+
+    test('rides Wi-Fi Direct for a voice note when the group owner is connected', () {
+      // skills/05: "Send: VOICE_CHUNK packets ... via best transport (WiFi Direct if
+      // GO connected, else chunked BLE 512B MTU)". The transport is a property of
+      // what has been negotiated, not only of the payload size.
+      final sim = lineWorld(n: 2);
+      final t = sim.sendVoice(sim.nodes[0].id, sim.nodes[1].id, 1.0,
+          transport: TransportType.wifiDirect)!;
+      expect(t.forcedTransport, equals(TransportType.wifiDirect));
+      expect(runUntil(sim, () => t.state == TransferState.complete, 60000), isTrue);
+      expect(t.transport, equals(TransportType.wifiDirect));
+      final delay = t.completedAt! + sim.config.jitterBufferMs - t.releasedAt!;
+      // skills/05 acceptance: "1-hop WiFi: PTT round-trip <1s".
+      expect(delay, lessThan(1000.0));
+      // Its modes table puts streaming PTT at 150-300 ms on one Wi-Fi Direct hop;
+      // the model's floor is the 40 ms hop plus 50-200 ms of jitter.
+      expect(delay - sim.config.jitterBufferMs, lessThan(300.0));
+    });
+
+    test('refuses a transfer over the 10 MB ceiling', () {
+      final sim = lineWorld(n: 2, captureLog: true);
+      expect(sim.config.maxTransferBytes, equals(10 * 1048576));
+      expect(sim.sendFile(sim.nodes[0].id, sim.nodes[1].id, 10 * 1048576), isNotNull);
+      expect(sim.sendFile(sim.nodes[0].id, sim.nodes[1].id, 10 * 1048576 + 1), isNull);
+      expect(
+        sim.log.any((l) =>
+            l.kind == MeshLogKind.transfer && l.detail.contains('ceiling')),
+        isTrue,
+      );
+    });
+
+    test('resumes a 10 MB Wi-Fi Direct image after a mid-transfer disconnect', () {
+      // skills/05 acceptance, verbatim: "10 MB image: delivered over WiFi Direct with
+      // resume after mid-transfer disconnect". Three hops, receiver gone for 20 s at
+      // about a third of the way in.
+      final sim = lineWorld(captureLog: true);
+      final t = sim.sendFile(sim.nodes[0].id, sim.nodes[3].id, 10 * 1024 * 1024,
+          transport: TransportType.wifiDirect)!;
+      expect(t.chunks, equals(160));
+      expect(
+          runUntil(sim, () => t.received >= (t.chunks * 0.3).floor(), 120000), isTrue);
+      final atDisconnect = t.received;
+
+      sim.toggleNodeOnline(sim.nodes[3].id);
+      sim.runFor(20000);
+      expect(t.state, equals(TransferState.active));
+      expect(t.received, equals(atDisconnect)); // nothing arrives while it is away
+      expect(t.stalls, greaterThan(0)); // ... and the watchdog notices
+
+      sim.toggleNodeOnline(sim.nodes[3].id);
+      expect(runUntil(sim, () => t.state == TransferState.complete, 600000), isTrue);
+      expect(t.received, equals(160));
+      expect(t.transport, equals(TransportType.wifiDirect));
+      expect(sim.refresh().bytesDelivered, greaterThanOrEqualTo(10 * 1024 * 1024));
+    });
+
+    test('slices to the 512 B BLE MTU when there is no Wi-Fi Direct capacity', () {
+      // skills/05: "else chunked BLE 512B MTU". Half the packet ceiling, so a slice
+      // stays on BLE with room for its header, and a 10 MB image becomes 20480 of
+      // them — which is what docs/05's auto-reject rule is for (docs/08 §8).
+      final sim = lineWorld(n: 2);
+      final t = sim.sendFile(sim.nodes[0].id, sim.nodes[1].id, 10 * 1024 * 1024,
+          chunkBytes: 512)!;
+      expect(t.chunks, equals(20480));
+      expect(t.transport, equals(TransportType.ble));
+      sim.runFor(60000);
+      expect(t.state, equals(TransferState.active));
+      expect(t.received / t.chunks, lessThan(0.1));
     });
   });
 }

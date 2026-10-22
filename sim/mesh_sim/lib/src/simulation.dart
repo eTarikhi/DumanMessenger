@@ -78,6 +78,8 @@ class SimConfig {
     this.voiceKbps = 12,
     this.voiceFrameMs = 500,
     this.jitterBufferMs = 200,
+    this.voiceTtl = 3,
+    this.maxTransferBytes = 10 * 1048576,
     this.maxRetries = 2,
     this.txPowerDbm = defaultTxPowerDbm,
     this.rxSensitivityDbm = defaultRxSensitivityDbm,
@@ -209,6 +211,15 @@ class SimConfig {
   /// Receiver buffer before playback can start (docs/05 §3.3: "jitter buffer
   /// 200 ms").
   final double jitterBufferMs;
+
+  /// TTL for one voice chunk. skills/05 puts `VOICE_CHUNK` at `prio=high, ttl=3`: a
+  /// frame that needs four hops is stale by the time it arrives, so it is not worth
+  /// the radio time.
+  final int voiceTtl;
+
+  /// skills/05: "Max 10 MB". A larger send is refused rather than attempted, because
+  /// on this mesh it would occupy the radio for minutes (docs/08 §8).
+  final int maxTransferBytes;
   final int maxRetries;
 
   final double txPowerDbm;
@@ -836,6 +847,7 @@ class Transfer {
     required this.startedAt,
     required this.lastProgressAt,
     required this.transport,
+    this.forcedTransport,
   });
 
   final String id;
@@ -891,16 +903,23 @@ class Transfer {
   double? minRttMs;
 
   TransportType transport;
+
+  /// skills/05: "Send ... via best transport (WiFi Direct if GO connected, else
+  /// chunked BLE 512B MTU)". A Wi-Fi Direct group owner that is already negotiated
+  /// means the radio is available whatever the payload size says, so the caller can
+  /// force it; null leaves the size-based choice in [selectTransport].
+  final TransportType? forcedTransport;
   TransferState state = TransferState.active;
 }
 
 /// Ties a message to one chunk of one transfer. Internal, like [_GroupCtx].
 class _ChunkCtx {
-  _ChunkCtx(this.transferId, this.index, this.bytes);
+  _ChunkCtx(this.transferId, this.index, this.bytes, [this.transport]);
 
   final String transferId;
   final int index;
   final int bytes;
+  final TransportType? transport;
 }
 
 class _ChunkPayload {
@@ -1424,13 +1443,24 @@ class MeshSimulation {
   /// OppQueue as a last resort — which is what makes "resume on reconnect" work
   /// without any media-specific state machine. Returns null if the sender is offline.
   Transfer? sendFile(NodeId fromId, NodeId toId, int totalBytes,
-      {int? chunkBytes, int? window}) {
+      {int? chunkBytes, int? window, TransportType? transport}) {
     final from = _byId(fromId);
     if (from == null || !from.isOnline || totalBytes <= 0) return null;
+    if (totalBytes > config.maxTransferBytes) {
+      // skills/05: "Max 10 MB". Refusing is the honest behaviour: docs/08 §8
+      // measures what attempting it would cost the mesh.
+      _pushLog(
+          MeshLogKind.transfer,
+          fromId,
+          'refused ${(totalBytes / 1048576).toStringAsFixed(1)} MB to $toId — over the '
+              '${(config.maxTransferBytes / 1048576).toStringAsFixed(0)} MB ceiling (skills/05)',
+          msgType: MsgType.file);
+      return null;
+    }
     final slice = math.max(64, chunkBytes ?? config.transferChunkBytes);
     final chunks = math.max(1, (totalBytes / slice).ceil());
-    final t = _newTransfer(
-        TransferKind.file, fromId, toId, totalBytes, slice, chunks, window);
+    final t = _newTransfer(TransferKind.file, fromId, toId, totalBytes, slice,
+        chunks, window, transport);
     _pushWindow(t);
     return t;
   }
@@ -1445,7 +1475,7 @@ class MeshSimulation {
   /// `stream: false` sends the finished note as one blob at release instead, which is
   /// the alternative the streaming design is measured against in docs/08 §5.
   Transfer? sendVoice(NodeId fromId, NodeId toId, double seconds,
-      {bool stream = true}) {
+      {bool stream = true, TransportType? transport}) {
     final from = _byId(fromId);
     if (from == null || !from.isOnline || seconds <= 0) return null;
     final frameMs = config.voiceFrameMs;
@@ -1457,16 +1487,16 @@ class MeshSimulation {
     final totalBytes = frames * frameBytes;
 
     if (!stream) {
-      final t = _newTransfer(
-          TransferKind.voice, fromId, toId, totalBytes, totalBytes, 1, 1);
+      final t = _newTransfer(TransferKind.voice, fromId, toId, totalBytes,
+          totalBytes, 1, 1, transport);
       t.releasedAt = releasedAt;
       _queue.push(
           releasedAt, EventKind.transferChunk, fromId, _ChunkPayload(t.id, 0));
       return t;
     }
 
-    final t = _newTransfer(
-        TransferKind.voice, fromId, toId, totalBytes, frameBytes, frames, 1);
+    final t = _newTransfer(TransferKind.voice, fromId, toId, totalBytes,
+        frameBytes, frames, 1, transport);
     t.releasedAt = releasedAt;
     for (var i = 0; i < frames; i++) {
       final departsAt = now + math.min((i + 1) * frameMs, seconds * 1000);
@@ -1477,7 +1507,8 @@ class MeshSimulation {
   }
 
   Transfer _newTransfer(TransferKind kind, NodeId fromId, NodeId toId,
-      int totalBytes, int chunkBytes, int chunks, int? window) {
+      int totalBytes, int chunkBytes, int chunks, int? window,
+      [TransportType? forced]) {
     final id = 'transfer-${_transferSeq++}';
     final t = Transfer(
       id: id,
@@ -1490,7 +1521,8 @@ class MeshSimulation {
       window: math.max(1, window ?? config.transferWindow),
       startedAt: now,
       lastProgressAt: now,
-      transport: selectTransport(chunkBytes),
+      transport: forced ?? selectTransport(chunkBytes),
+      forcedTransport: forced,
     );
     transfers[id] = t;
     _transfersStarted++;
@@ -1515,8 +1547,15 @@ class MeshSimulation {
     final bytes = math.min(t.chunkBytes, t.totalBytes - index * t.chunkBytes);
     if (bytes <= 0 || index >= t.chunks) return;
     t.onAir.add(index);
-    sendMessage(t.from, t.to, '', MsgType.file, null,
-        _ChunkCtx(t.id, index, bytes));
+    // skills/05: a voice note goes out as VOICE_CHUNK packets, prio=high and ttl=3,
+    // which sendMessage derives from the voice type.
+    sendMessage(
+        t.from,
+        t.to,
+        '',
+        t.kind == TransferKind.voice ? MsgType.voice : MsgType.file,
+        null,
+        _ChunkCtx(t.id, index, bytes, t.forcedTransport));
   }
 
   /// The window has not moved for [SimConfig.transferStallMs]: re-send the chunks the
@@ -1686,7 +1725,9 @@ class MeshSimulation {
     // docs/05 §"Broadcast SOS | All transports, flood (TTL=5)". Reach comes from
     // repeating the flood and, where the deployment is wider than that, from the
     // scenario's sosTtl override — see _onSosRepeat and docs/06 §11.
-    final ttl = type == MsgType.sos ? config.sosTtl : 5;
+    final ttl = type == MsgType.sos
+        ? config.sosTtl
+        : (type == MsgType.voice ? config.voiceTtl : 5);
     final priority = (type == MsgType.sos || type == MsgType.voice)
         ? Priority.high
         : Priority.normal;
@@ -1701,7 +1742,11 @@ class MeshSimulation {
         sosId: sosId,
         sosRepeat: isSos ? 0 : null,
         sosPos: isSos ? from.pos.clone() : null,
-        transport: isSos ? TransportType.wifiDirect : null,
+        // SOS rides Wi-Fi Direct whatever its size; a chunk rides whatever the
+        // transfer was told to use (skills/05: "WiFi Direct if GO connected"), and
+        // failing that whatever its size implies.
+        transport: chunk?.transport ??
+            (isSos ? TransportType.wifiDirect : null),
         groupId: groupCtx?.id,
         groupEpoch: groupCtx?.epoch,
         // A chunk's size is the payload it carries, not the empty body it was built

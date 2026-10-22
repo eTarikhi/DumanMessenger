@@ -302,9 +302,18 @@ void main(List<String> args) {
             '${f['stalls']}');
       }
       final ble = media['bleOnly'] as Map<String, Object?>;
-      stdout.writeln('  BLE-only (1 KB slices, no Wi-Fi Direct peer): '
+      stdout.writeln('  BLE-only at the ${ble['mtuBytes']} B MTU skills/05 specifies '
+          '(no Wi-Fi Direct peer): '
           '${ble['complete'] == true ? '${ble['ms']} ms' : 'not finished in 15 min'} '
           'for 10 MB over ${ble['chunks']} chunks');
+      for (final row
+          in (media['bleLadder'] as List).cast<Map<String, Object?>>()) {
+        final kb = (row['bytes'] as int) ~/ 1024;
+        final outcome = row['complete'] == true
+            ? '${row['ms']} ms'
+            : '>5 min (${row['received']}/${row['chunks']} chunks)';
+        stdout.writeln('    $kb KB over BLE → $outcome');
+      }
       stdout.writeln('  ${'note'.padRight(6)}${'mode'.padRight(10)}${'hops'.padRight(6)}'
           '${'radio'.padRight(12)}${'first audio'.padRight(13)}${'play delay'.padRight(12)}'
           '${'max gap'.padRight(10)}${'underruns'.padRight(11)}budget');
@@ -315,6 +324,25 @@ void main(List<String> args) {
             '${'${v['maxGapMs']} ms'.padRight(10)}${'${v['underruns']}'.padRight(11)}'
             '${v['meetsBudget'] == true ? 'PASS' : 'FAIL'} (<${(v['budgetMs'] as num) ~/ 1000} s)');
       }
+      final acc = media['acceptance'] as Map<String, Object?>;
+      stdout.writeln('  skills/05 acceptance:');
+      stdout.writeln('    [1] 1-hop Wi-Fi PTT round trip '
+          '${acc['wifiPttRoundTripMs']} ms (buffer excluded '
+          '${acc['wifiPttBufferExcludedMs']} ms) → '
+          '${acc['wifiPttUnder1s'] == true ? 'PASS <1 s' : 'FAIL'}');
+      stdout.writeln('    [2] 3-hop BLE voice note '
+          '${acc['bleNoteFrames']}/${acc['bleNoteFrameCount']} frames → '
+          '${acc['bleNoteIntact'] == true ? 'intact PASS' : 'INCOMPLETE'}');
+      final r = acc['resume'] as Map<String, Object?>?;
+      final resumed = acc['resumeAfterDisconnect'] == true
+          ? 'resumed, ${r?['ms']} ms PASS'
+          : 'DID NOT RESUME';
+      stdout.writeln('    [3] 10 MB Wi-Fi Direct, receiver offline at '
+          '${r?['atDisconnect']}/${r?['chunks']} chunks for 20 s → $resumed '
+          '(${r?['stalls']} window stalls, ${r?['stallsWhileAway']} while away)');
+      stdout.writeln('    [ ] 11 MB send → '
+          '${acc['overCeilingRefused'] == true ? 'refused' : 'ACCEPTED'} '
+          '(skills/05 "Max 10 MB")');
       stdout.writeln('  ${media['verdict']}');
     }
 
@@ -608,6 +636,10 @@ Map<String, Object?> _groupProbe(SimConfig config, int size) {
 Map<String, Object?> _mediaProbe(SimConfig config) {
   const tenMb = 10 * 1048576;
 
+  /// skills/05: "chunked BLE 512B MTU" — what a file is sliced into when there is
+  /// no Wi-Fi Direct group owner to carry it.
+  const bleMtu = 512;
+
   MeshSimulation fresh() {
     final sim = MeshSimulation(config.copyWith(trafficIntervalMs: 0));
     sim.runFor(90000);
@@ -708,7 +740,7 @@ Map<String, Object?> _mediaProbe(SimConfig config) {
   final blePair = pairAt(bleSim, 1);
   final ble = blePair == null
       ? null
-      : bleSim.sendFile(blePair[0].id, blePair[1].id, tenMb, chunkBytes: 1024);
+      : bleSim.sendFile(blePair[0].id, blePair[1].id, tenMb, chunkBytes: bleMtu);
   final bleDone = ble == null
       ? false
       : runUntil(bleSim, () => ble.state == TransferState.complete, 900000);
@@ -720,7 +752,90 @@ Map<String, Object?> _mediaProbe(SimConfig config) {
         ? null
         : _round(ble.completedAt! - ble.startedAt),
     'receivedIn15Min': ble?.received ?? 0,
+    'mtuBytes': bleMtu,
   };
+
+  // What a BLE-only mesh can still do inside a minute, at the same MTU.
+  final bleLadder = <Map<String, Object?>>[];
+  for (final size in <int>[262144, 1048576, 2 * 1048576, 5 * 1048576]) {
+    final sim = fresh();
+    final pair = pairAt(sim, 1);
+    if (pair == null) continue;
+    final t = sim.sendFile(pair[0].id, pair[1].id, size, chunkBytes: bleMtu);
+    if (t == null) continue;
+    final done =
+        runUntil(sim, () => t.state == TransferState.complete, 300000);
+    bleLadder.add(<String, Object?>{
+      'bytes': size,
+      'complete': done,
+      'ms': t.completedAt == null ? null : _round(t.completedAt! - t.startedAt),
+      'received': t.received,
+      'chunks': t.chunks,
+    });
+  }
+
+  // --- skills/05's three acceptance boxes ----------------------------------
+  // [1] "1-hop WiFi: PTT round-trip <1s". The modes table above it puts streaming
+  // PTT at 150-300 ms on one Wi-Fi Direct hop, which reads as excluding the jitter
+  // buffer, so both numbers are reported.
+  final wifiSim = fresh();
+  final wifiPair = pairAt(wifiSim, 1);
+  final wifiNote = wifiPair == null
+      ? null
+      : wifiSim.sendVoice(wifiPair[0].id, wifiPair[1].id, 3.0,
+          transport: TransportType.wifiDirect);
+  final wifiOk = wifiNote != null &&
+      runUntil(wifiSim, () => wifiNote.state == TransferState.complete, 30000);
+  final wifiRoundTrip = (wifiOk && wifiNote != null && wifiNote.completedAt != null)
+      ? wifiNote.completedAt! +
+          wifiSim.config.jitterBufferMs -
+          (wifiNote.releasedAt ?? wifiNote.startedAt)
+      : null;
+
+  // [2] "3-hop BLE: voice note arrives intact".
+  final bleNoteSim = fresh();
+  final bleNotePair = pairAt(bleNoteSim, 3);
+  final bleNote = bleNotePair == null
+      ? null
+      : bleNoteSim.sendVoice(bleNotePair[0].id, bleNotePair[1].id, 3.0);
+  final bleNoteOk = bleNote != null &&
+      runUntil(bleNoteSim, () => bleNote.state == TransferState.complete, 30000);
+
+  // [3] "10 MB image: delivered over WiFi Direct with resume after mid-transfer
+  // disconnect". The disconnect is the interesting half.
+  final resumeSim = fresh();
+  final resumePair = pairAt(resumeSim, 3);
+  Map<String, Object?>? resume;
+  if (resumePair != null) {
+    final t = resumeSim.sendFile(resumePair[0].id, resumePair[1].id, tenMb,
+        transport: TransportType.wifiDirect);
+    if (t != null) {
+      runUntil(resumeSim, () => t.received >= (t.chunks * 0.3).floor(), 120000);
+      final atDisconnect = t.received;
+      resumeSim.toggleNodeOnline(resumePair[1].id); // receiver walks away
+      resumeSim.runFor(20000);
+      final stallsAway = t.stalls;
+      resumeSim.toggleNodeOnline(resumePair[1].id); // ... and comes back
+      final done =
+          runUntil(resumeSim, () => t.state == TransferState.complete, 600000);
+      resume = <String, Object?>{
+        'atDisconnect': atDisconnect,
+        'chunks': t.chunks,
+        'stallsWhileAway': stallsAway,
+        'stalls': t.stalls,
+        'retransmitted': t.retransmitted,
+        'complete': done,
+        'ms': t.completedAt == null ? null : _round(t.completedAt! - t.startedAt),
+      };
+    }
+  }
+
+  // The ceiling itself: skills/05 "Max 10 MB".
+  final ceilingSim = fresh();
+  final ceilingPair = pairAt(ceilingSim, 1);
+  final refused = ceilingPair == null
+      ? null
+      : ceilingSim.sendFile(ceilingPair[0].id, ceilingPair[1].id, 11 * 1048576);
 
   // --- push-to-talk: streamed against one blob ------------------------------
   final voice = <Map<String, Object?>>[];
@@ -793,10 +908,25 @@ Map<String, Object?> _mediaProbe(SimConfig config) {
       'streaming starts audio at ${firstStreamed.toInt()} ms against ${firstBlob.toInt()} ms for one blob',
   ].join('; ');
 
+  final acceptance = <String, Object?>{
+    'wifiPttRoundTripMs': wifiRoundTrip == null ? null : _round(wifiRoundTrip),
+    'wifiPttBufferExcludedMs':
+        wifiRoundTrip == null ? null : _round(wifiRoundTrip - config.jitterBufferMs),
+    'wifiPttUnder1s': wifiRoundTrip != null && wifiRoundTrip < 1000,
+    'bleNoteIntact': bleNoteOk && bleNote != null && bleNote.received == bleNote.chunks,
+    'bleNoteFrames': bleNote?.received ?? 0,
+    'bleNoteFrameCount': bleNote?.chunks ?? 0,
+    'resumeAfterDisconnect': resume?['complete'] ?? false,
+    'resume': resume,
+    'overCeilingRefused': refused == null,
+  };
+
   return <String, Object?>{
     'files': files,
     'bleOnly': bleOnly,
+    'bleLadder': bleLadder,
     'voice': voice,
+    'acceptance': acceptance,
     'pttMeetsBudget': pttOk,
     'imageMeetsBudget': filesOk,
     'verdict': verdict,
