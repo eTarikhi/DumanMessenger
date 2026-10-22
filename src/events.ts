@@ -23,6 +23,8 @@ export type EventKind =
   | "transferchunk"
   /** Re-send whatever a stalled transfer is still missing (docs/05 §3.2 "resume"). */
   | "transferstall"
+  /** Offer this node's group-history digests to its peers (anti-entropy). */
+  | "historybeacon"
   | "traffic";
 
 export interface SimEvent<T = unknown> {

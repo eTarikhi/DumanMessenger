@@ -3,13 +3,17 @@ import {
   MeshSimulation,
   DEFAULT_CONFIG,
   deliveredChain,
+  encodeHistoryBeacon,
+  fnv1a32,
+  historyBucket,
+  historyDigest,
   type SimConfig,
 } from "../simulation";
 import { campusQuad, festivalCrowd, partitionedPair, sparseVillage } from "../scenarios";
 import { canReach, peersInRange } from "../rf";
-import { createMessage, deliverToInbox } from "../routing";
+import { createMessage, deliverToInbox, selectTransport, wireSizeOf } from "../routing";
 import { makeNode } from "./helpers";
-import type { MeshMessage, MeshNode } from "../types";
+import { HISTORY_BUCKETS, type HistoryEntry, type MeshMessage, type MeshNode } from "../types";
 
 /**
  * Every test in the first block pins a defect that existed in the original
@@ -1602,5 +1606,224 @@ describe("media against skills/05 (Voice PTT & Media)", () => {
     sim.runFor(60000);
     expect(t.state).toBe("active");
     expect(t.received / t.chunks).toBeLessThan(0.1);
+  });
+});
+
+describe("group history anti-entropy (roadmap Phase 1: hash beacon)", () => {
+  /**
+   * A line of members 20 m apart, all in one group, so every member can hear every
+   * neighbour and a beacon reaches the peer it is addressed to in one hop.
+   */
+  function lineGroup(n = 3, over: Partial<SimConfig> = {}) {
+    const sim = new MeshSimulation({
+      ...DEFAULT_CONFIG,
+      nodeCount: n,
+      stationaryRatio: 1,
+      chargingRatio: 0,
+      trafficIntervalMs: 0,
+      enableSuperElection: false,
+      warmupMs: 0,
+      obstacles: [],
+      captureLog: true,
+      ...over,
+    });
+    sim.nodes.forEach((node, i) => {
+      node.pos = { x: 10 + i * 20, y: 10 };
+      node.home = { x: 10 + i * 20, y: 10 };
+      node.target = { x: 10 + i * 20, y: 10 };
+      node.stationary = true;
+      node.mobility = 0;
+      node.isOnline = true;
+      node.battery = 1;
+    });
+    sim.runFor(20000);
+    sim.clearRecords();
+    const ids = sim.nodes.map((node) => node.id);
+    const group = sim.createGroup("field team", ids, ids[0])!;
+    sim.runFor(2000);
+    sim.clearRecords();
+    return { sim, group, ids };
+  }
+
+  function runUntil(sim: MeshSimulation, done: () => boolean, budgetMs: number): boolean {
+    let elapsed = 0;
+    while (!done() && elapsed < budgetMs) {
+      sim.runFor(250);
+      elapsed += 250;
+    }
+    return done();
+  }
+
+  const entry = (msgId: string): HistoryEntry => ({
+    msgId,
+    groupId: "grp-1",
+    from: "node-0",
+    at: 0,
+    body: msgId,
+    epoch: 0,
+  });
+
+  it("repairs a flood a member missed while it was offline", () => {
+    const { sim, group, ids } = lineGroup();
+    sim.toggleNodeOnline(ids[2]);
+    sim.sendMessage(ids[0], group.id, "meet at the north gate");
+    sim.runFor(4000);
+    expect(sim.groupHistoryOf(ids[1], group.id).map((e) => e.body)).toContain(
+      "meet at the north gate"
+    );
+    expect(sim.groupHistoryOf(ids[2], group.id)).toHaveLength(0); // it was away
+    expect(sim.historyConverged(group)).toBe(false);
+
+    sim.toggleNodeOnline(ids[2]);
+    sim.runFor(30000); // three beacon intervals
+
+    const recovered = sim.groupHistoryOf(ids[2], group.id);
+    expect(recovered.map((e) => e.body)).toContain("meet at the north gate");
+    expect(recovered[0].synced).toBe(true);
+    expect(recovered[0].from).toBe(ids[0]);
+    expect(sim.refresh().historyEntriesSynced).toBe(1);
+    expect(sim.historyConverged(group)).toBe(true);
+    // The exchange is visible in the capture log as control traffic, not as chat.
+    expect(sim.log.some((l) => l.kind === "sync" && l.detail.includes("recovered 1 message"))).toBe(
+      true
+    );
+  });
+
+  it("digests a set, not a sequence: the union properties the merge relies on", () => {
+    // Cross-language fixed points — the Dart engine asserts the same numbers.
+    expect(fnv1a32("m1")).toBe(2486071275);
+    expect(fnv1a32("m2")).toBe(2502848894);
+    expect(fnv1a32("msg-0001")).toBe(3384865146);
+    expect(historyBucket("m1")).toBe(11);
+    expect(historyBucket("m2")).toBe(14);
+    expect(historyBucket("msg-0001")).toBe(10);
+
+    const three = [entry("m1"), entry("m2"), entry("msg-0001")];
+    const digest = historyDigest(three);
+    expect(digest.count).toBe(3);
+    expect(digest.buckets).toHaveLength(HISTORY_BUCKETS);
+    // Commutative: XOR over a set does not depend on arrival order.
+    expect(historyDigest([...three].reverse()).buckets).toEqual(digest.buckets);
+    // Associative: merging in two steps gives the same buckets as one.
+    const staged = historyDigest([entry("m1")]);
+    const rest = historyDigest([entry("m2"), entry("msg-0001")]);
+    expect(staged.buckets.map((b, i) => (b ^ rest.buckets[i]) >>> 0)).toEqual(digest.buckets);
+    // XOR folds a *set*: the same id twice cancels itself out. That is not a defect
+    // to fix but the reason the store is keyed by message id and the merge is a union
+    // — `putHistory` reports false the second time, so a digest can never be fed a
+    // multiset. Idempotence is asserted at the store level in the repair test above.
+    const twice = historyDigest([...three, entry("m1")]);
+    expect(twice.buckets[historyBucket("m1")]).toBe(0); // cancelled
+    expect(twice.count).toBe(4); // the count is not a set, so it still disagrees
+  });
+
+  it("keeps a beacon inside one BLE packet whatever the history holds", () => {
+    const empty = encodeHistoryBeacon("grp-1", 0, historyDigest([]));
+    const full = encodeHistoryBeacon(
+      "grp-1",
+      0,
+      historyDigest(Array.from({ length: 400 }, (_, i) => entry(`msg-${i}`)))
+    );
+    expect(empty.length).toBe(156);
+    // The only thing that grows with the history is the decimal entry count: 16
+    // bucket digests, not 400 ids.
+    expect(full.length).toBe(158);
+    expect(wireSizeOf(empty.length)).toBe(256);
+    expect(wireSizeOf(full.length)).toBe(256);
+    expect(selectTransport(wireSizeOf(full.length))).toBe("ble");
+  });
+
+  it("repairs a long absence in bounded rounds rather than one huge reply", () => {
+    const { sim, group, ids } = lineGroup(3, { historyReplyMax: 8 });
+    sim.toggleNodeOnline(ids[2]);
+    for (let i = 0; i < 20; i++) {
+      sim.sendMessage(ids[0], group.id, `status ${i}`);
+      sim.runFor(200);
+    }
+    sim.runFor(2000);
+
+    sim.toggleNodeOnline(ids[2]);
+    sim.runFor(12000); // one round
+    const afterOne = sim.groupHistoryOf(ids[2], group.id).length;
+    expect(afterOne).toBeGreaterThan(0);
+    expect(afterOne).toBeLessThan(20); // the reply is capped at 8 entries
+
+    // Rounds are 10 s apart, a round can be lost to link loss, and a copy one member
+    // lost has to reach it from another member first — repair is transitive, so it is
+    // given time rather than a fixed number of rounds. The sender always holds its own
+    // entries, so a converged group necessarily holds all 20.
+    expect(runUntil(sim, () => sim.historyConverged(group), 200000)).toBe(true);
+    expect(sim.groupHistoryOf(ids[2], group.id)).toHaveLength(20);
+    expect(sim.groupHistoryOf(ids[1], group.id)).toHaveLength(20);
+    expect(sim.refresh().historyReplies).toBeGreaterThanOrEqual(3);
+    expect(
+      sim.log.some((l) => l.kind === "sync" && l.detail.includes("missing entries"))
+    ).toBe(true);
+  });
+
+  it("cannot repair history a key rotation made unreadable", () => {
+    const { sim, group, ids } = lineGroup();
+    sim.toggleNodeOnline(ids[2]);
+    sim.sendMessage(ids[0], group.id, "before the rotation");
+    sim.runFor(3000);
+    expect(sim.groupHistoryOf(ids[1], group.id)).toHaveLength(1);
+
+    // docs/06 §14: a rotation makes every older copy unreadable network-wide, so
+    // there is nothing worth repairing — and the engine does not offer it.
+    expect(sim.rotateGroupKey(group.id, group.adminId)).toBe(true);
+    expect(sim.syncableHistory(sim.nodes[1], group).size).toBe(0);
+
+    sim.sendMessage(ids[0], group.id, "after the rotation");
+    sim.runFor(3000);
+    sim.toggleNodeOnline(ids[2]);
+    sim.runFor(40000);
+
+    const recovered = sim.groupHistoryOf(ids[2], group.id).map((e) => e.body);
+    expect(recovered).toContain("after the rotation");
+    expect(recovered).not.toContain("before the rotation");
+    // Nothing stale was even put on air, so nothing had to be dropped on arrival.
+    expect(sim.refresh().historyEpochDropped).toBe(0);
+    expect(sim.historyConverged(group)).toBe(true);
+  });
+
+  it("costs control traffic only: no ACKs, no deliveries, no unicast count", () => {
+    const { sim } = lineGroup(4);
+    sim.runFor(60000); // six beacon intervals, and not one group message
+    const stats = sim.refresh();
+    expect(stats.sentUnicast).toBe(0);
+    expect(stats.sentGroup).toBe(0);
+    expect(stats.sentSync).toBeGreaterThan(0);
+    expect(stats.historyBeacons).toBeGreaterThan(0);
+    expect(stats.acksReceived).toBe(0); // periodic, so a lost beacon is not retried
+    expect(stats.deliveryRatio).toBe(0);
+    expect(sim.deliveries.filter((d) => d.type !== "sync")).toHaveLength(0);
+    // Beacons go to co-members the node can hear, not across the mesh.
+    expect(stats.historyBytes).toBeGreaterThan(0);
+    expect(
+      sim.sentRecords.filter((r) => r.type === "sync").every((r) => r.body.startsWith("HB|"))
+    ).toBe(true);
+  });
+
+  it("stops beaconing when a node leaves its last group, and can be switched off", () => {
+    const { sim, group, ids } = lineGroup(4);
+    sim.runFor(12000);
+    const before = sim.refresh().historyBeacons;
+    expect(before).toBeGreaterThan(0);
+    expect(sim.removeFromGroup(group.id, ids[3])).toBe(true); // 4 -> 3 members
+    sim.runFor(40000);
+    const after = sim.refresh().historyBeacons;
+    // The departed node contributes no more beacons; the three remaining members do.
+    expect(
+      sim.sentRecords.filter((r) => r.type === "sync" && r.from === ids[3] && r.timestamp > sim.now - 40000)
+    ).toHaveLength(0);
+    expect(after).toBeGreaterThan(before);
+
+    const off = lineGroup(3, { historyBeaconMs: 0 });
+    off.sim.sendMessage(off.ids[0], off.group.id, "no repair here");
+    off.sim.toggleNodeOnline(off.ids[2]);
+    off.sim.runFor(60000);
+    expect(off.sim.refresh().historyBeacons).toBe(0);
+    expect(off.sim.groupHistoryOf(off.ids[2], off.group.id)).toHaveLength(0);
+    expect(off.sim.historyConverged(off.group)).toBe(false);
   });
 });

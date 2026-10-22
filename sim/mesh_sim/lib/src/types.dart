@@ -25,6 +25,12 @@ enum MsgType {
   /// sliding-window ACK).
   file,
   sos,
+
+  /// Anti-entropy traffic for group history: a digest beacon, a request for the
+  /// buckets that differ, or the entries that fill them (roadmap Phase 1: "CRDT for
+  /// group/broadcast history (hash beacon anti-entropy)"). Control plane, so it is
+  /// neither acknowledged nor counted as 1:1 traffic.
+  sync,
   ack,
   ogm
 }
@@ -363,6 +369,9 @@ enum MeshLogKind {
   /// A large transfer: one chunk on air, a stalled window, or the whole file
   /// complete.
   transfer,
+
+  /// One round of group-history anti-entropy: a beacon, a request, or a reply.
+  sync,
   ogm
 }
 
@@ -454,6 +463,77 @@ class NextHopEntry {
 
   /// Neighbour whose receipt window backs this entry's tq.
   NodeId windowNeighbor;
+}
+
+/// Buckets a group history digest is split into. Sixteen is the usual compromise
+/// between beacon size and how much a reply over-sends: one differing bucket costs
+/// 1/16 of the history in ids, and the beacon itself stays inside one BLE packet.
+const int historyBuckets = 16;
+
+/// Cap on the ids a request lists. Well above a bucket's share of any realistic group
+/// history (400 entries over 16 buckets is 25), so it bounds the packet without ever
+/// bounding the repair.
+const int historyRequestMaxIds = 64;
+
+/// One group message a node holds, kept so a peer can repair it later.
+///
+/// The set of these per group is a grow-only set — a G-Set CRDT — so merging two
+/// nodes' histories is a union: idempotent, commutative and associative, which is what
+/// lets anti-entropy run in any order, lose beacons, and still converge.
+class HistoryEntry {
+  HistoryEntry({
+    required this.msgId,
+    required this.groupId,
+    required this.from,
+    required this.at,
+    required this.body,
+    required this.epoch,
+    this.synced = false,
+  });
+
+  factory HistoryEntry.fromJson(Map<String, dynamic> json) => HistoryEntry(
+        msgId: json['msgId'] as String,
+        groupId: json['groupId'] as String,
+        from: json['from'] as String,
+        at: (json['at'] as num).toDouble(),
+        body: json['body'] as String,
+        epoch: json['epoch'] as int,
+        synced: (json['synced'] as bool?) ?? false,
+      );
+
+  final String msgId;
+  final String groupId;
+  final NodeId from;
+  final double at;
+  final String body;
+
+  /// The group's key epoch when this was sent. A rotation makes everything under an
+  /// older epoch unreadable (docs/06 §14), so entries are only repairable inside the
+  /// epoch they were written in.
+  final int epoch;
+
+  /// True once this copy arrived by anti-entropy rather than by the original flood.
+  final bool synced;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'msgId': msgId,
+        'groupId': groupId,
+        'from': from,
+        'at': at,
+        'body': body,
+        'epoch': epoch,
+        'synced': synced,
+      };
+
+  HistoryEntry withSynced() => HistoryEntry(
+        msgId: msgId,
+        groupId: groupId,
+        from: from,
+        at: at,
+        body: body,
+        epoch: epoch,
+        synced: true,
+      );
 }
 
 class QueuedMessage {
@@ -568,6 +648,11 @@ class MeshNode {
   /// This node's own 1-hop neighbours, sorted; advertised in its OGM.
   List<NodeId> peerIds = <NodeId>[];
   final List<QueuedMessage> oppQueue = <QueuedMessage>[];
+
+  /// Group history this node holds, per group id then per message id. Union-merged by
+  /// anti-entropy; see [HistoryEntry].
+  final Map<String, Map<String, HistoryEntry>> history =
+      <String, Map<String, HistoryEntry>>{};
   final List<MeshMessage> inbox = <MeshMessage>[];
   final List<MeshMessage> sentLog = <MeshMessage>[];
   final double txPower;

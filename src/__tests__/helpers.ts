@@ -37,6 +37,7 @@ export function makeNode(id: string, x: number, y: number, over: Partial<MeshNod
     dutyPhaseMs: 0,
     batteryAtMeasure: 0.8,
     oppQueue: [],
+    history: new Map(),
     inbox: [],
     sentLog: [],
     txPower: DEFAULT_TX_POWER_DBM,

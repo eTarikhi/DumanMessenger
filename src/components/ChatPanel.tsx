@@ -111,8 +111,9 @@ export function ChatPanel({ nodes, selectedNodeId, onSendMessage, sentRecords, d
   const cards: { entry: SentRecord; floods: SentRecord[] }[] = [];
   const bySos = new Map<string, { entry: SentRecord; floods: SentRecord[] }>();
   // A chunk is not a message: 160 of them are one file, and the transfer rows below
-  // already show its progress. Rendering them as bubbles would bury the chat.
-  const chatRecords = sentRecords.filter((r) => !r.transferId);
+  // already show its progress. Rendering them as bubbles would bury the chat. Nor is a
+  // history digest, which is control traffic between members (docs/06 §17).
+  const chatRecords = sentRecords.filter((r) => !r.transferId && r.type !== "sync");
   for (const entry of chatRecords) {
     // In `per-member-unicast` mode one user action is N radio messages, all created
     // at the same instant for the same group: one card, like the SOS collapse.

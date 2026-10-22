@@ -1,10 +1,12 @@
 import {
+  HISTORY_BUCKETS,
   GROUP_ADDRESS,
   GROUP_MIN_MEMBERS,
   GROUP_MAX_MEMBERS,
 } from "./types";
 import type {
   Group,
+  HistoryEntry,
   TransportType,
   HopAction,
   HopRecord,
@@ -159,6 +161,14 @@ export interface SimConfig {
    *  on this mesh it would occupy the radio for minutes (docs/08 §8). */
   maxTransferBytes: number;
 
+  /** How often a group member offers its history digests to the co-members it can
+   *  hear (roadmap Phase 1: "hash beacon anti-entropy"). 0 turns repair off, which
+   *  leaves a member that missed a flood missing it forever. */
+  historyBeaconMs: number;
+  /** Entries in one anti-entropy reply. Bounded so that repairing a long absence
+   *  cannot turn into one huge transmission; the next beacon picks up the rest. */
+  historyReplyMax: number;
+
   enableSuperElection: boolean;
   enableMobility: boolean;
   enableDtn: boolean;
@@ -196,6 +206,74 @@ export interface SimConfig {
   warmupMs: number;
   /** Inject random traffic every N ms (0 = off). */
   trafficIntervalMs: number;
+}
+
+
+// --- group history anti-entropy (roadmap Phase 1: "CRDT for group/broadcast
+// --- history (hash beacon anti-entropy)") -----------------------------------
+
+/**
+ * FNV-1a, 32-bit, over the characters of a message id.
+ *
+ * Not a cryptographic hash, deliberately: a digest here only has to tell two sets
+ * apart, and the ids it covers are already visible to every relay on the path. Four
+ * lines that behave identically in TypeScript and Dart, which is what the
+ * cross-language golden vectors need.
+ */
+export function fnv1a32(text: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h >>> 0;
+}
+
+/** Which of the [HISTORY_BUCKETS] a message id falls in. */
+export function historyBucket(msgId: string): number {
+  return fnv1a32(msgId) % HISTORY_BUCKETS;
+}
+
+/** Cap on the ids a request lists. Well above a bucket's share of any realistic
+ *  group history (400 entries over 16 buckets is 25), so it bounds the packet without
+ *  ever bounding the repair. */
+export const HISTORY_REQUEST_MAX_IDS = 64;
+
+/**
+ * The digest a node advertises for one group: one XOR-folded hash per bucket, plus a
+ * count.
+ *
+ * XOR over a *set* is order-independent, so two nodes holding the same entries
+ * produce the same digest whatever order they arrived in. That is what makes the merge
+ * a union rather than a negotiation, and what lets a beacon be lost, duplicated or
+ * reordered without the protocol caring (the G-Set property `HistoryEntry` documents).
+ *
+ * Splitting into buckets is what keeps a repair proportional to the *difference*:
+ * a node that missed two messages out of two hundred asks for one bucket, not for the
+ * whole history.
+ */
+export function historyDigest(
+  entries: Iterable<HistoryEntry>
+): { count: number; buckets: number[] } {
+  const buckets = new Array<number>(HISTORY_BUCKETS).fill(0);
+  let count = 0;
+  for (const e of entries) {
+    const b = historyBucket(e.msgId);
+    buckets[b] = (buckets[b] ^ fnv1a32(e.msgId)) >>> 0;
+    count++;
+  }
+  return { count, buckets };
+}
+
+/** `HB|group|epoch|count|hexdigests` — what a beacon carries. */
+export function encodeHistoryBeacon(
+  groupId: string,
+  epoch: number,
+  digest: { count: number; buckets: number[] }
+): string {
+  return `HB|${groupId}|${epoch}|${digest.count}|${digest.buckets
+    .map((b) => b.toString(16).padStart(8, "0"))
+    .join(",")}`;
 }
 
 export const DEFAULT_CONFIG: SimConfig = {
@@ -243,6 +321,8 @@ export const DEFAULT_CONFIG: SimConfig = {
   jitterBufferMs: 200,
   voiceTtl: 3,
   maxTransferBytes: 10 * 1048576,
+  historyBeaconMs: 10000,
+  historyReplyMax: 32,
 
   enableSuperElection: true,
   enableMobility: true,
@@ -326,7 +406,18 @@ export interface SimulationStats {
   transfersCompleted: number;
   /** Windows that stopped moving and had to be kicked (docs/08 §6). */
   transferStalls: number;
+  /** Anti-entropy: digest beacons sent, bucket requests sent, replies sent, entries
+   *  recovered that way, entries dropped because a key rotation made them unreadable,
+   *  and the payload bytes the whole exchange occupied (docs/06 §17). */
+  historyBeacons: number;
+  historyRequests: number;
+  historyReplies: number;
+  historyEntriesSynced: number;
+  historyEpochDropped: number;
+  historyBytes: number;
   sentChunks: number;
+  /** Anti-entropy packets put on air: beacons, bucket requests and replies. */
+  sentSync: number;
   bytesDelivered: number;
 
   /** skills/07 telemetry: "Battery %/h per role, scans/sec, relays/sec".
@@ -587,6 +678,7 @@ export function createNode(
         : 0,
     batteryAtMeasure: battery,
     oppQueue: [],
+    history: new Map(),
     inbox: [],
     sentLog: [],
     txPower: config.txPowerDbm,
@@ -729,7 +821,17 @@ export class MeshSimulation {
   private transfersStarted = 0;
   private transfersCompleted = 0;
   private transferStalls = 0;
+  private historyBeacons = 0;
+  private historyRequests = 0;
+  private historyReplies = 0;
+  private historyEntriesSynced = 0;
+  private historyEpochDropped = 0;
+  private historyBytes = 0;
+  /** Nodes with a beacon chain running, so joining a second group does not start a
+   *  second one (the beacon covers every group the node is in). */
+  private historyBeaconArmed = new Set<NodeId>();
   private sentChunks = 0;
+  private sentSync = 0;
   private bytesDelivered = 0;
   private transferSeq = 0;
   /** Live and finished large transfers, keyed by transfer id. */
@@ -809,7 +911,14 @@ export class MeshSimulation {
     this.transfersStarted = 0;
     this.transfersCompleted = 0;
     this.transferStalls = 0;
+    this.historyBeacons = 0;
+    this.historyRequests = 0;
+    this.historyReplies = 0;
+    this.historyEntriesSynced = 0;
+    this.historyEpochDropped = 0;
+    this.historyBytes = 0;
     this.sentChunks = 0;
+    this.sentSync = 0;
     this.bytesDelivered = 0;
     this.superSamples = 0;
     this.superSampleSum = 0;
@@ -873,6 +982,7 @@ export class MeshSimulation {
     // Groups belong to the world, not to the metrics window: rebuilding the mesh
     // invalidates every membership, so the registry goes with it.
     this.groups.clear();
+    this.historyBeaconArmed.clear();
     this.groupSeq = 0;
     const merged: SimConfig = { ...this.config, ...config };
     this.config = merged;
@@ -930,6 +1040,9 @@ export class MeshSimulation {
       }
       case "transferstall":
         this.onTransferStall(nodeId, (payload as ChunkPayload).transferId);
+        break;
+      case "historybeacon":
+        this.onHistoryBeacon(nodeId);
         break;
       case "traffic":
         this.onTraffic();
@@ -1512,7 +1625,11 @@ export class MeshSimulation {
       // Group traffic gets its own counters: folding it into `sentUnicast` would
       // let a 10-member group flatter `deliveryRatio`, and folding it into
       // `sentBroadcast` would deflate `broadcastReach`.
-      if (chunk) this.sentChunks++;
+      // Anti-entropy is counted apart too: a digest beacon is not a message anybody
+      // sent to anybody, and folding it into `sentUnicast` would make deliveryRatio a
+      // statement about how often a group repaired itself.
+      if (msgType === "sync") this.sentSync++;
+      else if (chunk) this.sentChunks++;
       else if (groupCtx) this.sentGroup++;
       else if (toId === "BROADCAST") this.sentBroadcast++;
       else this.sentUnicast++;
@@ -1544,15 +1661,21 @@ export class MeshSimulation {
     // A scoped group flood is addressed to nobody, so no ACK can ever come back:
     // arming the retry timer here would burn two retransmissions and then push the
     // message into the OppQueue on every single group send.
+    // Anti-entropy is not acknowledged either: it is periodic by construction, so a
+    // lost beacon costs one interval of convergence rather than a retransmission, and
+    // ACKing every digest would cost more than the repair it reports on.
     if (
       toId !== "BROADCAST" &&
       toId !== GROUP_ADDRESS &&
       msgType !== "ack" &&
+      msgType !== "sync" &&
       this.config.maxRetries > 0
     ) {
       this.pendingAcks.set(msg.id, { msg, from: fromId, attempts: 0, sentAt: this.now });
       this.queue.push(this.now + this.ackTimeoutFor(msg), "acktimeout", fromId, msg.id);
     }
+
+    if (groupCtx) this.recordHistory(from, groupCtx.id, msg, groupCtx.epoch);
 
     const decision = decideForward(
       from,
@@ -1963,6 +2086,12 @@ export class MeshSimulation {
       // Set before recordDelivery copies the trace, so the delivered record
       // carries the final action rather than the provisional one.
       if (hopRecord) hopRecord.action = "delivered";
+      if (msg.type === "sync") {
+        // Control plane: it reached this node, which the hop trace should say, but it
+        // is not a message for the user and not a delivery to count.
+        this.onSyncMessage(node, msg);
+        return;
+      }
       const fresh = deliverToInbox(node, msg);
       if (fresh) {
         this.recordDelivery(node, msg, trace);
@@ -1985,6 +2114,7 @@ export class MeshSimulation {
         const fresh = deliverToInbox(node, msg);
         if (fresh) {
           this.recordDelivery(node, msg, trace);
+          this.recordHistory(node, group.id, msg, msg.groupEpoch ?? group.keyEpoch);
           this.pushLog(
             "deliver",
             node.id,
@@ -2152,6 +2282,7 @@ export class MeshSimulation {
       createdAt: this.now,
     };
     this.groups.set(group.id, group);
+    for (const id of unique) this.armHistoryBeacon(id);
     this.pushLog("group", group.adminId, `group "${group.name}" created with ${unique.length} members (epoch 0)`);
     return group;
   }
@@ -2167,6 +2298,7 @@ export class MeshSimulation {
     if (group.members.size >= GROUP_MAX_MEMBERS) return false;
     group.members.add(nodeId);
     group.keyEpoch++;
+    this.armHistoryBeacon(nodeId);
     this.pushLog(
       "group",
       nodeId,
@@ -2208,6 +2340,232 @@ export class MeshSimulation {
   groupsOf(nodeId: NodeId): Group[] {
     return [...this.groups.values()].filter((g) => g.members.has(nodeId));
   }
+
+  // --- group history anti-entropy -------------------------------------------
+
+  /**
+   * Start a node's beacon chain. One chain covers every group the node is in, so
+   * joining a second group does not start a second one.
+   *
+   * Nothing is scheduled for a node with no groups, which is why this whole feature
+   * is inert on a run that never creates one — including the golden vectors.
+   */
+  private armHistoryBeacon(nodeId: NodeId): void {
+    if (this.config.historyBeaconMs <= 0) return;
+    if (this.historyBeaconArmed.has(nodeId)) return;
+    this.historyBeaconArmed.add(nodeId);
+    this.queue.push(this.now + this.config.historyBeaconMs, "historybeacon", nodeId);
+  }
+
+  /**
+   * The entries a node can actually share for one group: the ones written under the
+   * key epoch the group is on now.
+   *
+   * A rotation makes everything older unreadable to everybody (docs/06 §14), so
+   * repairing it would move bytes nobody can decrypt. That has a consequence worth
+   * stating plainly: in a group whose membership changes often, the repairable history
+   * is only ever as old as the last change.
+   */
+  syncableHistory(node: MeshNode, group: Group): Map<string, HistoryEntry> {
+    const all = node.history.get(group.id);
+    const out = new Map<string, HistoryEntry>();
+    if (!all) return out;
+    for (const [id, entry] of all) if (entry.epoch === group.keyEpoch) out.set(id, entry);
+    return out;
+  }
+
+  /** Add one entry to a node's history. A duplicate is a no-op: the merge is a union. */
+  private recordHistory(node: MeshNode, groupId: string, msg: MeshMessage, epoch: number): void {
+    this.putHistory(node, {
+      msgId: msg.id,
+      groupId,
+      from: msg.from,
+      at: msg.timestamp,
+      body: msg.body,
+      epoch,
+    });
+  }
+
+  /** The union step of the G-Set: returns true if the entry was new to this node. */
+  private putHistory(node: MeshNode, entry: HistoryEntry): boolean {
+    let map = node.history.get(entry.groupId);
+    if (!map) {
+      map = new Map<string, HistoryEntry>();
+      node.history.set(entry.groupId, map);
+    }
+    if (map.has(entry.msgId)) return false;
+    map.set(entry.msgId, entry);
+    return true;
+  }
+
+  /**
+   * Offer this node's digests to every co-member it can currently hear.
+   *
+   * Beacons go only to peers, not across the mesh: anti-entropy repairs the last hop
+   * of a loss (a node that was asleep, out of range, or switched off while a flood
+   * went by), and a peer that is out of range will be a peer again later. The chain
+   * stops by itself when a node leaves its last group.
+   */
+  private onHistoryBeacon(nodeId: NodeId): void {
+    const node = this.byId(nodeId);
+    this.historyBeaconArmed.delete(nodeId);
+    if (!node || !node.isOnline || this.config.historyBeaconMs <= 0) return;
+    const groups = this.groupsOf(nodeId);
+    if (groups.length === 0) return;
+    this.armHistoryBeacon(nodeId);
+
+    for (const group of groups) {
+      const mine = this.syncableHistory(node, group);
+      const digest = historyDigest(mine.values());
+      for (const peerId of node.peerIds) {
+        if (!group.members.has(peerId)) continue;
+        const body = encodeHistoryBeacon(group.id, group.keyEpoch, digest);
+        if (this.sendMessage(nodeId, peerId, body, "sync")) {
+          this.historyBeacons++;
+          this.historyBytes += body.length;
+        }
+      }
+    }
+  }
+
+  /**
+   * One anti-entropy packet arrived: a beacon, a request for the buckets that differ,
+   * or the entries that fill them.
+   *
+   * The three-step exchange is what keeps a repair proportional to the difference
+   * rather than to the history — a beacon is ~170 characters whatever the group has
+   * said, and a reply carries only the buckets the requester is missing.
+   */
+  private onSyncMessage(node: MeshNode, msg: MeshMessage): void {
+    const parts = msg.body.split("|");
+    // A message body may itself contain "|", so a reply's payload is everything after
+    // the third field rather than the fourth field alone.
+    const payload = parts.slice(3).join("|");
+    const group = this.groups.get(parts[1]);
+    if (!group || !group.members.has(node.id)) return;
+    const epoch = Number(parts[2]);
+    if (epoch !== group.keyEpoch) return; // stale round: the key has rotated since
+
+    if (parts[0] === "HB") {
+      if (parts.length < 5) return;
+      const mine = this.syncableHistory(node, group);
+      const digest = historyDigest(mine.values());
+      const theirs = parts[4].split(",").map((h) => parseInt(h, 16));
+      const differing: number[] = [];
+      for (let i = 0; i < HISTORY_BUCKETS; i++) {
+        if (theirs[i] !== digest.buckets[i]) differing.push(i);
+      }
+      if (differing.length === 0) return;
+      // The request carries the ids this node already holds in those buckets. Without
+      // them a *bounded* reply would offer the same head of the list every round and
+      // convergence would stall at `historyReplyMax` entries — which is exactly what
+      // the first version of this protocol did (docs/06 §17).
+      const wanted = new Set(differing);
+      const have = [...mine.values()]
+        .filter((e) => wanted.has(historyBucket(e.msgId)))
+        .map((e) => e.msgId)
+        .sort()
+        .slice(0, HISTORY_REQUEST_MAX_IDS);
+      const body = `RQ|${group.id}|${epoch}|${differing.join(",")}|${have.join(",")}`;
+      if (this.sendMessage(node.id, msg.from, body, "sync")) {
+        this.historyRequests++;
+        this.historyBytes += body.length;
+        this.pushLog(
+          "sync",
+          node.id,
+          `${group.name}: ${node.name} and ${this.byId(msg.from)?.name ?? msg.from} disagree on ` +
+            `bucket${differing.length === 1 ? "" : "s"} ${differing.join(",")} (${digest.count} vs ` +
+            `${Number(parts[3])} entries) — requesting`,
+          { peerId: msg.from, msgId: msg.id, msgType: "sync" }
+        );
+      }
+      return;
+    }
+
+    if (parts[0] === "RQ") {
+      const wanted = new Set(parts[3].split(",").map((b) => Number(b)));
+      const theyHave = new Set(parts.length > 4 && parts[4] ? parts[4].split(",") : []);
+      const mine = this.syncableHistory(node, group);
+      const out: HistoryEntry[] = [];
+      for (const entry of mine.values()) {
+        if (wanted.has(historyBucket(entry.msgId)) && !theyHave.has(entry.msgId)) out.push(entry);
+      }
+      out.sort((a, b) => (a.msgId < b.msgId ? -1 : a.msgId > b.msgId ? 1 : 0));
+      const slice = out.slice(0, this.config.historyReplyMax);
+      if (slice.length === 0) return;
+      const body = `RS|${group.id}|${epoch}|${JSON.stringify(slice)}`;
+      if (this.sendMessage(node.id, msg.from, body, "sync")) {
+        this.historyReplies++;
+        this.historyBytes += body.length;
+        this.pushLog(
+          "sync",
+          node.id,
+          `${group.name}: ${node.name} sent ${slice.length} of ${out.length} missing entries in ` +
+            `bucket${wanted.size === 1 ? "" : "s"} ${[...wanted].join(",")} to ` +
+            `${this.byId(msg.from)?.name ?? msg.from}`,
+          { peerId: msg.from, msgId: msg.id, msgType: "sync" }
+        );
+      }
+      return;
+    }
+
+    if (parts[0] === "RS") {
+      let entries: HistoryEntry[];
+      try {
+        entries = JSON.parse(payload) as HistoryEntry[];
+      } catch {
+        return;
+      }
+      let added = 0;
+      let dropped = 0;
+      for (const entry of entries) {
+        if (entry.epoch !== group.keyEpoch) {
+          // Unreadable under the current key. Counted rather than silently dropped,
+          // because it is the cost of rotating on every membership change.
+          dropped++;
+          continue;
+        }
+        if (this.putHistory(node, { ...entry, synced: true })) added++;
+      }
+      this.historyEntriesSynced += added;
+      this.historyEpochDropped += dropped;
+      if (added > 0) {
+        this.pushLog(
+          "sync",
+          node.id,
+          `${group.name}: ${node.name} recovered ${added} message${added === 1 ? "" : "s"} from ` +
+            `${this.byId(msg.from)?.name ?? msg.from}${dropped > 0 ? ` (${dropped} unreadable under epoch ${group.keyEpoch})` : ""}`,
+          { peerId: msg.from, msgId: msg.id, msgType: "sync" }
+        );
+      }
+    }
+  }
+
+  /**
+   * The repairable history one node holds for one group, oldest first. What a UI
+   * renders when it wants to show a member the messages it missed and recovered;
+   * entries carry `synced` so a recovered one can be marked as such.
+   */
+  groupHistoryOf(nodeId: NodeId, groupId: string): HistoryEntry[] {
+    const node = this.byId(nodeId);
+    const group = this.groups.get(groupId);
+    if (!node || !group) return [];
+    return [...this.syncableHistory(node, group).values()].sort((a, b) =>
+      a.at === b.at ? (a.msgId < b.msgId ? -1 : 1) : a.at - b.at
+    );
+  }
+
+  /** Whether every member of a group holds the same repairable history. */
+  historyConverged(group: Group): boolean {
+    const members = [...group.members].map((id) => this.byId(id)).filter((n) => n !== undefined);
+    if (members.length === 0) return true;
+    const reference = historyDigest(this.syncableHistory(members[0], group).values());
+    return members.every((m) => {
+      const d = historyDigest(this.syncableHistory(m, group).values());
+      return d.count === reference.count && d.buckets.every((b, i) => b === reference.buckets[i]);
+    });
+  }
+
 
   // --- manual controls (UI) ---------------------------------------------------
 
@@ -2274,8 +2632,15 @@ export class MeshSimulation {
     // folding it in here would let a 10-member group flatter `deliveryRatio`.
     // Media chunks are excluded as well: a 10 MB file is 160 of them, and letting
     // them into the ratio would make delivery about the file rather than the mesh.
+    // So is anti-entropy: a digest beacon is control traffic, not a message anybody
+    // sent to anybody.
     const unicastDeliveries = this.deliveries.filter(
-      (d) => d.type !== "ack" && d.type !== "broadcast" && !d.groupId && !d.transferId
+      (d) =>
+        d.type !== "ack" &&
+        d.type !== "broadcast" &&
+        d.type !== "sync" &&
+        !d.groupId &&
+        !d.transferId
     );
     const dataDeliveries = this.deliveries.filter((d) => d.type !== "ack");
     const latencies = unicastDeliveries.map((d) => d.latencyMs).sort((a, b) => a - b);
@@ -2384,7 +2749,14 @@ export class MeshSimulation {
       transfersStarted: this.transfersStarted,
       transfersCompleted: this.transfersCompleted,
       transferStalls: this.transferStalls,
+      historyBeacons: this.historyBeacons,
+      historyRequests: this.historyRequests,
+      historyReplies: this.historyReplies,
+      historyEntriesSynced: this.historyEntriesSynced,
+      historyEpochDropped: this.historyEpochDropped,
+      historyBytes: this.historyBytes,
       sentChunks: this.sentChunks,
+      sentSync: this.sentSync,
       bytesDelivered: this.bytesDelivered,
       batteryPercentPerHourNormal: drainPerHour("NORMAL"),
       batteryPercentPerHourSuper: drainPerHour("SUPER"),

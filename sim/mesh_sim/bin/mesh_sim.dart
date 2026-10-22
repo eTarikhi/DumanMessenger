@@ -68,6 +68,9 @@ Duman mesh simulator (headless)
   --group [N]         create an N-member group (default 5, spread across the
                       world) and report what a group message costs in both
                       delivery modes -- the docs/06 §14 measurement
+  --history           form a group, take one member out of range while it talks, and
+                      report whether hash-beacon anti-entropy repairs what it missed
+                      (roadmap Phase 1, docs/06 §17)
   --media             run the media transport in a separate world and report what
                       a 10 MB image costs at 1/2/3 hops, what a BLE-only mesh can
                       still carry, and whether a push-to-talk note plays inside the
@@ -101,6 +104,7 @@ void main(List<String> args) {
   final showTrace = args.contains('--trace');
   final sosProbe = args.contains('--sos');
   final mediaProbe = args.contains('--media');
+  final historyProbe = args.contains('--history');
   final groupProbe = args.contains('--group');
   final groupSize = int.parse(_arg(args, '--group', '5'));
   final capture = args.contains('--capture');
@@ -169,6 +173,9 @@ void main(List<String> args) {
   // Separate again: one 10 MB file is 160 chunks and thousands of relays, and
   // folding that into this run would report a file transfer's cost as routing's.
   final media = mediaProbe ? _mediaProbe(config) : null;
+  // And again separate: repairing a group's history is background traffic that has
+  // nothing to do with the delivery ratio this run is asserting.
+  final history = historyProbe ? _historyProbe(config) : null;
 
   final s = sim.stats;
   final unicast = sim.deliveries
@@ -252,6 +259,7 @@ void main(List<String> args) {
     if (sos != null) 'sos': sos,
     if (group != null) 'group': group,
     if (media != null) 'media': media,
+    if (history != null) 'history': history,
     'latencyByHop': s.latencyByHop.map((b) => <String, Object?>{
           'hops': b.hops,
           'count': b.count,
@@ -286,6 +294,24 @@ void main(List<String> args) {
       }
       stdout.writeln('  ${(group['verdict'] as String)}');
     }
+    if (history != null) {
+      stdout.writeln('\nHistory probe (${history['members']} members, '
+          '${history['messages']} messages, one member out of range for all of them)');
+      stdout.writeln('  ${'member held'.padRight(22)}${history['heldBefore']} entries '
+          '(missed ${history['missed']})');
+      stdout.writeln('  ${'without repair'.padRight(22)}${history['offRecovered']} recovered, '
+          'converged=${history['offConverged']} — a missed flood is missed for good');
+      stdout.writeln('  ${'with repair'.padRight(22)}${history['recovered']} recovered in '
+          '${history['convergedSeconds']} s (${history['rounds']} beacon rounds)');
+      stdout.writeln('  ${'radio cost'.padRight(22)}${history['beacons']} beacons, '
+          '${history['requests']} requests, ${history['replies']} replies = '
+          '${history['syncPackets']} packets, ${history['bytes']} payload bytes');
+      stdout.writeln('  ${'one beacon is'.padRight(22)}${history['beaconChars']} characters '
+          '-> ${history['beaconWire']} B on the wire (${history['beaconTransport']}), '
+          'constant in the size of the history');
+      stdout.writeln('  ${history['verdict']}');
+    }
+
     if (media != null) {
       stdout.writeln('\nMedia probe (10 MB image, 64 KB chunks behind a '
           '${config.transferWindow}-deep window; 3 s Opus note in '
@@ -938,6 +964,119 @@ Map<String, Object?> _mediaProbe(SimConfig config) {
     'acceptance': acceptance,
     'pttMeetsBudget': pttOk,
     'imageMeetsBudget': filesOk,
+    'verdict': verdict,
+  };
+}
+
+/// Form a group, take one member out of range while it talks, and report whether
+/// hash-beacon anti-entropy repairs what it missed (roadmap Phase 1, docs/06 §17).
+///
+/// Runs the same world twice — once with repair switched off — because "the member
+/// eventually caught up" is only meaningful against "without beacons it never does".
+Map<String, Object?> _historyProbe(SimConfig config) {
+  const messages = 20;
+  const size = 5;
+
+  ({
+    int held,
+    int missed,
+    int recovered,
+    bool converged,
+    double seconds,
+    int rounds,
+    int beacons,
+    int requests,
+    int replies,
+    int packets,
+    int bytes,
+  }) run({required bool repair}) {
+    final sim = MeshSimulation(config.copyWith(
+        trafficIntervalMs: 0,
+        captureLog: true,
+        historyBeaconMs: repair ? config.historyBeaconMs : 0));
+    sim.runFor(90000);
+    sim.clearRecords();
+
+    final online = sim.nodes.where((n) => n.isOnline).toList();
+    final cx = online.fold<double>(0, (a, n) => a + n.pos.x) / online.length;
+    final cy = online.fold<double>(0, (a, n) => a + n.pos.y) / online.length;
+    double d2(MeshNode n) =>
+        (n.pos.x - cx) * (n.pos.x - cx) + (n.pos.y - cy) * (n.pos.y - cy);
+    final ranked = online.toList()..sort((a, b) => d2(b).compareTo(d2(a)));
+    final step = ranked.length ~/ math.max(1, size);
+    final ids = <NodeId>{};
+    for (var i = 0; i < ranked.length && ids.length < size; i++) {
+      ids.add(ranked[(i * step) % ranked.length].id);
+    }
+    final group = sim.createGroup('field team', ids.toList(), ids.first)!;
+    final away = ids.last;
+
+    sim.toggleNodeOnline(away); // out of range for the whole conversation
+    for (var i = 0; i < messages; i++) {
+      sim.sendMessage(ids.first, group.id, 'status $i');
+      sim.runFor(1500);
+    }
+    sim.runFor(2000);
+    final heldBefore = sim.groupHistoryOf(ids.first, group.id).length;
+
+    sim.toggleNodeOnline(away);
+    final from = sim.now;
+    var converged = false;
+    var elapsed = 0.0;
+    while (elapsed < 300000) {
+      sim.runFor(250);
+      elapsed += 250;
+      if (sim.historyConverged(group)) {
+        converged = true;
+        break;
+      }
+    }
+    final stats = sim.refresh();
+    final recovered = sim.groupHistoryOf(away, group.id).length;
+    return (
+      held: heldBefore,
+      missed: heldBefore,
+      recovered: recovered,
+      converged: converged,
+      seconds: converged ? (sim.now - from) / 1000 : -1,
+      rounds: stats.historyReplies,
+      beacons: stats.historyBeacons,
+      requests: stats.historyRequests,
+      replies: stats.historyReplies,
+      packets: stats.sentSync,
+      bytes: stats.historyBytes,
+    );
+  }
+
+  final off = run(repair: false);
+  final on = run(repair: true);
+
+  final beacon = encodeHistoryBeacon(
+      'grp-1', 0, historyDigest(<HistoryEntry>[]));
+  final verdict = on.converged
+      ? 'anti-entropy recovered all ${on.recovered} messages the absent member missed, '
+          'in ${on.rounds} bounded rounds; without it the member holds ${off.recovered}'
+      : 'anti-entropy did NOT converge inside 5 minutes (${on.recovered}/${on.missed} recovered)';
+
+  return <String, Object?>{
+    'members': size,
+    'messages': messages,
+    'heldBefore': on.held,
+    'missed': on.missed,
+    'offRecovered': off.recovered,
+    'offConverged': off.converged,
+    'recovered': on.recovered,
+    'converged': on.converged,
+    'convergedSeconds': on.seconds < 0 ? null : _round(on.seconds),
+    'rounds': on.rounds,
+    'beacons': on.beacons,
+    'requests': on.requests,
+    'replies': on.replies,
+    'syncPackets': on.packets,
+    'bytes': on.bytes,
+    'beaconChars': beacon.length,
+    'beaconWire': wireSizeOf(beacon.length),
+    'beaconTransport': selectTransport(wireSizeOf(beacon.length)).name,
     'verdict': verdict,
   };
 }

@@ -6,6 +6,7 @@
 /// a CI run reproduce a field test exactly.
 library;
 
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'election.dart';
@@ -80,6 +81,8 @@ class SimConfig {
     this.jitterBufferMs = 200,
     this.voiceTtl = 3,
     this.maxTransferBytes = 10 * 1048576,
+    this.historyBeaconMs = 10000,
+    this.historyReplyMax = 32,
     this.maxRetries = 2,
     this.txPowerDbm = defaultTxPowerDbm,
     this.rxSensitivityDbm = defaultRxSensitivityDbm,
@@ -220,6 +223,15 @@ class SimConfig {
   /// skills/05: "Max 10 MB". A larger send is refused rather than attempted, because
   /// on this mesh it would occupy the radio for minutes (docs/08 §8).
   final int maxTransferBytes;
+
+  /// How often a group member offers its history digests to the co-members it can hear
+  /// (roadmap Phase 1: "hash beacon anti-entropy"). 0 turns repair off, which leaves a
+  /// member that missed a flood missing it forever.
+  final double historyBeaconMs;
+
+  /// Entries in one anti-entropy reply. Bounded so that repairing a long absence cannot
+  /// turn into one huge transmission; the next beacon picks up the rest.
+  final int historyReplyMax;
   final int maxRetries;
 
   final double txPowerDbm;
@@ -270,6 +282,8 @@ class SimConfig {
     int? transferChunkBytes,
     int? transferWindow,
     double? transferStallMs,
+    double? historyBeaconMs,
+    int? historyReplyMax,
     double? voiceKbps,
     double? voiceFrameMs,
     double? jitterBufferMs,
@@ -309,6 +323,8 @@ class SimConfig {
         transferChunkBytes: transferChunkBytes ?? this.transferChunkBytes,
         transferWindow: transferWindow ?? this.transferWindow,
         transferStallMs: transferStallMs ?? this.transferStallMs,
+        historyBeaconMs: historyBeaconMs ?? this.historyBeaconMs,
+        historyReplyMax: historyReplyMax ?? this.historyReplyMax,
         voiceKbps: voiceKbps ?? this.voiceKbps,
         voiceFrameMs: voiceFrameMs ?? this.voiceFrameMs,
         jitterBufferMs: jitterBufferMs ?? this.jitterBufferMs,
@@ -343,6 +359,66 @@ class SimConfig {
 }
 
 const SimConfig defaultConfig = SimConfig();
+
+// --- group history anti-entropy (roadmap Phase 1: "CRDT for group/broadcast
+// --- history (hash beacon anti-entropy)") -----------------------------------
+
+/// JavaScript's `Math.imul`, as in `rng.dart`: multiply and keep the low 32 bits.
+int _imul32(int x, int y) => ((x & 0xffffffff) * (y & 0xffffffff)) & 0xffffffff;
+
+/// FNV-1a, 32-bit, over the characters of a message id.
+///
+/// Not a cryptographic hash, deliberately: a digest here only has to tell two sets
+/// apart, and the ids it covers are already visible to every relay on the path. Four
+/// lines that behave identically in TypeScript and Dart, which is what the
+/// cross-language fixed points in `test/history_test.dart` assert.
+int fnv1a32(String text) {
+  var h = 0x811c9dc5;
+  for (var i = 0; i < text.length; i++) {
+    h = _imul32(h ^ text.codeUnitAt(i), 0x01000193);
+  }
+  return h & 0xffffffff;
+}
+
+/// Which of the [historyBuckets] a message id falls in.
+int historyBucket(String msgId) => fnv1a32(msgId) % historyBuckets;
+
+/// The digest a node advertises for one group: one XOR-folded hash per bucket, plus a
+/// count.
+class HistoryDigest {
+  HistoryDigest(this.count, this.buckets);
+
+  final int count;
+  final List<int> buckets;
+}
+
+/// XOR over a *set* is order-independent, so two nodes holding the same entries produce
+/// the same digest whatever order they arrived in. That is what makes the merge a union
+/// rather than a negotiation, and what lets a beacon be lost, duplicated or reordered
+/// without the protocol caring (the G-Set property [HistoryEntry] documents).
+///
+/// Splitting into buckets is what keeps a repair proportional to the *difference*: a
+/// node that missed two messages out of two hundred asks for one bucket, not for the
+/// whole history.
+HistoryDigest historyDigest(Iterable<HistoryEntry> entries) {
+  final buckets = List<int>.filled(historyBuckets, 0);
+  var count = 0;
+  for (final e in entries) {
+    final b = historyBucket(e.msgId);
+    buckets[b] = (buckets[b] ^ fnv1a32(e.msgId)) & 0xffffffff;
+    count++;
+  }
+  return HistoryDigest(count, buckets);
+}
+
+/// `HB|group|epoch|count|hexdigests` — what a beacon carries.
+String encodeHistoryBeacon(String groupId, int epoch, HistoryDigest digest) {
+  final hexes = digest.buckets
+      .map((b) => b.toRadixString(16).padLeft(8, '0'))
+      .join(',');
+  return 'HB|$groupId|$epoch|${digest.count}|$hexes';
+}
+
 
 class SimulationStats {
   const SimulationStats({
@@ -387,6 +463,13 @@ class SimulationStats {
     required this.transferStalls,
     required this.sentChunks,
     required this.bytesDelivered,
+    required this.sentSync,
+    required this.historyBeacons,
+    required this.historyRequests,
+    required this.historyReplies,
+    required this.historyEntriesSynced,
+    required this.historyEpochDropped,
+    required this.historyBytes,
     required this.batteryPercentPerHourNormal,
     required this.batteryPercentPerHourSuper,
     required this.scansPerSec,
@@ -467,6 +550,19 @@ class SimulationStats {
   final int transferStalls;
   final int sentChunks;
   final int bytesDelivered;
+
+  /// Anti-entropy (docs/06 §17): packets put on air, digest beacons, bucket requests,
+  /// replies, entries recovered that way, entries a key rotation made unreadable, and
+  /// the payload bytes the whole exchange occupied. Counted apart from
+  /// [sentUnicast]/[deliveryRatio]: a digest is control traffic, not a message anybody
+  /// sent to anybody.
+  final int sentSync;
+  final int historyBeacons;
+  final int historyRequests;
+  final int historyReplies;
+  final int historyEntriesSynced;
+  final int historyEpochDropped;
+  final int historyBytes;
 
   /// skills/07 telemetry: "Battery %/h per role, scans/sec, relays/sec".
   /// Measured from the battery snapshot taken when metrics were cleared, over
@@ -1023,6 +1119,17 @@ class MeshSimulation {
   int _transferStalls = 0;
   int _sentChunks = 0;
   int _bytesDelivered = 0;
+  int _sentSync = 0;
+  int _historyBeacons = 0;
+  int _historyRequests = 0;
+  int _historyReplies = 0;
+  int _historyEntriesSynced = 0;
+  int _historyEpochDropped = 0;
+  int _historyBytes = 0;
+
+  /// Nodes with a beacon chain running, so joining a second group does not start a
+  /// second one (the beacon covers every group the node is in).
+  final Set<NodeId> _historyBeaconArmed = <NodeId>{};
   int _transferSeq = 0;
 
   /// Live and finished large transfers, keyed by transfer id.
@@ -1084,6 +1191,13 @@ class MeshSimulation {
     _transferStalls = 0;
     _sentChunks = 0;
     _bytesDelivered = 0;
+    _sentSync = 0;
+    _historyBeacons = 0;
+    _historyRequests = 0;
+    _historyReplies = 0;
+    _historyEntriesSynced = 0;
+    _historyEpochDropped = 0;
+    _historyBytes = 0;
     _superSamples = 0;
     _superSampleSum = 0;
     _retriesSent = 0;
@@ -1137,6 +1251,7 @@ class MeshSimulation {
     // Groups belong to the world, not to the metrics window: rebuilding the mesh
     // invalidates every membership, so the registry goes with it.
     groups.clear();
+    _historyBeaconArmed.clear();
     _groupSeq = 0;
     rng = createRng(this.config.seed);
     rf = this.config.rf;
@@ -1191,6 +1306,9 @@ class MeshSimulation {
         break;
       case EventKind.transferStall:
         _onTransferStall(nodeId, (payload! as _ChunkPayload).transferId);
+        break;
+      case EventKind.historyBeacon:
+        _onHistoryBeacon(nodeId);
         break;
       case EventKind.traffic:
         _onTraffic();
@@ -1786,7 +1904,9 @@ class MeshSimulation {
       // Group traffic gets its own counters: folding it into sentUnicast would let
       // a 10-member group flatter deliveryRatio, and folding it into sentBroadcast
       // would deflate broadcastReach.
-      if (chunk != null) {
+      if (msgType == MsgType.sync) {
+        _sentSync++;
+      } else if (chunk != null) {
         _sentChunks++;
       } else if (groupCtx != null) {
         _sentGroup++;
@@ -1795,6 +1915,9 @@ class MeshSimulation {
       } else {
         _sentUnicast++;
       }
+    }
+    if (groupCtx != null) {
+      _recordHistory(from, groupCtx.id, msg, groupCtx.epoch);
     }
     _traces[msg.id] = _PathTrace(<NodeId>[fromId], now, fromId, toId, msgType);
 
@@ -1813,9 +1936,13 @@ class MeshSimulation {
     // A scoped group flood is addressed to nobody, so no ACK can ever come back:
     // arming the retry timer here would burn two retransmissions and then push the
     // message into the OppQueue on every single group send.
+    // Anti-entropy is not acknowledged either: it is periodic by construction, so a
+    // lost beacon costs one interval of convergence rather than a retransmission, and
+    // acknowledging every digest would cost more than the repair it reports on.
     if (toId != broadcastAddress &&
         toId != groupAddress &&
         msgType != MsgType.ack &&
+        msgType != MsgType.sync &&
         config.maxRetries > 0) {
       _pendingAcks[msg.id] = _PendingAck(msg, fromId, 0, now);
       _queue.push(now + _ackTimeoutFor(msg), EventKind.ackTimeout, fromId, msg.id);
@@ -2175,6 +2302,12 @@ class MeshSimulation {
       // Set before _recordDelivery copies the trace, so the delivered record
       // carries the final action rather than the provisional one.
       if (hopRecord != null) hopRecord.action = HopAction.delivered;
+      if (msg.type == MsgType.sync) {
+        // Control plane: it reached this node, which the hop trace should say, but it
+        // is not a message for the user and not a delivery to count.
+        _onSyncMessage(node, msg);
+        return;
+      }
       final fresh = deliverToInbox(node, msg);
       if (fresh) {
         _recordDelivery(node, msg, trace);
@@ -2201,6 +2334,7 @@ class MeshSimulation {
         final fresh = deliverToInbox(node, msg);
         if (fresh) {
           _recordDelivery(node, msg, trace);
+          _recordHistory(node, group.id, msg, msg.groupEpoch ?? group.keyEpoch);
           _pushLog(
               MeshLogKind.deliver,
               node.id,
@@ -2357,6 +2491,9 @@ class MeshSimulation {
       createdAt: now,
     );
     groups[group.id] = group;
+    for (final id in unique) {
+      _armHistoryBeacon(id);
+    }
     _pushLog(MeshLogKind.group, group.adminId,
         'group "${group.name}" created with ${unique.length} members (epoch 0)');
     return group;
@@ -2373,6 +2510,7 @@ class MeshSimulation {
     if (group.members.length >= groupMaxMembers) return false;
     group.members.add(nodeId);
     group.keyEpoch++;
+    _armHistoryBeacon(nodeId);
     _pushLog(
         MeshLogKind.group,
         nodeId,
@@ -2408,6 +2546,249 @@ class MeshSimulation {
   }
 
   /// Groups a node belongs to, for a UI's destination picker.
+  // --- group history anti-entropy -------------------------------------------
+
+  /// Start a node's beacon chain. One chain covers every group the node is in, so
+  /// joining a second group does not start a second one.
+  ///
+  /// Nothing is scheduled for a node with no groups, which is why this whole feature is
+  /// inert on a run that never creates one — including the golden vectors.
+  void _armHistoryBeacon(NodeId nodeId) {
+    if (config.historyBeaconMs <= 0) return;
+    if (_historyBeaconArmed.contains(nodeId)) return;
+    _historyBeaconArmed.add(nodeId);
+    _queue.push(now + config.historyBeaconMs, EventKind.historyBeacon, nodeId);
+  }
+
+  /// The entries a node can actually share for one group: the ones written under the key
+  /// epoch the group is on now.
+  ///
+  /// A rotation makes everything older unreadable to everybody (docs/06 §14), so
+  /// repairing it would move bytes nobody can decrypt. That has a consequence worth
+  /// stating plainly: in a group whose membership changes often, the repairable history
+  /// is only ever as old as the last change.
+  Map<String, HistoryEntry> syncableHistory(MeshNode node, Group group) {
+    final all = node.history[group.id];
+    final out = <String, HistoryEntry>{};
+    if (all == null) return out;
+    all.forEach((id, entry) {
+      if (entry.epoch == group.keyEpoch) out[id] = entry;
+    });
+    return out;
+  }
+
+  /// The repairable history one node holds for one group, oldest first. What a UI renders
+  /// when it wants to show a member the messages it missed and recovered; entries carry
+  /// [HistoryEntry.synced] so a recovered one can be marked as such.
+  List<HistoryEntry> groupHistoryOf(NodeId nodeId, String groupId) {
+    final node = _byId(nodeId);
+    final group = groups[groupId];
+    if (node == null || group == null) return <HistoryEntry>[];
+    final list = syncableHistory(node, group).values.toList()
+      ..sort((a, b) {
+        if (a.at != b.at) return a.at.compareTo(b.at);
+        return a.msgId.compareTo(b.msgId);
+      });
+    return list;
+  }
+
+  /// Add one entry to a node's history.
+  void _recordHistory(
+      MeshNode node, String groupId, MeshMessage msg, int epoch) {
+    _putHistory(
+        node,
+        HistoryEntry(
+          msgId: msg.id,
+          groupId: groupId,
+          from: msg.from,
+          at: msg.timestamp,
+          body: msg.body,
+          epoch: epoch,
+        ));
+  }
+
+  /// The union step of the G-Set: returns true if the entry was new to this node.
+  bool _putHistory(MeshNode node, HistoryEntry entry) {
+    final map = node.history.putIfAbsent(
+        entry.groupId, () => <String, HistoryEntry>{});
+    if (map.containsKey(entry.msgId)) return false;
+    map[entry.msgId] = entry;
+    return true;
+  }
+
+  /// Offer this node's digests to every co-member it can currently hear.
+  ///
+  /// Beacons go only to peers, not across the mesh: anti-entropy repairs the last hop of
+  /// a loss (a node that was asleep, out of range, or switched off while a flood went
+  /// by), and a peer that is out of range will be a peer again later. The chain stops by
+  /// itself when a node leaves its last group.
+  void _onHistoryBeacon(NodeId nodeId) {
+    final node = _byId(nodeId);
+    _historyBeaconArmed.remove(nodeId);
+    if (node == null || !node.isOnline || config.historyBeaconMs <= 0) return;
+    final mine = groupsOf(nodeId);
+    if (mine.isEmpty) return;
+    _armHistoryBeacon(nodeId);
+
+    for (final group in mine) {
+      final held = syncableHistory(node, group);
+      final digest = historyDigest(held.values);
+      for (final peerId in node.peerIds) {
+        if (!group.members.contains(peerId)) continue;
+        final body = encodeHistoryBeacon(group.id, group.keyEpoch, digest);
+        if (sendMessage(nodeId, peerId, body, MsgType.sync) != null) {
+          _historyBeacons++;
+          _historyBytes += body.length;
+        }
+      }
+    }
+  }
+
+  /// One anti-entropy packet arrived: a beacon, a request for the buckets that differ, or
+  /// the entries that fill them.
+  ///
+  /// The three-step exchange is what keeps a repair proportional to the difference rather
+  /// than to the history — a beacon is 156 characters whatever the group has said, and a
+  /// reply carries only the buckets the requester is missing.
+  void _onSyncMessage(MeshNode node, MeshMessage msg) {
+    final parts = msg.body.split('|');
+    if (parts.length < 4) return;
+    // A message body may itself contain '|', so the payload is everything after the
+    // third field rather than the fourth field alone.
+    final payload = parts.sublist(3).join('|');
+    final group = groups[parts[1]];
+    if (group == null || !group.members.contains(node.id)) return;
+    final epoch = int.tryParse(parts[2]);
+    if (epoch == null || epoch != group.keyEpoch) return; // the key has rotated since
+
+    if (parts[0] == 'HB') {
+      final held = syncableHistory(node, group);
+      final digest = historyDigest(held.values);
+      if (parts.length < 5) return;
+      final theirs =
+          parts[4].split(',').map((h) => int.tryParse(h, radix: 16) ?? -1).toList();
+      if (theirs.length != historyBuckets) return;
+      final differing = <int>[];
+      for (var i = 0; i < historyBuckets; i++) {
+        if (theirs[i] != digest.buckets[i]) differing.add(i);
+      }
+      if (differing.isEmpty) return;
+      // The request carries the ids this node already holds in those buckets. Without
+      // them a *bounded* reply would offer the same head of the list every round and
+      // convergence would stall at `historyReplyMax` entries — which is exactly what the
+      // first version of this protocol did (docs/06 §17).
+      final wanted = differing.toSet();
+      final have = held.values
+          .where((e) => wanted.contains(historyBucket(e.msgId)))
+          .map((e) => e.msgId)
+          .toList()
+        ..sort();
+      final body =
+          'RQ|${group.id}|$epoch|${differing.join(',')}|${have.take(historyRequestMaxIds).join(',')}';
+      if (sendMessage(node.id, msg.from, body, MsgType.sync) != null) {
+        _historyRequests++;
+        _historyBytes += body.length;
+        _pushLog(
+            MeshLogKind.sync,
+            node.id,
+            '${group.name}: ${node.name} and ${_byId(msg.from)?.name ?? msg.from} disagree '
+                'on bucket${differing.length == 1 ? '' : 's'} ${differing.join(',')} '
+                '(${digest.count} vs ${int.tryParse(parts[3]) ?? 0} entries) — requesting',
+            peerId: msg.from,
+            msgId: msg.id,
+            msgType: MsgType.sync);
+      }
+      return;
+    }
+
+    if (parts[0] == 'RQ') {
+      // `RQ|group|epoch|buckets|ids`: the buckets being asked for, then the ids the
+      // requester already holds in them (which may be none).
+      final wanted = parts[3].split(',').map((b) => int.tryParse(b) ?? -1).toSet();
+      final theyHave = <String>{};
+      if (parts.length > 4 && parts[4].isNotEmpty) theyHave.addAll(parts[4].split(','));
+      final held = syncableHistory(node, group);
+      final out = held.values
+          .where((e) =>
+              wanted.contains(historyBucket(e.msgId)) && !theyHave.contains(e.msgId))
+          .toList()
+        ..sort((a, b) => a.msgId.compareTo(b.msgId));
+      final slice = out.take(config.historyReplyMax).toList();
+      if (slice.isEmpty) return;
+      final body = 'RS|${group.id}|$epoch|'
+          '${jsonEncode(slice.map((e) => e.toJson()).toList())}';
+      if (sendMessage(node.id, msg.from, body, MsgType.sync) != null) {
+        _historyReplies++;
+        _historyBytes += body.length;
+        _pushLog(
+            MeshLogKind.sync,
+            node.id,
+            '${group.name}: ${node.name} sent ${slice.length} of ${out.length} missing '
+                'entries in bucket${wanted.length == 1 ? '' : 's'} ${wanted.join(',')} to '
+                '${_byId(msg.from)?.name ?? msg.from}',
+            peerId: msg.from,
+            msgId: msg.id,
+            msgType: MsgType.sync);
+      }
+      return;
+    }
+
+    if (parts[0] == 'RS') {
+      final List<HistoryEntry> entries;
+      try {
+        final decoded = jsonDecode(payload) as List<dynamic>;
+        entries = decoded
+            .map((e) => HistoryEntry.fromJson(e as Map<String, dynamic>))
+            .toList();
+      } catch (_) {
+        return;
+      }
+      var added = 0;
+      var dropped = 0;
+      for (final entry in entries) {
+        if (entry.epoch != group.keyEpoch) {
+          // Unreadable under the current key. Counted rather than silently dropped,
+          // because it is the cost of rotating on every membership change.
+          dropped++;
+          continue;
+        }
+        if (_putHistory(node, entry.withSynced())) added++;
+      }
+      _historyEntriesSynced += added;
+      _historyEpochDropped += dropped;
+      if (added > 0) {
+        _pushLog(
+            MeshLogKind.sync,
+            node.id,
+            '${group.name}: ${node.name} recovered $added message${added == 1 ? '' : 's'} '
+                'from ${_byId(msg.from)?.name ?? msg.from}'
+                '${dropped > 0 ? ' ($dropped unreadable under epoch ${group.keyEpoch})' : ''}',
+            peerId: msg.from,
+            msgId: msg.id,
+            msgType: MsgType.sync);
+      }
+    }
+  }
+
+  /// Whether every member of a group holds the same repairable history.
+  bool historyConverged(Group group) {
+    final members = <MeshNode>[];
+    for (final id in group.members) {
+      final n = _byId(id);
+      if (n != null) members.add(n);
+    }
+    if (members.isEmpty) return true;
+    final reference = historyDigest(syncableHistory(members.first, group).values);
+    for (final m in members) {
+      final d = historyDigest(syncableHistory(m, group).values);
+      if (d.count != reference.count) return false;
+      for (var i = 0; i < historyBuckets; i++) {
+        if (d.buckets[i] != reference.buckets[i]) return false;
+      }
+    }
+    return true;
+  }
+
   List<Group> groupsOf(NodeId nodeId) =>
       groups.values.where((g) => g.members.contains(nodeId)).toList();
 
@@ -2481,6 +2862,7 @@ class MeshSimulation {
         .where((d) =>
             d.type != MsgType.ack &&
             d.type != MsgType.broadcast &&
+            d.type != MsgType.sync &&
             d.groupId == null &&
             d.transferId == null)
         .toList();
@@ -2600,6 +2982,13 @@ class MeshSimulation {
       transferStalls: _transferStalls,
       sentChunks: _sentChunks,
       bytesDelivered: _bytesDelivered,
+      sentSync: _sentSync,
+      historyBeacons: _historyBeacons,
+      historyRequests: _historyRequests,
+      historyReplies: _historyReplies,
+      historyEntriesSynced: _historyEntriesSynced,
+      historyEpochDropped: _historyEpochDropped,
+      historyBytes: _historyBytes,
       batteryPercentPerHourNormal: drainPerHour(Role.normal),
       batteryPercentPerHourSuper: drainPerHour(Role.superNode),
       scansPerSec: _scanCount / elapsedSec,

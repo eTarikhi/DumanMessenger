@@ -25,6 +25,9 @@ enum EventKind {
 
   /// Re-send whatever a stalled transfer is still missing (docs/05 §3.2 "resume").
   transferStall,
+
+  /// Offer this node's group-history digests to its peers (anti-entropy).
+  historyBeacon,
   traffic
 }
 

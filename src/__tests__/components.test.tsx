@@ -242,6 +242,50 @@ function mediaWorld(over: Partial<SimConfig> = {}): MeshSimulation {
   return sim;
 }
 
+describe("group history anti-entropy in the UI", () => {
+  it("reports the repair traffic, and only once a group has beaconed", () => {
+    const sim = groupWorld();
+    sim.runFor(30000); // three beacon intervals
+    sim.refresh();
+    expect(sim.stats.historyBeacons).toBeGreaterThan(0);
+    const html = renderToStaticMarkup(
+      <MetricsPanel stats={sim.stats} dutyCycleEnabled={false} config={sim.config} />
+    );
+    expect(html).toContain("Group history anti-entropy");
+    expect(html).toContain("Digest beacons");
+    expect(html).toContain("Messages recovered");
+    expect(html).toContain("Unreadable after rotation");
+    // The footnote states the two properties the protocol rests on.
+    expect(html).toContain("grow-only CRDT");
+    expect(html).toContain("BLE packet");
+
+    const quiet = world();
+    expect(
+      renderToStaticMarkup(<MetricsPanel stats={quiet.stats} dutyCycleEnabled={false} />)
+    ).not.toContain("Group history anti-entropy");
+  });
+
+  it("keeps digest beacons out of the chat log", () => {
+    const sim = groupWorld();
+    sim.runFor(30000);
+    sim.refresh();
+    expect(sim.sentRecords.some((r) => r.type === "sync")).toBe(true);
+    const group = [...sim.groups.values()][0];
+    const html = renderToStaticMarkup(
+      <ChatPanel
+        nodes={sim.nodes}
+        selectedNodeId={[...group.members][0]}
+        onSendMessage={() => null}
+        sentRecords={sim.sentRecords}
+        deliveries={sim.deliveries}
+        groups={[...sim.groups.values()]}
+      />
+    );
+    expect(html).not.toContain("HB|");
+    expect(html).toContain("sent"); // the header still counts real messages
+  });
+});
+
 describe("media transport in the UI", () => {
   it("offers the file and push-to-talk controls, and explains why they are greyed out", () => {
     const sim = mediaWorld();

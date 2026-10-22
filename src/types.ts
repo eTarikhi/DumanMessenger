@@ -11,6 +11,11 @@ export type MsgType =
   /** One chunk of a large transfer (docs/05 §3.2: 64 KB slices, sliding-window ACK). */
   | "file"
   | "sos"
+  /** Anti-entropy traffic for group history: a digest beacon, a request for the
+   *  buckets that differ, or the entries that fill them (roadmap Phase 1: "CRDT for
+   *  group/broadcast history (hash beacon anti-entropy)"). Control plane, so it is
+   *  neither ACKed nor counted as 1:1 traffic. */
+  | "sync"
   | "ack"
   | "ogm";
 
@@ -169,6 +174,33 @@ export const GROUP_ADDRESS = "GROUP";
 export const GROUP_MIN_MEMBERS = 3;
 export const GROUP_MAX_MEMBERS = 10;
 
+/** Buckets a group history digest is split into. Sixteen is the usual compromise
+ *  between beacon size and how much a reply over-sends: one differing bucket costs
+ *  1/16 of the history in ids, and the beacon itself stays inside one BLE packet. */
+export const HISTORY_BUCKETS = 16;
+
+/**
+ * One group message a node holds, kept so a peer can repair it later.
+ *
+ * The set of these per group is a grow-only set — a G-Set CRDT — so merging two
+ * nodes' histories is a union: idempotent, commutative and associative, which is
+ * what lets anti-entropy run in any order, lose beacons, and still converge
+ * (roadmap Phase 1: "CRDT for group/broadcast history").
+ */
+export interface HistoryEntry {
+  msgId: string;
+  groupId: string;
+  from: NodeId;
+  at: number;
+  body: string;
+  /** The group's key epoch when this was sent. A rotation makes everything under an
+   *  older epoch unreadable (docs/06 §14), so entries are only repairable inside the
+   *  epoch they were written in. */
+  epoch: number;
+  /** True once this copy arrived by anti-entropy rather than by the original flood. */
+  synced?: boolean;
+}
+
 /** A group channel (docs/04 §4, roadmap Phase 1 and Phase 4 "Group UX"). */
 export interface Group {
   id: string;
@@ -194,6 +226,8 @@ export type MeshLogKind =
   | "sos"
   /** Group membership: created, joined, left, key rotated, or a stale epoch rejected. */
   | "group"
+  /** One round of history anti-entropy: a beacon, a request, or a reply. */
+  | "sync"
   /** A large transfer: one chunk on air, or the whole file complete. */
   | "transfer"
   | "ogm";
@@ -312,6 +346,9 @@ export interface MeshNode {
    *  %/h telemetry (skills/07: "Battery %/h per role"). */
   batteryAtMeasure: number;
   oppQueue: QueuedMessage[];
+  /** Group history this node holds, per group id then per message id. Union-merged
+   *  by anti-entropy; see `HistoryEntry`. */
+  history: Map<string, Map<string, HistoryEntry>>;
   inbox: MeshMessage[];
   sentLog: MeshMessage[];
   txPower: number;

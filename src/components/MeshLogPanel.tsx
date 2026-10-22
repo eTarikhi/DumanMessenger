@@ -24,6 +24,7 @@ const KIND_COLOR: Record<MeshLogKind, string> = {
   sos: "#ff2d55",
   group: "#26d0a8",
   transfer: "#7fb3ff",
+  sync: "#e0b3ff",
   ogm: "#3f5568",
 };
 
@@ -33,6 +34,7 @@ const KINDS: MeshLogKind[] = [
   "deliver",
   "sos",
   "group",
+  "sync",
   "transfer",
   "duplicate",
   "loss",

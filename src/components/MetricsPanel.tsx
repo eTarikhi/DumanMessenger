@@ -1,7 +1,12 @@
 import type { SimConfig, SimulationStats } from "../simulation";
-import type { MeshNode } from "../types";
+import { HISTORY_BUCKETS, type MeshNode } from "../types";
 
 /** Human-readable payload size, for the media row. */
+/** Characters in one digest beacon: `HB|group|epoch|count|` plus 16 eight-character
+ *  bucket hashes. Measured, and constant — the beacon does not grow with the history
+ *  (docs/06 §17). */
+const BEACON_CHARS = 156;
+
 function fmtBytes(bytes: number): string {
   if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(bytes >= 10485760 ? 0 : 1)} MB`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -172,6 +177,39 @@ export function MetricsPanel({ stats, dutyCycleEnabled, nodes, config }: Props) 
             <code>deliveryRatio</code> nor deflate <code>broadcastReach</code>. "Stale key epoch" is
             the security property doing work: copies a member cannot decrypt because the key rotated
             when somebody left or joined — the node still relayed them, it just could not read them.
+          </div>
+        </section>
+      )}
+
+      {stats.historyBeacons > 0 && (
+        <section style={{ marginTop: 14 }}>
+          <div style={sectionStyle}>🧬 Group history anti-entropy (roadmap Phase 1)</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <Counter label="Digest beacons" value={`${stats.historyBeacons}`} accent="#e0b3ff" />
+            <Counter label="Bucket requests" value={`${stats.historyRequests}`} accent="#e0b3ff" />
+            <Counter label="Replies" value={`${stats.historyReplies}`} accent="#e0b3ff" />
+            <Counter
+              label="Messages recovered"
+              value={`${stats.historyEntriesSynced}`}
+              accent={stats.historyEntriesSynced > 0 ? "#b6ff4a" : "#9fb0c3"}
+            />
+            <Counter label="Sync packets" value={`${stats.sentSync}`} accent="#9fb0c3" />
+            <Counter label="Sync payload" value={fmtBytes(stats.historyBytes)} accent="#9fb0c3" />
+            <Counter
+              label="Unreadable after rotation"
+              value={`${stats.historyEpochDropped}`}
+              accent={stats.historyEpochDropped === 0 ? "#b6ff4a" : "#ff9f4d"}
+            />
+          </div>
+          <div style={{ fontSize: 10, color: "#5a6a7a", marginTop: 6, lineHeight: 1.5 }}>
+            Every {(config?.historyBeaconMs ?? 10000) / 1000} s a member offers each co-member it can hear a
+            digest of the history it holds: {HISTORY_BUCKETS} XOR-folded hashes, {BEACON_CHARS} characters
+            whatever the group has said, so one beacon is one {fmtBytes(256)} BLE packet. A peer whose buckets
+            differ asks for those buckets and lists the ids it already has; the reply is capped at{" "}
+            {config?.historyReplyMax ?? 32} entries, so a long absence is repaired in bounded rounds rather
+            than one huge transmission. Merging is a set union — a grow-only CRDT — so beacons can be lost,
+            duplicated or reordered without the protocol caring, and a copy one member lost can reach it
+            through another. None of it is acknowledged: the next beacon is the retry.
           </div>
         </section>
       )}

@@ -305,6 +305,14 @@ jobs:
           dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --group 5
           --no-check
 
+      # Roadmap Phase 1's "CRDT for group/broadcast history (hash beacon
+      # anti-entropy)": a member that missed a whole conversation catches up, and
+      # the same world with repair switched off shows it otherwise would not.
+      - name: Group history anti-entropy (docs/06 §17)
+        run: >-
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --history
+          --no-check
+
       # The roadmap Phase 3 media exit criteria: a <10 MB image across a Wi-Fi
       # Direct mesh, and a push-to-talk note that plays in <3 s at one hop and
       # <8 s at three (docs/08).
