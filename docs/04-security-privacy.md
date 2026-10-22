@@ -29,6 +29,11 @@
 ### 3. Encryption
 
 - **1:1 DM:** **Noise_XX** (or X3DH + Double Ratchet light) with forward secrecy. Initiated via BLE handshake when peers first meet; session keys ratchet per message. Libsodium / Dart `cryptography`.
+> **Implementation note (Oct 2026 — evidence in `docs/07-e2ee-noise-xx.md` §2):** the handshake is three mesh messages, so the §5 budget below applies
+> per *leg* and establishment needs roughly three times it — measured 675 ms at one hop, 6.7 s at three,
+> and one leg lost outright at four hops in a 60-node crowd. Establishment also has to be **on demand**:
+> §3 measures ~70 new in-range peers per node per hour in a crowd, so handshaking on discovery would
+> cost ~210 radio messages per node per hour of key agreement with strangers.
 - **Group chat:** **MLS-style** or simple sender-key distribution over 1:1 channels: each group has `groupKey` rotated on member leave; stored encrypted.
 > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §14):** the *membership and epoch* half is implemented and measured in both
 > engines: a group of 3-10 with an admin, a key epoch that rotates on every membership change and on

@@ -31,6 +31,16 @@
 - [ ] Store-and-forward OppQueue (7-day expiry, 500 msgs cap)
 - [ ] SQLite + CRDT for group/broadcast history (hash beacon anti-entropy)
 - [ ] E2EE round 1: Noise_XX 1:1, SAS verify, padding
+  > **Implementation note (Oct 2026 — evidence in `docs/07-e2ee-noise-xx.md` §2-§4):** specified and costed against this mesh, not implemented — `skills/03` says
+  *"never custom crypto"*, so the handshake is libsodium work. What is measured here and settles real
+  decisions: a handshake is **three** mesh messages, so its budget is three times the per-message one
+  (675 ms at 1 hop, 6.7 s at 3, and a 4-hop leg in the crowd was lost outright); retries must be
+  per-leg, not per-handshake, or a 5% leg loss becomes ~14% handshake failure; and handshakes must be
+  **on demand, never on discovery** — a crowd produces ~70 new in-range peers per node per hour, which
+  as eager XX exchanges is ~210 radio messages per node per hour of pure key agreement. The padding
+  half is implemented: both engines now size a packet as `ceil((95 + body)/256) × 256` from the
+  documented layout instead of a per-character guess, which had been flipping 241-character texts onto
+  Wi-Fi Direct when the real packet fits BLE until 930 characters.
 - [x] Broadcast pager channel (public) + private 1:1 + group (3-10 members)
   > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §14):** all three traffic classes now exist in both engines with their own
   accounting, so a 10-member group can neither flatter `deliveryRatio` nor deflate `broadcastReach`.

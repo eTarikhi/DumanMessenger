@@ -28,6 +28,28 @@ const String broadcastAddress = 'BROADCAST';
 TransportType selectTransport(int sizeBytes) =>
     sizeBytes > bleMaxBytes ? TransportType.wifiDirect : TransportType.ble;
 
+/// Padding block, per `skills/03`: "DO pad to 256B blocks".
+const int padBlockBytes = 256;
+
+/// Everything around the body in one encrypted packet, from `skills/03`'s layout:
+/// `header {msgId16, ttl, type, destHint8, hop}` = 27 B, `aead {nonce12, tag16}` =
+/// 28 B, and inside the ciphertext `from` 32 B + `ts` 8 B. 95 B before the body.
+const int packetOverheadBytes = 27 + 12 + 16 + 32 + 8;
+
+/// Wire size of one message, in bytes, as the transport selector sees it.
+///
+/// This used to be a `64 + 4 bytes per character` heuristic, which crossed the 1 KB
+/// BLE ceiling at 241 characters. The documented packet crosses it at 930: encryption
+/// adds 95 B and padding rounds *up* to a 256 B block, so a 900-character body is a
+/// 1 024 B packet that still rides BLE. The heuristic therefore flipped long texts
+/// onto Wi-Fi Direct about four times too early — and since transport is what sets
+/// per-hop latency in this model, it made long messages look faster than they are
+/// (docs/07 §3).
+int wireSizeOf(int bodyChars) {
+  final raw = packetOverheadBytes + (bodyChars < 0 ? 0 : bodyChars);
+  return ((raw + padBlockBytes - 1) ~/ padBlockBytes) * padBlockBytes;
+}
+
 /// Same 32-bit string hash as the TypeScript engine, so `destHint` matches
 /// across languages (it appears in golden vectors).
 String hashHint(String id) {
@@ -63,7 +85,7 @@ MeshMessage createMessage(
   String? groupId,
   int? groupEpoch,
 }) {
-  final sizeBytes = 64 + body.length * 4;
+  final sizeBytes = wireSizeOf(body.length);
   return MeshMessage(
     id: id,
     type: type,

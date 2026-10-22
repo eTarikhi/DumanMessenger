@@ -20,6 +20,13 @@
 - Public channel = plaintext (intentional). Encrypted broadcast variant = group with shared key.
 
 ### Packet
+
+> **Implementation note (Oct 2026 — evidence in `docs/07-e2ee-noise-xx.md` §4):** the packet is now the simulator's size model too, in both engines:
+> `wireSizeOf(body) = ceil((95 + body) / 256) × 256` with `PACKET_OVERHEAD_BYTES` 95 and
+> `PAD_BLOCK_BYTES` 256 exported and the BLE/Wi-Fi boundary pinned by tests at 900 characters
+> (1 024 B, still BLE) and 930 (1 280 B, Wi-Fi Direct). The previous `64 + 4 bytes per character`
+> heuristic crossed the 1 KB ceiling at 241 characters, which put ordinary long texts on the fast
+> transport and made their latency look three times better than a BLE deployment would deliver.
 ```
 header {msgId16, ttl, type, destHint8, hop}
 aead {nonce12, ciphertext, tag16} // ciphertext = from, ts, body, pad256

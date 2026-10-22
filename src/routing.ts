@@ -29,6 +29,32 @@ export const INBOX_MAX = 200;
 /** Text < 1 KB rides BLE; larger payloads need Wi-Fi Direct (docs/02 §3.1). */
 export const BLE_MAX_BYTES = 1024;
 
+/** Padding block, per `skills/03`: "DO pad to 256B blocks". */
+export const PAD_BLOCK_BYTES = 256;
+
+/**
+ * Everything around the body in one encrypted packet, from `skills/03`'s layout:
+ * `header {msgId16, ttl, type, destHint8, hop}` = 27 B, `aead {nonce12, tag16}` = 28 B,
+ * and inside the ciphertext `from` 32 B + `ts` 8 B. 95 B before the body.
+ */
+export const PACKET_OVERHEAD_BYTES = 27 + 12 + 16 + 32 + 8;
+
+/**
+ * Wire size of one message, in bytes, as the transport selector sees it.
+ *
+ * This used to be a `64 + 4 bytes per character` heuristic, which crossed the 1 KB
+ * BLE ceiling at 241 characters. The documented packet crosses it at 930: encryption
+ * adds 95 B and padding rounds *up* to a 256 B block, so a 900-character body is a
+ * 1 024 B packet that still rides BLE. The heuristic therefore flipped long texts
+ * onto Wi-Fi Direct about four times too early — and since transport is what sets
+ * per-hop latency in this model, it made long messages look faster than they are
+ * (docs/07 §3).
+ */
+export function wireSizeOf(bodyChars: number): number {
+  const raw = PACKET_OVERHEAD_BYTES + Math.max(0, bodyChars);
+  return Math.ceil(raw / PAD_BLOCK_BYTES) * PAD_BLOCK_BYTES;
+}
+
 export function selectTransport(sizeBytes: number): TransportType {
   return sizeBytes > BLE_MAX_BYTES ? "wifiDirect" : "ble";
 }
@@ -61,7 +87,7 @@ export function createMessage(
   ttl = 5,
   priority: MeshMessage["priority"] = "normal"
 ): MeshMessage {
-  const sizeBytes = 64 + body.length * 4;
+  const sizeBytes = wireSizeOf(body.length);
   return {
     id,
     type,

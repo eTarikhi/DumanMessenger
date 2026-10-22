@@ -13,6 +13,7 @@
 - `roadmap/index.html` — Interactive visual roadmap (open in browser)
 - `skills/` — 8 development skill definitions for the build team
 - `docs/06-simulator-findings.md` — Simulator calibration evidence, protocol corrections & the one documented limitation
+- `docs/07-e2ee-noise-xx.md` — Noise_XX as a *mesh* protocol: measured handshake cost, when to negotiate, packet/padding sizes
 - `sim/mesh_sim/` — **Dart mesh simulator** (authoritative headless engine + CLI)
 - `src/` — **TypeScript mesh simulator** (reference engine + React visualiser)
 - `test-fixtures/golden-vectors.json` — cross-language determinism contract asserted by both engines
@@ -62,7 +63,10 @@ relay budget, ≤0.22 role changes per node per minute.** In the 60-node crowd t
 engine delivers **91.3-95.3%** at 12-14% of naive flood's relays — naive flooding
 does reach 100% there, for 7-9× the transmissions.
 Criteria, calibration evidence and the protocol bugs found while measuring are in
-[`docs/06-simulator-findings.md`](docs/06-simulator-findings.md).
+[`docs/06-simulator-findings.md`](docs/06-simulator-findings.md). E2EE is specified and costed —
+handshake latency per leg, when to negotiate at all, and the packet/padding size model both engines
+now use — in [`docs/07-e2ee-noise-xx.md`](docs/07-e2ee-noise-xx.md); no cryptography is implemented
+here, because `skills/03` says never to write custom crypto.
 
 **SOS mode** (`docs/05` §3.2-3.3, roadmap Phase 3): the originator floods, then re-floods three
 times at 5 s intervals, each flood a *fresh message id* (the seen-cache would swallow a repeat that

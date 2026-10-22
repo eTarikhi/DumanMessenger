@@ -1629,6 +1629,38 @@ void main() {
       expect(sim.stats.electionEvents, greaterThan(0));
     });
   });
+
+  group('encrypted packet size (skills/03 Packet)', () {
+    test('is the documented layout: 95 bytes around the body, padded to 256', () {
+      expect(packetOverheadBytes, equals(27 + 12 + 16 + 32 + 8));
+      expect(padBlockBytes, equals(256));
+      expect(wireSizeOf(0), equals(256)); // an empty body is still one padded block
+      expect(wireSizeOf(161), equals(256)); // 95 + 161 fits exactly
+      expect(wireSizeOf(162), equals(512)); // one byte over costs a whole block
+      expect(wireSizeOf(900), equals(1024));
+    });
+
+    test('keeps a long text on BLE, where the documented packet still fits', () {
+      // The old heuristic (64 + 4 bytes per character) crossed the 1 KB ceiling at
+      // 241 characters and put every longer text on Wi-Fi Direct. The real packet
+      // does not cross until 930, and transport is what sets per-hop latency here —
+      // so the heuristic was making long messages look three times faster than they
+      // are (docs/07 §3).
+      expect(selectTransport(wireSizeOf(241)), equals(TransportType.ble));
+      expect(selectTransport(wireSizeOf(700)), equals(TransportType.ble));
+      expect(selectTransport(wireSizeOf(900)), equals(TransportType.ble));
+      expect(selectTransport(wireSizeOf(930)), equals(TransportType.wifiDirect));
+    });
+
+    test('sizes a created message from the packet layout', () {
+      final shortMsg = createMessage('m1', 0.0, 'a', 'b', 'hi');
+      expect(shortMsg.sizeBytes, equals(256));
+      expect(shortMsg.transport, equals(TransportType.ble));
+      final longMsg = createMessage('m2', 0.0, 'a', 'b', 'x' * 930);
+      expect(longMsg.sizeBytes, equals(1280));
+      expect(longMsg.transport, equals(TransportType.wifiDirect));
+    });
+  });
 }
 
 double _ln(num x) => math.log(x.toDouble());

@@ -46,6 +46,9 @@ import {
   scanOppQueue,
   selectTransport,
   seenKey,
+  wireSizeOf,
+  PACKET_OVERHEAD_BYTES,
+  PAD_BLOCK_BYTES,
   SEEN_CACHE_TTL_MS,
   SPRAY_LIMIT,
   OPP_TTL_MS,
@@ -571,7 +574,12 @@ describe("data plane (docs/03 §6, §8)", () => {
     expect(selectTransport(512)).toBe("ble");
     expect(selectTransport(1024)).toBe("ble");
     expect(selectTransport(1025)).toBe("wifiDirect");
-    expect(createMessage("m1", 0, "a", "b", "x".repeat(400), "text").transport).toBe("wifiDirect");
+    // 400 characters is a 512 B packet under skills/03's layout (95 B of header,
+    // nonce, tag, sender and timestamp, padded up to a 256 B block), so it rides BLE.
+    // Under the old `64 + 4 bytes per character` heuristic it was 1 664 B and flipped
+    // to Wi-Fi Direct — see the packet-size suite below and docs/07 §3.
+    expect(createMessage("m1", 0, "a", "b", "x".repeat(400), "text").transport).toBe("ble");
+    expect(createMessage("m2", 0, "a", "b", "x".repeat(930), "text").transport).toBe("wifiDirect");
   });
 
   it("creates routable, encrypted, attempt-zero messages", () => {
@@ -832,5 +840,36 @@ describe("MPR fallback at density (skills/08 nodeCount 10-200)", () => {
     expect(d.mode).toBe("drop");
     expect(d.reason).toContain("cover all my neighbours");
     expect(node.mprSuppressed).toBe(1);
+  });
+});
+
+describe("encrypted packet size (skills/03 §Packet)", () => {
+  it("is the documented layout: 95 bytes around the body, padded up to 256-byte blocks", () => {
+    expect(PACKET_OVERHEAD_BYTES).toBe(27 + 12 + 16 + 32 + 8);
+    expect(PAD_BLOCK_BYTES).toBe(256);
+    expect(wireSizeOf(0)).toBe(256); // an empty body is still one padded block
+    expect(wireSizeOf(161)).toBe(256); // 95 + 161 fits exactly
+    expect(wireSizeOf(162)).toBe(512); // one byte over costs a whole block
+    expect(wireSizeOf(900)).toBe(1024);
+  });
+
+  it("keeps a long text on BLE, where the documented packet still fits", () => {
+    // The old heuristic (64 + 4 bytes per character) crossed the 1 KB ceiling at 241
+    // characters and put every longer text on Wi-Fi Direct. The real packet does not
+    // cross until 930 characters, and transport is what sets per-hop latency here —
+    // so the heuristic was making long messages look three times faster than they are.
+    expect(selectTransport(wireSizeOf(241))).toBe("ble");
+    expect(selectTransport(wireSizeOf(700))).toBe("ble");
+    expect(selectTransport(wireSizeOf(900))).toBe("ble"); // exactly 1024 B
+    expect(selectTransport(wireSizeOf(930))).toBe("wifiDirect"); // 1280 B
+  });
+
+  it("sizes a created message from the packet layout", () => {
+    const short = createMessage("m1", 0, "a", "b", "hi");
+    expect(short.sizeBytes).toBe(256);
+    expect(short.transport).toBe("ble");
+    const long = createMessage("m2", 0, "a", "b", "x".repeat(930));
+    expect(long.sizeBytes).toBe(1280);
+    expect(long.transport).toBe("wifiDirect");
   });
 });
