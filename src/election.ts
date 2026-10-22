@@ -372,7 +372,30 @@ export interface ElectionOutcome {
  * (docs/03 §3 and §5). Pure apart from the demote counter, which is the
  * hysteresis state itself.
  */
-export function electRole(node: MeshNode, allNodes: MeshNode[], rf: RfParams): ElectionOutcome {
+/**
+ * A community relay: plugged in and not moving, which is what "keep Duman running on the
+ * café's tablet" means in the model (roadmap Phase 5, docs/06 §19). The two flags are what
+ * the coverage score already reads — `charging` for the +0.10 bonus, `stationary` for the
+ * stability term — so this adds no new state, only a name for the combination.
+ */
+export function isCommunityRelay(node: MeshNode): boolean {
+  return node.charging && node.stationary;
+}
+
+/**
+ * Share of the top-20% cap reserved for community relays, 0 to disable (docs/06 §19.2).
+ *
+ * The measurement behind it: six plugged tablets in a 60-node crowd take 18.6% of the radio
+ * work off everybody else, because at six they *displace* battery-powered SUPERs; at three
+ * they merely join an already-full elected set and everybody else's transmissions rise
+ * 9.2%. Reserving part of the cap makes displacement happen at three as well.
+ */
+export function electRole(
+  node: MeshNode,
+  allNodes: MeshNode[],
+  rf: RfParams,
+  communityRelayQuota = 0
+): ElectionOutcome {
   // skills/02 acceptance: "SUPER opt-out respected; NORMAL never auto-promoted
   // if battery saver on". Both are explicit user or OS intent, so they are
   // checked before any scoring and demote immediately rather than waiting out
@@ -401,15 +424,42 @@ export function electRole(node: MeshNode, allNodes: MeshNode[], rf: RfParams): E
   // that have declined the router role are not candidates: counting them would
   // burn top-20% slots on nodes that can never promote, so a crowd of opt-outs
   // would leave the mesh with too few SUPERs to cover it (skills/02's 15-25%).
-  const scores: number[] = [node.score];
+  const candidates: Array<{ score: number; community: boolean }> = [
+    { score: node.score, community: isCommunityRelay(node) },
+  ];
   for (const p of peers) {
     const heard = node.ogmTable[p.id];
     if (heard ? heard.declinedRouter : p.superOptOut || p.batterySaver) continue;
-    scores.push(heard ? heard.score : p.score);
+    candidates.push({ score: heard ? heard.score : p.score, community: isCommunityRelay(p) });
   }
+  const scores = candidates.map((c) => c.score);
   const strictlyBetter = scores.filter((s) => s > node.score).length;
   const top20Count = Math.max(1, Math.ceil(scores.length * TOP_PERCENT));
-  const inTop20 = strictlyBetter < top20Count;
+  let inTop20 = strictlyBetter < top20Count;
+  if (communityRelayQuota >= 1 && isCommunityRelay(node)) {
+    // A quota of 1 or more means "the cap does not bind a community relay": it still has
+    // to clear `SUPER_PROMOTE_THRESHOLD` and the 30 m proximity guard below, but it does
+    // not have to beat its neighbours. The measurement that motivates it is that the
+    // tablets which fail to be elected are not losing to phones — six plugged nodes in one
+    // crowd all hear each other, so they spend the five slots on each other and the
+    // weakest two stay NORMAL (docs/06 §19.4).
+    inTop20 = true;
+  } else if (communityRelayQuota > 0) {
+    // Split the cap rather than widen it: `reserved` slots are competed for by community
+    // relays only and the rest by everybody, so a plugged tablet displaces a
+    // battery-powered router instead of adding to the elected set. Reserved slots that no
+    // community relay can fill fall back to the open competition (`Math.min` against the
+    // candidate count), and with no community relays in range at all the reserved count is
+    // zero and this is the unmodified rule.
+    const communityCount = candidates.filter((c) => c.community).length;
+    const reserved = Math.min(Math.floor(top20Count * communityRelayQuota), communityCount);
+    const open = top20Count - reserved;
+    const betterCommunity = candidates.filter((c) => c.community && c.score > node.score).length;
+    const betterOpen = candidates.filter((c) => !c.community && c.score > node.score).length;
+    inTop20 = candidates[0].community
+      ? betterCommunity < reserved || strictlyBetter < top20Count
+      : betterOpen < open;
+  }
   const rankLabel = `${strictlyBetter + 1}/${scores.length}`;
 
   const shouldBeSuper = node.score > SUPER_PROMOTE_THRESHOLD && inTop20;

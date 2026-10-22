@@ -336,6 +336,19 @@
   for charging, stationary nodes, or score a tablet above a phone at equal position), and the benefit is a
   quota, not a single tablet.
 
+> **Correction note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §19.4):** cap-aware promotion was then built in both
+  proposed forms (`communityRelayQuota`: reserve a share of the top 20%, or exempt community relays from it) and
+  measured on three seeds. It is aimed at a mechanism that is not operating. The tablets that fail to be elected
+  are not losing to phones: with six plugged nodes in one crowd they all hear each other, so the five slots are
+  already theirs and the weakest two lose to the strongest four (seed 42: six better-scoring tablets, **zero**
+  better-scoring phones); at three tablets the one that sometimes loses is stopped by the 30 m proximity guard,
+  which is docs/03 §5 working as written. Exemption does elect all six and lifts delivery 1.7 points, but it
+  raises everybody else's transmissions **12%** — back to the no-tablet baseline — and puts the SUPER ratio at
+  **25.0%**, the ceiling of skills/02's band, so it fails the programme's own claim of moving work off other
+  people's batteries. Reserving half the cap reserves nothing for the same reason and instead hands a slot to a
+  phone (13 → 14 SUPERs, tablets unchanged). Ships at 0, i.e. off. The useful question this leaves is not how to
+  elect more tablets but whether a plugged node should be *preferred* as an MPR and as a bundle carrier.
+
 ---
 
 ### Risk Mitigations Across Roadmap

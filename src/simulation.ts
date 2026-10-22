@@ -253,6 +253,13 @@ export interface SimConfig {
    *  (docs/08 §12.8). */
   channelPriority: ChannelPriority;
 
+  /** Share of the top-20% SUPER cap reserved for community relays — plugged, stationary
+   *  nodes such as a café's tablet (roadmap Phase 5). 0 disables it, which is what ships:
+   *  with no reservation a tablet joins an already-full elected set and everybody else's
+   *  transmissions rise, and the reservation is the change that turns it into a quota
+   *  rather than a device (docs/06 §19.2). */
+  communityRelayQuota: number;
+
   txPowerDbm: number;
   rxSensitivityDbm: number;
   wallPenaltyDb: number;
@@ -400,6 +407,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   channelAccess: "free",
   channelQueueDepth: 8,
   channelPriority: "fifo",
+  communityRelayQuota: 0,
 
   txPowerDbm: DEFAULT_TX_POWER_DBM,
   rxSensitivityDbm: DEFAULT_RX_SENSITIVITY_DBM,
@@ -1274,7 +1282,7 @@ export class MeshSimulation {
   private electOne(node: MeshNode): void {
     node.score = computeScore(node, this.nodes, this.rf);
     if (!this.config.enableSuperElection) return;
-    const { role, reason } = electRole(node, this.nodes, this.rf);
+    const { role, reason } = electRole(node, this.nodes, this.rf, this.config.communityRelayQuota);
     if (role !== node.role) {
       node.wasSuper = node.role === "SUPER";
       node.roleTransitions++;

@@ -1415,8 +1415,8 @@ Two consequences for whoever builds it:
   useful version displaces a battery-powered SUPER, which means the election needs to know
   a candidate is community-hosted *before* it counts the top 20%, not after — e.g. reserve
   part of the cap for charging, stationary nodes, or score them so that a tablet beats a
-  phone at equal position. Neither is implemented, and both are one-line changes to
-  `computeScore`/`electRole` that this section's harness can measure the day they are.
+  phone at equal position. **Both variants have since been implemented and measured, and
+  the proposal is wrong about the mechanism: §19.4.**
 * **Six is not three.** The benefit is a function of how much of the elected set the
   programme occupies. A single tablet in a café is a role change with a small battery
   dividend; a programme is a quota.
@@ -1430,7 +1430,73 @@ likely to be moving and drained. The delivery differences are one to seven messa
 hundred on a single seed, which is inside the band §16.4 warns about, and the ordering
 *between* the three- and six-tablet arms on battery drain (2.822 against 2.877 %/h) is two
 hundredths of a percent and is reported rather than asserted. A six-seed run is the next step
-if this item is ever prioritised, and the harness above is what would run it.
+if this item is ever prioritised, and the harness above is what would run it. §19.4 ran the
+cap-aware variants on three seeds (42, 7, 1234) with the same harness and 60 messages rather
+than 100, so its numbers are comparable to each other and not to the single-seed table above.
+
+### 19.4 Cap-aware promotion, implemented and rejected
+
+§19.2 asked for the election to know a candidate is community-hosted before it counts the
+top 20%. `communityRelayQuota` now does exactly that, in both forms proposed, and neither
+form does what the proposal expected. A quota between 0 and 1 reserves that share of the
+cap for community relays; a quota of 1 or more exempts them from the cap entirely (they
+still have to clear the 0.60 score gate and the 30 m proximity guard). It ships at **0**,
+inert, and the reason is below.
+
+**The diagnosis first, because it decides everything.** Six plugged tablets in the
+60-node crowd, seed 42, four elected. For each of the two that stayed NORMAL, the
+candidates that outscored it were:
+
+| blocked tablet | reason | better-scoring tablets | better-scoring phones |
+|---|---|---|---|
+| `node-1` | `NORMAL: score 0.77, rank 7/24` | **6** | 0 |
+| `node-24` | `NORMAL: score 0.78, rank 6/23` | **5** | 0 |
+
+The same holds on every seed measured: at seed 7 the two blocked tablets read `Backed off:
+SUPER node-14 closer and better scored` — node-14 is another tablet — and at seed 1234 the
+one blocked tablet faced five better tablets and one better phone. **A community relay that
+fails to be elected is losing to other community relays, not to phones.** Reserving part of
+the cap for community relays therefore cannot help them: the slots are already theirs, and
+the weakest two tablets are competing against the strongest four. At three tablets the one
+that sometimes loses is stopped by the proximity guard, which is docs/03 §5 working as
+written — two plugged nodes in the same café should not both be routers.
+
+**What the two variants do instead.** Mean of three seeds (42, 7, 1234), `festival_crowd`,
+60 messages at 1 s, `relayPolicy: "mpr"`:
+
+| tablets | quota | delivery | relay tx | SUPER ratio | elected | tx by others | tx by tablets | NORMAL %/h |
+|---|---|---|---|---|---|---|---|---|
+| 0 | — | 0.9333 | 10,565 | 19.4% | — | 10,565 | 0 | 2.873 |
+| 3 | 0 | 0.9389 | 13,152 | 17.8% | 2.7/3 | 11,595 | 1,557 | 2.803 |
+| 3 | 0.5 | **0.9556** | **11,721** | 20.0% | 2.7/3 | **10,381** | 1,341 | 2.846 |
+| 3 | 1 | 0.9389 | 13,152 | 17.8% | 2.7/3 | 11,595 | 1,557 | 2.803 |
+| 6 | 0 | 0.9444 | 12,063 | 18.3% | 4.7/6 | **9,418** | 2,645 | 2.775 |
+| 6 | 0.5 | 0.9111 | 11,872 | 21.1% | 4.7/6 | 9,334 | 2,538 | 2.795 |
+| 6 | 1 | **0.9611** | 13,309 | 18.9% | **5.3/6** | 10,573 | 2,735 | **2.732** |
+
+* **Quota 1 is byte-identical to quota 0 at three tablets**, and at six it elects all of
+  them on seed 42 (4/6 → 6/6) and lifts delivery 1.7 points — while pushing the SUPER ratio
+  to 15/60 = **25.0%**, exactly the ceiling of skills/02's band, and raising everybody
+  else's transmissions from 9,418 to 10,573 (+12%), back to the no-tablet baseline. The
+  programme's whole claim is moving relay work *off* other people's batteries, and the
+  exemption moves it back on.
+* **Quota 0.5 does not reserve anything for tablets.** A tablet already outscores every
+  phone in range, so those slots were already theirs; taking them out of the open pool
+  *loosens* the rule for phones, and on seed 42 at three tablets the elected set gains one
+  member that is a phone (13 → 14 SUPERs, tablets unchanged at 3/3). The improvement it
+  shows at three tablets (delivery 0.9389 → 0.9556, other people's transmissions 11,595 →
+  10,381, below the no-tablet baseline) is real on three seeds and worth following up, but
+  it is an accident of a looser cap rather than the displacement that was asked for — and
+  at six tablets the same knob costs 3.3 points of delivery.
+* **Neither variant is a quota.** A quota moves work from phones to tablets at a fixed
+  number of routers. What both variants actually do is change *how many* routers there are,
+  which is the variable skills/02 already constrains.
+
+**Verdict:** implemented, default 0, documented as rejected. The lever §19.2 named is aimed
+at a mechanism that is not operating. If the roadmap's community-relay programme is ever
+prioritised, the useful question is not how to elect more tablets — six plugged nodes in one
+crowd get four elected and the other two are correctly redundant — but whether a tablet
+should be *preferred* as an MPR and as a bundle carrier, where the work actually is.
 
 ---
 

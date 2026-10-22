@@ -2007,11 +2007,21 @@ describe("community relays (roadmap Phase 5: a plugged tablet in a café)", () =
     /** The same count for the tablets themselves, which are plugged in. */
     burdenOnRelays: number;
     normalPctPerHour: number;
+    /** Every tablet that did not become a SUPER, with what actually beat it: how many
+     *  better-scoring candidates were themselves community relays, and how many were
+     *  phones. That distinction is the whole finding (§19.4). */
+    blocked: Array<{ id: string; reason: string; betterTablets: number; betterPhones: number }>;
+    superCount: number;
   }
 
-  function runArm(seed: number, relays: number, policy: SimConfig["relayPolicy"]): Arm {
+  function runArm(
+    seed: number,
+    relays: number,
+    policy: SimConfig["relayPolicy"],
+    quota = 0
+  ): Arm {
     const world = festivalCrowd(seed);
-    const sim = new MeshSimulation({ ...world, relayPolicy: policy });
+    const sim = new MeshSimulation({ ...world, relayPolicy: policy, communityRelayQuota: quota });
     sim.runFor(20000);
 
     const relayIds = new Set<string>();
@@ -2067,6 +2077,19 @@ describe("community relays (roadmap Phase 5: a plugged tablet in a café)", () =
       burdenOnOthers: byOthers,
       burdenOnRelays: byRelays,
       normalPctPerHour: stats.batteryPercentPerHourNormal,
+      blocked: [...relayIds]
+        .map((id) => sim.nodes.find((n) => n.id === id)!)
+        .filter((n) => n.role !== "SUPER")
+        .map((n) => {
+          const peers = peersInRange(n, sim.nodes, sim.rf).filter((p) => p.score > n.score);
+          return {
+            id: n.id,
+            reason: n.reasonTrace,
+            betterTablets: peers.filter((p) => p.charging && p.stationary).length,
+            betterPhones: peers.filter((p) => !(p.charging && p.stationary)).length,
+          };
+        }),
+      superCount: sim.nodes.filter((n) => n.role === "SUPER").length,
     };
   }
 
@@ -2667,5 +2690,97 @@ describe("which packet a busy radio takes next (docs/08 §12.8)", () => {
       expect(sim.refresh().channelDeferrals).toBe(0);
       expect(sim.deliveries.filter((d) => d.to === b && d.type === "text").length).toBe(5);
     }
+  });
+});
+
+describe("cap-aware community-relay promotion, measured and rejected (docs/06 §19.4)", () => {
+  /** The same crowd harness as the block above, trimmed to the two questions that decide
+   *  the lever: who gets elected, and what did the ones that did not lose to? */
+  function crowdArm(seed: number, relays: number, quota: number) {
+    const sim = new MeshSimulation({ ...festivalCrowd(seed), communityRelayQuota: quota });
+    sim.runFor(20000);
+    const online = sim.nodes.filter((n) => n.isOnline);
+    const ranked = [...online].sort(
+      (a, b) =>
+        peersInRange(b, online, sim.rf).length - peersInRange(a, online, sim.rf).length ||
+        (a.id < b.id ? -1 : 1)
+    );
+    const tablets = ranked.slice(0, relays);
+    for (const n of tablets) {
+      n.charging = true;
+      n.stationary = true;
+      n.battery = 1;
+      n.superOptOut = false;
+      n.batterySaver = false;
+      n.uptimeMin = 600;
+    }
+    sim.runFor(60000);
+    return {
+      sim,
+      tablets,
+      elected: tablets.filter((n) => n.role === "SUPER").length,
+      supers: sim.nodes.filter((n) => n.role === "SUPER").length,
+      blocked: tablets
+        .filter((n) => n.role !== "SUPER")
+        .map((n) => {
+          const better = peersInRange(n, sim.nodes, sim.rf).filter((p) => p.score > n.score);
+          return {
+            reason: n.reasonTrace,
+            betterTablets: better.filter((p) => p.charging && p.stationary).length,
+            betterPhones: better.filter((p) => !(p.charging && p.stationary)).length,
+          };
+        }),
+    };
+  }
+
+  it("the cap a tablet loses is being spent on other tablets, not on phones", () => {
+    // docs/06 §19.2 proposed making promotion cap-aware so a plugged tablet *displaces* a
+    // battery-powered SUPER. This is why that cannot work: with six tablets in one crowd
+    // they all hear each other, so the five top-20% slots they are competing for are
+    // already theirs, and the two that stay NORMAL lost to their own kind.
+    const arm = crowdArm(42, 6, 0);
+    expect(arm.elected).toBe(4);
+    expect(arm.blocked.length).toBe(2);
+    for (const b of arm.blocked) {
+      expect(b.betterTablets).toBeGreaterThan(b.betterPhones);
+      expect(b.betterPhones).toBe(0);
+    }
+    // And at three tablets the one that sometimes loses is stopped by the 30 m proximity
+    // guard — two plugged nodes in the same café should not both be routers — which is
+    // the guard doing its job (docs/03 §5), not a cap that needs widening.
+    const backed = crowdArm(7, 3, 0);
+    expect(backed.elected).toBe(2);
+    expect(backed.blocked[0].reason).toContain("Backed off");
+  });
+
+  it("exempting tablets from the cap elects all six and pushes the ratio to the top of the band", () => {
+    const capped = crowdArm(42, 6, 0);
+    const exempt = crowdArm(42, 6, 1);
+    expect(capped.elected).toBe(4);
+    expect(exempt.elected).toBe(6);
+    // 15/60 is exactly 25.0%, the ceiling of skills/02's 15-25% band, reached by adding
+    // routers rather than by moving work onto better ones.
+    expect(exempt.supers).toBe(15);
+    expect(exempt.supers / exempt.sim.nodes.length).toBeCloseTo(0.25, 6);
+    expect(exempt.supers).toBeGreaterThan(capped.supers);
+    // Three tablets are all elected either way, so the exemption buys nothing at the
+    // scale a real café programme would start at.
+    expect(crowdArm(42, 3, 1).elected).toBe(crowdArm(42, 3, 0).elected);
+  });
+
+  it("reserving half the cap does not reserve it for tablets — it hands a slot to a phone", () => {
+    // A tablet already outscores every phone in range, so the reserved slots were theirs
+    // before the reservation existed. Taking those slots out of the open pool therefore
+    // *loosens* the rule for phones: one more SUPER, and it is not a tablet.
+    const plain = crowdArm(42, 3, 0);
+    const reserved = crowdArm(42, 3, 0.5);
+    expect(reserved.elected).toBe(plain.elected);
+    expect(reserved.supers).toBe(plain.supers + 1);
+    const extra = reserved.sim.nodes.filter(
+      (n) => n.role === "SUPER" && !(n.charging && n.stationary)
+    ).length;
+    expect(extra).toBeGreaterThan(
+      plain.sim.nodes.filter((n) => n.role === "SUPER" && !(n.charging && n.stationary)).length
+    );
   });
 });
