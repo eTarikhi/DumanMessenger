@@ -64,6 +64,25 @@ enum RelayPolicy { mpr, routeFlood, floodAll }
 /// collide.
 enum ChannelAccess { free, halfDuplex }
 
+/// Which queued packet a busy radio takes next (docs/08 §12.8).
+///
+/// [ChannelPriority.fifo] is arrival order: simple, fair, and what a radio with no notion
+/// of what it is carrying does. It ships.
+///
+/// [ChannelPriority.ackFirst] lets acknowledgements jump the queue. An ACK is about 100
+/// bytes and it releases the next chunk of somebody's transfer, so promoting it is cheap
+/// and it pays: 17% off a 2 MB transfer on one radio, 5-17% off a 10 MB file that has
+/// traffic to compete with.
+///
+/// [ChannelPriority.byClass] is a WMM-like ranking that also puts an SOS and a voice frame
+/// above a bulk chunk — TypeScript spells this `"class"`, which is a reserved word here.
+/// It buys the bulk transfer another 22% and the voice nothing: a note three hops away is
+/// limited by its own air time, and no queue order creates air time.
+///
+/// Only consulted under [ChannelAccess.halfDuplex]. With a free radio nothing waits, so
+/// there is no order to choose.
+enum ChannelPriority { fifo, ackFirst, byClass }
+
 /// Address of a scoped group flood. Not a node id, and deliberately distinct from
 /// `broadcastAddress`: a broadcast is public by design (docs/04 §4), a group flood
 /// is delivered only to members holding the current key epoch.

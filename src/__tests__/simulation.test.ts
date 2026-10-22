@@ -33,7 +33,13 @@ import {
 } from "../routing";
 import { makeNode, rfWith } from "./helpers";
 import { BATTERY_FLOOR, CHARGING_BONUS, WEIGHTS, computeScore } from "../election";
-import { HISTORY_BUCKETS, type HistoryEntry, type MeshMessage, type MeshNode } from "../types";
+import {
+  HISTORY_BUCKETS,
+  type HistoryEntry,
+  type MeshMessage,
+  type MeshNode,
+  type NodeId,
+} from "../types";
 
 /**
  * Every test in the first block pins a defect that existed in the original
@@ -2545,5 +2551,121 @@ describe("channel access: one radio, half-duplex (docs/08 §12)", () => {
     expect(threeOnOneRadio).toBeGreaterThan(10000);
     expect(threeOnFreeRadio).toBeLessThan(2000);
     expect(threeOnOneRadio).toBeGreaterThan(threeOnFreeRadio * 10);
+  });
+});
+
+describe("which packet a busy radio takes next (docs/08 §12.8)", () => {
+  function lineWorld(n = 2, over: Partial<SimConfig> = {}): MeshSimulation {
+    const sim = new MeshSimulation({
+      ...DEFAULT_CONFIG,
+      nodeCount: n,
+      stationaryRatio: 1,
+      chargingRatio: 0,
+      trafficIntervalMs: 0,
+      enableSuperElection: false,
+      warmupMs: 0,
+      obstacles: [],
+      ...over,
+    });
+    sim.nodes.forEach((node, i) => {
+      node.pos = { x: 10 + i * 20, y: 10 };
+      node.target = { x: 10 + i * 20, y: 10 };
+      node.mobility = 0;
+      node.isOnline = true;
+      node.battery = 1;
+    });
+    sim.runFor(20000);
+    sim.clearRecords();
+    return sim;
+  }
+
+  function runUntil(sim: MeshSimulation, done: () => boolean, budgetMs: number): boolean {
+    let elapsed = 0;
+    while (!done() && elapsed < budgetMs) {
+      sim.runFor(100);
+      elapsed += 100;
+    }
+    return done();
+  }
+
+  /** One radio, one sender, a 2 MB file already committed to it, and then something
+   *  else arriving: the arrival order is the same in every arm, so whatever differs is
+   *  the queue discipline. */
+  function busyRadio(priority: SimConfig["channelPriority"], then: (sim: MeshSimulation, a: NodeId, b: NodeId) => void) {
+    const sim = lineWorld(2, { channelAccess: "halfDuplex", channelPriority: priority });
+    const a = sim.nodes[0].id;
+    const b = sim.nodes[1].id;
+    const file = sim.sendFile(a, b, 2 * 1048576)!;
+    sim.runFor(1000); // some chunks are queued and the radio is committed
+    then(sim, a, b);
+    runUntil(sim, () => file.state === "complete", 600000);
+    return { sim, file };
+  }
+
+  it("lets a voice note overtake the bulk transfer, and only when asked to", () => {
+    const arms = (["fifo", "class"] as const).map((priority) => {
+      const { sim, file } = busyRadio(priority, (s, a, b) => {
+        s.sendVoice(a, b, 5, { stream: true });
+      });
+      const note = [...sim.transfers.values()].find((t) => t.id !== file.id)!;
+      // `busyRadio` runs until the *file* is done; under FIFO the note is still behind
+      // it, so give the note its own budget before measuring either.
+      runUntil(sim, () => note.state === "complete", 600000);
+      const fileDone = file.completedAt ?? Number.POSITIVE_INFINITY;
+      return {
+        noteFirst: (note.completedAt ?? Number.POSITIVE_INFINITY) < fileDone,
+        framesBeforeFile: sim.deliveries.filter(
+          (d) => d.transferId === note.id && d.timestamp < fileDone
+        ).length,
+        frames: note.chunks,
+        noteSeconds: ((note.completedAt ?? 0) - note.startedAt) / 1000,
+      };
+    });
+    const [fifo, cls] = arms;
+
+    // Arrival order: under FIFO the note's frames sit behind the chunks already queued,
+    // so the note finishes when the file does.
+    expect(fifo.noteFirst).toBe(false);
+    expect(fifo.framesBeforeFile).toBeLessThan(fifo.frames);
+    // Under `class` the same ten frames all go first and the note is done 9 s sooner.
+    expect(cls.noteFirst).toBe(true);
+    expect(cls.framesBeforeFile).toBe(cls.frames);
+    expect(cls.noteSeconds).toBeLessThan(fifo.noteSeconds - 5);
+  });
+
+  it("promoting acknowledgements is what pays for the bulk transfer", () => {
+    const arms = (["fifo", "ackFirst"] as const).map((priority) => {
+      const { sim, file } = busyRadio(priority, (s, a, b) => {
+        s.sendMessage(a, b, "probe-ack", "ack");
+      });
+      const ackAt = sim.deliveries.find((d) => d.type === "ack" && d.to === sim.nodes[1].id)?.timestamp ?? -1;
+      return {
+        chunksBeforeAck: sim.deliveries.filter(
+          (d) => d.transferId === file.id && d.timestamp < ackAt
+        ).length,
+        fileSeconds: ((file.completedAt ?? 0) - file.startedAt) / 1000,
+        chunks: file.chunks,
+      };
+    });
+    const [fifo, ackFirst] = arms;
+
+    expect(ackFirst.chunksBeforeAck).toBeLessThan(fifo.chunksBeforeAck);
+    // An ACK is ~100 bytes and it releases the next chunk, so letting it overtake six
+    // 64 KB slices takes 17% off the transfer — the same direction the three-seed campus
+    // measurement shows (200 s -> 189 s with text competing, 225 s -> 186 s with a note).
+    expect(ackFirst.fileSeconds).toBeLessThan(fifo.fileSeconds);
+    expect(ackFirst.fileSeconds).toBeGreaterThan(fifo.fileSeconds * 0.7);
+  });
+
+  it("is never consulted on the shipped radio, because nothing ever waits there", () => {
+    for (const channelPriority of ["fifo", "class"] as const) {
+      const sim = lineWorld(2, { channelPriority });
+      const a = sim.nodes[0].id;
+      const b = sim.nodes[1].id;
+      for (let i = 0; i < 5; i++) sim.sendMessage(a, b, `m${i}`, "text");
+      sim.runFor(20000);
+      expect(sim.refresh().channelDeferrals).toBe(0);
+      expect(sim.deliveries.filter((d) => d.to === b && d.type === "text").length).toBe(5);
+    }
   });
 });

@@ -714,14 +714,81 @@ would silently redefine every acceptance number in the roadmap.
   capped at two hops for streaming and longer notes are sent as blobs, or voice gets
   priority in the transmit queue — which this model does not implement, and which would be
   the next thing to measure.
+* Voice priority in the transmit queue **is** implemented and measured (§12.8), and it does
+  not do what it was for: it cannot rescue push-to-talk beyond two hops. It ships off.
 * Not modelled, and the direction of the error is known: receiver-side capture and
   collisions between waiting packets. Both would make `halfDuplex` worse, so every number
   here is the optimistic end of a real radio.
 
+### 12.8 Which packet a busy radio takes next
+
+Once packets wait, the order they wait in is a design decision, and the obvious one is
+wrong. `channelPriority` has three settings: `"fifo"` (arrival order, ships), `"ackFirst"`
+(acknowledgements jump the queue), and `"class"` (a WMM-like ranking: an SOS and a voice
+frame first, then acknowledgements, then everything else in arrival order — so a text
+message overtakes the 64 KB chunk queued ahead of it). Mean of three seeds on the campus
+world, all under `halfDuplex`:
+
+**Text traffic with a 10 MB file in flight**
+
+| priority | delivery | p95 | file time | queue drops |
+|---|---|---|---|---|
+| `fifo` | 0.9548 | 7,954 ms | 3.33 min | 2,409 |
+| `ackFirst` | **0.9605** | **7,193 ms** | **3.15 min** | 2,545 |
+| `class` | 0.9605 | 7,193 ms | 3.15 min | 2,545 |
+
+`class` and `ackFirst` are identical here because nothing but text and chunks is in flight,
+so the two settings make the same choice — a useful check that the ranking is doing what the
+code says.
+
+**A 30 s note with a 10 MB file in flight**
+
+| priority | note delay after release | underruns | file time |
+|---|---|---|---|
+| `fifo` | 33.29 s | 21.7 | 3.74 min |
+| `ackFirst` | **40.76 s** | 23.3 | 3.09 min |
+| `class` | 33.45 s | 22.0 | **2.40 min** |
+
+**Text with a 30 s note in flight, and an SOS with a file in flight**
+
+| priority | text delivery | SOS mean latency |
+|---|---|---|
+| `fifo` | **0.9658** | 8.33 s |
+| `ackFirst` | 0.9573 | 8.32 s |
+| `class` | 0.9573 | 8.33 s |
+
+Three things follow, and only the first is what the feature was for.
+
+**Promoting acknowledgements is what pays.** An ACK is about 100 bytes and it is what
+releases the next chunk of somebody's transfer, so letting it overtake a 64 KB slice takes
+5% off a file that has text to compete with and 17% off one that has a note, and text
+delivery and p95 move the same way. The tests pin the mechanism on one radio: with a 2 MB
+transfer already committed, an ACK arrives after 8 chunks under `fifo` and after 5 under
+`ackFirst`, and the transfer finishes in 15.0 s instead of 18.1 s.
+
+**Promoting voice buys the file more and the voice nothing.** `class` cuts the same
+note-competed transfer by a further 22% (3.09 → 2.40 min, 36% below `fifo`) because bulk
+chunks are now the lowest class of all — and the note's own delay is unchanged at 33.4 s
+with the same underruns. `ackFirst` alone actually *hurts* the note (33.3 → 40.8 s) because
+voice frames now wait behind acknowledgements. On one radio the tests pin it: a 5 s note
+started while a 2 MB file is in flight finishes at 24.3 s under `fifo`, with 9 of its 10
+frames arriving before the file does, and at **15.4 s** under `class`, with all 10 first.
+
+**Nothing rescues push-to-talk at three hops.** §12.3's limit is the note's own air time —
+735 ms of radio per 500 ms of capture — and no queue discipline creates air time. Priority
+changes who waits, not how much waiting there is; a note that is over-subscribed on its own
+path stays over-subscribed while everybody else pays for the attempt, which is the 0.9 point
+of text delivery `class` costs when a note is in flight. An SOS is untouched in every arm:
+four floods of a 100-byte packet are not what a busy radio is waiting on.
+
+So `"fifo"` ships. If the real radio is the model to plan against, the evidence-backed order
+is: window 1 (§12.5), then `"ackFirst"`, and only then `"class"` — and `"class"` should be
+chosen for bulk-transfer speed, not for voice.
+
 ## 13. Reproducing
 
 ```bash
-npm run media                                            # TypeScript probe, every table above
+npm run media                                            # TypeScript probe, every table above (§7-§8 for the radio)
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media --no-check
 npm test                                                 # 243 TS tests, incl. 18 media + 6 channel cases
 cd sim/mesh_sim && dart test                             # 18 Dart media cases + test/channel_test.dart
@@ -732,11 +799,12 @@ Engine surface: `sendFile(from, to, bytes, {chunkBytes, window, transport})`,
 `mediaTimeoutMs(transfer)`, `sim.transfers`, and the config keys `bleKbps`,
 `wifiDirectKbps`, `transferChunkBytes`, `transferWindow`, `transferStallMs`,
 `mediaAckTimeoutMs`, `adaptiveMediaAck`, `voiceKbps`, `voiceFrameMs`, `jitterBufferMs`,
-`voiceTtl`, `maxTransferBytes`, `channelAccess`, `channelQueueDepth`.
+`voiceTtl`, `maxTransferBytes`, `channelAccess`, `channelQueueDepth`, `channelPriority`.
 
 Tests that pin this document's claims: `media transport (docs/05 §3.2-3.3, roadmap
 Phase 3)`, `media against skills/05 (Voice PTT & Media)`, `media under load, measured
 without confounding the A/B (docs/08 §9)` and `channel access: one radio, half-duplex
-(docs/08 §12)` in `src/__tests__/simulation.test.ts`, `media transport in the UI` in
+(docs/08 §12)` and `which packet a busy radio takes next (docs/08 §12.8)` in
+`src/__tests__/simulation.test.ts`, `media transport in the UI` in
 `src/__tests__/components.test.tsx`, and `test/media_test.dart` plus `test/channel_test.dart`
 in the Dart engine.

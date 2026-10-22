@@ -393,6 +393,15 @@ void main(List<String> args) {
               '${'${t['drops']}'.padRight(9)}'
               '${t['arm'] == 'quiet' ? '—' : (t['fileComplete'] == true ? 'yes' : 'no')}');
         }
+        final prio = (ch['priority'] as List?)?.cast<Map<String, Object?>>();
+        if (prio != null && prio.isNotEmpty) {
+          stdout.writeln('    queue discipline on one radio (docs/08 §12.8):');
+          for (final r in prio) {
+            stdout.writeln('      ${'${r['arm']}'.padRight(28)}'
+                '${'${r['priority']}'.padRight(10)}'
+                '${'${r['what']} ${r['ms']} ms'.padRight(26)}${r['metric']}');
+          }
+        }
       }
       stdout.writeln('  ${media['verdict']}');
     }
@@ -1088,6 +1097,100 @@ Map<String, Object?> _mediaProbe(SimConfig config) {
     }
   }
 
+  /// Two nodes 20 m apart, no walls and no traffic of their own: one radio and one
+  /// sender, so whatever differs between the arms below is the queue discipline and
+  /// nothing else (docs/08 §12.8). The campus-scale A/B — three seeds against text, a
+  /// file and a note — is the TypeScript probe's §8; these two rows pin the mechanism.
+  MeshSimulation radioPair(ChannelPriority priority) {
+    final sim = MeshSimulation(config.copyWith(
+      nodeCount: 2,
+      stationaryRatio: 1.0,
+      chargingRatio: 0.0,
+      trafficIntervalMs: 0,
+      enableSuperElection: false,
+      warmupMs: 0,
+      obstacles: const <Obstacle>[],
+      channelAccess: ChannelAccess.halfDuplex,
+      channelPriority: priority,
+    ));
+    for (var i = 0; i < sim.nodes.length; i++) {
+      final node = sim.nodes[i];
+      node.pos = Vec2(10.0 + i * 20, 10);
+      node.target = Vec2(10.0 + i * 20, 10);
+      node.mobility = 0;
+      node.isOnline = true;
+      node.battery = 1.0;
+    }
+    sim.runFor(20000);
+    sim.clearRecords();
+    return sim;
+  }
+
+  final channelPriorityRows = <Map<String, Object?>>[];
+  for (final arm in <(ChannelPriority, String)>[
+    (ChannelPriority.fifo, 'voice behind a 2 MB file'),
+    (ChannelPriority.byClass, 'voice behind a 2 MB file'),
+    (ChannelPriority.fifo, 'an ACK behind a 2 MB file'),
+    (ChannelPriority.ackFirst, 'an ACK behind a 2 MB file'),
+  ]) {
+    final priority = arm.$1;
+    final sim = radioPair(priority);
+    final a = sim.nodes[0].id;
+    final b = sim.nodes[1].id;
+    final file = sim.sendFile(a, b, 2 * 1048576);
+    if (file == null) continue;
+    sim.runFor(1000);
+    final isVoice = arm.$2.startsWith('voice');
+    Transfer? note;
+    if (isVoice) {
+      note = sim.sendVoice(a, b, 5.0, stream: true);
+    } else {
+      sim.sendMessage(a, b, 'probe-ack', MsgType.ack);
+    }
+    runUntil(sim, () => file.state == TransferState.complete, 600000);
+    if (note != null) {
+      runUntil(sim, () => note!.state == TransferState.complete, 600000);
+    }
+    final fileDone = file.completedAt ?? double.infinity;
+    String metric;
+    double ms;
+    String what;
+    if (isVoice) {
+      final framesFirst = sim.deliveries
+          .where((d) => d.transferId == note?.id && d.timestamp < fileDone)
+          .length;
+      metric = '$framesFirst/${note?.chunks ?? 0} frames before the file';
+      ms = _round((note?.completedAt ?? 0) - (note?.startedAt ?? 0));
+      what = 'note finished in';
+    } else {
+      // The injected ACK runs A -> B; the transfer's own acknowledgements run the other
+      // way, so the recipient is what tells them apart.
+      double? ackAt;
+      for (final d in sim.deliveries) {
+        if (d.type == MsgType.ack && d.to == b) {
+          ackAt = d.timestamp;
+          break;
+        }
+      }
+      final at = ackAt;
+      final chunksFirst = at == null
+          ? 0
+          : sim.deliveries
+              .where((d) => d.transferId == file.id && d.timestamp < at)
+              .length;
+      metric = '$chunksFirst/${file.chunks} chunks before the ACK';
+      ms = _round((file.completedAt ?? 0) - file.startedAt);
+      what = 'file finished in';
+    }
+    channelPriorityRows.add(<String, Object?>{
+      'arm': arm.$2,
+      'priority': priority == ChannelPriority.byClass ? 'class' : priority.name,
+      'metric': metric,
+      'ms': ms,
+      'what': what,
+    });
+  }
+
   final channelText = <Map<String, Object?>>[
     for (final ca in <ChannelAccess>[
       ChannelAccess.free,
@@ -1108,6 +1211,7 @@ Map<String, Object?> _mediaProbe(SimConfig config) {
     'channel': <String, Object?>{
       'files': channelFiles,
       'text': channelText,
+      'priority': channelPriorityRows,
     },
     'pttMeetsBudget': pttOk,
     'imageMeetsBudget': filesOk,

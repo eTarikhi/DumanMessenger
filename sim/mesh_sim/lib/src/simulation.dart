@@ -73,6 +73,7 @@ class SimConfig {
     this.adaptiveMediaAck = false,
     this.channelAccess = ChannelAccess.free,
     this.channelQueueDepth = 8,
+    this.channelPriority = ChannelPriority.fifo,
     this.bleKbps = 80,
     this.wifiDirectKbps = 20000,
     this.transferChunkBytes = 65536,
@@ -200,6 +201,11 @@ class SimConfig {
   /// moving (docs/08 §12.1).
   final int channelQueueDepth;
 
+  /// Which queued packet a busy radio takes next: arrival order (ships), acknowledgements
+  /// first, or a WMM-like class ranking that also promotes an SOS and a voice frame above
+  /// a bulk chunk (docs/08 §12.8).
+  final ChannelPriority channelPriority;
+
   /// Link throughput, for the serialization time a large payload occupies the radio
   /// with. The 250x ratio is not a guess: docs/05 §3.2 puts Wi-Fi Direct at "250x
   /// faster than BLE" for images, so 80 kbit/s against 20 Mbit/s reproduces exactly
@@ -308,6 +314,7 @@ class SimConfig {
     bool? adaptiveMediaAck,
     ChannelAccess? channelAccess,
     int? channelQueueDepth,
+    ChannelPriority? channelPriority,
     int? transferChunkBytes,
     int? transferWindow,
     double? transferStallMs,
@@ -350,6 +357,7 @@ class SimConfig {
         adaptiveMediaAck: adaptiveMediaAck ?? this.adaptiveMediaAck,
         channelAccess: channelAccess ?? this.channelAccess,
         channelQueueDepth: channelQueueDepth ?? this.channelQueueDepth,
+        channelPriority: channelPriority ?? this.channelPriority,
         bleKbps: bleKbps,
         wifiDirectKbps: wifiDirectKbps,
         transferChunkBytes: transferChunkBytes ?? this.transferChunkBytes,
@@ -972,6 +980,22 @@ class _QueuedTx {
 /// it. Without that last flag a packet handed to a busy radio whose queue had just
 /// drained has nothing to wake the radio up, and waits for some other transmission to
 /// come along — which in a quiet mesh is never.
+/// WMM-like ranking for a radio that has to choose what to send next. An SOS and a
+/// push-to-talk frame have a deadline; an ACK is small and keeps somebody else's window
+/// moving; a 64 KB chunk has neither property and is the only thing here that can afford
+/// to wait. [MsgType.ogm] never reaches a transmit queue — control beacons have their own
+/// path — and is ranked last for exhaustiveness.
+const Map<MsgType, int> _channelClass = <MsgType, int>{
+  MsgType.sos: 0,
+  MsgType.voice: 0,
+  MsgType.ack: 1,
+  MsgType.text: 2,
+  MsgType.broadcast: 2,
+  MsgType.file: 2,
+  MsgType.sync: 2,
+  MsgType.ogm: 2,
+};
+
 class _ChannelState {
   double busyUntil = 0;
   final List<_QueuedTx> queue = <_QueuedTx>[];
@@ -2318,7 +2342,7 @@ class MeshSimulation {
       }
       return;
     }
-    final next = ch.queue.removeAt(0);
+    final next = _takeNextTx(ch);
     final waited = now - next.queuedAt;
     if (waited > 0) {
       _channelDeferrals++;
@@ -2330,6 +2354,24 @@ class MeshSimulation {
       ch.drainScheduled = true;
       _queue.push(ch.busyUntil, EventKind.channel, node.id);
     }
+  }
+
+  /// Take the next packet off the queue: arrival order, or by class when the config asks
+  /// for it. Within a class it is still arrival order, so a voice note cannot be overtaken
+  /// by a later one.
+  _QueuedTx _takeNextTx(_ChannelState ch) {
+    if (config.channelPriority == ChannelPriority.fifo) return ch.queue.removeAt(0);
+    if (config.channelPriority == ChannelPriority.ackFirst) {
+      final ack = ch.queue.indexWhere((q) => q.msg.type == MsgType.ack);
+      return ch.queue.removeAt(ack == -1 ? 0 : ack);
+    }
+    var best = 0;
+    for (var i = 1; i < ch.queue.length; i++) {
+      if (_channelClass[ch.queue[i].msg.type]! < _channelClass[ch.queue[best].msg.type]!) {
+        best = i;
+      }
+    }
+    return ch.queue.removeAt(best);
   }
 
   /// The packet goes on air: counters, loss draw, log, delivery event. Returns the air

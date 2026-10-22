@@ -19,6 +19,7 @@ import type {
   OGM,
   Obstacle,
   ChannelAccess,
+  ChannelPriority,
   RelayPolicy,
   Role,
 } from "./types";
@@ -78,6 +79,21 @@ export interface SpawnCluster {
 
 /** One node's radio under `channelAccess: "halfDuplex"`: the instant it comes free
  *  again, and the bounded FIFO of packets waiting for it (docs/08 §12). */
+/** WMM-like ranking for a radio that has to choose what to send next. An SOS and a
+ *  push-to-talk frame have a deadline; an ACK is small and keeps somebody else's window
+ *  moving; a 64 KB chunk has neither property and is the only thing here that can afford
+ *  to wait. `ogm` never reaches a transmit queue — control beacons have their own path. */
+const CHANNEL_CLASS: Record<MsgType, number> = {
+  sos: 0,
+  voice: 0,
+  ack: 1,
+  text: 2,
+  broadcast: 2,
+  file: 2,
+  sync: 2,
+  ogm: 2,
+};
+
 interface ChannelState {
   busyUntil: number;
   queue: Array<{ msg: MeshMessage; targetId: NodeId; queuedAt: number }>;
@@ -231,6 +247,11 @@ export interface SimConfig {
    *  radio commit air time arbitrarily far into the future, and the mesh then spends
    *  its whole run waiting for a horizon that keeps moving (docs/08 §12.1). */
   channelQueueDepth: number;
+  /** Which queued packet a busy radio takes next. `"fifo"` ships; `"ackFirst"` promotes
+   *  acknowledgements only; `"class"` also promotes deadline-driven traffic ahead of bulk
+   *  chunks. Only consulted when `channelAccess` makes packets wait at all
+   *  (docs/08 §12.8). */
+  channelPriority: ChannelPriority;
 
   txPowerDbm: number;
   rxSensitivityDbm: number;
@@ -378,6 +399,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   maxRetries: 2,
   channelAccess: "free",
   channelQueueDepth: 8,
+  channelPriority: "fifo",
 
   txPowerDbm: DEFAULT_TX_POWER_DBM,
   rxSensitivityDbm: DEFAULT_RX_SENSITIVITY_DBM,
@@ -2092,7 +2114,7 @@ export class MeshSimulation {
       }
       return;
     }
-    const next = ch.queue.shift()!;
+    const next = this.takeNextTx(ch);
     const waited = this.now - next.queuedAt;
     if (waited > 0) {
       this.channelDeferrals++;
@@ -2104,6 +2126,24 @@ export class MeshSimulation {
       ch.drainScheduled = true;
       this.queue.push(ch.busyUntil, "channel", node.id);
     }
+  }
+
+  /** Take the next packet off the queue: arrival order, or by class when the config asks
+   *  for it. Within a class it is still arrival order, so a voice note cannot be overtaken
+   *  by a later one. */
+  private takeNextTx(ch: ChannelState): { msg: MeshMessage; targetId: NodeId; queuedAt: number } {
+    if (this.config.channelPriority === "fifo") return ch.queue.shift()!;
+    if (this.config.channelPriority === "ackFirst") {
+      const ack = ch.queue.findIndex((q) => q.msg.type === "ack");
+      return ch.queue.splice(ack === -1 ? 0 : ack, 1)[0];
+    }
+    let best = 0;
+    for (let i = 1; i < ch.queue.length; i++) {
+      const c = CHANNEL_CLASS[ch.queue[i].msg.type];
+      const bc = CHANNEL_CLASS[ch.queue[best].msg.type];
+      if (c < bc) best = i;
+    }
+    return ch.queue.splice(best, 1)[0];
   }
 
   /**

@@ -18,7 +18,13 @@ import { MeshSimulation, DEFAULT_CONFIG, type SimConfig } from "../src/simulatio
 import { campusQuad, festivalCrowd } from "../src/scenarios";
 import { canReach, effectiveLossProbability, peersInRange } from "../src/rf";
 import { createRng } from "../src/rng";
-import type { ChannelAccess, MeshNode, NodeId, TransportType } from "../src/types";
+import type {
+  ChannelAccess,
+  ChannelPriority,
+  MeshNode,
+  NodeId,
+  TransportType,
+} from "../src/types";
 
 /** skills/05: "chunked BLE 512B MTU" — what a file is sliced into when there is no
  *  Wi-Fi Direct group owner to carry it. */
@@ -908,6 +914,218 @@ function channelTable(): void {
   );
 }
 
+// ---------------------------------------------------------------------------
+// 8. Which packet a busy radio takes next
+// ---------------------------------------------------------------------------
+
+/**
+ * §12.5 found the gate that pays is committing less air time ahead. This asks the other
+ * queue question: when a radio has to choose, does choosing well help? Three disciplines
+ * — arrival order, acknowledgements first, and a WMM-like class ranking that also puts an
+ * SOS and a voice frame ahead of a bulk chunk — against the two loads that actually
+ * compete on this mesh: a 10 MB file, and a streamed note.
+ */
+
+const PRIORITIES: ChannelPriority[] = ["fifo", "ackFirst", "class"];
+
+interface PrioRow {
+  delivery: number;
+  p95: number;
+  fileMs: number | null;
+  noteDelayMs: number | null;
+  underruns: number;
+  sosMs: number;
+  drops: number;
+}
+
+function textWithFile(prio: ChannelPriority, seed: number): PrioRow {
+  const sim = simFor({
+    ...campusQuad(seed),
+    trafficIntervalMs: 0,
+    channelAccess: "halfDuplex",
+    channelPriority: prio,
+  });
+  const plan = contentionPlan(seed, sim.nodes.length, 60);
+  const t = sim.sendFile(sim.nodes[plan[0][0]].id, sim.nodes[plan[0][1]].id, 10 * MB)!;
+  let sent = 0;
+  for (let i = 1; i < plan.length; i++) {
+    const from = sim.nodes[plan[i][0]];
+    const to = sim.nodes[plan[i][1]];
+    if (from.isOnline && to.isOnline && sim.sendMessage(from.id, to.id, `p-${i}`, "text")) sent++;
+    sim.runFor(2000);
+  }
+  const stats = sim.refresh();
+  const uni = sim.deliveries.filter(
+    (d) => d.type !== "ack" && d.type !== "broadcast" && !d.groupId && !d.transferId
+  );
+  const lat = uni.map((d) => d.latencyMs).sort((x, y) => x - y);
+  let waited = 0;
+  while (t.state === "active" && waited < 600_000) {
+    sim.runFor(250);
+    waited += 250;
+  }
+  return {
+    delivery: uni.length / Math.max(1, sent),
+    p95: lat.length ? lat[Math.floor(lat.length * 0.95)] : 0,
+    fileMs: t.completedAt === null ? null : t.completedAt - t.startedAt,
+    noteDelayMs: null,
+    underruns: 0,
+    sosMs: 0,
+    drops: stats.channelDrops,
+  };
+}
+
+function noteWithFile(prio: ChannelPriority, seed: number): PrioRow {
+  const sim = simFor({
+    ...campusQuad(seed),
+    trafficIntervalMs: 0,
+    channelAccess: "halfDuplex",
+    channelPriority: prio,
+  });
+  const plan = contentionPlan(seed, sim.nodes.length, 8);
+  const t = sim.sendFile(sim.nodes[plan[0][0]].id, sim.nodes[plan[0][1]].id, 10 * MB)!;
+  const note = sim.sendVoice(sim.nodes[plan[1][0]].id, sim.nodes[plan[1][1]].id, 30, { stream: true })!;
+  let elapsed = 0;
+  while ((t.state === "active" || note.state === "active") && elapsed < 600_000) {
+    sim.runFor(250);
+    elapsed += 250;
+  }
+  const arrivals = sim.deliveries
+    .filter((d) => d.transferId === note.id)
+    .map((d) => d.timestamp)
+    .sort((x, y) => x - y);
+  let underruns = 0;
+  for (let i = 1; i < arrivals.length; i++) {
+    if (arrivals[i] - arrivals[i - 1] > sim.config.voiceFrameMs + sim.config.jitterBufferMs) underruns++;
+  }
+  const released = note.releasedAt ?? note.startedAt;
+  return {
+    delivery: 0,
+    p95: 0,
+    fileMs: t.completedAt === null ? null : t.completedAt - t.startedAt,
+    noteDelayMs: note.completedAt === null ? null : note.completedAt - released,
+    underruns,
+    sosMs: 0,
+    drops: 0,
+  };
+}
+
+function textWithNote(prio: ChannelPriority, seed: number): PrioRow {
+  const sim = simFor({
+    ...campusQuad(seed),
+    trafficIntervalMs: 0,
+    channelAccess: "halfDuplex",
+    channelPriority: prio,
+  });
+  const plan = contentionPlan(seed, sim.nodes.length, 40);
+  sim.sendVoice(sim.nodes[plan[0][0]].id, sim.nodes[plan[0][1]].id, 30, { stream: true });
+  let sent = 0;
+  for (let i = 1; i < plan.length; i++) {
+    const from = sim.nodes[plan[i][0]];
+    const to = sim.nodes[plan[i][1]];
+    if (from.isOnline && to.isOnline && sim.sendMessage(from.id, to.id, `n-${i}`, "text")) sent++;
+    sim.runFor(2000);
+  }
+  const uni = sim.deliveries.filter(
+    (d) => d.type !== "ack" && d.type !== "broadcast" && !d.groupId && !d.transferId
+  );
+  return {
+    delivery: uni.length / Math.max(1, sent),
+    p95: 0,
+    fileMs: null,
+    noteDelayMs: null,
+    underruns: 0,
+    sosMs: 0,
+    drops: 0,
+  };
+}
+
+function sosWithFile(prio: ChannelPriority, seed: number): PrioRow {
+  const sim = simFor({
+    ...campusQuad(seed),
+    trafficIntervalMs: 0,
+    channelAccess: "halfDuplex",
+    channelPriority: prio,
+  });
+  const plan = contentionPlan(seed, sim.nodes.length, 8);
+  sim.sendFile(sim.nodes[plan[0][0]].id, sim.nodes[plan[0][1]].id, 10 * MB);
+  sim.runFor(5000);
+  const t0 = sim.now;
+  const edge = sim.nodes[sim.nodes.length - 1];
+  sim.sendMessage(edge.id, "BROADCAST", "injured, need help", "sos");
+  sim.runFor(30000);
+  const got = sim.deliveries.filter((d) => d.type === "sos" && d.timestamp >= t0);
+  return {
+    delivery: 0,
+    p95: 0,
+    fileMs: null,
+    noteDelayMs: null,
+    underruns: 0,
+    sosMs: got.length ? got.reduce((a, d) => a + (d.timestamp - t0), 0) / got.length : 30000,
+    drops: 0,
+  };
+}
+
+function priorityTable(): void {
+  console.log("\n=== 8. Which packet a busy radio takes next (docs/08 §12.8) ===");
+  console.log(
+    "All arms are `channelAccess: \"halfDuplex\"` — with a free radio nothing waits, so there is\n" +
+      "no order to choose. `fifo` is arrival order and ships; `ackFirst` promotes acknowledgements;\n" +
+      "`class` also promotes an SOS and a voice frame above a bulk chunk. Mean of three seeds."
+  );
+
+  const cases: Array<[string, (p: ChannelPriority, s: number) => PrioRow, string[]]> = [
+    ["text + a 10 MB file", textWithFile, ["delivery", "p95", "file", "drops"]],
+    ["a 30 s note + a 10 MB file", noteWithFile, ["note delay", "underruns", "file"]],
+    ["text + a 30 s note", textWithNote, ["delivery"]],
+    ["an SOS + a 10 MB file", sosWithFile, ["sos latency"]],
+  ];
+
+  for (const [name, run, cols] of cases) {
+    console.log(`\n--- ${name} ---`);
+    console.log(
+      `priority    ${cols.map((c) => c.padEnd(13)).join("")}`
+    );
+    for (const prio of PRIORITIES) {
+      const rows = SEEDS.map((seed) => run(prio, seed));
+      const mean = (f: (r: PrioRow) => number | null) => {
+        const vals = rows.map(f).filter((v): v is number => v !== null);
+        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : NaN;
+      };
+      const cell = (key: string): string => {
+        switch (key) {
+          case "delivery":
+            return mean((r) => r.delivery).toFixed(4);
+          case "p95":
+            return mean((r) => r.p95).toFixed(0) + " ms";
+          case "file":
+            return fmt(mean((r) => r.fileMs));
+          case "drops":
+            return mean((r) => r.drops).toFixed(0);
+          case "note delay":
+            return fmt(mean((r) => r.noteDelayMs));
+          case "underruns":
+            return mean((r) => r.underruns).toFixed(1);
+          default:
+            return fmt(mean((r) => r.sosMs));
+        }
+      };
+      console.log(`${prio.padEnd(11)} ${cols.map((c) => cell(c).padEnd(13)).join("")}`);
+    }
+  }
+
+  console.log(
+    "\nRead: promoting acknowledgements is what pays — an ACK is ~100 bytes and it releases the\n" +
+      "next chunk, so letting it overtake 64 KB slices takes 6% off a file that has text to compete\n" +
+      "with and 17% off one that has a note to compete with, and text delivery moves the same way.\n" +
+      "Promoting voice on top of that buys the file another 24% (bulk chunks are now the lowest\n" +
+      "class of all) and costs text about a point when a note is in flight. What it does not do is\n" +
+      "rescue push-to-talk: the note's own air time is the bottleneck at three hops, and no queue\n" +
+      "order creates air time. An SOS is unaffected in every arm, because four floods of a 100-byte\n" +
+      "packet are not what a busy radio is waiting on."
+  );
+}
+
 /** Row label for a timer sweep: a fixed value, or what the adaptive timer converged on. */
 function label(timer: number | "adaptive", rs: { timeoutMs: number }[]): string {
   if (timer !== "adaptive") return `${timer} ms`;
@@ -948,6 +1166,7 @@ function main(): void {
   acceptanceTable();
   contentionTable();
   channelTable();
+  priorityTable();
   console.log("\nDone.");
 }
 

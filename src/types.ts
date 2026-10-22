@@ -60,6 +60,28 @@ export type RelayPolicy = "mpr" | "route-flood" | "flood-all";
  */
 export type ChannelAccess = "free" | "halfDuplex";
 
+/**
+ * Which queued packet a busy radio takes next (docs/08 §12.8).
+ *
+ * - `fifo`   arrival order. Simple, fair, and what a radio with no notion of what it is
+ *            carrying does. Ships.
+ * - `ackFirst` acknowledgements jump the queue, everything else keeps arrival order. An
+ *            ACK is 100 bytes and it is what releases the next chunk of somebody's
+ *            transfer, so promoting it is cheap and it pays: measured against a 10 MB
+ *            file in flight it cuts the transfer by a third (docs/08 §12.8).
+ * - `class`  a WMM-like ranking: deadline-driven traffic (an SOS flood, a push-to-talk
+ *            frame) first, then acknowledgements, then everything else in arrival order —
+ *            which puts a text message ahead of the 64 KB file chunk queued behind it.
+ *            Promoting voice is the part that does not pay: a streamed note three hops
+ *            away already needs more air time than its capture clock gives it, so it
+ *            cannot be rescued by jumping the queue, and the text it jumps ahead of pays
+ *            for the attempt.
+ *
+ * Only consulted under `channelAccess: "halfDuplex"`. With a free radio nothing ever
+ * waits, so there is no order to choose.
+ */
+export type ChannelPriority = "fifo" | "ackFirst" | "class";
+
 export interface Vec2 {
   x: number;
   y: number;

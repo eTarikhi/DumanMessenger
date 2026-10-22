@@ -18,6 +18,7 @@ void main() {
     int n = 4,
     ChannelAccess channelAccess = ChannelAccess.free,
     int channelQueueDepth = 8,
+    ChannelPriority channelPriority = ChannelPriority.fifo,
   }) {
     final sim = MeshSimulation(SimConfig(
       nodeCount: n,
@@ -29,6 +30,7 @@ void main() {
       obstacles: const <Obstacle>[],
       channelAccess: channelAccess,
       channelQueueDepth: channelQueueDepth,
+      channelPriority: channelPriority,
     ));
     for (var i = 0; i < sim.nodes.length; i++) {
       final node = sim.nodes[i];
@@ -162,5 +164,117 @@ void main() {
     expect(threeOnOneRadio, greaterThan(10000.0));
     expect(threeOnFreeRadio, lessThan(2000.0));
     expect(threeOnOneRadio, greaterThan(threeOnFreeRadio * 10));
+  });
+
+  /// One radio, one sender, a 2 MB file already committed to it, and then something else
+  /// arriving. The arrival order is the same in every arm, so whatever differs is the
+  /// queue discipline.
+  /// When the acknowledgement this test injected (A -> B) arrived. The transfer's own
+  /// acknowledgements run the other way (B -> A), so the recipient is what tells them
+  /// apart; without that filter the measurement picks up somebody else's ACK.
+  double? injectedAckAt(MeshSimulation sim) {
+    final b = sim.nodes[1].id;
+    for (final d in sim.deliveries) {
+      if (d.type == MsgType.ack && d.to == b) return d.timestamp;
+    }
+    return null;
+  }
+
+  ({MeshSimulation sim, Transfer file}) busyRadio(ChannelPriority priority) {
+    final sim = lineWorld(
+        n: 2,
+        channelAccess: ChannelAccess.halfDuplex,
+        channelPriority: priority);
+    final a = sim.nodes[0].id;
+    final b = sim.nodes[1].id;
+    final file = sim.sendFile(a, b, 2 * 1048576)!;
+    sim.runFor(1000); // some chunks are queued and the radio is committed
+    return (sim: sim, file: file);
+  }
+
+  test('lets a voice note overtake the bulk transfer, and only when asked to', () {
+    // Arrival order: the note's frames sit behind the chunks already queued, so the note
+    // finishes when the file does.
+    final fifo = busyRadio(ChannelPriority.fifo);
+    final fifoNote = fifo.sim.sendVoice(
+        fifo.sim.nodes[0].id, fifo.sim.nodes[1].id, 5.0,
+        stream: true)!;
+    runUntil(fifo.sim, () => fifoNote.state == TransferState.complete, 600000);
+    runUntil(fifo.sim, () => fifo.file.state == TransferState.complete, 600000);
+    final fifoFileDone = fifo.file.completedAt ?? double.infinity;
+    final fifoFramesFirst = fifo.sim.deliveries
+        .where((d) =>
+            d.transferId == fifoNote.id && d.timestamp < fifoFileDone)
+        .length;
+    expect(fifoNote.state, TransferState.complete);
+    expect((fifoNote.completedAt ?? double.infinity) < fifoFileDone, isFalse);
+    expect(fifoFramesFirst, lessThan(fifoNote.chunks));
+
+    // Under the class ranking the same ten frames all go first and the note is done
+    // about nine seconds sooner.
+    final cls = busyRadio(ChannelPriority.byClass);
+    final clsNote = cls.sim.sendVoice(
+        cls.sim.nodes[0].id, cls.sim.nodes[1].id, 5.0,
+        stream: true)!;
+    runUntil(cls.sim, () => clsNote.state == TransferState.complete, 600000);
+    runUntil(cls.sim, () => cls.file.state == TransferState.complete, 600000);
+    final clsFileDone = cls.file.completedAt ?? double.infinity;
+    final clsFramesFirst = cls.sim.deliveries
+        .where((d) => d.transferId == clsNote.id && d.timestamp < clsFileDone)
+        .length;
+    expect(clsNote.state, TransferState.complete);
+    expect((clsNote.completedAt ?? double.infinity) < clsFileDone, isTrue);
+    expect(clsFramesFirst, clsNote.chunks);
+    expect((clsNote.completedAt ?? 0) - clsNote.startedAt,
+        lessThan((fifoNote.completedAt ?? 0) - fifoNote.startedAt - 5000));
+  });
+
+  test('promoting acknowledgements is what pays for the bulk transfer', () {
+    final fifo = busyRadio(ChannelPriority.fifo);
+    fifo.sim
+        .sendMessage(fifo.sim.nodes[0].id, fifo.sim.nodes[1].id, 'probe-ack', MsgType.ack);
+    runUntil(fifo.sim, () => fifo.file.state == TransferState.complete, 600000);
+    final fifoAckAt = injectedAckAt(fifo.sim);
+    expect(fifoAckAt, isNotNull);
+    final fifoChunksBefore = fifo.sim.deliveries
+        .where((d) => d.transferId == fifo.file.id && d.timestamp < fifoAckAt!)
+        .length;
+
+    final ack = busyRadio(ChannelPriority.ackFirst);
+    ack.sim
+        .sendMessage(ack.sim.nodes[0].id, ack.sim.nodes[1].id, 'probe-ack', MsgType.ack);
+    runUntil(ack.sim, () => ack.file.state == TransferState.complete, 600000);
+    final ackAt = injectedAckAt(ack.sim);
+    expect(ackAt, isNotNull);
+    final ackChunksBefore = ack.sim.deliveries
+        .where((d) => d.transferId == ack.file.id && d.timestamp < ackAt!)
+        .length;
+
+    expect(ackChunksBefore, lessThan(fifoChunksBefore));
+    // An ACK is ~100 bytes and it releases the next chunk, so letting it overtake a few
+    // 64 KB slices takes about 17% off the transfer.
+    expect((ack.file.completedAt ?? 0) - ack.file.startedAt,
+        lessThan((fifo.file.completedAt ?? 0) - fifo.file.startedAt));
+  });
+
+  test('is never consulted on the shipped radio, because nothing ever waits there', () {
+    for (final priority in <ChannelPriority>[
+      ChannelPriority.fifo,
+      ChannelPriority.byClass
+    ]) {
+      final sim = lineWorld(n: 2, channelPriority: priority);
+      final a = sim.nodes[0].id;
+      final b = sim.nodes[1].id;
+      for (var i = 0; i < 5; i++) {
+        sim.sendMessage(a, b, 'm$i');
+      }
+      sim.runFor(20000);
+      expect(sim.refresh().channelDeferrals, 0);
+      expect(
+          sim.deliveries
+              .where((d) => d.to == b && d.type == MsgType.text)
+              .length,
+          5);
+    }
   });
 }
