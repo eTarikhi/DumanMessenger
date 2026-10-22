@@ -84,9 +84,17 @@ const double neighborScoreTtlMs = 30000;
 /// Entries advertised in an OGM so peers can learn routes to non-neighbours.
 const int _bestHopAdvertiseLimit = 8;
 
-double _normPeers(int count) => math.log(1 + count) / math.log(1 + 50);
+/// Normalise a peer count. [observedMax] is 0 for the shipped fixed denominator of 50; a
+/// positive value switches to the largest peer count this node has heard, which is what
+/// `PeerNorm.observed` asks for (docs/06 §18.4). Clamped so the term can never exceed 1: the
+/// denominator is at least the node's own count.
+double _normPeers(int count, [int observedMax = 0]) {
+  final denom = observedMax > 0 ? math.max(observedMax, count) : 50;
+  return math.log(1 + count) / math.log(1 + denom);
+}
 
-double computeScore(MeshNode node, List<MeshNode> allNodes, RfParams rf) {
+double computeScore(MeshNode node, List<MeshNode> allNodes, RfParams rf,
+    [int observedMax = 0]) {
   final peers = peersInRange(node, allNodes, rf);
   final peerCount = peers.length;
   if (peerCount == 0) return 0;
@@ -97,7 +105,7 @@ double computeScore(MeshNode node, List<MeshNode> allNodes, RfParams rf) {
     rssiSum += rssiModel(node, p, rf);
   }
   final r = normRssi(rssiSum / peerCount);
-  final n = _normPeers(peerCount);
+  final n = _normPeers(peerCount, observedMax);
   final b = node.battery;
   final s = math.min(node.uptimeMin / 60, 1.0) * (1 - node.mobility);
   final q = node.pdr;

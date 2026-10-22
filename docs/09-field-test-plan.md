@@ -182,6 +182,8 @@ app build's logger can be checked against a reference file before anybody travel
 | SUPER ratio | **20-25%** of nodes, 0.06-0.22 role changes per node per minute | §5 | outside 15-25% → the coverage weights need this building's numbers |
 | atrium node | SUPER within **2 election cycles** (60 s) **if it is also healthy** — full battery, long uptime, low packet loss. Verified in all four simulated worlds | §18.1 | it does not → read its battery and uptime before reading its position: a drained phone at 199 peers (0.688) still loses to a healthy one at nine (0.708), because the peer term saturates logarithmically (§18) |
 | atrium node, drained | **NORMAL**, in three of four worlds — health carries 0.45 of the score and position only 0.55 of a compressed term | §18 | if a drained atrium phone *is* elected, something is inflating the position terms: check the RSSI normalization against the calibration fit |
+| atrium node, **as spawned** | **NORMAL** in three of four worlds, and not because of its score: it clears the 0.60 promote gate on the campus world and still loses on **rank** — 7th of the 13 candidates it can hear, where the top-20% cap is 3 | §18.4 | record the *rank among heard candidates* next to the score. Normalising openness against the observed maximum was built for exactly this case and changes nothing: the score rises 0.05-0.19 and the rank does not move at all, because every open neighbour gains the same way |
+| media on a real radio (`channelAccess: "halfDuplex"`) | 10 MB at 3 hops in **3.97 min** instead of 33.0 s; a 10 s streamed note at 3 hops finishes **17.8 s after release** instead of 757 ms; text delivery with a file in flight 0.955 instead of 0.994 | `docs/08` §12 | the shipped model is `free`, so the field numbers will sit between the two rows above; which side they fall on is the single most useful thing a media field test can report |
 | latency | p50 ~0.3 s, p95 ~1.3-4.8 s (traffic-dependent); 1 hop ≈ 0.16-0.5 s | §4, §8 | p95 over 5 s at 3 hops → the retry timer, not the routing |
 | NORMAL battery, duty cycle on | **10.0%/8 h** campus, 10.9% crowd, 7.1% stationary | §7 | over 15% → the scan window is not being honoured by the OS |
 | NORMAL battery, always on | 19.4%/8 h campus, 22.5% crowd — **fails the criterion by design** | §7 | this is the prediction, not a surprise |
@@ -196,12 +198,17 @@ app build's logger can be checked against a reference file before anybody travel
 
 Listed so a disagreement is diagnosed rather than argued about:
 
-* **No channel-access model.** The simulator has no CSMA, no collisions and no shared
-  medium: two transmissions at once both succeed. A 2.4 GHz floor with 15 phones and a
-  dozen access points will not behave like that, and the direction is known — real
-  delivery will be *lower* and real overhead *higher*, because a suppressed relay is free
-  in the model and a collided one costs a retry. `docs/08` §11 makes the same caveat for
-  media.
+* **Channel access is a flag, and it ships off.** The default (`channelAccess: "free"`) has
+  no CSMA, no collisions and no shared medium: two transmissions at once both succeed. A
+  2.4 GHz floor with 15 phones and a dozen access points will not behave like that, and the
+  direction is known — real delivery will be *lower* and real overhead *higher*, because a
+  suppressed relay is free in the model and a collided one costs a retry. `"halfDuplex"`
+  supplies the missing mechanism (one transmitter, a bounded queue, drop-tail) and predicts
+  overhead 38.6% against 9.3%, and delivery 0.956 against 0.989 on the same campus world
+  (`docs/08` §12.6); it still omits receiver capture and collisions, both optimistic. The
+  field test should report which of the two it lands nearer, per criterion, because that
+  decides whether the acceptance gates in `skills/02` and `skills/08` are calibrated against
+  a radio anybody carries.
 * **Wi-Fi Direct formation** is a setup latency in the model, not a negotiation that can
   fail, time out, or be refused by a phone in a pocket.
 * **Human bodies are walls.** The model's obstacles are static rectangles; a crowd of

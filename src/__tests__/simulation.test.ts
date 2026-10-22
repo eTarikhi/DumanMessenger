@@ -39,6 +39,7 @@ import {
   type MeshMessage,
   type MeshNode,
   type NodeId,
+  type PeerNorm,
 } from "../types";
 
 /**
@@ -2782,5 +2783,112 @@ describe("cap-aware community-relay promotion, measured and rejected (docs/06 §
     expect(extra).toBeGreaterThan(
       plain.sim.nodes.filter((n) => n.role === "SUPER" && !(n.charging && n.stationary)).length
     );
+  });
+});
+
+describe("observed-maximum peer normalisation, measured and rejected (docs/06 §18.4)", () => {
+  /** The most open position in the world, found rather than assumed: the node that reaches
+   *  the most peers with the least wall attenuation. */
+  function mostOpenNode(sim: MeshSimulation): MeshNode {
+    const online = sim.nodes.filter((n) => n.isOnline);
+    let best = online[0];
+    let bestScore = -1;
+    for (const n of online) {
+      const peers = peersInRange(n, online, sim.rf);
+      let rssiSum = 0;
+      for (const p of peers) rssiSum += rssiModel(n, p, sim.rf);
+      const avg = peers.length > 0 ? rssiSum / peers.length : -120;
+      const score = peers.length * 100 + avg;
+      if (score > bestScore) {
+        bestScore = score;
+        best = n;
+      }
+    }
+    return best;
+  }
+
+  /** Run one world under one normalisation and report both the score and the thing the
+   *  election actually decides on: where that score ranks inside the node's own 1-hop
+   *  candidacy list. */
+  function atriumArm(name: string, peerNorm: PeerNorm) {
+    const sim = new MeshSimulation({
+      ...buildScenario(name, 42),
+      enableMobility: false,
+      peerNorm,
+    });
+    sim.runFor(20000);
+    const atrium = mostOpenNode(sim);
+    sim.runFor(60000);
+    const online = sim.nodes.filter((n) => n.isOnline);
+    const candidates = [
+      atrium,
+      ...peersInRange(atrium, online, sim.rf).filter((p) => !(p.superOptOut || p.batterySaver)),
+    ];
+    const better = candidates.filter((c) => c.score > atrium.score).length;
+    return {
+      sim,
+      atrium,
+      score: atrium.score,
+      rank: better + 1,
+      candidates: candidates.length,
+      cap: Math.max(1, Math.ceil(candidates.length * 0.2)),
+      role: atrium.role,
+      supers: sim.nodes.filter((n) => n.role === "SUPER").length,
+    };
+  }
+
+  it("raises every open node's score and leaves the ranking exactly where it was", () => {
+    // docs/06 §18.2 predicted that normalising against the observed maximum would make
+    // openness decisive in sparse worlds. It does not, and the reason is that an election
+    // is a ranking while this is a level change: every well-placed neighbour gains the
+    // same way, so the most open node in the world is beaten by the same six people it was
+    // beaten by before, and stays NORMAL in three worlds out of four.
+    for (const name of scenarioNames()) {
+      const fixed = atriumArm(name, "fixed");
+      const observed = atriumArm(name, "observed");
+      expect(observed.score).toBeGreaterThan(fixed.score);
+      expect(observed.rank).toBe(fixed.rank);
+      expect(observed.cap).toBe(fixed.cap);
+      expect(observed.role).toBe(fixed.role);
+    }
+  });
+
+  it("what it does move is the promote gate and the size of the elected set", () => {
+    // sparse_village: the atrium phone's score crosses docs/03 §3's 0.60 promote threshold
+    // only under the observed denominator (0.529 -> 0.723), and one more node in the world
+    // crosses it with him — 2 SUPERs become 3. It still does not win, because the cap in a
+    // four-candidate view is one and its neighbour is healthier.
+    const villageFixed = atriumArm("sparse_village", "fixed");
+    const villageObserved = atriumArm("sparse_village", "observed");
+    expect(villageFixed.score).toBeLessThan(0.6);
+    expect(villageObserved.score).toBeGreaterThan(0.6);
+    expect(villageObserved.supers).toBe(villageFixed.supers + 1);
+
+    // festival_crowd: the observed maximum *is* the crowd, so mid-open nodes lose score and
+    // the elected set shrinks instead — 13 SUPERs become 11.
+    const crowdFixed = atriumArm("festival_crowd", "fixed");
+    const crowdObserved = atriumArm("festival_crowd", "observed");
+    expect(crowdObserved.supers).toBe(crowdFixed.supers - 2);
+  });
+
+  it("holds skills/02's band on the campus world, and puts one seed on its floor", () => {
+    const ratios: number[] = [];
+    for (const seed of [42, 7, 1234, 99, 2026, 555]) {
+      const sim = new MeshSimulation({
+        ...campusQuad(seed),
+        peerNorm: "observed",
+        trafficIntervalMs: 1000,
+      });
+      sim.runFor(20000);
+      sim.runFor(180000);
+      ratios.push(sim.refresh().superRatio);
+    }
+    for (const r of ratios) {
+      expect(r).toBeGreaterThanOrEqual(0.15);
+      expect(r).toBeLessThanOrEqual(0.25);
+    }
+    // Seed 99 lands exactly on the floor, which is the practical objection: the lever buys
+    // nothing measurable and spends the band's margin doing it.
+    expect(Math.min(...ratios)).toBeCloseTo(0.15, 6);
   });
 });

@@ -82,6 +82,22 @@ export type ChannelAccess = "free" | "halfDuplex";
  */
 export type ChannelPriority = "fifo" | "ackFirst" | "class";
 
+/**
+ * How the coverage score normalises a node's peer count (docs/03 §3, docs/06 §18.2).
+ *
+ * - `fixed`    against a constant 50 peers, as `docs/03` specifies: `log(1+P)/log(51)`.
+ *              Bounded and comparable across worlds, but it saturates — a node hearing 199
+ *              peers and one hearing 60 differ by 0.09 of score, so the score cannot say
+ *              "dramatically better placed", which is exactly what an atrium or a ridge is.
+ * - `observed` against the largest peer count this node has actually heard, from its own
+ *              count and the `peerCount` field of the OGMs in its table. Openness becomes
+ *              decisive in a sparse world and stays bounded in a crowd, because the
+ *              denominator is the world's own maximum rather than a constant. Not shipped:
+ *              it is the same trap as docs/06 §15's density rule approached from the other
+ *              side, and it needs a field test to justify it.
+ */
+export type PeerNorm = "fixed" | "observed";
+
 export interface Vec2 {
   x: number;
   y: number;

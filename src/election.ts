@@ -81,11 +81,21 @@ export const MPR_NEIGHBOR_ADVERTISE_LIMIT = 30;
 export const DENSE_FALLBACK_FANOUT = 6;
 export const NEIGHBOR_SCORE_TTL_MS = 30_000;
 
-function normPeers(count: number): number {
-  return Math.log(1 + count) / Math.log(1 + 50);
+/** Normalise a peer count. `observedMax` is 0 for the shipped fixed denominator of 50;
+ *  a positive value switches to the largest peer count this node has heard, which is what
+ *  `peerNorm: "observed"` asks for (docs/06 §18.2). Clamped so a node can never score above
+ *  1 on this term: the denominator is at least its own count. */
+export function normPeers(count: number, observedMax = 0): number {
+  const denom = observedMax > 0 ? Math.max(observedMax, count) : 50;
+  return Math.log(1 + count) / Math.log(1 + denom);
 }
 
-export function computeScore(node: MeshNode, allNodes: MeshNode[], rf: RfParams): number {
+export function computeScore(
+  node: MeshNode,
+  allNodes: MeshNode[],
+  rf: RfParams,
+  observedMax = 0
+): number {
   const peers = peersInRange(node, allNodes, rf);
   const peerCount = peers.length;
   if (peerCount === 0) return 0;
@@ -94,7 +104,7 @@ export function computeScore(node: MeshNode, allNodes: MeshNode[], rf: RfParams)
   let rssiSum = 0;
   for (const p of peers) rssiSum += rssiModel(node, p, rf);
   const r = normRssi(rssiSum / peerCount);
-  const n = normPeers(peerCount);
+  const n = normPeers(peerCount, observedMax);
   const b = node.battery;
   const s = Math.min(node.uptimeMin / 60, 1) * (1 - node.mobility);
   const q = node.pdr;

@@ -117,4 +117,91 @@ void main() {
       );
     });
   });
+
+  group('observed-maximum peer normalisation, measured and rejected (docs/06 §18.4)', () {
+    /// One world under one normalisation, reporting both the score and the quantity the
+    /// election actually decides on: where that score ranks inside the node's own 1-hop
+    /// candidacy list.
+    ({
+      MeshSimulation sim,
+      MeshNode atrium,
+      double score,
+      int rank,
+      int candidates,
+      int cap,
+      Role role,
+      int supers,
+    })
+        atriumArm(String name, PeerNorm peerNorm) {
+      final sim = MeshSimulation(buildScenario(name, 42)
+          .copyWith(enableMobility: false, peerNorm: peerNorm));
+      sim.runFor(20000);
+      final atrium = mostOpenNode(sim);
+      sim.runFor(60000);
+      final online = sim.nodes.where((n) => n.isOnline).toList();
+      final candidates = <MeshNode>[atrium]
+        ..addAll(peersInRange(atrium, online, sim.rf)
+            .where((p) => !(p.superOptOut || p.batterySaver)));
+      final better = candidates.where((c) => c.score > atrium.score).length;
+      return (
+        sim: sim,
+        atrium: atrium,
+        score: atrium.score,
+        rank: better + 1,
+        candidates: candidates.length,
+        cap: math.max(1, (candidates.length * topPercent).ceil()),
+        role: atrium.role,
+        supers: sim.nodes.where((n) => n.role == Role.superNode).length,
+      );
+    }
+
+    test("raises every open node's score and leaves the ranking exactly where it was", () {
+      // docs/06 §18.2 predicted this would make openness decisive in sparse worlds. It does
+      // not: an election is a ranking and this is a level change, so every well-placed
+      // neighbour gains the same way and the most open node in the world is beaten by the
+      // same people it was beaten by before.
+      for (final name in scenarioNames()) {
+        final fixed = atriumArm(name, PeerNorm.fixed);
+        final observed = atriumArm(name, PeerNorm.observed);
+        expect(observed.score, greaterThan(fixed.score), reason: name);
+        expect(observed.rank, equals(fixed.rank), reason: name);
+        expect(observed.cap, equals(fixed.cap), reason: name);
+        expect(observed.role, equals(fixed.role), reason: name);
+      }
+    });
+
+    test('what it does move is the promote gate and the size of the elected set', () {
+      // sparse_village: the atrium phone crosses the promote threshold only under the
+      // observed denominator, and one more node in the world crosses with it.
+      final villageFixed = atriumArm('sparse_village', PeerNorm.fixed);
+      final villageObserved = atriumArm('sparse_village', PeerNorm.observed);
+      expect(villageFixed.score, lessThan(superPromoteThreshold));
+      expect(villageObserved.score, greaterThan(superPromoteThreshold));
+      expect(villageObserved.supers, equals(villageFixed.supers + 1));
+
+      // festival_crowd: the observed maximum *is* the crowd, so mid-open nodes lose score
+      // and the elected set shrinks instead.
+      final crowdFixed = atriumArm('festival_crowd', PeerNorm.fixed);
+      final crowdObserved = atriumArm('festival_crowd', PeerNorm.observed);
+      expect(crowdObserved.supers, equals(crowdFixed.supers - 2));
+    });
+
+    test("holds skills/02's band on the campus world, and puts one seed on its floor", () {
+      final ratios = <double>[];
+      for (final seed in <int>[42, 7, 1234, 99, 2026, 555]) {
+        final sim = MeshSimulation(campusQuad(seed)
+            .copyWith(peerNorm: PeerNorm.observed, trafficIntervalMs: 1000));
+        sim.runFor(20000);
+        sim.runFor(180000);
+        ratios.add(sim.refresh().superRatio);
+      }
+      for (final r in ratios) {
+        expect(r, greaterThanOrEqualTo(0.15));
+        expect(r, lessThanOrEqualTo(0.25));
+      }
+      // Seed 99 lands exactly on the floor, which is the practical objection: the lever buys
+      // nothing measurable and spends the band's margin doing it.
+      expect(ratios.reduce(math.min), closeTo(0.15, 1e-9));
+    });
+  });
 }

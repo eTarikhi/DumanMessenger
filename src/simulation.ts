@@ -20,6 +20,7 @@ import type {
   Obstacle,
   ChannelAccess,
   ChannelPriority,
+  PeerNorm,
   RelayPolicy,
   Role,
 } from "./types";
@@ -260,6 +261,10 @@ export interface SimConfig {
    *  rather than a device (docs/06 §19.2). */
   communityRelayQuota: number;
 
+  /** Whether the coverage score normalises peer count against a fixed 50 (ships) or
+   *  against the largest peer count this node has heard (docs/06 §18.2). */
+  peerNorm: PeerNorm;
+
   txPowerDbm: number;
   rxSensitivityDbm: number;
   wallPenaltyDb: number;
@@ -408,6 +413,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   channelQueueDepth: 8,
   channelPriority: "fifo",
   communityRelayQuota: 0,
+  peerNorm: "fixed",
 
   txPowerDbm: DEFAULT_TX_POWER_DBM,
   rxSensitivityDbm: DEFAULT_RX_SENSITIVITY_DBM,
@@ -1199,7 +1205,7 @@ export class MeshSimulation {
     const node = this.byId(nodeId);
     if (!node || !node.isOnline) return;
     this.refreshPeerList(node);
-    node.score = computeScore(node, this.nodes, this.rf);
+    node.score = computeScore(node, this.nodes, this.rf, this.observedPeerMax(node));
     node.seq++;
     const ogm = buildOGM(node);
     this.beacon(node, ogm);
@@ -1280,7 +1286,7 @@ export class MeshSimulation {
 
   /** Score and re-elect one node, recording any transition. */
   private electOne(node: MeshNode): void {
-    node.score = computeScore(node, this.nodes, this.rf);
+    node.score = computeScore(node, this.nodes, this.rf, this.observedPeerMax(node));
     if (!this.config.enableSuperElection) return;
     const { role, reason } = electRole(node, this.nodes, this.rf, this.config.communityRelayQuota);
     if (role !== node.role) {
@@ -1366,6 +1372,27 @@ export class MeshSimulation {
     node.peerCount = peers.length;
     node.peerIds = peers.map((p) => p.id).sort();
     return peers;
+  }
+
+  /**
+   * The largest peer count this node has heard: its own, and the `peerCount` advertised in
+   * the OGMs it holds. That is the decentralised denominator `peerNorm: "observed"` asks
+   * for (docs/06 §18.2) — a node cannot know the world's maximum, only what its own
+   * neighbourhood told it, which is the honest version of the same idea and the reason the
+   * normalisation stays bounded in a crowd. Returns 0 under the shipped `"fixed"` mode,
+   * where `normPeers` uses docs/03 §3's constant 50.
+   *
+   * Peers are counted here rather than read from `node.peerCount` because that field is
+   * refreshed on the beacon cycle and `electOne` runs between beacons; the scan costs
+   * nothing while the flag is off.
+   */
+  private observedPeerMax(node: MeshNode): number {
+    if (this.config.peerNorm !== "observed") return 0;
+    let max = peersInRange(node, this.nodes, this.rf).length;
+    for (const ogm of Object.values(node.ogmTable)) {
+      if (ogm.peerCount > max) max = ogm.peerCount;
+    }
+    return max;
   }
 
   private nextMsgId(): string {

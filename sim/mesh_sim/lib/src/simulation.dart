@@ -88,6 +88,7 @@ class SimConfig {
     this.historyReplyMax = 32,
     this.dtnPreferSuper = false,
     this.communityRelayQuota = 0,
+    this.peerNorm = PeerNorm.fixed,
     this.maxRetries = 2,
     this.txPowerDbm = defaultTxPowerDbm,
     this.rxSensitivityDbm = defaultRxSensitivityDbm,
@@ -274,6 +275,11 @@ class SimConfig {
   /// transmissions 12% while pushing the SUPER ratio to the top of skills/02's band
   /// (docs/06 §19.4).
   final double communityRelayQuota;
+
+  /// Whether the coverage score normalises peer count against a fixed 50 (ships) or against
+  /// the largest peer count this node has heard. Measured and rejected: it lifts every open
+  /// node's score and changes no election (docs/06 §18.4).
+  final PeerNorm peerNorm;
   final int maxRetries;
 
   final double txPowerDbm;
@@ -331,6 +337,7 @@ class SimConfig {
     int? historyReplyMax,
     bool? dtnPreferSuper,
     double? communityRelayQuota,
+    PeerNorm? peerNorm,
     double? voiceKbps,
     double? voiceFrameMs,
     double? jitterBufferMs,
@@ -377,6 +384,7 @@ class SimConfig {
         historyReplyMax: historyReplyMax ?? this.historyReplyMax,
         dtnPreferSuper: dtnPreferSuper ?? this.dtnPreferSuper,
         communityRelayQuota: communityRelayQuota ?? this.communityRelayQuota,
+        peerNorm: peerNorm ?? this.peerNorm,
         voiceKbps: voiceKbps ?? this.voiceKbps,
         voiceFrameMs: voiceFrameMs ?? this.voiceFrameMs,
         jitterBufferMs: jitterBufferMs ?? this.jitterBufferMs,
@@ -1480,7 +1488,7 @@ class MeshSimulation {
     final node = _byId(nodeId);
     if (node == null || !node.isOnline) return;
     _refreshPeerList(node);
-    node.score = computeScore(node, nodes, rf);
+    node.score = computeScore(node, nodes, rf, _observedPeerMax(node));
     node.seq++;
     _beacon(node, buildOgm(node));
     final jitter = randRange(rng, -config.ogmJitterMs, config.ogmJitterMs);
@@ -1568,7 +1576,7 @@ class MeshSimulation {
 
   /// Score and re-elect one node, recording any transition.
   void _electOne(MeshNode node) {
-    node.score = computeScore(node, nodes, rf);
+    node.score = computeScore(node, nodes, rf, _observedPeerMax(node));
     if (!config.enableSuperElection) return;
     final outcome = electRole(node, nodes, rf, config.communityRelayQuota);
     if (outcome.role != node.role) {
@@ -1661,6 +1669,24 @@ class MeshSimulation {
     node.peerCount = peers.length;
     node.peerIds = peers.map((p) => p.id).toList()..sort();
     return peers;
+  }
+
+  /// The largest peer count this node has heard: its own, and the `peerCount` advertised in
+  /// the OGMs it holds. That is the decentralised denominator `PeerNorm.observed` asks for
+  /// (docs/06 §18.4) — a node cannot know the world's maximum, only what its own
+  /// neighbourhood told it. Returns 0 under the shipped `PeerNorm.fixed`, where `_normPeers`
+  /// uses docs/03 §3's constant 50.
+  ///
+  /// Peers are counted here rather than read from `node.peerCount`, which is refreshed on the
+  /// beacon cycle while elections also run between beacons; the scan costs nothing while the
+  /// flag is off.
+  int _observedPeerMax(MeshNode node) {
+    if (config.peerNorm != PeerNorm.observed) return 0;
+    var max = peersInRange(node, nodes, rf).length;
+    for (final ogm in node.ogmTable.values) {
+      if (ogm.peerCount > max) max = ogm.peerCount;
+    }
+    return max;
   }
 
   String _nextMsgId() {

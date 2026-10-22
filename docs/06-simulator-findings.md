@@ -1326,10 +1326,12 @@ topology rests on one unusually open position — a courtyard, an atrium, a ridg
 weights under-reward exactly the node the roadmap expects to win. The obvious alternative
 is to normalise peer count against the *observed* maximum in the world rather than a fixed
 50, which would make openness decisive in sparse worlds and still bounded in crowds. It is
-**not shipped**: §15 is the record of what happens when a coverage rule assumes "everyone
-hears everyone" and meets a 200-node world, and this is the same trap approached from the
-other side. If the field test shows the atrium losing to a corridor, that is the lever to
-pull, and it needs six seeds before anybody believes it (§16.4).
+**not shipped** — and §18.4 now reports why on measurement rather than on the prediction
+below, which turned out to be wrong about the mechanism. The prediction was that this is
+§15's density trap approached from the other side; what the measurement shows is that it
+does not change the election at all, because an election is a ranking and this is a level
+change. If the field test shows the atrium losing to a corridor, the lever to pull is not
+the denominator of the openness term.
 
 ### 18.3 What the field test has to record
 
@@ -1345,6 +1347,56 @@ On the day the criterion to check is not "the phone in the atrium is SUPER" but:
 Both engines assert the healthy-node result in all four worlds and the score arithmetic
 above (`the atrium becomes a router`, in `src/__tests__/simulation.test.ts` and its Dart
 twin).
+
+### 18.4 Observed-maximum normalisation, implemented and rejected
+
+`peerNorm: "observed"` replaces docs/03 §3's constant denominator with the largest peer
+count the node has heard — its own, and the `peerCount` field of the OGMs in its table, so
+it stays decentralised. It ships as `"fixed"`, inert, and the measurement below is why.
+
+**The score rises. The ranking does not move.** Most open node in each world, seed 42,
+mobility off, two election cycles:
+
+| world | normalisation | score | rank in its own candidacy list | cap | clears 0.60 | role |
+|---|---|---|---|---|---|---|
+| campus_quad | fixed | 0.637 | **7** of 13 | 3 | yes | NORMAL |
+| campus_quad | observed | **0.741** | **7** of 13 | 3 | yes | NORMAL |
+| sparse_village | fixed | 0.529 | **2** of 4 | 1 | no | NORMAL |
+| sparse_village | observed | **0.723** | **2** of 4 | 1 | yes | NORMAL |
+| festival_crowd | fixed | 0.638 | **12** of 25 | 5 | yes | NORMAL |
+| festival_crowd | observed | **0.692** | **12** of 25 | 5 | yes | NORMAL |
+| partitioned_pair | fixed | 0.732 | 1 of 5 | 1 | yes | SUPER |
+| partitioned_pair | observed | **0.909** | 1 of 5 | 1 | yes | SUPER |
+
+The rank column is identical in all four worlds. That is the whole finding: openness is
+55% of the score and the normalisation rescales it *monotonically for every candidate in
+the neighbourhood at once*, so a node that was beaten by six healthier neighbours is still
+beaten by the same six. What §18.1 diagnosed as "the weights under-reward the open node"
+is really "the open node is not the healthy node", and no denominator fixes that.
+
+**What it does move is the gate and the size of the elected set.** In `sparse_village` the
+atrium phone's score crosses the 0.60 promote threshold only under the observed
+denominator, and one more node in the world crosses with it: 2 SUPERs become 3. In
+`festival_crowd` the observed maximum *is* the crowd, so mid-open nodes lose score and the
+elected set shrinks: 13 SUPERs become 11. Neither change is about placement winning.
+
+**And the acceptance band pays for it.** `campus_quad`, six seeds, background traffic every
+second:
+
+| normalisation | mean SUPER ratio | per-seed SUPER ratio |
+|---|---|---|
+| fixed | 21.7% | 20.0, 25.0, 20.0, 20.0, 25.0, 20.0 |
+| observed | 20.8% | 20.0, 25.0, 20.0, **15.0**, 25.0, 20.0 |
+
+Seed 99 lands exactly on skills/02's 15% floor, and delivery moves by less than half a
+point in exchange. So the lever spends the band's margin, changes no election it was meant
+to change, and buys nothing measurable.
+
+**Verdict:** implemented, default `"fixed"`, documented as rejected — the same disposition
+as `dtnPreferSuper` (§20.4), `adaptiveMediaAck` (`docs/08` §7.1) and `communityRelayQuota`
+(§19.4). The field test in `docs/09` §5 should record the atrium phone's *rank among the
+candidates it can hear* alongside its score, because that is the quantity the election
+decides on and the one a score threshold hides.
 
 ---
 

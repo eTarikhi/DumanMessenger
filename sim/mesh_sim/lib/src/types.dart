@@ -83,6 +83,20 @@ enum ChannelAccess { free, halfDuplex }
 /// there is no order to choose.
 enum ChannelPriority { fifo, ackFirst, byClass }
 
+/// How the coverage score normalises a node's peer count (docs/03 §3, docs/06 §18.4).
+///
+/// [PeerNorm.fixed] is docs/03's constant denominator of 50 peers: `log(1+P)/log(51)`.
+/// Bounded and comparable across worlds, but it saturates — a node hearing 199 peers and one
+/// hearing 60 differ by 0.09 of score, so the score cannot say "dramatically better placed".
+///
+/// [PeerNorm.observed] normalises against the largest peer count the node has actually heard,
+/// from its own count and the `peerCount` field of the OGMs in its table, so it stays
+/// decentralised. Measured and not shipped: an election is a ranking and this is a level
+/// change, so it lifts every open node in a neighbourhood together and the most open node in
+/// the world keeps its exact rank — 7 of 13 on the campus world, 12 of 25 in the crowd —
+/// while spending skills/02's SUPER-ratio margin (one seed of six lands on the 15% floor).
+enum PeerNorm { fixed, observed }
+
 /// Address of a scoped group flood. Not a node id, and deliberately distinct from
 /// `broadcastAddress`: a broadcast is public by design (docs/04 §4), a group flood
 /// is delivered only to members holding the current key epoch.
