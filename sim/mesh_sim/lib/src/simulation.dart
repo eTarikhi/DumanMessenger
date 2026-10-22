@@ -83,6 +83,7 @@ class SimConfig {
     this.maxTransferBytes = 10 * 1048576,
     this.historyBeaconMs = 10000,
     this.historyReplyMax = 32,
+    this.dtnPreferSuper = false,
     this.maxRetries = 2,
     this.txPowerDbm = defaultTxPowerDbm,
     this.rxSensitivityDbm = defaultRxSensitivityDbm,
@@ -232,6 +233,18 @@ class SimConfig {
   /// Entries in one anti-entropy reply. Bounded so that repairing a long absence cannot
   /// turn into one huge transmission; the next beacon picks up the rest.
   final int historyReplyMax;
+
+  /// skills/04: "DO prefer SUPER as bundle carrier (more storage/battery)". When a carrier
+  /// has no route of its own, hand the bundle to the strongest SUPER in range instead of
+  /// waiting for a route to appear. Bounded by the spray limit either way.
+  ///
+  /// Implemented, measured, and **off by default**: once a carried bundle is parked instead
+  /// of being deleted by flood suppression, the routing layer delivers it by itself, and
+  /// biasing the spray towards SUPERs duplicates copies into the busiest nodes' queues —
+  /// crowd delivery falls 94.7% to 91.2% over six seeds and parked bundles grow 39 to 63
+  /// per run (docs/06 §20.4). The intuition behind the rule is about who should *hold* a
+  /// bundle, not about who should be handed extra copies.
+  final bool dtnPreferSuper;
   final int maxRetries;
 
   final double txPowerDbm;
@@ -284,6 +297,7 @@ class SimConfig {
     double? transferStallMs,
     double? historyBeaconMs,
     int? historyReplyMax,
+    bool? dtnPreferSuper,
     double? voiceKbps,
     double? voiceFrameMs,
     double? jitterBufferMs,
@@ -325,6 +339,7 @@ class SimConfig {
         transferStallMs: transferStallMs ?? this.transferStallMs,
         historyBeaconMs: historyBeaconMs ?? this.historyBeaconMs,
         historyReplyMax: historyReplyMax ?? this.historyReplyMax,
+        dtnPreferSuper: dtnPreferSuper ?? this.dtnPreferSuper,
         voiceKbps: voiceKbps ?? this.voiceKbps,
         voiceFrameMs: voiceFrameMs ?? this.voiceFrameMs,
         jitterBufferMs: jitterBufferMs ?? this.jitterBufferMs,
@@ -470,6 +485,8 @@ class SimulationStats {
     required this.historyEntriesSynced,
     required this.historyEpochDropped,
     required this.historyBytes,
+    required this.bundlesPruned,
+    required this.dtnSuperCarries,
     required this.batteryPercentPerHourNormal,
     required this.batteryPercentPerHourSuper,
     required this.scansPerSec,
@@ -563,6 +580,11 @@ class SimulationStats {
   final int historyEntriesSynced;
   final int historyEpochDropped;
   final int historyBytes;
+
+  /// DTN (skills/04): bundles dropped because their ACK was overheard, and bundles handed
+  /// to a SUPER because the carrier had no route of its own (docs/06 §20).
+  final int bundlesPruned;
+  final int dtnSuperCarries;
 
   /// skills/07 telemetry: "Battery %/h per role, scans/sec, relays/sec".
   /// Measured from the battery snapshot taken when metrics were cleared, over
@@ -1126,6 +1148,8 @@ class MeshSimulation {
   int _historyEntriesSynced = 0;
   int _historyEpochDropped = 0;
   int _historyBytes = 0;
+  int _bundlesPruned = 0;
+  int _dtnSuperCarries = 0;
 
   /// Nodes with a beacon chain running, so joining a second group does not start a
   /// second one (the beacon covers every group the node is in).
@@ -1198,6 +1222,8 @@ class MeshSimulation {
     _historyEntriesSynced = 0;
     _historyEpochDropped = 0;
     _historyBytes = 0;
+    _bundlesPruned = 0;
+    _dtnSuperCarries = 0;
     _superSamples = 0;
     _superSampleSum = 0;
     _retriesSent = 0;
@@ -1495,7 +1521,9 @@ class MeshSimulation {
     node.mprSet = selectMprSet(node);
 
     if (config.enableDtn && node.oppQueue.isNotEmpty) {
-      final scan = scanOppQueue(node, nodes, rf, now);
+      final scan = scanOppQueue(node, nodes, rf, now,
+          preferSuper: config.dtnPreferSuper);
+      _dtnSuperCarries += scan.superCarries;
       for (final q in scan.deliver) {
         _transmit(node, q.msg, q.msg.to);
       }
@@ -2290,6 +2318,15 @@ class MeshSimulation {
       trace.hops.add(hopRecord);
     }
 
+    // skills/04: "On ackReceived from dest: remove + gossip ACK (so relays can prune)".
+    // The ACK comes back along the reverse path, and the nodes on that path are the ones
+    // that were carrying copies, so hearing one is enough to drop the bundle — no extra
+    // traffic and no new packet type. Measured, it fires essentially never (docs/06
+    // §20.5); it is kept because it is free and correct when it does.
+    if (msg.type == MsgType.ack && msg.body.length > 4) {
+      _bundlesPruned += pruneAcked(node, msg.body.substring(4));
+    }
+
     if (msg.to == node.id) {
       if (msg.type == MsgType.ack) {
         final ackedId = msg.body.length > 4 ? msg.body.substring(4) : '';
@@ -2322,7 +2359,11 @@ class MeshSimulation {
           msgType: msg.type,
           hop: msg.hopCount + 1);
       if (msg.type != MsgType.ack && msg.to != broadcastAddress) {
-        _sendAck(node, msg);
+        // A bundle that arrived by store-carry-forward is acknowledged to whoever carried
+        // it in, not to the originator: the originator's retry timer expired long ago, and
+        // the carriers are the nodes holding copies that can now be pruned (skills/04:
+        // "remove + gossip ACK (so relays can prune)").
+        _sendAck(node, msg, msg.carried ? via : null);
       }
       return;
     }
@@ -2415,12 +2456,13 @@ class MeshSimulation {
     _applyDecision(node, forwarded, decision);
   }
 
-  void _sendAck(MeshNode node, MeshMessage original) {
-    final ack = createMessage(_nextMsgId(), now, node.id, original.from,
+  void _sendAck(MeshNode node, MeshMessage original, [NodeId? ackTo]) {
+    final target = ackTo ?? original.from;
+    final ack = createMessage(_nextMsgId(), now, node.id, target,
         'ACK:${original.id}',
         type: MsgType.ack, ttl: 3, priority: Priority.high);
     _traces[ack.id] =
-        _PathTrace(<NodeId>[node.id], now, node.id, original.from, MsgType.ack);
+        _PathTrace(<NodeId>[node.id], now, node.id, target, MsgType.ack);
     final decision = decideForward(
         node, ack, nodes, rf, config.relayPolicy);
     _applyDecision(node, ack, decision);
@@ -2989,6 +3031,8 @@ class MeshSimulation {
       historyEntriesSynced: _historyEntriesSynced,
       historyEpochDropped: _historyEpochDropped,
       historyBytes: _historyBytes,
+      bundlesPruned: _bundlesPruned,
+      dtnSuperCarries: _dtnSuperCarries,
       batteryPercentPerHourNormal: drainPerHour(Role.normal),
       batteryPercentPerHourSuper: drainPerHour(Role.superNode),
       scansPerSec: _scanCount / elapsedSec,

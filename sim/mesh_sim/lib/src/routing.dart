@@ -173,8 +173,17 @@ bool enqueueOpp(MeshNode node, MeshMessage msg, double nowMs) {
     if (q.msg.id == msg.id) return false;
   }
   if (node.oppQueue.length >= oppQueueMax) {
-    node.oppQueue.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    // skills/04: "keep newest 500 (LRU by priority)". Priority first, then age: a bundle
+    // that has already sprayed its three copies is the one to lose, and among those the
+    // oldest. Evicting purely by age — what this did before — could throw away a fresh
+    // bundle to keep a sprayed-out one.
+    int rank(QueuedMessage q) => q.msg.priority == Priority.low ? 0 : 1;
+    node.oppQueue.sort((a, b) {
+      final r = rank(a).compareTo(rank(b));
+      return r != 0 ? r : a.createdAt.compareTo(b.createdAt);
+    });
     node.oppQueue.removeAt(0);
+    node.oppQueue.sort((a, b) => a.createdAt.compareTo(b.createdAt));
   }
   // Opportunistic from here on: the bundle waits for a contact rather than being
   // routed, so its end-to-end latency is a meeting time, not a transport time.
@@ -192,6 +201,22 @@ bool enqueueOpp(MeshNode node, MeshMessage msg, double nowMs) {
 /// Drop expired bundles. [nowMs] is simulation time, so a 7-day TTL is real.
 void pruneOppQueue(MeshNode node, double nowMs) {
   node.oppQueue.removeWhere((q) => nowMs - q.createdAt > q.ttlMs);
+}
+
+/// Drop every copy of a bundle that has been acknowledged, and report how many went.
+///
+/// skills/04: "On ackReceived from dest: remove + gossip ACK (so relays can prune)". The
+/// ACK travels back along the reverse path, and the nodes on that path are exactly the
+/// nodes that were carrying copies — so overhearing one is enough to prune, with no extra
+/// traffic and no new packet type. Measured, it prunes nothing in any of the four worlds
+/// (docs/06 §20.5), because the carrier that delivered has already dropped its own copy
+/// and the other holders are not on the reverse path; it is kept because it is free and
+/// correct when it does fire.
+int pruneAcked(MeshNode node, String ackedId) {
+  if (node.oppQueue.isEmpty) return 0;
+  final before = node.oppQueue.length;
+  node.oppQueue.removeWhere((q) => q.msg.id == ackedId);
+  return before - node.oppQueue.length;
 }
 
 enum ForwardMode { direct, route, flood, waitMpr, queue, drop }
@@ -259,6 +284,15 @@ ForwardDecision decideForward(
     if (nextHop != null && peerIds.contains(nextHop)) {
       return ForwardDecision(
           ForwardMode.route, <NodeId>[nextHop], 'route via $nextHop');
+    }
+    // A bundle already in DTN circulation has nowhere to go *right now*, which is exactly
+    // why it is being carried. Flooding it would spend the neighbourhood's radio on a copy
+    // with no path, and MPR suppression would delete it outright — measured in docs/06
+    // §20.1 as the reason skills/04's carry test could not pass. Park it and let the next
+    // contact decide.
+    if (msg.carried) {
+      return ForwardDecision(ForwardMode.queue, const <NodeId>[],
+          'carried bundle: no route to the destination right now');
     }
   }
 
@@ -373,6 +407,11 @@ class OppScanResult {
   final List<QueuedMessage> deliver = <QueuedMessage>[];
   final List<OppForward> forward = <OppForward>[];
   final List<QueuedMessage> keep = <QueuedMessage>[];
+
+  /// Forwards that went to a SUPER because the carrier had no route of its own
+  /// (skills/04: "prefer SUPER as bundle carrier"). Counted so the cost of the rule can be
+  /// reported separately from routed forwarding — it is off by default, see docs/06 §20.4.
+  int superCarries = 0;
 }
 
 class OppForward {
@@ -386,8 +425,9 @@ OppScanResult scanOppQueue(
   MeshNode node,
   List<MeshNode> allNodes,
   RfParams rf,
-  double nowMs,
-) {
+  double nowMs, {
+  bool preferSuper = false,
+}) {
   final result = OppScanResult();
   for (final queued in node.oppQueue) {
     if (nowMs - queued.createdAt > queued.ttlMs) continue; // expired
@@ -424,6 +464,14 @@ OppScanResult scanOppQueue(
       if (queued.copyCount < sprayLimit) {
         result.forward.add(OppForward(queued, nextHop));
         queued.copyCount++;
+        // A copy handed to a carrier is a *later* copy of the same bundle, and bumping
+        // `attempt` is what says so: intermediate nodes dedupe on `id#attempt`, so without
+        // this a relay that already heard the bundle swallows every later hand-over as a
+        // duplicate and the bundle never moves. The increment has to be relative to the
+        // attempt the bundle is *already* on, because the source retries that put it in the
+        // queue used 1 and 2 first: numbering sprayed copies from 1 collides with them and
+        // the carrier's cache swallows the first two copies of every bundle (docs/06 §20).
+        queued.msg = queued.msg.copyWith(attempt: queued.msg.attempt + 1);
         // docs/03 §8: "if copyCount == 3: keep but lower priority". The bundle
         // stays so it can still be handed straight to the destination later;
         // only the copying stops.
@@ -433,6 +481,35 @@ OppScanResult scanOppQueue(
       }
       result.keep.add(queued);
       continue;
+    }
+    // No route of our own. skills/04: "DO prefer SUPER as bundle carrier (more
+    // storage/battery)" — and a SUPER is also the node with the fullest view, since it
+    // scans continuously and relays everything. Still bounded by the spray limit: this is
+    // the spray half of spray-and-wait, not a flood. Off by default, because once carried
+    // bundles are parked rather than suppressed this costs delivery (docs/06 §20.4).
+    if (preferSuper && queued.copyCount < sprayLimit) {
+      final carriers = allNodes
+          .where((p) =>
+              p.id != node.id &&
+              p.isOnline &&
+              p.role == Role.superNode &&
+              canReach(node, p, rf))
+          .toList()
+        ..sort((a, b) {
+          final byRssi = rssiModel(node, b, rf).compareTo(rssiModel(node, a, rf));
+          return byRssi != 0 ? byRssi : a.id.compareTo(b.id);
+        });
+      if (carriers.isNotEmpty) {
+        result.forward.add(OppForward(queued, carriers.first.id));
+        result.superCarries++;
+        queued.copyCount++;
+        queued.msg = queued.msg.copyWith(attempt: queued.msg.attempt + 1);
+        if (queued.copyCount >= sprayLimit) {
+          queued.msg = queued.msg.copyWith(priority: Priority.low);
+        }
+        result.keep.add(queued);
+        continue;
+      }
     }
     result.keep.add(queued);
   }

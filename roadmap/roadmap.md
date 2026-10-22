@@ -49,6 +49,18 @@
   routed traffic. Two interactions were measured rather than assumed: a media chunk whose retries run out lands here and
   stalls its sliding window forever unless a watchdog re-sends it (`docs/08` §6), and a heavy file transfer pushed 35
   ordinary messages into store-carry-forward in 300 s (`docs/08` §9).
+> **Correction note (Oct 2026 — evidence in `docs/06-simulator-findings.md` §20):** the layer was implemented as specified and still could not pass
+  `skills/04`'s own carry test, for two reasons only a test would find: sprayed copies reused the source retries'
+  `attempt` numbers, so relays deduped the first two of three copies and the spray budget was spent on copies nobody
+  forwarded; and a carried bundle with no reachable route fell through to the flood branch, where a NORMAL node
+  **MPR-suppressed it** — suppression exists to delete duplicate copies of a flood, and a bundle with nowhere to go is
+  not a duplicate. Fixing both took the 60-node crowd from **0.867 to 0.947** delivery over six seeds, with five
+  messages in a hundred arriving by store-carry-forward that previously did not arrive at all, and left the golden
+  vectors untouched (the fixture parks no bundles). Two of `skills/04`'s rules were then measured and did not survive:
+  preferring SUPER as a bundle carrier is implemented and **off by default** (−3.5 delivery points once the defects were
+  fixed, because it duplicates work into the busiest queues), and "gossip ACK so relays can prune" pruned **zero**
+  bundles across four worlds and six seeds, because the ACK is a unicast along the reverse path. §20.4 records the
+  general lesson: the carrier preference measured as a *win* before the fixes and a *loss* after them.
 - [x] SQLite + CRDT for group/broadcast history (hash beacon anti-entropy)
 > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §17):** the protocol half is implemented in both
   engines and measured; SQLite is storage and stays app-side. Each member holds its group messages as a
