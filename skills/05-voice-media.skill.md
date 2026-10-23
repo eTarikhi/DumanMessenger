@@ -54,11 +54,20 @@
 > protocol: they were measured with `channelAccess: "free"`, a model in which two
 > transmissions can occupy the air at once. On the one radio a phone has (`"halfDuplex"`,
 > shipped off behind that flag) the sliding window's 15.5× becomes **1.6×**, a 10 MB image at
-> three hops takes **3.97 min** instead of 33.00 s, and streamed PTT cannot keep up with its
+> three hops takes **4.44 min** instead of 33.00 s, and streamed PTT cannot keep up with its
 > own capture clock beyond two hops — one 500 ms frame needs ≈245 ms of air per hop, so three
-> hops need 735 ms per 500 ms recorded and a 10 s note finishes 17.8 s after the user let go.
-> Window 1 instead of 4 recovers all of the 2.8 points of text delivery a transfer costs
-> there, at no cost in file time; slicing chunks smaller does not, because the fixed part of
-> air time (hop latency plus jitter) is six times the serialization part at 64 KB.
-> `docs/08-media-transport-ptt.md` §12.
+> hops need 735 ms per 500 ms recorded and a 10 s note finishes 26.8 s after the user let go.
+> Window 1 instead of 4 recovers 1.1 of the 1.7 points of text delivery a transfer costs, and a
+> third of the p95, for 46% more transfer time; slicing chunks smaller buys no delivery at all
+> and costs 4.4x the transfer time, because the fixed part of air time (hop latency plus
+> jitter) is six times the serialization part at 64 KB. `docs/08-media-transport-ptt.md` §12.
+>
+> One narrow exception to all of the above is a win rather than a trade, and it is this skill's
+> own acceptance box: for a transfer between two devices with nothing else on the radio — "2
+> phones exchange image <10 MB over WiFi Direct mesh" — letting the sender fill only the queue
+> slots its radio has (`mediaBackpressure`) cuts a 1 MB transfer's dropped chunks from 25 to 3,
+> its retransmissions from 6 to 1 and its window stalls from 1 to 0, and the file arrives in
+> **5.2 s instead of 9.4 s**, because a chunk that was never dropped never had to be sent twice.
+> The same flag does nothing for a mesh, where the queue that overflows belongs to a relay fed
+> by several senders at once (`docs/08` §12.12).
 
