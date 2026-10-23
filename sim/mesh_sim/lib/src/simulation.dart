@@ -733,6 +733,7 @@ class SimulationStats {
   /// packets lost because the receiver was itself transmitting. Both zero under
   /// [ChannelCapture.none] (docs/08 §12.9).
   final int channelCaptured;
+  final int channelDeafRx;
 
   /// Times a stronger newcomer took a busy receiver over from the packet it was holding,
   /// under [ChannelCapture.strongest]. Each one is also a collision loss — of the incumbent —
@@ -740,7 +741,6 @@ class SimulationStats {
   /// `first`'s pessimism the capture effect buys back: over six seeds, none of it
   /// (docs/08 §12.15).
   final int channelCaptureEffects;
-  final int channelDeafRx;
 
   /// Contention-window draws: how often a node found the medium free and still had to wait a
   /// random number of slots for it (docs/08 §12.13). Zero unless [ChannelBackoff.binary].

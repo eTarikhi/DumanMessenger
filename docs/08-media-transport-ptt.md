@@ -1300,8 +1300,8 @@ the golden vectors are byte-identical. `npm run media -- captureEffect` reproduc
 npm run media                                            # TypeScript probe, every table above (§7-§12 for the radio: channel, priority, capture, carrier sense, the contention window, who sheds, the capture effect)
 npm run media -- backoff                                 # one section; also `shedding`, `captureEffect`, `captureMargin`. The whole probe is minutes of simulation
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media --no-check
-npm test                                                 # 274 TS tests, incl. 18 media and 20 radio cases
-cd sim/mesh_sim && dart test                             # 18 Dart media cases + test/channel_test.dart
+npm test                                                 # 276 TS tests, incl. 18 media cases and the 29-case §12 radio block
+cd sim/mesh_sim && dart test                             # 197 Dart cases, incl. 18 media and test/channel_test.dart
 ```
 
 Engine surface: `sendFile(from, to, bytes, {chunkBytes, window, transport})`,
