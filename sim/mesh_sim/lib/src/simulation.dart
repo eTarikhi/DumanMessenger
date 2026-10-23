@@ -90,6 +90,10 @@ class SimConfig {
     this.communityRelayQuota = 0,
     this.peerNorm = PeerNorm.fixed,
     this.channelCapture = ChannelCapture.none,
+    this.channelBackoff = ChannelBackoff.none,
+    this.channelCwMin = 4,
+    this.channelCwMax = 64,
+    this.channelSlotMs = 1.0,
     this.mediaBackpressure = false,
     this.communityRelayPreference = false,
     this.dtnPreferCommunity = false,
@@ -290,6 +294,23 @@ class SimConfig {
   /// packet that arrives while its receiver is transmitting (docs/08 §12.9).
   final ChannelCapture channelCapture;
 
+  /// Whether a node that has been waiting for the medium waits a *random* number of slots
+  /// before taking it. Carrier sense alone wakes every waiting node at the same instant the
+  /// medium clears, so they transmit together; the random wait is what disperses them, and
+  /// doubling the window after a collision is what stops two nodes that keep meeting from
+  /// keeping meeting (docs/08 §12.13). Consulted only under [ChannelAccess.csma].
+  final ChannelBackoff channelBackoff;
+
+  /// Contention window after a clean transmission, in slots.
+  final int channelCwMin;
+
+  /// Contention window ceiling after repeated collisions, in slots.
+  final int channelCwMax;
+
+  /// How long one backoff slot lasts. 802.11's is 9 µs at 2.4 GHz; a BLE mesh has no such
+  /// constant, so this is a knob rather than a calibration.
+  final double channelSlotMs;
+
   /// Whether a transfer stops pumping chunks when its sender's radio is full. A real socket
   /// blocks; an engine that keeps handing packets to a saturated radio converts somebody
   /// else's queue slots into drops. Measured: it halves a one-peer transfer's drops and its
@@ -368,6 +389,10 @@ class SimConfig {
     double? communityRelayQuota,
     PeerNorm? peerNorm,
     ChannelCapture? channelCapture,
+    ChannelBackoff? channelBackoff,
+    int? channelCwMin,
+    int? channelCwMax,
+    double? channelSlotMs,
     bool? mediaBackpressure,
     bool? communityRelayPreference,
     bool? dtnPreferCommunity,
@@ -419,6 +444,10 @@ class SimConfig {
         communityRelayQuota: communityRelayQuota ?? this.communityRelayQuota,
         peerNorm: peerNorm ?? this.peerNorm,
         channelCapture: channelCapture ?? this.channelCapture,
+        channelBackoff: channelBackoff ?? this.channelBackoff,
+        channelCwMin: channelCwMin ?? this.channelCwMin,
+        channelCwMax: channelCwMax ?? this.channelCwMax,
+        channelSlotMs: channelSlotMs ?? this.channelSlotMs,
         mediaBackpressure: mediaBackpressure ?? this.mediaBackpressure,
         communityRelayPreference:
             communityRelayPreference ?? this.communityRelayPreference,
@@ -576,6 +605,7 @@ class SimulationStats {
     required this.channelDrops,
     required this.channelCaptured,
     required this.channelDeafRx,
+    required this.channelBackoffs,
     required this.batteryPercentPerHourNormal,
     required this.batteryPercentPerHourSuper,
     required this.scansPerSec,
@@ -690,6 +720,10 @@ class SimulationStats {
   /// [ChannelCapture.none] (docs/08 §12.9).
   final int channelCaptured;
   final int channelDeafRx;
+
+  /// Contention-window draws: how often a node found the medium free and still had to wait a
+  /// random number of slots for it (docs/08 §12.13). Zero unless [ChannelBackoff.binary].
+  final int channelBackoffs;
 
   /// skills/07 telemetry: "Battery %/h per role, scans/sec, relays/sec".
   /// Measured from the battery snapshot taken when metrics were cleared, over
@@ -1066,9 +1100,21 @@ const Map<MsgType, int> _channelClass = <MsgType, int>{
 };
 
 class _ChannelState {
+  _ChannelState(this.cw);
+
   double busyUntil = 0;
   final List<_QueuedTx> queue = <_QueuedTx>[];
   bool drainScheduled = false;
+
+  /// Contention window this radio currently draws from, in slots. Starts at
+  /// `config.channelCwMin`, doubles after a collision, resets after a clean transmission.
+  int cw;
+
+  /// Whether a slot count has already been drawn for the attempt now in progress, and how
+  /// many slots of it are left to wait. Drawn once per attempt so a radio that is deferred
+  /// again mid-backoff keeps the turn it already paid for.
+  bool backoffArmed = false;
+  int backoffSlots = 0;
 }
 
 class _PathTrace {
@@ -1275,6 +1321,11 @@ class MeshSimulation {
   int _channelDrops = 0;
   int _channelCaptured = 0;
   int _channelDeafRx = 0;
+  int _channelBackoffs = 0;
+
+  /// Whether the transmission that just went on air collided at its receiver. Written by
+  /// [_onAir], read by the contention window to decide whether to widen.
+  bool _lastTxCollided = false;
 
   /// Until when each node is transmitting, and until when it is locked onto a reception.
   /// Maintained only while the receiver model or carrier sense is on, so the shipped model
@@ -1363,6 +1414,8 @@ class MeshSimulation {
     _channelDrops = 0;
     _channelCaptured = 0;
     _channelDeafRx = 0;
+    _channelBackoffs = 0;
+    _lastTxCollided = false;
     _channel.clear();
     _txUntil.clear();
     _rxUntil.clear();
@@ -2442,7 +2495,7 @@ class MeshSimulation {
     }
     var ch = _channel[node.id];
     if (ch == null) {
-      ch = _ChannelState();
+      ch = _ChannelState(config.channelCwMin);
       _channel[node.id] = ch;
     }
     if (ch.queue.length >= config.channelQueueDepth) {
@@ -2495,6 +2548,32 @@ class MeshSimulation {
         }
         return;
       }
+      if (config.channelBackoff != ChannelBackoff.none) {
+        // The medium is free *now* — which is exactly when every other node waiting on the
+        // same medium also finds it free, because they were all woken at this instant. Left
+        // alone they transmit together and listening has synchronised the herd instead of
+        // dispersing it. Draw a random number of slots and wait them out (docs/08 §12.13).
+        if (!ch.backoffArmed) {
+          // `randInt` draws only here, so ChannelBackoff.none consumes no random numbers and
+          // the shipped model stays bit-identical.
+          ch.backoffSlots = randInt(rng, 0, ch.cw);
+          ch.backoffArmed = true;
+          _channelBackoffs++;
+        }
+        if (ch.backoffSlots > 0) {
+          final wait = ch.backoffSlots * config.channelSlotMs;
+          // Paid in full rather than a slot at a time: a 64-slot window drained one event per
+          // slot is 64 wakeups per transmission, and the answer is the same.
+          ch.backoffSlots = 0;
+          _channelDeferrals++;
+          _channelDeferMs += wait;
+          if (!ch.drainScheduled) {
+            ch.drainScheduled = true;
+            _queue.push(now + wait, EventKind.channel, node.id);
+          }
+          return;
+        }
+      }
     }
     final next = _takeNextTx(ch);
     final waited = now - next.queuedAt;
@@ -2504,6 +2583,15 @@ class MeshSimulation {
     }
     final airTime = _onAir(node, next.msg, next.targetId);
     ch.busyUntil = now + airTime;
+    if (config.channelBackoff != ChannelBackoff.none) {
+      // Binary exponential backoff: a radio that just collided draws from a window twice as
+      // wide next time, so two radios that keep meeting keep backing off until they stop
+      // meeting; a radio that got through goes back to the narrow window it started with.
+      ch.cw = _lastTxCollided
+          ? (ch.cw * 2 > config.channelCwMax ? config.channelCwMax : ch.cw * 2)
+          : config.channelCwMin;
+      ch.backoffArmed = false;
+    }
     if (ch.queue.isNotEmpty && !ch.drainScheduled) {
       ch.drainScheduled = true;
       _queue.push(ch.busyUntil, EventKind.channel, node.id);
@@ -2544,6 +2632,9 @@ class MeshSimulation {
   /// time it occupied — a lost packet still occupied the radio for all of it.
   double _onAir(MeshNode node, MeshMessage msg, NodeId targetId) {
     final target = _byId(targetId)!;
+    // Cleared per transmission so the contention window sees this packet's fate and not the
+    // last one's.
+    _lastTxCollided = false;
     node.txCount++;
     _relayTx++;
     final loss = effectiveLossProbability(node, target, rf, config.linkRetries);
@@ -2592,6 +2683,7 @@ class MeshSimulation {
       final deaf = (_txUntil[target.id] ?? 0) > now;
       final captured = !deaf && (_rxUntil[target.id] ?? 0) > now;
       if (deaf || captured) {
+        _lastTxCollided = true;
         if (deaf) {
           _channelDeafRx++;
         } else {
@@ -3447,6 +3539,7 @@ class MeshSimulation {
       channelDrops: _channelDrops,
       channelCaptured: _channelCaptured,
       channelDeafRx: _channelDeafRx,
+      channelBackoffs: _channelBackoffs,
       batteryPercentPerHourNormal: drainPerHour(Role.normal),
       batteryPercentPerHourSuper: drainPerHour(Role.superNode),
       scansPerSec: _scanCount / elapsedSec,

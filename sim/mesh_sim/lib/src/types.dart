@@ -122,6 +122,25 @@ enum PeerNorm { fixed, observed }
 /// contention lives — 13.6 points of delivery against a transmitter queue's 4.0.
 enum ChannelCapture { none, first }
 
+/// Whether a node that has been waiting for the medium waits a random number of slots
+/// before it takes it (docs/08 §12.13).
+///
+/// Carrier sense without backoff has a failure mode that is invisible in the deferral
+/// counter: every node waiting on the same busy medium is woken at *the same instant* — the
+/// moment it comes free — and they all transmit together. Listening synchronises the herd
+/// instead of dispersing it, which is why [ChannelAccess.csma] measured worse than not
+/// listening at all.
+///
+/// [ChannelBackoff.none] transmits the instant the medium is free. It ships, and it is what
+/// every `csma` number in docs/08 §12.10 was measured under.
+///
+/// [ChannelBackoff.binary] is binary exponential backoff: `channelCwMin` slots after a clean
+/// transmission, doubling up to `channelCwMax` after each collision. Measured and rejected —
+/// under carrier sense the dominant loss is queue drops (1994-3466) rather than collisions
+/// (273-394), so a lever that makes nodes wait longer feeds the mechanism that is losing the
+/// packets. Consulted only under [ChannelAccess.csma].
+enum ChannelBackoff { none, binary }
+
 /// Address of a scoped group flood. Not a node id, and deliberately distinct from
 /// `broadcastAddress`: a broadcast is public by design (docs/04 §4), a group flood
 /// is delivered only to members holding the current key epoch.

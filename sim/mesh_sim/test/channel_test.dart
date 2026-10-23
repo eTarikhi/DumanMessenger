@@ -51,6 +51,95 @@ void main() {
     return sim;
   }
 
+  /// Three nodes 20 m apart in a triangle, so every pair is inside the 31.6 m
+  /// line-of-sight budget and every node can sense every other. This is the geometry
+  /// carrier sense is supposed to work in — no hidden terminal to excuse it — and the one
+  /// the contention window is measured in (docs/08 §12.13).
+  MeshSimulation triangleWorld({
+    ChannelAccess channelAccess = ChannelAccess.csma,
+    ChannelCapture channelCapture = ChannelCapture.first,
+    ChannelBackoff channelBackoff = ChannelBackoff.none,
+    int channelCwMin = 4,
+    int channelCwMax = 64,
+    double channelSlotMs = 1.0,
+  }) {
+    final sim = MeshSimulation(SimConfig(
+      nodeCount: 3,
+      stationaryRatio: 1.0,
+      chargingRatio: 0.0,
+      trafficIntervalMs: 0,
+      enableSuperElection: false,
+      warmupMs: 0,
+      obstacles: const <Obstacle>[],
+      channelAccess: channelAccess,
+      channelCapture: channelCapture,
+      channelBackoff: channelBackoff,
+      channelCwMin: channelCwMin,
+      channelCwMax: channelCwMax,
+      channelSlotMs: channelSlotMs,
+    ));
+    final at = <Vec2>[Vec2(10, 10), Vec2(30, 10), Vec2(20, 27.32)];
+    for (var i = 0; i < sim.nodes.length; i++) {
+      final node = sim.nodes[i];
+      node.pos = at[i];
+      node.target = at[i];
+      node.mobility = 0;
+      node.isOnline = true;
+      node.battery = 1.0;
+    }
+    sim.runFor(20000); // beacons settle, routes form
+    sim.clearRecords();
+    return sim;
+  }
+
+  /// Every node transmits at once, each to a different one, so all three radios want the
+  /// medium in the same instant.
+  ({
+    int collisions,
+    int retries,
+    int draws,
+    double deferMs,
+    int deferrals,
+    int arrived,
+  })
+      allTalkAtOnce({
+    ChannelBackoff channelBackoff = ChannelBackoff.none,
+    int channelCwMin = 4,
+    int channelCwMax = 64,
+    double channelSlotMs = 1.0,
+    ChannelAccess channelAccess = ChannelAccess.csma,
+  }) {
+    final sim = triangleWorld(
+      channelAccess: channelAccess,
+      channelBackoff: channelBackoff,
+      channelCwMin: channelCwMin,
+      channelCwMax: channelCwMax,
+      channelSlotMs: channelSlotMs,
+    );
+    final a = sim.nodes[0], b = sim.nodes[1], c = sim.nodes[2];
+    // Every pair is inside the line-of-sight budget, so nothing here is a hidden terminal.
+    for (final pair in <List<MeshNode>>[
+      [a, b],
+      [b, c],
+      [a, c]
+    ]) {
+      expect(canReach(pair[0], pair[1], sim.rf), isTrue);
+    }
+    sim.sendMessage(a.id, b.id, 'a-b', MsgType.text);
+    sim.sendMessage(b.id, c.id, 'b-c', MsgType.text);
+    sim.sendMessage(c.id, a.id, 'c-a', MsgType.text);
+    sim.runFor(60000);
+    final st = sim.refresh();
+    return (
+      collisions: st.channelCaptured + st.channelDeafRx,
+      retries: st.retriesSent,
+      draws: st.channelBackoffs,
+      deferMs: st.channelDeferMs,
+      deferrals: st.channelDeferrals,
+      arrived: sim.deliveries.where((d) => d.type == MsgType.text).length,
+    );
+  }
+
   bool runUntil(MeshSimulation sim, bool Function() done, double budgetMs) {
     var elapsed = 0.0;
     while (!done() && elapsed < budgetMs) {
@@ -498,5 +587,80 @@ void main() {
     expect(throttled.retransmitted, lessThan(blind.retransmitted));
     expect(throttled.stalls, 0);
     expect(throttled.seconds, lessThan(blind.seconds));
+  });
+
+  test('the contention window fires where carrier sense defers, and costs waiting to do it',
+      () {
+    final herd = allTalkAtOnce();
+    final spread = allTalkAtOnce(
+        channelBackoff: ChannelBackoff.binary, channelCwMin: 16, channelSlotMs: 5.0);
+
+    // The control never draws, so every deferring node is released at the same instant the
+    // medium clears and they meet again there. Exact counts are pinned in the TypeScript
+    // suite; here the claim is the mechanism, so a divergence in one engine fails one suite.
+    expect(herd.draws, 0);
+    expect(spread.draws, greaterThan(0));
+    expect(spread.deferrals, greaterThan(herd.deferrals));
+    expect(spread.deferMs, greaterThan(herd.deferMs));
+    // At three nodes the wait is real and the collision count does not move, which is the
+    // same thing §12.13 finds across a whole campus: the mechanism fires and does not pay.
+    expect(spread.collisions, herd.collisions);
+    expect(spread.arrived, 3);
+    expect(herd.arrived, 3);
+  });
+
+  test('doubles the window after a collision, which is the exponential half of the backoff', () {
+    // A one-slot window can only ever draw zero, so if the window never grew the price of a
+    // slot could not matter. It does matter here — which is the collision having doubled the
+    // window, observed from outside a private field.
+    final cheap = allTalkAtOnce(
+        channelBackoff: ChannelBackoff.binary, channelCwMin: 1, channelCwMax: 64, channelSlotMs: 5.0);
+    final dear = allTalkAtOnce(
+        channelBackoff: ChannelBackoff.binary,
+        channelCwMin: 1,
+        channelCwMax: 64,
+        channelSlotMs: 500.0);
+    expect(cheap.draws, greaterThan(0));
+    expect(dear.deferMs, greaterThan(cheap.deferMs));
+
+    // The same run with the ceiling at one slot: the window cannot widen, the draw cannot
+    // exceed zero, and now the price of a slot is irrelevant. Same draws, same totals.
+    final cappedCheap = allTalkAtOnce(
+        channelBackoff: ChannelBackoff.binary, channelCwMin: 1, channelCwMax: 1, channelSlotMs: 5.0);
+    final cappedDear = allTalkAtOnce(
+        channelBackoff: ChannelBackoff.binary,
+        channelCwMin: 1,
+        channelCwMax: 1,
+        channelSlotMs: 500.0);
+    expect(cappedCheap.draws, cheap.draws);
+    expect(cappedDear.deferMs, cappedCheap.deferMs);
+    expect(cappedDear.collisions, cappedCheap.collisions);
+    expect(cappedDear.arrived, 3);
+
+    // A window that starts wide pays the slot price from its first attempt, so the same
+    // comparison holds without needing a collision to widen it.
+    final wide = allTalkAtOnce(
+        channelBackoff: ChannelBackoff.binary, channelCwMin: 64, channelSlotMs: 500.0);
+    final wideCheap = allTalkAtOnce(
+        channelBackoff: ChannelBackoff.binary, channelCwMin: 64, channelSlotMs: 5.0);
+    expect(wide.deferMs, greaterThan(wideCheap.deferMs));
+    expect(wideCheap.draws, greaterThan(0));
+  });
+
+  test("backoff is carrier sense's lever: a radio with no shared medium does not move", () {
+    // A node whose own radio is busy is already serialised by its FIFO, and with no shared
+    // medium there is nobody to contend with. Backoff under halfDuplex would be delay for
+    // its own sake, so the engine ignores it — asserted rather than assumed.
+    final off = allTalkAtOnce(channelAccess: ChannelAccess.halfDuplex);
+    final on = allTalkAtOnce(
+        channelAccess: ChannelAccess.halfDuplex,
+        channelBackoff: ChannelBackoff.binary,
+        channelCwMin: 64,
+        channelSlotMs: 5.0);
+    expect(off.draws, 0);
+    expect(on.draws, 0);
+    expect(on.deferMs, off.deferMs);
+    expect(on.collisions, off.collisions);
+    expect(on.arrived, off.arrived);
   });
 }
