@@ -3049,3 +3049,97 @@ describe("preferring a community relay, measured and rejected (docs/06 §19.5)",
     expect(off.dtn).toBe(0);
   });
 });
+
+describe("receiver contention: what a busy receiver does (docs/08 §12.9)", () => {
+  /** A-B-C in a line, 20 m apart: A and C both reach B, and neither reaches the other. */
+  function lineWorld(over: Partial<SimConfig> = {}): MeshSimulation {
+    const sim = new MeshSimulation({
+      ...DEFAULT_CONFIG,
+      nodeCount: 3,
+      stationaryRatio: 1,
+      chargingRatio: 0,
+      trafficIntervalMs: 0,
+      enableSuperElection: false,
+      warmupMs: 0,
+      obstacles: [],
+      ...over,
+    });
+    sim.nodes.forEach((node, i) => {
+      node.pos = { x: 10 + i * 20, y: 10 };
+      node.home = { x: 10 + i * 20, y: 10 };
+      node.target = { x: 10 + i * 20, y: 10 };
+      node.stationary = true;
+      node.mobility = 0;
+      node.isOnline = true;
+      node.battery = 1;
+    });
+    sim.runFor(20000);
+    sim.clearRecords();
+    return sim;
+  }
+
+  it("loses the second of two packets that arrive together, and only when asked to", () => {
+    const run = (capture: SimConfig["channelCapture"]) => {
+      const sim = lineWorld({ channelCapture: capture });
+      const [a, b, c] = sim.nodes;
+      // Two senders, one receiver, the same instant: the air time of a text packet is
+      // ~245 ms, so the second arrival lands while B is still locked onto the first.
+      sim.sendMessage(a.id, b.id, "from-a", "text");
+      sim.sendMessage(c.id, b.id, "from-c", "text");
+      sim.runFor(20000);
+      const stats = sim.refresh();
+      return {
+        captured: stats.channelCaptured,
+        deaf: stats.channelDeafRx,
+        arrived: sim.deliveries.filter((d) => d.to === b.id && d.type === "text").length,
+      };
+    };
+
+    const none = run("none");
+    expect(none.captured).toBe(0);
+    expect(none.deaf).toBe(0);
+    expect(none.arrived).toBe(2); // both arrive: this is the model §9's null result lives in
+
+    const first = run("first");
+    expect(first.captured).toBe(1);
+    // ... and the message is not lost, only late: the sender's ACK timeout re-sends it into
+    // an idle radio. That is why receiver contention in the crowd costs p95 (4.5 s -> 7.5 s)
+    // before it costs delivery (docs/08 §12.9).
+    expect(first.arrived).toBe(2);
+  });
+
+  it("loses a packet that arrives while its receiver is transmitting", () => {
+    const run = (capture: SimConfig["channelCapture"]) => {
+      const sim = lineWorld({ channelCapture: capture });
+      const [a, b] = sim.nodes;
+      sim.sendMessage(a.id, b.id, "a-to-b", "text");
+      sim.sendMessage(b.id, a.id, "b-to-a", "text");
+      sim.runFor(20000);
+      const stats = sim.refresh();
+      return {
+        deaf: stats.channelDeafRx,
+        arrived: sim.deliveries.filter((d) => d.type === "text").length,
+      };
+    };
+
+    // A half-duplex radio cannot hear over its own transmitter. The two transmissions are
+    // not exactly simultaneous — each message is scheduled by its own sender — so one
+    // packet lands inside the other's transmit window and the other lands just after it:
+    // one collision, and the retry recovers it.
+    expect(run("none").deaf).toBe(0);
+    const first = run("first");
+    expect(first.deaf).toBe(1);
+    expect(first.arrived).toBe(2);
+  });
+
+  it("counts nothing at all in the shipped model, whatever the transmitter does", () => {
+    for (const channelAccess of ["free", "halfDuplex"] as const) {
+      const sim = new MeshSimulation({ ...campusQuad(42), trafficIntervalMs: 1000, channelAccess });
+      sim.runFor(120000);
+      const stats = sim.refresh();
+      expect(stats.channelCaptured).toBe(0);
+      expect(stats.channelDeafRx).toBe(0);
+      expect(stats.totalForwarded).toBeGreaterThan(100);
+    }
+  });
+});

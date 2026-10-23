@@ -89,6 +89,7 @@ class SimConfig {
     this.dtnPreferSuper = false,
     this.communityRelayQuota = 0,
     this.peerNorm = PeerNorm.fixed,
+    this.channelCapture = ChannelCapture.none,
     this.communityRelayPreference = false,
     this.dtnPreferCommunity = false,
     this.maxRetries = 2,
@@ -283,6 +284,11 @@ class SimConfig {
   /// node's score and changes no election (docs/06 §18.4).
   final PeerNorm peerNorm;
 
+  /// What a receiver does when two packets arrive at once. [ChannelCapture.none] ships: a busy
+  /// receiver takes everything. [ChannelCapture.first] loses the later packet, and loses any
+  /// packet that arrives while its receiver is transmitting (docs/08 §12.9).
+  final ChannelCapture channelCapture;
+
   /// When two relays cover the same neighbours, pick the plugged one. Off by default and
   /// measured as a null result: it moves 0.6 of 100 MPR slots in a crowd and nothing
   /// downstream, because who transmits is decided per packet from what was actually heard
@@ -352,6 +358,7 @@ class SimConfig {
     bool? dtnPreferSuper,
     double? communityRelayQuota,
     PeerNorm? peerNorm,
+    ChannelCapture? channelCapture,
     bool? communityRelayPreference,
     bool? dtnPreferCommunity,
     double? voiceKbps,
@@ -401,6 +408,7 @@ class SimConfig {
         dtnPreferSuper: dtnPreferSuper ?? this.dtnPreferSuper,
         communityRelayQuota: communityRelayQuota ?? this.communityRelayQuota,
         peerNorm: peerNorm ?? this.peerNorm,
+        channelCapture: channelCapture ?? this.channelCapture,
         communityRelayPreference:
             communityRelayPreference ?? this.communityRelayPreference,
         dtnPreferCommunity: dtnPreferCommunity ?? this.dtnPreferCommunity,
@@ -555,6 +563,8 @@ class SimulationStats {
     required this.channelDeferrals,
     required this.channelDeferMs,
     required this.channelDrops,
+    required this.channelCaptured,
+    required this.channelDeafRx,
     required this.batteryPercentPerHourNormal,
     required this.batteryPercentPerHourSuper,
     required this.scansPerSec,
@@ -663,6 +673,12 @@ class SimulationStats {
   final int channelDeferrals;
   final double channelDeferMs;
   final int channelDrops;
+
+  /// Packets lost because the receiver was locked onto a packet that arrived first, and
+  /// packets lost because the receiver was itself transmitting. Both zero under
+  /// [ChannelCapture.none] (docs/08 §12.9).
+  final int channelCaptured;
+  final int channelDeafRx;
 
   /// skills/07 telemetry: "Battery %/h per role, scans/sec, relays/sec".
   /// Measured from the battery snapshot taken when metrics were cleared, over
@@ -1240,6 +1256,13 @@ class MeshSimulation {
   int _channelDeferrals = 0;
   double _channelDeferMs = 0;
   int _channelDrops = 0;
+  int _channelCaptured = 0;
+  int _channelDeafRx = 0;
+
+  /// Until when each node is transmitting, and until when it is locked onto a reception. Both
+  /// maintained only while `channelCapture` is on, so the shipped model pays nothing.
+  final Map<NodeId, double> _txUntil = <NodeId, double>{};
+  final Map<NodeId, double> _rxUntil = <NodeId, double>{};
 
   /// One radio per node. Only maintained under [ChannelAccess.halfDuplex] — under
   /// [ChannelAccess.free] a radio is never busy, so the map stays empty.
@@ -1320,7 +1343,11 @@ class MeshSimulation {
     _channelDeferrals = 0;
     _channelDeferMs = 0;
     _channelDrops = 0;
+    _channelCaptured = 0;
+    _channelDeafRx = 0;
     _channel.clear();
+    _txUntil.clear();
+    _rxUntil.clear();
     _ogmTx = 0;
     _lostDataTx = 0;
     _lostOgmTx = 0;
@@ -1504,6 +1531,8 @@ class MeshSimulation {
         // that comes back must not inherit a busy transmitter.
         _channel.remove(node.id);
         _queue.cancel(EventKind.channel, node.id);
+        _txUntil.remove(node.id);
+        _rxUntil.remove(node.id);
       }
     }
     _queue.push(now + config.physicsIntervalMs, EventKind.physics, '*');
@@ -2447,6 +2476,18 @@ class MeshSimulation {
     _relayTx++;
     final loss = effectiveLossProbability(node, target, rf, config.linkRetries);
     final rssi = rssiModel(node, target, rf);
+    // What this packet occupies a radio for, without the jitter draw: the receiver-side model
+    // below needs it before the packet's fate is known, and both branches that never land
+    // return it. No random number is consumed here, so `ChannelCapture.none` stays
+    // bit-identical to the model every other result was measured under.
+    final occupied = (msg.transport == TransportType.wifiDirect
+            ? config.hopLatencyWifiMs
+            : config.hopLatencyBleMs) +
+        serializationMs(msg.sizeBytes, msg.transport);
+    final capture = config.channelCapture != ChannelCapture.none;
+    // A radio is deaf from the moment it starts transmitting, whether or not the packet
+    // survives the link.
+    if (capture) _txUntil[node.id] = now + occupied;
     if (chance(rng, loss)) {
       _lostDataTx++;
       _recordTxOutcome(node, 0);
@@ -2460,11 +2501,34 @@ class MeshSimulation {
           hop: msg.hopCount,
           rssi: rssi);
       // Air time without the jitter draw: consuming a random number here would move the
-      // stream the default free model depends on, and the golden vectors with it.
-      return (msg.transport == TransportType.wifiDirect
-              ? config.hopLatencyWifiMs
-              : config.hopLatencyBleMs) +
-          serializationMs(msg.sizeBytes, msg.transport);
+      // stream the default model depends on, and the golden vectors with it.
+      return occupied;
+    }
+    if (capture) {
+      // Two ways a packet that survived the link still does not arrive: its receiver is
+      // transmitting, or its receiver is locked onto a packet that got there first. Both are
+      // losses rather than deferrals — that is what a collision is — and neither compares
+      // signal strengths, so the earlier packet always wins (docs/08 §12.9).
+      final deaf = (_txUntil[target.id] ?? 0) > now;
+      final captured = !deaf && (_rxUntil[target.id] ?? 0) > now;
+      if (deaf || captured) {
+        if (deaf) {
+          _channelDeafRx++;
+        } else {
+          _channelCaptured++;
+        }
+        _recordTxOutcome(node, 0);
+        _pushLog(
+            MeshLogKind.loss,
+            node.id,
+            '${msg.id} → $targetId collided (${deaf ? 'receiver was transmitting' : 'receiver was locked onto an earlier packet'})',
+            peerId: targetId,
+            msgId: msg.id,
+            msgType: msg.type,
+            hop: msg.hopCount,
+            rssi: rssi);
+        return occupied;
+      }
     }
     _recordTxOutcome(node, 1);
     _pushLog(
@@ -2486,6 +2550,7 @@ class MeshSimulation {
     final airTime = base +
         serializationMs(msg.sizeBytes, msg.transport) +
         randRange(rng, config.jitterMinMs, config.jitterMaxMs);
+    if (capture) _rxUntil[target.id] = now + airTime;
     _queue.push(now + airTime, EventKind.msg, targetId, _MsgPayload(msg, node.id));
     return airTime;
   }
@@ -3107,6 +3172,8 @@ class MeshSimulation {
       _queue.cancel(EventKind.scan, node.id);
       _channel.remove(node.id);
       _queue.cancel(EventKind.channel, node.id);
+      _txUntil.remove(node.id);
+      _rxUntil.remove(node.id);
     } else {
       node.battery = math.max(node.battery, 0.3);
       node.uptimeMin = 0;
@@ -3298,6 +3365,8 @@ class MeshSimulation {
       channelDeferrals: _channelDeferrals,
       channelDeferMs: _channelDeferMs,
       channelDrops: _channelDrops,
+      channelCaptured: _channelCaptured,
+      channelDeafRx: _channelDeafRx,
       batteryPercentPerHourNormal: drainPerHour(Role.normal),
       batteryPercentPerHourSuper: drainPerHour(Role.superNode),
       scansPerSec: _scanCount / elapsedSec,

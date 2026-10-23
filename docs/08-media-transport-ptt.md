@@ -716,9 +716,10 @@ would silently redefine every acceptance number in the roadmap.
   the next thing to measure.
 * Voice priority in the transmit queue **is** implemented and measured (§12.8), and it does
   not do what it was for: it cannot rescue push-to-talk beyond two hops. It ships off.
-* Not modelled, and the direction of the error is known: receiver-side capture and
-  collisions between waiting packets. Both would make `halfDuplex` worse, so every number
-  here is the optimistic end of a real radio.
+* The receiver is modelled separately, by `channelCapture` (§12.9), and it is where most of
+  the contention turns out to live. Two things remain unmodelled there as well: a capture
+  effect that compares signal strengths rather than arrival order, and any carrier sense —
+  a real radio defers before transmitting instead of transmitting blind.
 
 ### 12.8 Which packet a busy radio takes next
 
@@ -785,10 +786,89 @@ So `"fifo"` ships. If the real radio is the model to plan against, the evidence-
 is: window 1 (§12.5), then `"ackFirst"`, and only then `"class"` — and `"class"` should be
 chosen for bulk-transfer speed, not for voice.
 
+### 12.9 Receiver contention, and why the acceptance gates lose their margin
+
+§12 gave the device one transmitter and left the receiver infinitely attentive: a node on air
+could still hear, and two packets arriving together both landed. `channelCapture` closes both.
+`"first"` — the only setting besides the shipped `"none"` — makes the receiver lock onto
+whichever packet arrived first, and makes a transmitting node deaf. Both are modelled as losses
+rather than deferrals, because that is what a collision is, and neither compares signal
+strengths, so the earlier packet always wins. The flag is independent of `channelAccess`, which
+is what makes the two mechanisms separable:
+
+**60 text messages at 2 s, nothing else** (3 seeds, 20-node campus)
+
+| transmitter | receiver | delivery | within 5 | p95 | retries | parked | captured | deaf |
+|---|---|---|---|---|---|---|---|---|
+| `free` | `none` | **0.9944** | 0.9944 | 4,472 ms | 11 | 1.0 | 0 | 0 |
+| `free` | `first` | 0.9831 | 0.9774 | **7,534 ms** | 32 | 8.7 | 661 | 180 |
+| `halfDuplex` | `none` | 0.9831 | 0.9774 | 5,077 ms | 17 | 4.0 | 0 | 0 |
+| `halfDuplex` | `first` | **0.9040** | 0.9040 | 10,550 ms | 52 | 15.3 | 291 | 267 |
+
+**The same traffic with a 10 MB file in flight**
+
+| transmitter | receiver | delivery | p95 | retries | parked | captured | deaf | queue drops | file time |
+|---|---|---|---|---|---|---|---|---|---|
+| `free` | `none` | **0.9944** | 3,275 ms | 59 | 1.0 | 0 | 0 | 0 | 10.71 s |
+| `free` | `first` | **0.8588** | 10,314 ms | 379 | 37.3 | 3,625 | 1,256 | 0 | 1.98 min |
+| `halfDuplex` | `none` | 0.9548 | 7,954 ms | 272 | 12.3 | 0 | 0 | 2,409 | 3.33 min |
+| `halfDuplex` | `first` | 0.8927 | 11,681 ms | 310 | 21.0 | 603 | 808 | 1,744 | 3.75 min |
+
+Four things follow.
+
+**The receiver is where contention lives.** With a file in flight, a transmitter queue alone
+costs text 4.0 points of delivery (0.9944 → 0.9548) and receiver collisions alone cost **13.6**
+(0.9944 → 0.8588). §9's null result was not wrong about the transmitter; it was missing the
+larger half of the mechanism. A single radio that can still hear everything is a much friendlier
+network than a radio that cannot.
+
+**Once collisions exist, the queue earns its keep.** Under `"none"` adding a transmitter queue
+costs 4.0 points; under `"first"` adding one *recovers* 3.4 (0.8588 → 0.8927), because
+serialising a node's own transmissions removes the overlaps it was causing everybody else. That
+is the closest thing to a CSMA result in this repository: the discipline is worth having only
+once there is something to collide with, and §12.5's window-1 recommendation still holds on top
+of it.
+
+**Collisions are paid in latency before delivery.** In a quiet mesh, receiver contention moves
+p95 by +68% (4,472 → 7,534 ms) to cost 1.1 points of delivery, because a collided packet is not
+lost — the sender's ACK timeout re-sends it into an idle radio four seconds later. The unit
+tests pin exactly that: two packets sent to one receiver at the same instant produce one
+collision and *two* deliveries.
+
+**Most of the collisions are a node not hearing itself.** With a file in flight under
+`halfDuplex` + `first`, 808 losses are deaf-receiver against 603 first-capture. A real CSMA/CA
+radio defers rather than transmitting blind, so this arm overstates that half of the harm —
+while the missing capture effect (a strong packet surviving a weak one) understates the other.
+The two omissions do not cancel and are not claimed to.
+
+**And the acceptance gates lose their margin.** The same 20-node campus, three seeds, gates
+measured against a naive flood-all run under the same radio:
+
+| transmitter | receiver | delivery | within 5 | overhead vs flood-all | SUPER ratio | queue drops |
+|---|---|---|---|---|---|---|
+| `free` | `none` (ships) | 0.9889 | 0.9889 | 9.3 % | 21.7 % | 0 |
+| `free` | `first` | **0.9056** | 0.9056 | 15.8 % | 25.0 % | 0 |
+| `halfDuplex` | `none` | 0.9556 | 0.9556 | 38.6 % | 25.0 % | 538 |
+| `halfDuplex` | `first` | **0.9000** | 0.9000 | 27.1 % | 21.7 % | 185 |
+
+skills/02 and skills/08 both ask for delivery ≥ 0.90. Under the two radios that have a receiver
+in them, the campus measures **0.9056** and **0.9000** — the gate is met with nothing to spare.
+Overhead stays comfortably inside 70% in every arm and the SUPER ratio stays inside its band, so
+delivery is the binding criterion and contention is what binds it. That is the most consequential
+number in this document: the roadmap's acceptance gates were calibrated against a radio with no
+contention, and the moment a receiver is added the margin is zero. It is also an argument about
+ordering — `docs/09`'s field test should measure delivery ratio on a real floor before anybody
+tunes anything else, because the simulator can no longer claim headroom it does not have.
+
+Neither flag ships: `channelCapture: "none"` is inert by construction (no counter moves, no
+random draw changes order, golden vectors byte-identical), and the four-arm comparison above is
+what the two flags are for — a decomposition, not a setting to leave on without deciding which
+radio you are claiming to have.
+
 ## 13. Reproducing
 
 ```bash
-npm run media                                            # TypeScript probe, every table above (§7-§8 for the radio)
+npm run media                                            # TypeScript probe, every table above (§7-§9 for the radio)
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media --no-check
 npm test                                                 # 243 TS tests, incl. 18 media + 6 channel cases
 cd sim/mesh_sim && dart test                             # 18 Dart media cases + test/channel_test.dart
@@ -799,12 +879,14 @@ Engine surface: `sendFile(from, to, bytes, {chunkBytes, window, transport})`,
 `mediaTimeoutMs(transfer)`, `sim.transfers`, and the config keys `bleKbps`,
 `wifiDirectKbps`, `transferChunkBytes`, `transferWindow`, `transferStallMs`,
 `mediaAckTimeoutMs`, `adaptiveMediaAck`, `voiceKbps`, `voiceFrameMs`, `jitterBufferMs`,
-`voiceTtl`, `maxTransferBytes`, `channelAccess`, `channelQueueDepth`, `channelPriority`.
+`voiceTtl`, `maxTransferBytes`, `channelAccess`, `channelQueueDepth`, `channelPriority`,
+`channelCapture`.
 
 Tests that pin this document's claims: `media transport (docs/05 §3.2-3.3, roadmap
 Phase 3)`, `media against skills/05 (Voice PTT & Media)`, `media under load, measured
 without confounding the A/B (docs/08 §9)` and `channel access: one radio, half-duplex
-(docs/08 §12)` and `which packet a busy radio takes next (docs/08 §12.8)` in
+(docs/08 §12)` and `which packet a busy radio takes next (docs/08 §12.8)` and
+`receiver contention: what a busy receiver does (docs/08 §12.9)` in
 `src/__tests__/simulation.test.ts`, `media transport in the UI` in
 `src/__tests__/components.test.tsx`, and `test/media_test.dart` plus `test/channel_test.dart`
 in the Dart engine.

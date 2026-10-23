@@ -19,6 +19,7 @@ void main() {
     ChannelAccess channelAccess = ChannelAccess.free,
     int channelQueueDepth = 8,
     ChannelPriority channelPriority = ChannelPriority.fifo,
+    ChannelCapture channelCapture = ChannelCapture.none,
   }) {
     final sim = MeshSimulation(SimConfig(
       nodeCount: n,
@@ -31,6 +32,7 @@ void main() {
       channelAccess: channelAccess,
       channelQueueDepth: channelQueueDepth,
       channelPriority: channelPriority,
+      channelCapture: channelCapture,
     ));
     for (var i = 0; i < sim.nodes.length; i++) {
       final node = sim.nodes[i];
@@ -275,6 +277,80 @@ void main() {
               .where((d) => d.to == b && d.type == MsgType.text)
               .length,
           5);
+    }
+  });
+
+  test('loses the second of two packets that arrive together, and only when asked to', () {
+    /// A-B-C in a line, 20 m apart: A and C both reach B, and neither reaches the other.
+    ({int captured, int deaf, int arrived}) run(ChannelCapture capture) {
+      final sim = lineWorld(n: 3, channelCapture: capture);
+      final a = sim.nodes[0];
+      final b = sim.nodes[1];
+      final c = sim.nodes[2];
+      // Two senders, one receiver, the same instant: the air time of a text packet is about
+      // 245 ms, so the second arrival lands while B is still locked onto the first.
+      sim.sendMessage(a.id, b.id, 'from-a');
+      sim.sendMessage(c.id, b.id, 'from-c');
+      sim.runFor(20000);
+      final st = sim.refresh();
+      return (
+        captured: st.channelCaptured,
+        deaf: st.channelDeafRx,
+        arrived: sim.deliveries
+            .where((d) => d.to == b.id && d.type == MsgType.text)
+            .length,
+      );
+    }
+
+    final none = run(ChannelCapture.none);
+    expect(none.captured, 0);
+    expect(none.deaf, 0);
+    expect(none.arrived, 2); // both arrive: this is the model §9's null result lives in
+
+    final first = run(ChannelCapture.first);
+    expect(first.captured, 1);
+    // ... and the message is not lost, only late: the sender's ACK timeout re-sends it into
+    // an idle radio. That is why receiver contention costs p95 before it costs delivery.
+    expect(first.arrived, 2);
+  });
+
+  test('loses a packet that arrives while its receiver is transmitting', () {
+    ({int deaf, int arrived}) run(ChannelCapture capture) {
+      final sim = lineWorld(n: 2, channelCapture: capture);
+      final a = sim.nodes[0];
+      final b = sim.nodes[1];
+      sim.sendMessage(a.id, b.id, 'a-to-b');
+      sim.sendMessage(b.id, a.id, 'b-to-a');
+      sim.runFor(20000);
+      final st = sim.refresh();
+      return (
+        deaf: st.channelDeafRx,
+        arrived: sim.deliveries.where((d) => d.type == MsgType.text).length,
+      );
+    }
+
+    // A half-duplex radio cannot hear over its own transmitter. The two transmissions are not
+    // exactly simultaneous — each message is scheduled by its own sender — so one packet lands
+    // inside the other's transmit window and the other lands just after it: one collision, and
+    // the retry recovers it.
+    expect(run(ChannelCapture.none).deaf, 0);
+    final first = run(ChannelCapture.first);
+    expect(first.deaf, 1);
+    expect(first.arrived, 2);
+  });
+
+  test('counts nothing at all in the shipped model, whatever the transmitter does', () {
+    for (final channelAccess in <ChannelAccess>[
+      ChannelAccess.free,
+      ChannelAccess.halfDuplex
+    ]) {
+      final sim = MeshSimulation(campusQuad(42)
+          .copyWith(trafficIntervalMs: 1000, channelAccess: channelAccess));
+      sim.runFor(120000);
+      final stats = sim.refresh();
+      expect(stats.channelCaptured, 0);
+      expect(stats.channelDeafRx, 0);
+      expect(stats.totalForwarded, greaterThan(100));
     }
   });
 }

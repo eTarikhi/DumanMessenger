@@ -20,6 +20,7 @@ import { canReach, effectiveLossProbability, peersInRange } from "../src/rf";
 import { createRng } from "../src/rng";
 import type {
   ChannelAccess,
+  ChannelCapture,
   ChannelPriority,
   MeshNode,
   NodeId,
@@ -691,12 +692,18 @@ interface GateRow {
   drops: number;
 }
 
-function gateRow(seed: number, channelAccess: ChannelAccess, messages = 60): GateRow {
+function gateRow(
+  seed: number,
+  channelAccess: ChannelAccess,
+  messages = 60,
+  channelCapture: ChannelCapture = "none"
+): GateRow {
   const run = (policy: SimConfig["relayPolicy"]) => {
     const sim = simFor({
       ...campusQuad(seed),
       trafficIntervalMs: 0,
       channelAccess,
+      channelCapture,
       relayPolicy: policy,
     });
     const plan = contentionPlan(seed, sim.nodes.length, messages);
@@ -734,6 +741,133 @@ function gateRow(seed: number, channelAccess: ChannelAccess, messages = 60): Gat
     deferMs: mpr.deferMs,
     drops: mpr.drops,
   };
+}
+
+// ---------------------------------------------------------------------------
+// 9. Receiver contention: the other half of a real radio
+// ---------------------------------------------------------------------------
+
+const CAPTURES: ChannelCapture[] = ["none", "first"];
+const ACCESSES: ChannelAccess[] = ["free", "halfDuplex"];
+
+interface CaptureCell {
+  ratio: number;
+  within5: number;
+  p95: number;
+  relayTx: number;
+  retries: number;
+  parked: number;
+  captured: number;
+  deaf: number;
+  drops: number;
+  fileMs: number | null;
+}
+
+function captureCell(
+  access: ChannelAccess,
+  capture: ChannelCapture,
+  seed: number,
+  withFile: boolean
+): CaptureCell {
+  const sim = simFor({
+    ...campusQuad(seed),
+    trafficIntervalMs: 0,
+    channelAccess: access,
+    channelCapture: capture,
+  });
+  const plan = contentionPlan(seed, sim.nodes.length, 60);
+  const t = withFile ? sim.sendFile(sim.nodes[plan[0][0]].id, sim.nodes[plan[0][1]].id, 10 * MB) : null;
+  let sent = 0;
+  for (let i = 1; i < plan.length; i++) {
+    const from = sim.nodes[plan[i][0]];
+    const to = sim.nodes[plan[i][1]];
+    if (from.isOnline && to.isOnline && sim.sendMessage(from.id, to.id, `r-${i}`, "text")) sent++;
+    sim.runFor(2000);
+  }
+  // Text metrics are snapshotted at the end of the plan, in every arm, over the same window.
+  const stats = sim.refresh();
+  const uni = sim.deliveries.filter(
+    (d) => d.type !== "ack" && d.type !== "broadcast" && !d.groupId && !d.transferId
+  );
+  const lat = uni.map((d) => d.latencyMs).sort((x, y) => x - y);
+  if (t) {
+    let waited = 0;
+    while (t.state === "active" && waited < 900_000) {
+      sim.runFor(250);
+      waited += 250;
+    }
+  }
+  return {
+    ratio: uni.length / Math.max(1, sent),
+    within5: uni.filter((d) => d.hops <= 5).length / Math.max(1, sent),
+    p95: lat.length ? lat[Math.floor(lat.length * 0.95)] : 0,
+    relayTx: stats.totalForwarded,
+    retries: stats.retriesSent,
+    parked: stats.totalQueued,
+    captured: stats.channelCaptured,
+    deaf: stats.channelDeafRx,
+    drops: stats.channelDrops,
+    fileMs: t && t.completedAt !== null ? t.completedAt - t.startedAt : null,
+  };
+}
+
+function captureTable(): void {
+  console.log("\n=== 9. Receiver contention: the other half of a real radio (docs/08 §12.9) ===");
+  console.log(
+    "§12 gave the device one transmitter. The receiver was still infinitely attentive: a node\n" +
+      "on air could hear, and two packets arriving together both landed. `channelCapture: \"first\"`\n" +
+      "closes both — the receiver locks onto whichever packet arrived first, and a node that is\n" +
+      "transmitting hears nothing — as losses rather than deferrals, because that is what a\n" +
+      "collision is. It is independent of `channelAccess`, so the two mechanisms can be separated."
+  );
+  for (const withFile of [false, true]) {
+    console.log(
+      `\n--- ${withFile ? "60 messages at 2 s, with a 10 MB file in flight" : "60 messages at 2 s, nothing else"} (3 seeds) ---`
+    );
+    console.log(
+      "transmitter  receiver   delivery   within5   p95 ms   retries  parked  captured  deaf  queue drops  file"
+    );
+    for (const access of ACCESSES) {
+      for (const capture of CAPTURES) {
+        const rows = SEEDS.map((seed) => captureCell(access, capture, seed, withFile));
+        const mean = (f: (r: CaptureCell) => number | null) => {
+          const vals = rows.map(f).filter((v): v is number => v !== null);
+          return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : NaN;
+        };
+        console.log(
+          `${access.padEnd(12)} ${capture.padEnd(10)} ${mean((r) => r.ratio).toFixed(4).padEnd(10)} ` +
+            `${mean((r) => r.within5).toFixed(4).padEnd(9)} ${mean((r) => r.p95).toFixed(0).padEnd(8)} ` +
+            `${mean((r) => r.retries).toFixed(0).padEnd(8)} ${mean((r) => r.parked).toFixed(1).padEnd(7)} ` +
+            `${mean((r) => r.captured).toFixed(0).padEnd(9)} ${mean((r) => r.deaf).toFixed(0).padEnd(5)} ` +
+            `${mean((r) => r.drops).toFixed(0).padEnd(12)} ` +
+            `${withFile ? fmt(mean((r) => r.fileMs)) : "—"}`
+        );
+      }
+    }
+  }
+
+  console.log("\n--- the acceptance gates under all four radios (20-node campus, 3 seeds) ---");
+  console.log("transmitter  receiver   delivery   within5   overhead vs flood-all   SUPER ratio   collisions");
+  for (const access of ACCESSES) {
+    for (const capture of CAPTURES) {
+      const rows = SEEDS.map((seed) => gateRow(seed, access, 60, capture));
+      const mean = (f: (r: GateRow) => number) => rows.reduce((a, r) => a + f(r), 0) / rows.length;
+      console.log(
+        `${access.padEnd(12)} ${capture.padEnd(10)} ${mean((r) => r.ratio).toFixed(4).padEnd(10)} ` +
+          `${mean((r) => r.within5).toFixed(4).padEnd(9)} ` +
+          `${(mean((r) => r.overhead) * 100).toFixed(1).padStart(5)} %                 ` +
+          `${(mean((r) => r.superRatio) * 100).toFixed(1).padStart(5)} %          ` +
+          `${mean((r) => r.drops).toFixed(0)} dropped`
+      );
+    }
+  }
+  console.log(
+    "\nRead: the receiver is where contention lives. A transmitter queue alone costs text 4.0 points\n" +
+      "when a file is in flight; receiver collisions alone cost 13.6. Once collisions exist the queue\n" +
+      "earns its keep — it is worth 3.4 points back — because serialising a node's own transmissions\n" +
+      "removes the overlaps it was causing everybody else. And collisions are paid in latency before\n" +
+      "delivery: a lost packet is re-sent into an idle radio four seconds later, so p95 moves first."
+  );
 }
 
 function channelTable(): void {
@@ -1167,6 +1301,7 @@ function main(): void {
   contentionTable();
   channelTable();
   priorityTable();
+  captureTable();
   console.log("\nDone.");
 }
 

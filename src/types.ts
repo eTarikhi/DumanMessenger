@@ -98,6 +98,24 @@ export type ChannelPriority = "fifo" | "ackFirst" | "class";
  */
 export type PeerNorm = "fixed" | "observed";
 
+/**
+ * What a receiver does when two packets arrive at once (docs/08 §12.9).
+ *
+ * - `none`  a busy receiver takes everything. This is what ships, and it is why the
+ *           contention measurement in docs/08 §9 comes out null: with no shared medium and
+ *           an infinitely attentive receiver, a transmission cannot harm another one.
+ * - `first` the receiver locks onto the packet that got there first, and two things are
+ *           lost: a packet that arrives while the receiver is locked onto another one
+ *           (first capture, with no signal-strength comparison), and a packet that arrives
+ *           while the receiver is itself transmitting (a half-duplex radio cannot hear
+ *           over its own transmitter). Both are modelled as losses rather than deferrals,
+ *           which is what a collision is.
+ *
+ * Independent of `channelAccess`: `first` under `"free"` is receiver contention with no
+ * transmitter queue, which separates the two mechanisms the half-duplex model conflates.
+ */
+export type ChannelCapture = "none" | "first";
+
 export interface Vec2 {
   x: number;
   y: number;

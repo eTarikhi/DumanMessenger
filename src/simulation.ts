@@ -20,6 +20,7 @@ import type {
   Obstacle,
   ChannelAccess,
   ChannelPriority,
+  ChannelCapture,
   PeerNorm,
   RelayPolicy,
   Role,
@@ -265,6 +266,12 @@ export interface SimConfig {
    *  against the largest peer count this node has heard (docs/06 §18.2). */
   peerNorm: PeerNorm;
 
+  /** What a receiver does when two packets arrive at once. `"none"` ships: a busy receiver
+   *  takes everything, which is the second half of why this model has no contention.
+   *  `"first"` loses the later packet, and loses any packet that arrives while its receiver
+   *  is itself transmitting (docs/08 §12.9). */
+  channelCapture: ChannelCapture;
+
   /** When two relays cover the same neighbours, pick the plugged one: a community relay's
    *  transmission costs nobody's battery and its position does not change. Off by default,
    *  and measured rather than assumed — see docs/06 §19.5. */
@@ -424,6 +431,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   channelPriority: "fifo",
   communityRelayQuota: 0,
   peerNorm: "fixed",
+  channelCapture: "none",
   communityRelayPreference: false,
   dtnPreferCommunity: false,
 
@@ -518,6 +526,12 @@ export interface SimulationStats {
   /** Packets a busy transmitter could not hold: the queue was full, so they were
    *  dropped at the radio rather than lost on a link. */
   channelDrops: number;
+  /** Packets lost because the receiver was locked onto a packet that arrived first
+   *  (`channelCapture: "first"`, docs/08 §12.9). */
+  channelCaptured: number;
+  /** Packets lost because the receiver was itself transmitting: a half-duplex radio cannot
+   *  hear over its own transmitter. */
+  channelDeafRx: number;
   /** Anti-entropy packets put on air: beacons, bucket requests and replies. */
   sentSync: number;
   bytesDelivered: number;
@@ -912,6 +926,12 @@ export class MeshSimulation {
   private channelDeferrals = 0;
   private channelDeferMs = 0;
   private channelDrops = 0;
+  private channelCaptured = 0;
+  private channelDeafRx = 0;
+  /** Until when each node is transmitting, and until when it is locked onto a reception.
+   *  Both maintained only while `channelCapture` is on, so the shipped model pays nothing. */
+  private txUntil = new Map<NodeId, number>();
+  private rxUntil = new Map<NodeId, number>();
   /** One radio per node: when it comes free, and what is waiting for it. Only
    *  maintained under `channelAccess: "halfDuplex"` — under `"free"` a radio is never
    *  busy, so the map stays empty and costs nothing. */
@@ -1008,7 +1028,11 @@ export class MeshSimulation {
     this.channelDeferrals = 0;
     this.channelDeferMs = 0;
     this.channelDrops = 0;
+    this.channelCaptured = 0;
+    this.channelDeafRx = 0;
     this.channel.clear();
+    this.txUntil.clear();
+    this.rxUntil.clear();
     this.ogmTx = 0;
     this.lostDataTx = 0;
     this.lostOgmTx = 0;
@@ -1212,6 +1236,8 @@ export class MeshSimulation {
         // node that comes back must not inherit a busy transmitter.
         this.channel.delete(node.id);
         this.queue.cancel("channel", node.id);
+        this.txUntil.delete(node.id);
+        this.rxUntil.delete(node.id);
       }
     }
     this.queue.push(this.now + this.config.physicsIntervalMs, "physics", "*");
@@ -2209,6 +2235,17 @@ export class MeshSimulation {
     this.relayTx++;
     const loss = effectiveLossProbability(node, target, this.rf, this.config.linkRetries);
     const rssi = rssiModel(node, target, this.rf);
+    // What this packet occupies a radio for, without the jitter draw: the receiver-side
+    // model below needs it before the packet's fate is known, and both branches that never
+    // land return it. No random number is consumed here, so `channelCapture: "none"` stays
+    // bit-identical to the model every other result in this repository was measured under.
+    const occupied =
+      (msg.transport === "wifiDirect" ? this.config.hopLatencyWifiMs : this.config.hopLatencyBleMs) +
+      this.serializationMs(msg.sizeBytes, msg.transport);
+    const capture = this.config.channelCapture !== "none";
+    // A radio is deaf from the moment it starts transmitting, whether or not the packet
+    // survives the link.
+    if (capture) this.txUntil.set(node.id, this.now + occupied);
     if (chance(this.rng, loss)) {
       this.lostDataTx++;
       this.recordTxOutcome(node, 0);
@@ -2220,11 +2257,31 @@ export class MeshSimulation {
         rssi,
       });
       // Air time without the jitter draw: consuming a random number here would move the
-      // stream the default `free` model depends on, and the golden vectors with it.
-      return (
-        (msg.transport === "wifiDirect" ? this.config.hopLatencyWifiMs : this.config.hopLatencyBleMs) +
-        this.serializationMs(msg.sizeBytes, msg.transport)
-      );
+      // stream the default model depends on, and the golden vectors with it.
+      return occupied;
+    }
+    if (capture) {
+      // Two ways a packet that survived the link still does not arrive: its receiver is
+      // transmitting, or its receiver is locked onto a packet that got there first. Both
+      // are losses rather than deferrals — that is what a collision is — and neither is
+      // modelled with a signal-strength comparison, so the earlier packet always wins
+      // (docs/08 §12.9).
+      const deaf = (this.txUntil.get(target.id) ?? 0) > this.now;
+      const captured = !deaf && (this.rxUntil.get(target.id) ?? 0) > this.now;
+      if (deaf || captured) {
+        if (deaf) this.channelDeafRx++;
+        else this.channelCaptured++;
+        this.recordTxOutcome(node, 0);
+        this.pushLog(
+          "loss",
+          node.id,
+          `${msg.id} → ${targetId} collided (${
+            deaf ? "receiver was transmitting" : "receiver was locked onto an earlier packet"
+          })`,
+          { peerId: targetId, msgId: msg.id, msgType: msg.type, hop: msg.hopCount, rssi }
+        );
+        return occupied;
+      }
     }
     this.recordTxOutcome(node, 1);
     this.pushLog("tx", node.id, `${msg.id} → ${targetId} (${msg.type}, hop ${msg.hopCount}, ${rssi.toFixed(0)} dBm)`, {
@@ -2243,6 +2300,7 @@ export class MeshSimulation {
       base +
       this.serializationMs(msg.sizeBytes, msg.transport) +
       randRange(this.rng, this.config.jitterMinMs, this.config.jitterMaxMs);
+    if (capture) this.rxUntil.set(target.id, this.now + airTime);
     this.queue.push(this.now + airTime, "msg", targetId, { msg, via: node.id } as MsgPayload);
     return airTime;
   }
@@ -2859,6 +2917,8 @@ export class MeshSimulation {
       this.queue.cancel("scan", node.id);
       this.channel.delete(node.id);
       this.queue.cancel("channel", node.id);
+      this.txUntil.delete(node.id);
+      this.rxUntil.delete(node.id);
     } else {
       node.battery = Math.max(node.battery, 0.3);
       node.uptimeMin = 0;
@@ -3042,6 +3102,8 @@ export class MeshSimulation {
       channelDeferrals: this.channelDeferrals,
       channelDeferMs: this.channelDeferMs,
       channelDrops: this.channelDrops,
+      channelCaptured: this.channelCaptured,
+      channelDeafRx: this.channelDeafRx,
       sentSync: this.sentSync,
       bytesDelivered: this.bytesDelivered,
       batteryPercentPerHourNormal: drainPerHour("NORMAL"),

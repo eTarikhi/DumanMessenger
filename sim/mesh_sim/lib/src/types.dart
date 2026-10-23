@@ -97,6 +97,24 @@ enum ChannelPriority { fifo, ackFirst, byClass }
 /// while spending skills/02's SUPER-ratio margin (one seed of six lands on the 15% floor).
 enum PeerNorm { fixed, observed }
 
+/// What a receiver does when two packets arrive at once (docs/08 §12.9).
+///
+/// [ChannelCapture.none] is a receiver that takes everything, however busy it is. It ships,
+/// and it is the second half of why this model has no contention: with no shared medium and an
+/// infinitely attentive receiver, a transmission cannot harm another one.
+///
+/// [ChannelCapture.first] locks the receiver onto whichever packet arrived first, and loses two
+/// kinds of packet: one that arrives while the receiver is locked onto another (first capture,
+/// with no signal-strength comparison), and one that arrives while the receiver is itself
+/// transmitting, because a half-duplex radio cannot hear over its own transmitter. Both are
+/// losses rather than deferrals, which is what a collision is.
+///
+/// Independent of [ChannelAccess]: `first` under [ChannelAccess.free] is receiver contention
+/// with no transmitter queue, which separates the two mechanisms the half-duplex model
+/// conflates. Measured in docs/08 §12.9, where the receiver turns out to be where most of the
+/// contention lives — 13.6 points of delivery against a transmitter queue's 4.0.
+enum ChannelCapture { none, first }
+
 /// Address of a scoped group flood. Not a node id, and deliberately distinct from
 /// `broadcastAddress`: a broadcast is public by design (docs/04 §4), a group flood
 /// is delivered only to members holding the current key epoch.
