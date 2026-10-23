@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { SimConfig } from "../simulation";
-import type { ChannelAccess, RelayPolicy } from "../types";
+import type { ChannelAccess, ChannelCapture, RelayPolicy } from "../types";
 
 interface Props {
   config: SimConfig;
@@ -23,6 +23,7 @@ type Draft = {
   seed: number;
   relayPolicy: RelayPolicy;
   channelAccess: ChannelAccess;
+  channelCapture: ChannelCapture;
   enableSuperElection: boolean;
   enableMobility: boolean;
   enableDtn: boolean;
@@ -45,6 +46,7 @@ function toDraft(c: SimConfig): Draft {
     seed: c.seed,
     relayPolicy: c.relayPolicy,
     channelAccess: c.channelAccess,
+    channelCapture: c.channelCapture,
     enableSuperElection: c.enableSuperElection,
     enableMobility: c.enableMobility,
     enableDtn: c.enableDtn,
@@ -91,6 +93,7 @@ export function ConfigPanel({
       seed: draft.seed,
       relayPolicy: draft.relayPolicy,
       channelAccess: draft.channelAccess,
+      channelCapture: draft.channelCapture,
       enableSuperElection: draft.enableSuperElection,
       enableMobility: draft.enableMobility,
       enableDtn: draft.enableDtn,
@@ -187,6 +190,34 @@ export function ConfigPanel({
         </span>
       </div>
 
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontSize: 11, color: "#9fb0c3" }}>Receiver</span>
+        <div style={{ display: "flex", gap: 6 }}>
+          {(["none", "first"] as const).map((p) => (
+            <button
+              key={p}
+              aria-pressed={draft.channelCapture === p}
+              onClick={() => set("channelCapture", p)}
+              style={{
+                flex: 1, padding: "6px 8px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 700,
+                border: "1px solid #1e2a3a",
+                background: draft.channelCapture === p ? "rgba(77,224,255,0.18)" : "rgba(255,255,255,0.03)",
+                color: draft.channelCapture === p ? "#4de0ff" : "#9fb0c3",
+              }}
+            >
+              {CAPTURE_LABELS[p]}
+            </button>
+          ))}
+        </div>
+        <span style={{ fontSize: 10, color: "#5a6a7a", lineHeight: 1.5 }}>
+          The other half of a real radio, and the half where most of the contention turns out to live.{" "}
+          <b style={{ color: "#9fb0c3" }}>First packet wins</b> loses whatever arrives while the receiver is
+          locked onto an earlier packet, and whatever arrives while the receiver is itself transmitting
+          (docs/08 §12.9): with a 10 MB file in flight that is 13.6 points of delivery, against a transmit
+          queue's 2.8.
+        </span>
+      </div>
+
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <Toggle label="Super-node election" value={draft.enableSuperElection}
           onChange={() => set("enableSuperElection", !draft.enableSuperElection)} />
@@ -265,6 +296,11 @@ function dutySummary(d: Draft): string {
     ` (${(perHour * 8).toFixed(1)}% per 8 h)`
   );
 }
+
+const CAPTURE_LABELS: Record<ChannelCapture, string> = {
+  none: "Takes everything (ships)",
+  first: "First packet wins",
+};
 
 const CHANNEL_LABELS: Record<ChannelAccess, string> = {
   free: "Free (ships)",

@@ -222,7 +222,10 @@ export function MetricsPanel({ stats, dutyCycleEnabled, nodes, config }: Props) 
         </section>
       )}
 
-      {(stats.channelDeferrals > 0 || stats.channelDrops > 0) && (
+      {(stats.channelDeferrals > 0 ||
+        stats.channelDrops > 0 ||
+        stats.channelCaptured > 0 ||
+        stats.channelDeafRx > 0) && (
         <section style={{ marginTop: 14 }}>
           <div style={sectionStyle}>📻 Radio channel (docs/08 §12)</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -233,14 +236,26 @@ export function MetricsPanel({ stats, dutyCycleEnabled, nodes, config }: Props) 
               value={`${stats.channelDrops}`}
               accent={stats.channelDrops === 0 ? "#b6ff4a" : "#ff6b6b"}
             />
+            <Counter
+              label="Collided at the receiver"
+              value={`${stats.channelCaptured}`}
+              accent={stats.channelCaptured === 0 ? "#b6ff4a" : "#ff6b6b"}
+            />
+            <Counter
+              label="Lost to a deaf receiver"
+              value={`${stats.channelDeafRx}`}
+              accent={stats.channelDeafRx === 0 ? "#b6ff4a" : "#ff6b6b"}
+            />
           </div>
           <div style={{ fontSize: 10, color: "#5a6a7a", marginTop: 6, lineHeight: 1.5 }}>
-            Only <code>channelAccess: "halfDuplex"</code> produces these: a device with one transmitter queues each
-            packet until the radio is free, and drops it when the {config?.channelQueueDepth ?? 8}-deep queue is full,
-            because a real radio sheds load rather than promising air time it does not have. Under the shipped{" "}
-            <code>"free"</code> model both counters stay at zero by construction — there is no shared medium, so a
-            transmission cannot delay another one, which is why a 10 MB file costs nobody else anything there and
-            costs 2.8 points of delivery here.
+            Only the channel flags produce these. A device with one transmitter (<code>channelAccess</code>) queues
+            each packet until the radio is free and drops it when the {config?.channelQueueDepth ?? 8}-deep queue is
+            full, because a real radio sheds load rather than promising air time does not have;{" "}
+            <code>channelCapture: "first"</code> adds the receiver, which loses whatever arrives while it is locked
+            onto an earlier packet or while it is itself transmitting. Under the shipped model every counter stays at
+            zero by construction — there is no shared medium and no inattentive receiver, so a transmission cannot
+            delay or lose another one. That is why a 10 MB file costs nobody else anything there, and costs 1.7 points
+            of delivery with a queue and 13.6 with a receiver (docs/08 §12.9).
           </div>
         </section>
       )}
