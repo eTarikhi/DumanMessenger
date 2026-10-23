@@ -50,9 +50,10 @@ export type RelayPolicy = "mpr" | "route-flood" | "flood-all";
  *                the medium to come free if one is. This is what BLE and Wi-Fi both do at
  *                the link layer, so it is the most realistic of the three — and it is the
  *                mechanism that stops a node transmitting into a receiver that cannot hear
- *                it (docs/08 §12.10). No contention window and no random backoff: two nodes
- *                that sense each other busy simply wait, and progress is guaranteed because
- *                a node that is waiting is not itself on air.
+ *                it (docs/08 §12.10). Plain carrier sense, no contention window: two nodes
+ *                that sense each other busy simply wait — and are woken at the same instant
+ *                the medium clears, so they transmit together. `channelBackoff: "binary"`
+ *                adds the random wait that disperses them (§12.13).
  * - `halfDuplex` one radio per device, and it does one thing at a time. Packets
  *                go into a bounded FIFO and on air when the radio comes free;
  *                when the FIFO is full the newest packet is dropped, because a
@@ -67,6 +68,28 @@ export type RelayPolicy = "mpr" | "route-flood" | "flood-all";
  * specifies. Flip it to measure what a shared medium would cost.
  */
 export type ChannelAccess = "free" | "halfDuplex" | "csma";
+
+/**
+ * Whether a node that has been waiting for the medium waits a random number of slots
+ * before it takes it (docs/08 §12.13).
+ *
+ * Carrier sense without backoff has a failure mode that is invisible in the deferral
+ * counter: every node waiting on the same busy medium is woken at *the same instant* —
+ * the moment it comes free — and they all transmit together. Listening synchronises the
+ * herd instead of dispersing it, which is why `csma` measured worse than not listening at
+ * all. A contention window is the standard answer: draw a random slot count, wait it out,
+ * and double the window you draw from after a collision so a node that keeps losing keeps
+ * backing off further.
+ *
+ * - `none`   transmit the instant the medium is free. Ships, and is what every `csma`
+ *            number in docs/08 §12.10 was measured under.
+ * - `binary` binary exponential backoff: `channelCwMin` slots on a clean transmission,
+ *            doubling up to `channelCwMax` after each collision.
+ *
+ * Only consulted under `channelAccess: "csma"`. Without a shared medium there is nobody to
+ * contend with, and a node whose own radio is busy is already serialised by its FIFO.
+ */
+export type ChannelBackoff = "none" | "binary";
 
 /**
  * Which queued packet a busy radio takes next (docs/08 §12.8).

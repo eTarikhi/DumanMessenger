@@ -1032,12 +1032,106 @@ exactly the case where the measurements above show it halving the drops and the 
 together. That is worth building; the mesh-wide version is not, until somebody has a story for
 the relay.
 
+### 12.13 The contention window: what carrier sense was missing, and why it still is not the fix
+
+§12.10 measured carrier sense and found it made delivery *worse* than not listening, which is
+not what listening is supposed to do. The diagnosis it offered was that waiting is not free.
+There is a second thing wrong, and it is structural: **the wake-up is synchronous.** Every node
+deferring on a busy medium is released at the instant the medium clears, because that instant is
+what it was scheduled against. They all find it free together and they all transmit together, so
+carrier sense synchronises the herd instead of dispersing it. A contention window is the standard
+answer and §12.10 noted this engine did not have one.
+
+`channelBackoff: "binary"` adds it: when the medium is free, draw a slot count uniformly from the
+current window and wait it out; after a collision double the window up to `channelCwMax`; after a
+clean transmission reset it to `channelCwMin`. It is consulted only under `channelAccess: "csma"`
+— a radio with no shared medium has nobody to contend with, and its own FIFO already serialises
+it — and it ships as `"none"`, so it consumes no random numbers and nothing above moves.
+
+**The gates, with and without the random wait** (20-node campus, 3 seeds, 60 messages, no media):
+
+| receiver | backoff | delivery | within 5 | overhead | SUPER | queue drops | deferred | draws |
+|---|---|---|---|---|---|---|---|---|
+| `none` | `none` | 0.7944 | 0.7944 | 80.2% | 25.0% | 699 | 3 042.0 s | 0 |
+| `none` | `binary` | 0.7889 | 0.7889 | 76.4% | 25.0% | 825 | 2 963.0 s | 1 058 |
+| `first` | `none` | 0.7389 | 0.7389 | 78.0% | 23.3% | 562 | 2 629.6 s | 0 |
+| `first` | `binary` | **0.7500** | 0.7500 | 77.3% | 25.0% | 590 | 2 794.6 s | 1 052 |
+
+The mechanism fires — 1 058 draws over the run — and it moves delivery by **+1.1 points with
+collisions modelled and −0.6 without**. Neither arm is within 14 points of the ≥0.90 gate. Backoff
+does not rescue carrier sense, and it helps only in the arm where there are collisions to prevent,
+which is at least the right shape for the mechanism.
+
+**How wide a window** (same world, 10 MB file in flight, collisions modelled, 3 seeds; the
+`backoff: none` control from §12.10 is delivery 0.8757, p95 16 212 ms, file 3.64 min):
+
+| `cwMin` | slot | delivery | p95 ms | captured | deaf | drops | deferred | draws | file |
+|---|---|---|---|---|---|---|---|---|---|
+| 2 | 1 ms | 0.8475 | 14 549 | 356 | 9 | 2 815 | 74.3 m | 2 067 | 4.20 min |
+| 2 | 5 ms | **0.9322** | 24 931 | 370 | 7 | 2 762 | 82.0 m | 2 152 | 4.50 min |
+| 4 | 1 ms | 0.8305 | 21 400 | 394 | 7 | 3 294 | 82.4 m | 2 147 | 4.21 min |
+| 4 | 5 ms | 0.8701 | 25 689 | 380 | 6 | 3 311 | 84.7 m | 2 185 | 4.54 min |
+| 16 | 1 ms | 0.8701 | 19 955 | 351 | 10 | 2 444 | 87.8 m | 2 158 | 4.27 min |
+| 16 | 5 ms | 0.9096 | 19 696 | 319 | 6 | 2 666 | 82.6 m | 2 023 | 4.69 min |
+| 64 | 1 ms | 0.8644 | 17 744 | 380 | 5 | 2 738 | 86.5 m | 2 154 | 5.11 min |
+| 64 | 5 ms | 0.8588 | 24 463 | 273 | 6 | 3 466 | 91.1 m | 1 884 | 5.61 min |
+
+Two arms clear the gate, which is more than any other radio lever managed. The sweep is also not
+monotonic in either knob: `cwMin` 2 beats 16 at a 5 ms slot and loses to it at a 1 ms slot, and 64
+beats 4 at one slot width and loses at the other. A lever whose effect reverses when a neighbouring
+setting changes is a lever whose effect may be noise, and §6's faster-beacon idea was exactly that
+— +2.6 points on three seeds, −1.1 on six. So the two arms that cleared the gate were re-run on the
+acceptance suite's six seeds with every seed printed:
+
+| arm | mean | per-seed delivery | drops | file |
+|---|---|---|---|---|
+| control (`none`) | 0.8672 | 0.898 0.831 0.898 0.847 0.831 0.898 | 2 215 | 3.77 min |
+| `binary` `cwMin` 2, 5 ms | **0.9040** | 0.915 0.932 0.949 **0.847** 0.864 0.915 | 2 108 | 4.07 min |
+| `binary` `cwMin` 16, 5 ms | 0.8955 | 0.915 0.847 0.966 0.932 **0.797** 0.915 | 1 994 | 4.37 min |
+
+The mean rises 3.7 points and clears the gate. The spread widens at the same time: `cwMin` 2's
+worst seed (0.847) is *below the control's mean*, and `cwMin` 16's worst (0.797) is below the
+control's worst. A lever that raises the mean by making good seeds better and bad seeds worse has
+not made the network more reliable — it has moved which seeds are unreliable, and an acceptance
+gate that has to hold per-run does not get to average over that. It costs 8–16% of file time to
+find out.
+
+**The reason it cannot work is in the columns nobody reads first.** Across every arm above, queue
+drops run **1 994–3 466** while receiver collisions run **273–394**: roughly eight packets shed at
+a full transmit queue for every one lost to a collision. Under carrier sense the dominant loss is
+*buffering*, not collision. Listening makes nodes wait; waiting fills an 8-deep transmit queue;
+the queue sheds. A contention window makes nodes wait **longer**, so it feeds the mechanism that is
+actually losing the packets, and it buys its few points by removing a loss that was never the
+binding one. Widening the window from 2 to 64 slots does cut collisions (370 → 273) and cuts
+delivery anyway.
+
+That revises §12.10's own diagnosis. It said waiting is not free in an engine with no
+backpressure, and reached for a contention window as the thing carrier sense was missing. The
+decomposition says the thing missing is flow control: the queue that sheds is the loss, and the
+mechanism that would stop it shedding is §12.12's **hop-by-hop** backpressure — a relay that can
+tell its upstream to stop — not a wider window in front of it. Backoff is the right answer to a
+question this network is not asking.
+
+At three nodes in a triangle, where every pair is inside the line-of-sight budget and there is no
+hidden terminal to excuse anything, the same result appears in miniature: the backoff fires (8
+draws) and turns 1 250 ms of deferral into 2 054 ms, and the collision count does not move — one
+either way, with all three messages arriving either way. `halfDuplex` + `binary` is inert by
+construction and asserted so (0.9096 delivery, 0 draws, 3.28 min, identical to `none`).
+
+**Verdict: rejected, and kept as a control.** Ships as `"none"`. It is the first radio lever to
+move the carrier-sense arm's mean toward the gate at all, so it is worth recording what it costs
+and why it does not hold — but the honest summary is that it optimises collisions in a network
+whose losses are queue drops. If a hop-by-hop flow control is ever built, the contention window
+should be re-measured against it, because the two address different halves of the same failure and
+backoff alone cannot be judged fairly in an engine that sheds.
+
 ## 13. Reproducing
 
 ```bash
-npm run media                                            # TypeScript probe, every table above (§7-§9 for the radio, incl. carrier sense)
+npm run media                                            # TypeScript probe, every table above (§7-§10 for the radio: channel, priority, capture, carrier sense, the contention window)
+npm run media -- backoff                                 # one section; the whole probe is minutes of simulation
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media --no-check
-npm test                                                 # 265 TS tests, incl. 18 media and 14 radio cases
+npm test                                                 # 268 TS tests, incl. 18 media and 17 radio cases
 cd sim/mesh_sim && dart test                             # 18 Dart media cases + test/channel_test.dart
 ```
 

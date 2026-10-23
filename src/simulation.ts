@@ -21,13 +21,14 @@ import type {
   ChannelAccess,
   ChannelPriority,
   ChannelCapture,
+  ChannelBackoff,
   PeerNorm,
   RelayPolicy,
   Role,
 } from "./types";
 import type { ForwardDecision, ForwardMode } from "./routing";
 import type { Rng } from "./rng";
-import { chance, createRng, randRange } from "./rng";
+import { chance, createRng, randInt, randRange } from "./rng";
 import type { RfParams } from "./rf";
 import {
   batteryDrain,
@@ -104,6 +105,14 @@ interface ChannelState {
    *  last drain has nothing to wake the radio up, and waits for the next transmission
    *  to be handed to it — which is how a mesh stalls (docs/08 §12.1). */
   drainScheduled: boolean;
+  /** Contention window this radio currently draws from, in slots (`channelBackoff`). Starts
+   *  at `channelCwMin`, doubles after a collision, resets after a clean transmission. */
+  cw: number;
+  /** Whether a slot count has already been drawn for the attempt now in progress, and how
+   *  many slots of it are left to wait. Drawn once per attempt so a radio that is deferred
+   *  again mid-backoff keeps the turn it already paid for. */
+  backoffArmed: boolean;
+  backoffSlots: number;
 }
 
 export interface SimConfig {
@@ -272,6 +281,21 @@ export interface SimConfig {
    *  is itself transmitting (docs/08 §12.9). */
   channelCapture: ChannelCapture;
 
+  /** Whether a node that has been waiting for the medium waits a *random* number of slots
+   *  before taking it, and how wide the window it draws from is. Carrier sense alone wakes
+   *  every waiting node at the same instant the medium clears, so they transmit together;
+   *  the random wait is what disperses them, and doubling the window after a collision is
+   *  what stops two nodes that keep meeting from keeping meeting (docs/08 §12.13). Only
+   *  consulted under `channelAccess: "csma"`. */
+  channelBackoff: ChannelBackoff;
+  /** Contention window after a clean transmission, in slots. */
+  channelCwMin: number;
+  /** Contention window ceiling after repeated collisions, in slots. */
+  channelCwMax: number;
+  /** How long one backoff slot lasts. 802.11's is 9 µs at 2.4 GHz; a BLE mesh has no such
+   *  constant, so this is a knob rather than a calibration. */
+  channelSlotMs: number;
+
   /** Whether a transfer stops pumping chunks when the sender's radio is full. A real socket
    *  blocks; an engine that keeps handing packets to a saturated radio converts somebody
    *  else's queue slots into drops, which is the mechanism docs/08 §12.10 could not answer
@@ -438,6 +462,10 @@ export const DEFAULT_CONFIG: SimConfig = {
   communityRelayQuota: 0,
   peerNorm: "fixed",
   channelCapture: "none",
+  channelBackoff: "none",
+  channelCwMin: 4,
+  channelCwMax: 64,
+  channelSlotMs: 1,
   mediaBackpressure: false,
   communityRelayPreference: false,
   dtnPreferCommunity: false,
@@ -539,6 +567,9 @@ export interface SimulationStats {
   /** Packets lost because the receiver was itself transmitting: a half-duplex radio cannot
    *  hear over its own transmitter. */
   channelDeafRx: number;
+  /** Contention-window draws: how often a node found the medium free and still had to wait
+   *  a random number of slots for it (`channelBackoff`, docs/08 §12.13). */
+  channelBackoffs: number;
   /** Anti-entropy packets put on air: beacons, bucket requests and replies. */
   sentSync: number;
   bytesDelivered: number;
@@ -945,6 +976,10 @@ export class MeshSimulation {
   private channelDrops = 0;
   private channelCaptured = 0;
   private channelDeafRx = 0;
+  private channelBackoffs = 0;
+  /** Whether the transmission that just went on air collided at its receiver. Read by the
+   *  contention window to decide whether to widen; written by `onAir`. */
+  private lastTxCollided = false;
   /** Until when each node is transmitting, and until when it is locked onto a reception.
    *  Maintained only while the receiver model or carrier sense is on, so the shipped model
    *  pays nothing. */
@@ -1048,6 +1083,8 @@ export class MeshSimulation {
     this.channelDrops = 0;
     this.channelCaptured = 0;
     this.channelDeafRx = 0;
+    this.channelBackoffs = 0;
+    this.lastTxCollided = false;
     this.channel.clear();
     this.txUntil.clear();
     this.rxUntil.clear();
@@ -2197,7 +2234,14 @@ export class MeshSimulation {
     }
     let ch = this.channel.get(node.id);
     if (!ch) {
-      ch = { busyUntil: 0, queue: [], drainScheduled: false };
+      ch = {
+        busyUntil: 0,
+        queue: [],
+        drainScheduled: false,
+        cw: this.config.channelCwMin,
+        backoffArmed: false,
+        backoffSlots: 0,
+      };
       this.channel.set(node.id, ch);
     }
     if (ch.queue.length >= this.config.channelQueueDepth) {
@@ -2251,6 +2295,32 @@ export class MeshSimulation {
         }
         return;
       }
+      if (this.config.channelBackoff !== "none") {
+        // The medium is free *now* — which is exactly when every other node waiting on the
+        // same medium also finds it free, because they were all woken at this instant. Left
+        // alone they transmit together and listening has synchronised the herd instead of
+        // dispersing it. Draw a random number of slots and wait them out (docs/08 §12.13).
+        if (!ch.backoffArmed) {
+          // `randInt` draws only here, so `channelBackoff: "none"` consumes no random
+          // numbers and the shipped model stays bit-identical.
+          ch.backoffSlots = randInt(this.rng, 0, ch.cw);
+          ch.backoffArmed = true;
+          this.channelBackoffs++;
+        }
+        if (ch.backoffSlots > 0) {
+          const wait = ch.backoffSlots * this.config.channelSlotMs;
+          // Paid in full rather than a slot at a time: a 64-slot window drained one event
+          // per slot is 64 wakeups per transmission, and the answer is the same.
+          ch.backoffSlots = 0;
+          this.channelDeferrals++;
+          this.channelDeferMs += wait;
+          if (!ch.drainScheduled) {
+            ch.drainScheduled = true;
+            this.queue.push(this.now + wait, "channel", node.id);
+          }
+          return;
+        }
+      }
     }
     const next = this.takeNextTx(ch);
     const waited = this.now - next.queuedAt;
@@ -2260,6 +2330,15 @@ export class MeshSimulation {
     }
     const airTime = this.onAir(node, next.msg, next.targetId);
     ch.busyUntil = this.now + airTime;
+    if (this.config.channelBackoff !== "none") {
+      // Binary exponential backoff: a radio that just collided draws from a window twice as
+      // wide next time, so two radios that keep meeting keep backing off until they stop
+      // meeting; a radio that got through goes back to the narrow window it started with.
+      ch.cw = this.lastTxCollided
+        ? Math.min(ch.cw * 2, this.config.channelCwMax)
+        : this.config.channelCwMin;
+      ch.backoffArmed = false;
+    }
     if (ch.queue.length > 0 && !ch.drainScheduled) {
       ch.drainScheduled = true;
       this.queue.push(ch.busyUntil, "channel", node.id);
@@ -2302,6 +2381,9 @@ export class MeshSimulation {
    */
   private onAir(node: MeshNode, msg: MeshMessage, targetId: NodeId): number {
     const target = this.byId(targetId)!;
+    // Cleared per transmission so the contention window sees this packet's fate and not the
+    // last one's.
+    this.lastTxCollided = false;
     node.txCount++;
     this.relayTx++;
     const loss = effectiveLossProbability(node, target, this.rf, this.config.linkRetries);
@@ -2348,6 +2430,7 @@ export class MeshSimulation {
       const deaf = (this.txUntil.get(target.id) ?? 0) > this.now;
       const captured = !deaf && (this.rxUntil.get(target.id) ?? 0) > this.now;
       if (deaf || captured) {
+        this.lastTxCollided = true;
         if (deaf) this.channelDeafRx++;
         else this.channelCaptured++;
         this.recordTxOutcome(node, 0);
@@ -3182,6 +3265,7 @@ export class MeshSimulation {
       channelDeferMs: this.channelDeferMs,
       channelDrops: this.channelDrops,
       channelCaptured: this.channelCaptured,
+      channelBackoffs: this.channelBackoffs,
       channelDeafRx: this.channelDeafRx,
       sentSync: this.sentSync,
       bytesDelivered: this.bytesDelivered,

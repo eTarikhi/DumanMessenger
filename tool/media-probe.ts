@@ -20,6 +20,7 @@ import { canReach, effectiveLossProbability, peersInRange } from "../src/rf";
 import { createRng } from "../src/rng";
 import type {
   ChannelAccess,
+  ChannelBackoff,
   ChannelCapture,
   ChannelPriority,
   MeshNode,
@@ -690,13 +691,16 @@ interface GateRow {
   deferrals: number;
   deferMs: number;
   drops: number;
+  backoffs: number;
 }
 
 function gateRow(
   seed: number,
   channelAccess: ChannelAccess,
   messages = 60,
-  channelCapture: ChannelCapture = "none"
+  channelCapture: ChannelCapture = "none",
+  backoff?: ChannelBackoff,
+  cwMin?: number
 ): GateRow {
   const run = (policy: SimConfig["relayPolicy"]) => {
     const sim = simFor({
@@ -704,6 +708,8 @@ function gateRow(
       trafficIntervalMs: 0,
       channelAccess,
       channelCapture,
+      ...(backoff === undefined ? {} : { channelBackoff: backoff }),
+      ...(cwMin === undefined ? {} : { channelCwMin: cwMin }),
       relayPolicy: policy,
     });
     const plan = contentionPlan(seed, sim.nodes.length, messages);
@@ -726,6 +732,7 @@ function gateRow(
       deferrals: stats.channelDeferrals,
       deferMs: stats.channelDeferMs,
       drops: stats.channelDrops,
+      backoffs: stats.channelBackoffs,
       sent,
     };
   };
@@ -740,6 +747,7 @@ function gateRow(
     deferrals: mpr.deferrals,
     deferMs: mpr.deferMs,
     drops: mpr.drops,
+    backoffs: mpr.backoffs,
   };
 }
 
@@ -761,6 +769,7 @@ interface CaptureCell {
   deaf: number;
   drops: number;
   deferMs: number;
+  backoffs: number;
   fileMs: number | null;
 }
 
@@ -769,7 +778,9 @@ function captureCell(
   capture: ChannelCapture,
   seed: number,
   withFile: boolean,
-  queueDepth?: number
+  queueDepth?: number,
+  backoff?: ChannelBackoff,
+  cwMin?: number
 ): CaptureCell {
   const sim = simFor({
     ...campusQuad(seed),
@@ -777,6 +788,8 @@ function captureCell(
     channelAccess: access,
     channelCapture: capture,
     ...(queueDepth === undefined ? {} : { channelQueueDepth: queueDepth }),
+    ...(backoff === undefined ? {} : { channelBackoff: backoff }),
+    ...(cwMin === undefined ? {} : { channelCwMin: cwMin }),
   });
   const plan = contentionPlan(seed, sim.nodes.length, 60);
   const t = withFile ? sim.sendFile(sim.nodes[plan[0][0]].id, sim.nodes[plan[0][1]].id, 10 * MB) : null;
@@ -811,6 +824,7 @@ function captureCell(
     deaf: stats.channelDeafRx,
     drops: stats.channelDrops,
     deferMs: stats.channelDeferMs,
+    backoffs: stats.channelBackoffs,
     fileMs: t && t.completedAt !== null ? t.completedAt - t.startedAt : null,
   };
 }
@@ -1320,6 +1334,180 @@ function withinFiveRatio(sim: MeshSimulation): number {
   return within.length / sent.length;
 }
 
+// ---------------------------------------------------------------------------
+// 10. The contention window: does listening need a random wait to pay?
+// ---------------------------------------------------------------------------
+
+const BACKOFFS: ChannelBackoff[] = ["none", "binary"];
+
+/** One 20-node campus run with a 10 MB file in flight, under carrier sense, at a given
+ *  contention window. Shared by the sweep and by the six-seed robustness check below, so
+ *  the two cannot disagree about what they measured. */
+function csmaFileRun(
+  seed: number,
+  backoff: ChannelBackoff,
+  cwMin: number,
+  slotMs: number
+): {
+  ratio: number;
+  p95: number;
+  captured: number;
+  deaf: number;
+  drops: number;
+  deferMs: number;
+  backoffs: number;
+  fileMs: number | null;
+} {
+  const sim = simFor({
+    ...campusQuad(seed),
+    trafficIntervalMs: 0,
+    channelAccess: "csma",
+    channelCapture: "first",
+    channelBackoff: backoff,
+    channelCwMin: cwMin,
+    channelSlotMs: slotMs,
+  });
+  const plan = contentionPlan(seed, sim.nodes.length, 60);
+  const t = sim.sendFile(sim.nodes[plan[0][0]].id, sim.nodes[plan[0][1]].id, 10 * MB);
+  let sent = 0;
+  for (let i = 1; i < plan.length; i++) {
+    const from = sim.nodes[plan[i][0]];
+    const to = sim.nodes[plan[i][1]];
+    if (from.isOnline && to.isOnline && sim.sendMessage(from.id, to.id, `b-${i}`, "text")) sent++;
+    sim.runFor(2000);
+  }
+  const st = sim.refresh();
+  const uni = sim.deliveries.filter(
+    (d) => d.type !== "ack" && d.type !== "broadcast" && !d.groupId && !d.transferId
+  );
+  const lat = uni.map((d) => d.latencyMs).sort((x, y) => x - y);
+  let waited = 0;
+  while (t && t.state === "active" && waited < 900_000) {
+    sim.runFor(250);
+    waited += 250;
+  }
+  return {
+    ratio: uni.length / Math.max(1, sent),
+    p95: lat.length ? lat[Math.floor(lat.length * 0.95)] : 0,
+    captured: st.channelCaptured,
+    deaf: st.channelDeafRx,
+    drops: st.channelDrops,
+    deferMs: st.channelDeferMs,
+    backoffs: st.channelBackoffs,
+    fileMs: t && t.completedAt !== null ? t.completedAt - t.startedAt : null,
+  };
+}
+
+function backoffTable(): void {
+  console.log("\n=== 10. Contention window: the thing carrier sense was missing (docs/08 §12.13) ===");
+  console.log(
+    "§12.10 measured carrier sense and found it made things worse, which is not what listening is\n" +
+      "supposed to do. The reason is in the wake-up: every node waiting on a busy medium is woken at\n" +
+      "the instant it clears, so they all find it free together and transmit together. Carrier sense\n" +
+      "synchronised the herd instead of dispersing it. `channelBackoff: \"binary\"` draws a random\n" +
+      "number of slots before taking a medium that is already free, and doubles the window it draws\n" +
+      "from after a collision — the 802.11 answer, which §12.10 noted it had not modelled."
+  );
+
+  console.log("\n--- the acceptance gates, with and without the random wait (20-node campus, 3 seeds) ---");
+  console.log("transmitter  backoff  receiver   delivery   within5   overhead   SUPER    drops   deferred   draws");
+  for (const capture of CAPTURES) {
+    for (const backoff of BACKOFFS) {
+      const rows = SEEDS.map((seed) => gateRow(seed, "csma", 60, capture, backoff));
+      const mean = (f: (r: GateRow) => number) => rows.reduce((a, r) => a + f(r), 0) / rows.length;
+      console.log(
+        `${"csma".padEnd(12)} ${backoff.padEnd(8)} ${capture.padEnd(10)} ${mean((r) => r.ratio)
+          .toFixed(4)
+          .padEnd(10)} ${mean((r) => r.within5).toFixed(4).padEnd(9)} ` +
+          `${(mean((r) => r.overhead) * 100).toFixed(1).padStart(5)} %   ` +
+          `${(mean((r) => r.superRatio) * 100).toFixed(1).padStart(5)} %  ` +
+          `${mean((r) => r.drops).toFixed(0).padStart(5)}   ` +
+          `${(mean((r) => r.deferMs) / 1000).toFixed(1).padStart(6)} s   ` +
+          `${mean((r) => r.backoffs).toFixed(0).padStart(6)}`
+      );
+    }
+  }
+  console.log(
+    "\nThe gate is delivery ≥0.90. `backoff: none` is §12.10's csma arm, repeated here as the control."
+  );
+
+  console.log("\n--- how wide a window, and against a 10 MB file (3 seeds) ---");
+  console.log(
+    "A window that is too narrow does not separate anybody; one that is too wide makes every node\n" +
+      "wait longer than the transmission it is waiting for. Swept against the case that matters: a\n" +
+      "file in flight, collisions modelled, which is where §12.10 lost the most."
+  );
+  console.log("cwMin  slotMs  delivery   p95 ms   captured  deaf  drops  deferred   draws   file");
+  for (const cwMin of [2, 4, 16, 64]) {
+    for (const slotMs of [1, 5]) {
+      const rows = SEEDS.map((seed) => csmaFileRun(seed, "binary", cwMin, slotMs));
+      const mean = (f: (r: (typeof rows)[number]) => number) =>
+        rows.reduce((a, r) => a + f(r), 0) / rows.length;
+      console.log(
+        `${String(cwMin).padEnd(6)} ${String(slotMs).padEnd(7)} ${mean((r) => r.ratio)
+          .toFixed(4)
+          .padEnd(10)} ${mean((r) => r.p95).toFixed(0).padStart(6)}   ` +
+          `${mean((r) => r.captured).toFixed(0).padStart(7)}  ${mean((r) => r.deaf).toFixed(0).padStart(4)}  ` +
+          `${mean((r) => r.drops).toFixed(0).padStart(5)}   ${(mean((r) => r.deferMs) / 60000).toFixed(1).padStart(6)} m   ` +
+          `${mean((r) => r.backoffs).toFixed(0).padStart(6)}   ` +
+          `${mean((r) => (r.fileMs === null ? Number.NaN : r.fileMs / 60000)).toFixed(2)} min`
+      );
+    }
+  }
+
+  console.log("\n--- does the best arm hold up? Six seeds, and the spread, not just the mean ---");
+  console.log(
+    "The sweep above is not monotonic in either knob: cwMin 2 beats 16 at a 5 ms slot and loses\n" +
+      "to it at a 1 ms slot, and 64 beats 4 at one slot width and loses at the other. A lever whose\n" +
+      "effect reverses when a neighbouring setting changes is a lever whose effect is noise. This\n" +
+      "repository has been wrong that way before — §6's faster-beacon idea looked like +2.6 points\n" +
+      "on three seeds and measured -1.1 on six — so the two arms that cleared the gate are re-run\n" +
+      "on the acceptance suite's six seeds with every seed printed."
+  );
+  const ROBUST_SEEDS = [42, 7, 1234, 99, 2026, 555];
+  const arms: Array<[string, ChannelBackoff, number, number]> = [
+    ["control (no backoff)", "none", DEFAULT_CONFIG.channelCwMin, DEFAULT_CONFIG.channelSlotMs],
+    ["binary cwMin 2 slot 5 ms", "binary", 2, 5],
+    ["binary cwMin 16 slot 5 ms", "binary", 16, 5],
+  ];
+  console.log("arm".padEnd(26) + "mean     per-seed delivery".padEnd(12) + "  drops   file");
+  for (const [name, backoff, cwMin, slotMs] of arms) {
+    const rows = ROBUST_SEEDS.map((seed) => csmaFileRun(seed, backoff, cwMin, slotMs));
+    const mean = (f: (r: (typeof rows)[number]) => number) =>
+      rows.reduce((a, r) => a + f(r), 0) / rows.length;
+    console.log(
+      name.padEnd(26) +
+        mean((r) => r.ratio).toFixed(4).padEnd(9) +
+        rows.map((r) => r.ratio.toFixed(3)).join(" ") +
+        "  " +
+        mean((r) => r.drops).toFixed(0).padStart(5) +
+        "   " +
+        mean((r) => (r.fileMs === null ? Number.NaN : r.fileMs / 60000)).toFixed(2) +
+        " min"
+    );
+  }
+  console.log(
+    "\nRead the per-seed column before the mean. If an arm's seeds straddle the control's, the\n" +
+      "difference between their means is not a property of the backoff."
+  );
+
+  console.log("\n--- the lever is carrier-sense-only: `halfDuplex` must not move ---");
+  console.log(
+    "A node whose own radio is busy is already serialised by its FIFO, and with no shared medium\n" +
+      "there is nobody to contend with. Backoff under `halfDuplex` would be delay for its own sake,\n" +
+      "so the engine ignores it — asserted here rather than assumed."
+  );
+  for (const backoff of BACKOFFS) {
+    const rows = SEEDS.map((seed) => captureCell("halfDuplex", "first", seed, true, undefined, backoff));
+    const mean = (f: (r: CaptureCell) => number) => rows.reduce((a, r) => a + f(r), 0) / rows.length;
+    console.log(
+      `halfDuplex + ${backoff.padEnd(7)} delivery ${mean((r) => r.ratio).toFixed(4)}   draws ${mean((r) =>
+        r.backoffs
+      ).toFixed(0)}   file ${(mean((r) => (r.fileMs === null ? Number.NaN : r.fileMs / 60000))).toFixed(2)} min`
+    );
+  }
+}
+
 function main(): void {
   console.log("Duman media transport probe — every number below is measured, not assumed.");
   console.log(
@@ -1328,15 +1516,27 @@ function main(): void {
       `Hop latency BLE ${DEFAULT_CONFIG.hopLatencyBleMs} ms / Wi-Fi ${DEFAULT_CONFIG.hopLatencyWifiMs} ms, ` +
       `jitter ${DEFAULT_CONFIG.jitterMinMs}-${DEFAULT_CONFIG.jitterMaxMs} ms.`
   );
-  serializationTable();
-  fileTable();
-  voiceTable();
-  retryTimerTable();
-  acceptanceTable();
-  contentionTable();
-  channelTable();
-  priorityTable();
-  captureTable();
+  // `npm run media` runs all ten sections, which is minutes of simulation. A section name as
+  // the first argument runs just that one — the whole file is a build, so re-measuring §10
+  // should not mean re-measuring §1-§9 to get at it.
+  const only = process.argv[2];
+  const sections: Array<[string, () => void]> = [
+    ["serialization", serializationTable],
+    ["file", fileTable],
+    ["voice", voiceTable],
+    ["retry", retryTimerTable],
+    ["acceptance", acceptanceTable],
+    ["contention", contentionTable],
+    ["channel", channelTable],
+    ["priority", priorityTable],
+    ["capture", captureTable],
+    ["backoff", backoffTable],
+  ];
+  if (only && !sections.some(([name]) => name === only)) {
+    console.error(`unknown section "${only}". one of: ${sections.map(([name]) => name).join(", ")}`);
+    process.exit(2);
+  }
+  for (const [name, run] of sections) if (!only || name === only) run();
   console.log("\nDone.");
 }
 

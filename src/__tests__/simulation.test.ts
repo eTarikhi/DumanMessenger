@@ -3236,6 +3236,151 @@ describe("carrier sense, and the hidden terminal it cannot fix (docs/08 §12.10)
   });
 });
 
+describe("the contention window carrier sense was missing (docs/08 §12.13)", () => {
+  /** Three nodes 20 m apart in a triangle, so every pair is inside the 31.6 m line-of-sight
+   *  budget and every node can sense every other. This is the geometry carrier sense is
+   *  supposed to work in — no hidden terminal to excuse it. */
+  function triangleWorld(over: Partial<SimConfig> = {}): MeshSimulation {
+    const sim = new MeshSimulation({
+      ...DEFAULT_CONFIG,
+      nodeCount: 3,
+      stationaryRatio: 1,
+      chargingRatio: 0,
+      trafficIntervalMs: 0,
+      enableSuperElection: false,
+      warmupMs: 0,
+      obstacles: [],
+      ...over,
+    });
+    const at = [
+      { x: 10, y: 10 },
+      { x: 30, y: 10 },
+      { x: 20, y: 27.32 },
+    ];
+    sim.nodes.forEach((node, i) => {
+      node.pos = at[i];
+      node.home = at[i];
+      node.target = at[i];
+      node.stationary = true;
+      node.mobility = 0;
+      node.isOnline = true;
+      node.battery = 1;
+    });
+    sim.runFor(20000);
+    sim.clearRecords();
+    return sim;
+  }
+
+  /** Every node transmits at once, each to a different one, so all three radios want the
+   *  medium in the same instant. */
+  function allTalkAtOnce(over: Partial<SimConfig>) {
+    const sim = triangleWorld({ channelAccess: "csma", channelCapture: "first", ...over });
+    const [a, b, c] = sim.nodes;
+    // Every pair is inside the line-of-sight budget, so this is the geometry carrier sense is
+    // supposed to work in: nothing here is a hidden terminal.
+    for (const [x, y] of [
+      [a, b],
+      [b, c],
+      [a, c],
+    ]) {
+      expect(canReach(x, y, sim.rf)).toBe(true);
+    }
+    sim.sendMessage(a.id, b.id, "a-b", "text");
+    sim.sendMessage(b.id, c.id, "b-c", "text");
+    sim.sendMessage(c.id, a.id, "c-a", "text");
+    sim.runFor(60000);
+    const stats = sim.refresh();
+    return {
+      collisions: stats.channelCaptured + stats.channelDeafRx,
+      retries: stats.retriesSent,
+      draws: stats.channelBackoffs,
+      deferMs: stats.channelDeferMs,
+      deferrals: stats.channelDeferrals,
+      arrived: sim.deliveries.filter((d) => d.type === "text").length,
+    };
+  }
+
+  it("fires where carrier sense defers, and costs waiting to do it", () => {
+    const herd = allTalkAtOnce({ channelBackoff: "none" });
+    const spread = allTalkAtOnce({ channelBackoff: "binary", channelCwMin: 16, channelSlotMs: 5 });
+
+    // The control never draws, so every deferring node is released at the same instant the
+    // medium clears and they meet again there.
+    expect(herd.draws).toBe(0);
+    expect(spread.draws).toBe(8);
+    expect(spread.deferrals).toBeGreaterThan(herd.deferrals);
+    // Measured, not hoped for: at three nodes the wait is real (1250 ms becomes 2054 ms) and
+    // the collision count does not move — one collision either way, and all three messages
+    // arrive either way. The mechanism fires; at this scale it does not yet pay, which is the
+    // same thing §12.13 finds across a whole campus.
+    expect(spread.deferMs).toBeGreaterThan(herd.deferMs);
+    expect(spread.collisions).toBe(herd.collisions);
+    expect(spread.arrived).toBe(3);
+    expect(herd.arrived).toBe(3);
+  });
+
+  it("doubles the window after a collision, which is the exponential half of the backoff", () => {
+    // A one-slot window can only ever draw zero, so if the window never grew the price of a
+    // slot could not matter. It does matter here — which is the collision having doubled the
+    // window, observed from outside a private field.
+    const grow = (slotMs: number) =>
+      allTalkAtOnce({ channelBackoff: "binary", channelCwMin: 1, channelCwMax: 64, channelSlotMs: slotMs });
+    const cheap = grow(5);
+    const dear = grow(500);
+    expect(cheap.draws).toBeGreaterThan(0);
+    expect(dear.deferMs).toBeGreaterThan(cheap.deferMs);
+
+    // The same run with the ceiling at one slot: the window cannot widen, the draw cannot
+    // exceed zero, and now the price of a slot is irrelevant. Same draws, same totals.
+    const capped = (slotMs: number) =>
+      allTalkAtOnce({ channelBackoff: "binary", channelCwMin: 1, channelCwMax: 1, channelSlotMs: slotMs });
+    const cappedCheap = capped(5);
+    const cappedDear = capped(500);
+    expect(cappedCheap.draws).toBe(cheap.draws);
+    expect(cappedDear.deferMs).toBe(cappedCheap.deferMs);
+    expect(cappedDear.collisions).toBe(cappedCheap.collisions);
+    expect(cappedDear.arrived).toBe(3);
+
+    // A window that starts wide pays the slot price from its first attempt, so the same
+    // comparison holds without needing a collision to widen it. Comparing across *window
+    // widths* at a fixed slot price does not: the wait changes when transmissions happen,
+    // which changes how many of them there are, so two widths diverge chaotically and their
+    // totals are not ordered. The width sweep is a measurement (docs/08 §12.13), not an
+    // invariant, and is asserted nowhere here.
+    const wide = (slotMs: number) =>
+      allTalkAtOnce({ channelBackoff: "binary", channelCwMin: 64, channelSlotMs: slotMs });
+    expect(wide(500).deferMs).toBeGreaterThan(wide(5).deferMs);
+    expect(wide(5).draws).toBeGreaterThan(0);
+  });
+
+  it("is carrier sense's lever: a radio with no shared medium does not move", () => {
+    const run = (channelBackoff: SimConfig["channelBackoff"]) => {
+      const sim = triangleWorld({
+        channelAccess: "halfDuplex",
+        channelCapture: "first",
+        channelBackoff,
+        channelCwMin: 64,
+        channelSlotMs: 5,
+      });
+      const [a, b] = sim.nodes;
+      sim.sendMessage(a.id, b.id, "x", "text");
+      sim.sendMessage(b.id, a.id, "y", "text");
+      sim.runFor(30000);
+      const stats = sim.refresh();
+      return {
+        draws: stats.channelBackoffs,
+        deferMs: stats.channelDeferMs,
+        arrived: sim.deliveries.filter((d) => d.type === "text").length,
+      };
+    };
+    const off = run("none");
+    const on = run("binary");
+    expect(off.draws).toBe(0);
+    expect(on.draws).toBe(0);
+    expect(on).toEqual(off);
+  });
+});
+
 describe("a retry timer cannot run out before the packet exists (docs/08 §12.11)", () => {
   function lineWorld(over: Partial<SimConfig> = {}): MeshSimulation {
     const sim = new MeshSimulation({
