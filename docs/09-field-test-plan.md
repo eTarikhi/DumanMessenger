@@ -186,6 +186,7 @@ app build's logger can be checked against a reference file before anybody travel
 | delivery, with a receiver in the model | **0.9056** with collisions and no transmit queue, **0.8556** with both — against 0.9889 in the shipped model | `docs/08` §12.9 | the shipped model has no contention at all, so the real number is below every row above. This is the criterion with no margin left: measure it first, on the first walk, before tuning anything else |
 | delivery, with carrier sense as well | **0.7944** listening with no collisions modelled, **0.7389** with both; overhead 80.2% and 78.0% of flood-all | `docs/08` §12.10 | if the floor delivers nine in ten, the real radios are behaving like the §12.9 arms and *not* like the carrier-sense arm — which is the useful inference, because that arm is what a simulator with no backpressure produces when it is told to listen. A real stack defers *and* stops generating work; this engine only defers |
 | delivery, with a contention window as well | **0.7500** with collisions modelled against a 0.7389 control, **0.7889** against 0.7944 without — ±1.1 points either way, and both still ~14 points short of the gate | `docs/08` §12.13 | a real link layer has a contention window, so if the floor lands near the `csma` arm the window is *not* what is missing. Count drops against collisions in the capture: the simulator says the losses are queue drops eight to one, and if the field capture agrees, the fix is flow control above the radio and no radio-layer tuning will find it |
+| delivery, with sender-side flow control as well (`mediaBackpressure`) | **0.8927** against a 0.8757 control with carrier sense; **0.8814** against 0.9096 without — drops fall 29% and 3% in those two arms, and neither reaches the gate | `docs/08` §12.12, §12.14 | in the capture, split the shed packets by *who shed them*: the simulator says that with a file in flight 82-85% are shed by the node that originated them, and 3-9% of the relays' sheds had an equal-cost alternative next hop. If a field capture shows the shedding is a *relay's* instead, this engine's topology is not the one being walked, and rerouting round congestion becomes worth trying after all |
 | media on a real radio (`channelAccess: "halfDuplex"`) | 10 MB at 3 hops in **3.97 min** instead of 33.0 s; a 10 s streamed note at 3 hops finishes **17.8 s after release** instead of 757 ms; text delivery with a file in flight 0.955 instead of 0.994 | `docs/08` §12 | the shipped model is `free`, so the field numbers will sit between the two rows above; which side they fall on is the single most useful thing a media field test can report |
 | latency | p50 ~0.3 s, p95 ~1.3-4.8 s (traffic-dependent); 1 hop ≈ 0.16-0.5 s | §4, §8 | p95 over 5 s at 3 hops → the retry timer, not the routing |
 | NORMAL battery, duty cycle on | **10.0%/8 h** campus, 10.9% crowd, 7.1% stationary | §7 | over 15% → the scan window is not being honoured by the OS |
@@ -235,8 +236,10 @@ Listed so a disagreement is diagnosed rather than argued about:
   RTS/CTS is still not modelled, and the hidden terminal at §12.10 is still open.
 * **What the field test should therefore compare against is a range, not a number.** Near the
   `free`+`none` end means contention is not binding in practice; near the `csma` end means the
-  radios are deferring into a saturated queue, and the fix belongs above the radio — in flow
-  control, since §12.13 rules out the window in front of the queue.
+  radios are deferring into a saturated queue, and the fix belongs above the radio: §12.13 rules
+  out the window in front of the queue, and §12.14 finds the queue being shed is mostly the
+  *source's* own (82-85% of it with a file in flight), so sender-side flow control is pointed at
+  most of the problem — it is built and measured, and it is a trade rather than a rescue (§12.12).
 * **Wi-Fi Direct formation** is a setup latency in the model, not a negotiation that can
   fail, time out, or be refused by a phone in a pocket.
 * **Human bodies are walls.** The model's obstacles are static rectangles; a crowd of

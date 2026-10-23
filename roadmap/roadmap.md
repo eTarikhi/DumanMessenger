@@ -195,7 +195,17 @@
   dispersing it). It moves delivery ±1.1 points and leaves both csma arms ~14 short of the gate, because under
   carrier sense the losses are **queue drops, 1994-3466 against 273-394 collisions**: a lever that makes nodes
   wait longer feeds the queue that is shedding them (§12.13). So the fix is not in front of the queue and has
-  to be above the radio — hop-by-hop flow control, which §12.12 named and this stack still does not have.
+  to be above the radio, which is why sender-side flow control was built too — and measuring it corrects the
+  reason. `mediaBackpressure` had to be fixed in three places before it did what it claims (a window floored at
+  one slot still hands a packet to a full queue; the stall path bypassed the window; nothing resumed a blocked
+  transfer). Corrected, it is a clear win on one radio — 25 → 5 drops, 6 → 0 retransmissions, 6.04 s instead of
+  9.37 s — and a trade in a mesh, +1.7 points under carrier sense against -2.8 under plain half-duplex, neither
+  reaching the gate (§12.12). Attribution says why the first version's null result was mis-explained: with a file
+  in flight **82-85% of the shedding is the source's own**, not a relay's, so a sender-side window is pointed at
+  most of the problem — and what it cannot fix is that a window rations a transfer's *share* of a radio rather
+  than creating slots. The cheap alternative, rerouting round a congested relay, is not available either: an
+  equal-cost alternative next hop existed for only 3-9% of relay sheds (§12.14). What remains is a radio that can
+  refuse a hand-over, with a layer above it that holds the packet instead of counting it lost.
 
 ---
 
