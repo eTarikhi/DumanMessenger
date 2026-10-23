@@ -184,6 +184,8 @@ app build's logger can be checked against a reference file before anybody travel
 | atrium node, drained | **NORMAL**, in three of four worlds — health carries 0.45 of the score and position only 0.55 of a compressed term | §18 | if a drained atrium phone *is* elected, something is inflating the position terms: check the RSSI normalization against the calibration fit |
 | atrium node, **as spawned** | **NORMAL** in three of four worlds, and not because of its score: it clears the 0.60 promote gate on the campus world and still loses on **rank** — 7th of the 13 candidates it can hear, where the top-20% cap is 3 | §18.4 | record the *rank among heard candidates* next to the score. Normalising openness against the observed maximum was built for exactly this case and changes nothing: the score rises 0.05-0.19 and the rank does not move at all, because every open neighbour gains the same way |
 | delivery, with a receiver in the model | **0.9056** with collisions and no transmit queue, **0.9000** with both — against 0.9889 in the shipped model | `docs/08` §12.9 | the shipped model has no contention at all, so the real number is below every row above. This is the criterion with no margin left: measure it first, on the first walk, before tuning anything else |
+| delivery, with a receiver in the model | **0.9056** with collisions and no transmit queue, **0.9000** with both — against 0.9889 in the shipped model | `docs/08` §12.9 | the shipped model has no contention at all, so the real number is below every row above. This is the criterion with no margin left: measure it first, on the first walk, before tuning anything else |
+| delivery, with carrier sense as well | **0.7889** listening with no collisions modelled, **0.7222** with both; overhead 81.3% and 77.2% of flood-all | `docs/08` §12.10 | if the floor delivers nine in ten, the real radios are behaving like the §12.9 arms and *not* like the carrier-sense arm — which is the useful inference, because that arm is what a simulator with no backpressure produces when it is told to listen. A real stack defers *and* stops generating work; this engine only defers |
 | media on a real radio (`channelAccess: "halfDuplex"`) | 10 MB at 3 hops in **3.97 min** instead of 33.0 s; a 10 s streamed note at 3 hops finishes **17.8 s after release** instead of 757 ms; text delivery with a file in flight 0.955 instead of 0.994 | `docs/08` §12 | the shipped model is `free`, so the field numbers will sit between the two rows above; which side they fall on is the single most useful thing a media field test can report |
 | latency | p50 ~0.3 s, p95 ~1.3-4.8 s (traffic-dependent); 1 hop ≈ 0.16-0.5 s | §4, §8 | p95 over 5 s at 3 hops → the retry timer, not the routing |
 | NORMAL battery, duty cycle on | **10.0%/8 h** campus, 10.9% crowd, 7.1% stationary | §7 | over 15% → the scan window is not being honoured by the OS |
@@ -215,6 +217,18 @@ Listed so a disagreement is diagnosed rather than argued about:
   flight. With both on, the campus measures **0.9000** against skills/02's and skills/08's
   ≥90% (`docs/08` §12.9), so the prediction to test first is not overhead or battery but
   whether a real floor delivers nine messages in ten.
+* **Carrier sense is modelled, and it is the pessimistic arm.** `channelAccess: "csma"` adds
+  what BLE and Wi-Fi both do at the link layer — listen, and wait if a peer within range is
+  transmitting — with no contention window, no random backoff and no RTS/CTS. It removes almost
+  every collision a node can hear (self-deafness 808 → 8 with a file in flight) and still
+  measures **worse** than transmitting blind under load: delivery 0.7222-0.7889, overhead
+  77-81% of flood-all, p95 up 50%. The reason is that waiting is not free in an engine whose
+  layers above keep generating packets while the queue fills, and whose retry timers (4 s for
+  text, 600 ms for media) retransmit anything that waits longer than they do. A real stack
+  defers *and* applies backpressure; this one only defers. So the field result to compare
+  against is a range: near the `free`+`none` end means contention is not binding in practice,
+  and near the `csma` end means the radios are deferring into a saturated queue and the fix
+  belongs above the radio (`docs/08` §12.10).
 * **Wi-Fi Direct formation** is a setup latency in the model, not a negotiation that can
   fail, time out, or be refused by a phone in a pocket.
 * **Human bodies are walls.** The model's obstacles are static rectangles; a crowd of

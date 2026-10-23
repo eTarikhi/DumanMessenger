@@ -183,7 +183,12 @@
   **0.9056** (collisions only) and **0.9000** (both) against the ≥90% this criterion inherits from skills/02 and
   skills/08, while overhead stays at 15.8% and 27.1% of flood-all and the SUPER ratio stays inside its band. So the
   overhead half of this exit criterion has margin and the delivery half has none, and the 10-phone test should
-  measure delivery ratio before it measures anything else.
+  measure delivery ratio before it measures anything else. A third arm adds what real link layers do —
+  `channelAccess: "csma"`, listen before talking — and it is worse than either: delivery **0.7222-0.7889** and
+  overhead **77-81%** of flood-all, failing both gates, because listening converts collisions into queueing and
+  this engine's retry timers convert queueing into load (§12.10). The missing mechanism is backpressure: a real
+  stack defers *and* stops generating work, while the simulator only defers. If a real floor delivers nine
+  messages in ten, that is the finding to act on, and it is not in the radio model.
 
 ---
 

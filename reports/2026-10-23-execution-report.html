@@ -221,6 +221,35 @@ calibrated against a radio with no contention, and the moment a receiver is adde
 the binding criterion and contention is what binds it. <code>docs/09</code> now asks the field test to measure
 delivery ratio first, on the first walk, before anybody tunes anything else.</div>
 
+<h3>Carrier sense: the mechanism real radios have, and why it is the pessimistic arm</h3>
+<p class="sub"><code>channelAccess: &quot;csma&quot;</code> is half-duplex plus listen-before-talk over peers in
+range &mdash; what BLE and Wi-Fi both do at the link layer &mdash; with no contention window, no random backoff and
+no RTS/CTS. Three seeds, receiver model on in every row:</p>
+<table><thead><tr><th></th><th>quiet mesh</th><th>with a 10 MB file</th><th>self-deaf losses</th><th>first-capture losses</th><th>p95 with the file</th><th>queue drops</th></tr></thead><tbody>
+<tr><td><code>halfDuplex</code> (transmits blind)</td><td class="num">0.9040</td><td class="num pass">0.8927</td><td class="num">808</td><td class="num">603</td><td class="num">11,681 ms</td><td class="num">1,744</td></tr>
+<tr><td><code>csma</code> (listens first)</td><td class="num pass">0.9322</td><td class="num part">0.8588</td><td class="num pass">8</td><td class="num">368</td><td class="num part">17,484 ms</td><td class="num part">3,232</td></tr>
+</tbody></table>
+<p class="sub">It does exactly what it was invented to do &mdash; self-deafness all but disappears, and a unit test
+pins the smallest case: two nodes transmitting at each other produce one deaf loss and one retry blind, and zero of
+each when they listen, paid for with 573 ms of waiting. Whether that is worth anything depends entirely on the load:
++2.8 points of delivery in a quiet mesh, &minus;3.4 with a file in flight, because waiting is not free. The bounded
+queue overflows harder while the layers above keep generating packets, and every packet that waits longer than its
+own retry timer (4 s for text, 600 ms for media) is retransmitted while the original is still queued. Carrier sense
+converts collisions into congestion, and congestion is what this engine&#x27;s timers turn into load.</p>
+<table><thead><tr><th>acceptance gate</th><th><code>csma</code> + <code>none</code></th><th><code>csma</code> + <code>first</code></th><th>required</th></tr></thead><tbody>
+<tr><td>delivery ratio</td><td class="num part">0.7889</td><td class="num part">0.7222</td><td class="part">&ge; 0.90 &mdash; fails</td></tr>
+<tr><td>overhead vs flood-all</td><td class="num part">81.3%</td><td class="num part">77.2%</td><td class="part">&le; 70% &mdash; fails</td></tr>
+<tr><td>SUPER ratio</td><td class="num">25.0%</td><td class="num">23.3%</td><td class="pass">15&ndash;25%</td></tr>
+</tbody></table>
+<p class="sub">So §12.9&#x27;s zero margin is the <em>best</em> contended case. One caveat on the overhead column: its
+denominator is flood-all&#x27;s transmissions, and under heavy queue shedding flood-all&#x27;s packets are dropped at the
+tail before they are ever counted, so the ratio rises for a reason that is a metric artefact rather than a routing
+result. Deepening the queue is not the fix either &mdash; blind transmission tolerates one step (0.8927 &rarr; 0.9266
+at depth 32) and then collapses to 0.8305 at 128, while carrier sense degrades monotonically to 0.6667 at 128 with
+450 minutes of deferred air time across three runs. The mechanism that would change the verdict is backpressure, and
+the simulator does not have it: its MPR fan-out, retry timers and transfer window keep producing packets whatever
+the radio is doing.</p>
+
 <h3>So is a load gate motivated? Yes &mdash; and it is the window, not the chunk size</h3>
 <table><thead><tr><th>arm (half-duplex, same plan, three seeds)</th><th>delivery</th><th>p95</th><th>parked</th><th>file time</th><th>dropped</th></tr></thead><tbody>
 <tr><td>no file</td><td class="num">0.9831</td><td class="num">5,077 ms</td><td class="num">4.0</td><td>&mdash;</td><td class="num">248</td></tr>
@@ -379,10 +408,16 @@ carrier, where the work actually is.</li>
 <li><strong>Rank, not score, in the field record</strong> - observed-maximum normalisation is built,
 measured and rejected (&sect;18.4): the atrium phone loses on rank among the candidates it can hear, which a
 score threshold hides. <code>docs/09</code> &sect;5 should record that column.</li>
-<li><strong>Carrier sense, and a capture effect that compares signal strengths</strong> - the
-receiver model loses the later of two packets whatever their levels, and a transmitting node transmits blind
-instead of deferring. The first omission understates the harm and the second overstates it; they are not
-claimed to cancel (docs/08 &sect;12.9).</li>
+<li><strong>Backpressure from the radio to the layers above it</strong> - carrier sense is
+modelled and measured, and it loses delivery under load rather than recovering it, because this engine keeps
+generating packets while the queue fills and its retry timers retransmit anything that waits longer than they
+do. A real stack defers <em>and</em> stops producing work; that second half is the missing mechanism, and it is
+why &sect;12.10 ends with a recommendation about the layers above the radio rather than about the radio
+(docs/08 &sect;12.10).</li>
+<li><strong>A capture effect that compares signal strengths, a contention window, and RTS/CTS</strong> - the
+receiver model loses the later of two packets whatever their levels, two nodes that defer for each other are
+separated only by event ordering, and the hidden terminal is provably unfixable without RTS/CTS (a test pins
+it). Each omission is named with its direction in docs/08 &sect;12.9-12.10.</li>
 <li><strong>Voice priority in the transmit queue</strong> - at three hops a streamed note cannot keep up
 with its own capture clock on one radio, so either streaming is capped at two hops and longer notes are
 sent as blobs, or voice jumps the queue. Not implemented; it is the next thing to measure (docs/08
