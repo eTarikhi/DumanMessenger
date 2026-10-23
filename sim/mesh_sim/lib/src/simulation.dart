@@ -90,6 +90,7 @@ class SimConfig {
     this.communityRelayQuota = 0,
     this.peerNorm = PeerNorm.fixed,
     this.channelCapture = ChannelCapture.none,
+    this.channelCaptureRatioDb = 6,
     this.channelBackoff = ChannelBackoff.none,
     this.channelCwMin = 4,
     this.channelCwMax = 64,
@@ -294,6 +295,12 @@ class SimConfig {
   /// packet that arrives while its receiver is transmitting (docs/08 §12.9).
   final ChannelCapture channelCapture;
 
+  /// How much stronger a newcomer has to be to take a busy receiver over, in dB. Only read
+  /// under [ChannelCapture.strongest]. Six dB is the capture ratio usually quoted for an
+  /// angle-modulated receiver; 0 dB is loudest-wins with no margin, and a large value
+  /// collapses the model back onto [ChannelCapture.first].
+  final double channelCaptureRatioDb;
+
   /// Whether a node that has been waiting for the medium waits a *random* number of slots
   /// before taking it. Carrier sense alone wakes every waiting node at the same instant the
   /// medium clears, so they transmit together; the random wait is what disperses them, and
@@ -389,6 +396,7 @@ class SimConfig {
     double? communityRelayQuota,
     PeerNorm? peerNorm,
     ChannelCapture? channelCapture,
+    double? channelCaptureRatioDb,
     ChannelBackoff? channelBackoff,
     int? channelCwMin,
     int? channelCwMax,
@@ -444,6 +452,7 @@ class SimConfig {
         communityRelayQuota: communityRelayQuota ?? this.communityRelayQuota,
         peerNorm: peerNorm ?? this.peerNorm,
         channelCapture: channelCapture ?? this.channelCapture,
+        channelCaptureRatioDb: channelCaptureRatioDb ?? this.channelCaptureRatioDb,
         channelBackoff: channelBackoff ?? this.channelBackoff,
         channelCwMin: channelCwMin ?? this.channelCwMin,
         channelCwMax: channelCwMax ?? this.channelCwMax,
@@ -604,6 +613,7 @@ class SimulationStats {
     required this.channelDeferMs,
     required this.channelDrops,
     required this.channelCaptured,
+    required this.channelCaptureEffects,
     required this.channelDeafRx,
     required this.channelBackoffs,
     required this.channelDropsRelayed,
@@ -723,6 +733,13 @@ class SimulationStats {
   /// packets lost because the receiver was itself transmitting. Both zero under
   /// [ChannelCapture.none] (docs/08 §12.9).
   final int channelCaptured;
+
+  /// Times a stronger newcomer took a busy receiver over from the packet it was holding,
+  /// under [ChannelCapture.strongest]. Each one is also a collision loss — of the incumbent —
+  /// so it is counted in [channelCaptured] too. This is the count that says how much of
+  /// `first`'s pessimism the capture effect buys back: over six seeds, none of it
+  /// (docs/08 §12.15).
+  final int channelCaptureEffects;
   final int channelDeafRx;
 
   /// Contention-window draws: how often a node found the medium free and still had to wait a
@@ -1082,10 +1099,17 @@ double percentile(List<double> sorted, double p) {
 }
 
 class _MsgPayload {
-  const _MsgPayload(this.msg, this.via);
+  const _MsgPayload(this.msg, this.via, {this.seq});
 
   final MeshMessage msg;
   final NodeId via;
+
+  /// Which *transmission* this is, not which message. A message can be on air several times
+  /// over — a retry, or two relays racing with the same copy — and
+  /// [ChannelCapture.strongest] has to be able to say "this one was taken over" without
+  /// condemning every later attempt at the same message. Only assigned under `strongest`, so
+  /// the two shipped modes never touch it.
+  final int? seq;
 }
 
 /// One transmission waiting for its node's radio (docs/08 §12).
@@ -1339,7 +1363,11 @@ class MeshSimulation {
   double _channelDeferMs = 0;
   int _channelDrops = 0;
   int _channelCaptured = 0;
+  int _channelCaptureEffects = 0;
   int _channelDeafRx = 0;
+  /// Per-transmission sequence, for [ChannelCapture.strongest] only. Not a random draw, so it
+  /// cannot move a golden vector.
+  int _txSeq = 0;
   int _channelBackoffs = 0;
   int _channelDropsRelayed = 0;
   int _channelDropsMedia = 0;
@@ -1355,6 +1383,9 @@ class MeshSimulation {
   /// pays nothing.
   final Map<NodeId, double> _txUntil = <NodeId, double>{};
   final Map<NodeId, double> _rxUntil = <NodeId, double>{};
+  final Map<NodeId, double> _rxRssi = <NodeId, double>{};
+  final Map<NodeId, int> _rxSeq = <NodeId, int>{};
+  final Set<int> _superseded = <int>{};
 
   /// One radio per node. Only maintained under [ChannelAccess.halfDuplex] — under
   /// [ChannelAccess.free] a radio is never busy, so the map stays empty.
@@ -1436,7 +1467,10 @@ class MeshSimulation {
     _channelDeferMs = 0;
     _channelDrops = 0;
     _channelCaptured = 0;
+    _channelCaptureEffects = 0;
     _channelDeafRx = 0;
+    _txSeq = 0;
+    _superseded.clear();
     _channelBackoffs = 0;
     _channelDropsRelayed = 0;
     _channelDropsMedia = 0;
@@ -1446,6 +1480,8 @@ class MeshSimulation {
     _channel.clear();
     _txUntil.clear();
     _rxUntil.clear();
+    _rxRssi.clear();
+    _rxSeq.clear();
     _ogmTx = 0;
     _lostDataTx = 0;
     _lostOgmTx = 0;
@@ -1631,6 +1667,8 @@ class MeshSimulation {
         _queue.cancel(EventKind.channel, node.id);
         _txUntil.remove(node.id);
         _rxUntil.remove(node.id);
+        _rxRssi.remove(node.id);
+        _rxSeq.remove(node.id);
       }
     }
     _queue.push(now + config.physicsIntervalMs, EventKind.physics, '*');
@@ -2766,11 +2804,19 @@ class MeshSimulation {
     if (capture) {
       // Two ways a packet that survived the link still does not arrive: its receiver is
       // transmitting, or its receiver is locked onto a packet that got there first. Both are
-      // losses rather than deferrals — that is what a collision is — and neither compares
-      // signal strengths, so the earlier packet always wins (docs/08 §12.9).
+      // losses rather than deferrals — that is what a collision is. Under `first` the earlier
+      // packet always wins and no signal-strength comparison happens, which is the pessimistic
+      // bound (docs/08 §12.9). Under `strongest` a newcomer that is enough stronger takes the
+      // receiver over instead and the incumbent is what is lost — the capture effect, and the
+      // reason `first` and `none` bracket the truth rather than either of them being it
+      // (docs/08 §12.15).
       final deaf = (_txUntil[target.id] ?? 0) > now;
-      final captured = !deaf && (_rxUntil[target.id] ?? 0) > now;
-      if (deaf || captured) {
+      final busy = !deaf && (_rxUntil[target.id] ?? 0) > now;
+      final held = _rxRssi[target.id] ?? double.negativeInfinity;
+      final captures = busy &&
+          config.channelCapture == ChannelCapture.strongest &&
+          rssi >= held + config.channelCaptureRatioDb;
+      if ((deaf || busy) && !captures) {
         _lastTxCollided = true;
         if (deaf) {
           _channelDeafRx++;
@@ -2778,10 +2824,14 @@ class MeshSimulation {
           _channelCaptured++;
         }
         _recordTxOutcome(node, 0);
-        _pushLog(
-            MeshLogKind.loss,
-            node.id,
-            '${msg.id} → $targetId collided (${deaf ? 'receiver was transmitting' : 'receiver was locked onto an earlier packet'})',
+        final reason = deaf
+            ? 'receiver was transmitting'
+            : config.channelCapture == ChannelCapture.strongest
+                ? 'receiver held a stronger packet '
+                    '(${held.toStringAsFixed(0)} vs ${rssi.toStringAsFixed(0)} dBm)'
+                : 'receiver was locked onto an earlier packet';
+        _pushLog(MeshLogKind.loss, node.id,
+            '${msg.id} → $targetId collided ($reason)',
             peerId: targetId,
             msgId: msg.id,
             msgType: msg.type,
@@ -2789,8 +2839,31 @@ class MeshSimulation {
             rssi: rssi);
         return occupied;
       }
+      if (captures) {
+        // The newcomer wins the receiver. The incumbent is condemned by transmission sequence
+        // rather than by message id, so a retry of the same message — or a second relay
+        // carrying the same copy — is a fresh attempt.
+        final victim = _rxSeq[target.id];
+        if (victim != null) _superseded.add(victim);
+        _channelCaptureEffects++;
+        // …and the incumbent is a collision loss, so it is counted as one.
+        _channelCaptured++;
+        // `_lastTxCollided` stays clear for the winner: its own transmission was clean, and
+        // doubling its contention window would punish the packet that survived. The
+        // incumbent's transmitter is not told, which is the honest limit of modelling this at
+        // the receiver — a real radio gets no such notification either, and it is why
+        // `channelBackoff` and `strongest` do not compose into anything better than each
+        // alone.
+      }
     }
-    _recordTxOutcome(node, 1);
+    // Under `strongest` the outcome is booked at arrival instead, because a packet taken over
+    // part-way through was not a success and booking it as one here would leave the link
+    // estimate optimistic about a radio that is losing packets to third parties. That would
+    // also make the arm incomparable with `first`, where the loser of a collision *is* booked
+    // as a failure: the only difference between the two arms should be which packet survives.
+    // Measured before this was corrected, `csma` with a file in flight read 0.9266 over three
+    // seeds — clearing the ≥0.90 gate — and the whole of that was the bookkeeping.
+    if (config.channelCapture != ChannelCapture.strongest) _recordTxOutcome(node, 1);
     _pushLog(
         MeshLogKind.tx,
         node.id,
@@ -2811,7 +2884,16 @@ class MeshSimulation {
         serializationMs(msg.sizeBytes, msg.transport) +
         randRange(rng, config.jitterMinMs, config.jitterMaxMs);
     if (capture) _rxUntil[target.id] = now + airTime;
-    _queue.push(now + airTime, EventKind.msg, targetId, _MsgPayload(msg, node.id));
+    int? seq;
+    if (config.channelCapture == ChannelCapture.strongest) {
+      // Only assigned here, so the two shipped modes consume nothing and behave exactly as
+      // every published number in this repository was measured.
+      seq = ++_txSeq;
+      _rxRssi[target.id] = rssi;
+      _rxSeq[target.id] = seq;
+    }
+    _queue.push(
+        now + airTime, EventKind.msg, targetId, _MsgPayload(msg, node.id, seq: seq));
     return airTime;
   }
 
@@ -2839,6 +2921,30 @@ class MeshSimulation {
     final msg = payload.msg;
     final via = payload.via;
     final sender = _byId(via);
+
+    // A transmission the receiver gave up on part-way through, because a stronger packet took
+    // it over ([ChannelCapture.strongest]). Checked before anything else: the receiver never
+    // decoded this one, so it is not coverage evidence, not a delivery and not a duplicate.
+    // Keyed by transmission rather than by message id, so a retry of the same message is a
+    // fresh attempt and not a condemned one. Under every other mode `seq` is null and this
+    // cannot fire.
+    final seq = payload.seq;
+    if (seq != null && sender != null) {
+      if (_superseded.contains(seq)) {
+        _superseded.remove(seq);
+        _recordTxOutcome(sender, 0);
+        _pushLog(
+            MeshLogKind.loss,
+            nodeId,
+            '${msg.id} lost (receiver was taken over by a stronger packet)',
+            peerId: via,
+            msgId: msg.id,
+            msgType: msg.type,
+            hop: msg.hopCount);
+        return;
+      }
+      _recordTxOutcome(sender, 1);
+    }
 
     // Coverage evidence for the MPR gate. Any neighbour we receive a copy from
     // already holds the message, so it never needs covering again; and that
@@ -3626,6 +3732,7 @@ class MeshSimulation {
       channelDeferMs: _channelDeferMs,
       channelDrops: _channelDrops,
       channelCaptured: _channelCaptured,
+      channelCaptureEffects: _channelCaptureEffects,
       channelDeafRx: _channelDeafRx,
       channelBackoffs: _channelBackoffs,
       channelDropsRelayed: _channelDropsRelayed,

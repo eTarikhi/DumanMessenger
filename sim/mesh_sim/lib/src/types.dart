@@ -120,7 +120,24 @@ enum PeerNorm { fixed, observed }
 /// with no transmitter queue, which separates the two mechanisms the half-duplex model
 /// conflates. Measured in docs/08 §12.9, where the receiver turns out to be where most of the
 /// contention lives — 13.6 points of delivery against a transmitter queue's 4.0.
-enum ChannelCapture { none, first }
+enum ChannelCapture {
+  /// A busy receiver takes everything. Ships, and the reason the contention measurement in
+  /// docs/08 §9 comes out null.
+  none,
+
+  /// The receiver locks onto the packet that got there first. Two things are lost: a packet
+  /// that arrives while the receiver is locked onto another, and one that arrives while the
+  /// receiver is itself transmitting. Neither compares signal strengths, so this is the
+  /// *pessimistic* bound — no real radio lets a strong packet lose to a weak one
+  /// (docs/08 §12.9).
+  first,
+
+  /// [first] plus the capture effect: a newcomer at least `channelCaptureRatioDb` stronger
+  /// than the packet being held takes the receiver over, and the incumbent is what is lost.
+  /// A real receiver demodulates the stronger signal through the weaker one, which makes
+  /// [first] bound the loss from above and [none] from below (docs/08 §12.15).
+  strongest,
+}
 
 /// Whether a node that has been waiting for the medium waits a random number of slots
 /// before it takes it (docs/08 §12.13).

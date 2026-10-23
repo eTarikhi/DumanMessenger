@@ -672,4 +672,135 @@ void main() {
     expect(on.collisions, off.collisions);
     expect(on.arrived, off.arrived);
   });
+  /// A-B-C in a line, but *not* symmetrically: A is 10 m from B and C is 25 m, so A arrives
+  /// about 8 dB stronger — over the 6 dB margin the model ships with and under a 12 dB one.
+  /// A and C are 35 m apart, past the 31.6 m line-of-sight budget, so neither hears the other
+  /// and both talk over B: the hidden terminal the capture effect describes (docs/08 §12.15).
+  ///
+  /// `linkRetries: 6` is isolation, not tuning. At 25 m the weak sender's raw link loss is
+  /// 39%, and with the shipped two retries that is 6% of packets — enough to turn "did a
+  /// takeover happen" into a coin flip. Six retries takes it to 0.1%.
+  MeshSimulation lopsidedWorld({
+    ChannelCapture channelCapture = ChannelCapture.strongest,
+    double channelCaptureRatioDb = 6,
+  }) {
+    final sim = MeshSimulation(SimConfig(
+      nodeCount: 3,
+      stationaryRatio: 1.0,
+      chargingRatio: 0.0,
+      trafficIntervalMs: 0,
+      enableSuperElection: false,
+      warmupMs: 0,
+      obstacles: const <Obstacle>[],
+      linkRetries: 6,
+      // Fewer beacons, so the OGMs contesting the receiver do not drown the data pairs.
+      ogmIntervalMs: 8000,
+      channelCapture: channelCapture,
+      channelCaptureRatioDb: channelCaptureRatioDb,
+    ));
+    const xs = <double>[10, 20, 45];
+    for (var i = 0; i < sim.nodes.length; i++) {
+      final node = sim.nodes[i];
+      node.pos = Vec2(xs[i], 10);
+      node.target = Vec2(xs[i], 10);
+      node.mobility = 0;
+      node.isOnline = true;
+      node.battery = 1.0;
+    }
+    sim.runFor(20000);
+    sim.clearRecords();
+    return sim;
+  }
+
+  group('the capture effect (docs/08 §12.15)', () {
+    /// Twenty contested pairs; `strongFirst` decides which sender the engine is handed first,
+    /// and therefore which packet the receiver is locked onto when the other one lands.
+    ({MeshSimulation sim, SimulationStats stats, int effects, int captured,
+        MeshNode strong, MeshNode weak, MeshNode rx}) contest(
+      ChannelCapture capture, {
+      bool strongFirst = false,
+      double margin = 6,
+      int pairs = 20,
+    }) {
+      final sim = lopsidedWorld(
+          channelCapture: capture, channelCaptureRatioDb: margin);
+      final strong = sim.nodes[0];
+      final rx = sim.nodes[1];
+      final weak = sim.nodes[2];
+      for (var i = 0; i < pairs; i++) {
+        final order = strongFirst ? [strong, weak] : [weak, strong];
+        for (final from in order) {
+          sim.sendMessage(
+              from.id, rx.id, '${from == strong ? 's' : 'w'}-$i', MsgType.text);
+        }
+        sim.runFor(5000);
+      }
+      sim.runFor(60000); // let every retry the collisions forced land
+      final stats = sim.refresh();
+      return (
+        sim: sim,
+        stats: stats,
+        effects: stats.channelCaptureEffects,
+        captured: stats.channelCaptured,
+        strong: strong,
+        weak: weak,
+        rx: rx
+      );
+    }
+
+    test('takes the receiver over for a stronger newcomer, never for a weaker one', () {
+      // The weak packet is the incumbent and the strong one lands 8 dB up, over the 6 dB
+      // margin: every pair is a takeover. Exactly twenty, because the beacons are thinned to
+      // one every 8 s and none of them lands inside a data pair here.
+      final weakIncumbent = contest(ChannelCapture.strongest);
+      expect(weakIncumbent.effects, equals(20));
+      // A takeover is not a rescue: it moves the loss from the newcomer to the incumbent, so
+      // the collision counter carries both.
+      expect(weakIncumbent.captured,
+          greaterThanOrEqualTo(weakIncumbent.effects));
+
+      // Reverse the order and the strong packet is the incumbent. A weaker newcomer can never
+      // take a receiver over, so nothing is taken over at all — which is the whole difference
+      // between this model and first-packet-wins.
+      final strongIncumbent = contest(ChannelCapture.strongest, strongFirst: true);
+      expect(strongIncumbent.effects, equals(0));
+      // …and the collisions did not stop happening, they just stopped being takeovers.
+      expect(strongIncumbent.captured, greaterThan(0));
+    });
+
+    test('is first-packet-wins under a margin the geometry cannot reach', () {
+      // 8 dB of asymmetry cannot clear a 12 dB margin, so the model reduces to `first`.
+      expect(contest(ChannelCapture.strongest, margin: 12).effects, equals(0));
+      // A zero margin is loudest-wins with no protection: it takes over at least as often,
+      // and here exactly as often, because 8 dB clears every margin from 0 to 8.
+      expect(contest(ChannelCapture.strongest, margin: 0).effects, equals(20));
+      // `first` never compares signal strengths, so it never takes a receiver over.
+      final first = contest(ChannelCapture.first);
+      expect(first.effects, equals(0));
+      expect(first.captured, greaterThan(0));
+      // And the shipped model counts nothing at all, which is what keeps the golden vectors
+      // where they were.
+      final shipped = contest(ChannelCapture.none);
+      expect(shipped.effects, equals(0));
+      expect(shipped.captured, equals(0));
+    });
+
+    test('does not condemn a retry of the message it took over', () {
+      // The bookkeeping is per *transmission*, not per message. Keyed by message id, the
+      // incumbent that lost would have its retry dropped on arrival too, and a message that
+      // was merely overtaken would never land — the difference between modelling a collision
+      // and modelling a blackhole.
+      final run = contest(ChannelCapture.strongest);
+      expect(run.effects, equals(20));
+      final arrived = run.sim.deliveries
+          .where((d) => d.type == MsgType.text && d.to == run.rx.id)
+          .toList();
+      // Every pair: the strong one, and the weak one it displaced, whose retry had to work.
+      expect(arrived.map((d) => d.msgId).toSet().length, equals(40));
+      expect(arrived.where((d) => d.from == run.weak.id).length, equals(20));
+      expect(arrived.where((d) => d.from == run.strong.id).length, equals(20));
+      expect(run.stats.retriesSent, greaterThan(0));
+    });
+  });
+
 }
