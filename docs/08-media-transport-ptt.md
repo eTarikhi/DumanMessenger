@@ -1037,7 +1037,7 @@ the relay.
 ```bash
 npm run media                                            # TypeScript probe, every table above (§7-§9 for the radio, incl. carrier sense)
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media --no-check
-npm test                                                 # 243 TS tests, incl. 18 media + 6 channel cases
+npm test                                                 # 265 TS tests, incl. 18 media and 14 radio cases
 cd sim/mesh_sim && dart test                             # 18 Dart media cases + test/channel_test.dart
 ```
 
@@ -1046,15 +1046,17 @@ Engine surface: `sendFile(from, to, bytes, {chunkBytes, window, transport})`,
 `mediaTimeoutMs(transfer)`, `sim.transfers`, and the config keys `bleKbps`,
 `wifiDirectKbps`, `transferChunkBytes`, `transferWindow`, `transferStallMs`,
 `mediaAckTimeoutMs`, `adaptiveMediaAck`, `voiceKbps`, `voiceFrameMs`, `jitterBufferMs`,
-`voiceTtl`, `maxTransferBytes`, `channelAccess`, `channelQueueDepth`, `channelPriority`,
-`channelCapture`, `mediaBackpressure`, and the `csma` value of `channelAccess`.
+`voiceTtl`, `maxTransferBytes`, and the five radio keys — `channelAccess`
+(`free`/`halfDuplex`/`csma`), `channelQueueDepth`, `channelPriority`, `channelCapture` and
+`mediaBackpressure` — every one of which defaults to the behaviour this document was measured
+under before §12.
 
-Tests that pin this document's claims: `media transport (docs/05 §3.2-3.3, roadmap
-Phase 3)`, `media against skills/05 (Voice PTT & Media)`, `media under load, measured
-without confounding the A/B (docs/08 §9)` and `channel access: one radio, half-duplex
-(docs/08 §12)` and `which packet a busy radio takes next (docs/08 §12.8)` and
-`receiver contention: what a busy receiver does (docs/08 §12.9)` and
-`carrier sense, and the hidden terminal it cannot fix (docs/08 §12.10)` and
-`sender-side backpressure (docs/08 §12.12)` in `src/__tests__/simulation.test.ts`, `media transport in the UI` in
-`src/__tests__/components.test.tsx`, and `test/media_test.dart` plus `test/channel_test.dart`
-in the Dart engine.
+Tests that pin this document's claims, all in `src/__tests__/simulation.test.ts` unless noted:
+`media transport (docs/05 §3.2-3.3, roadmap Phase 3)`, `media against skills/05 (Voice PTT &
+Media)`, `media under load, measured without confounding the A/B (docs/08 §9)`, `channel access:
+one radio, half-duplex (§12)`, `which packet a busy radio takes next (§12.8)`, `receiver
+contention: what a busy receiver does (§12.9)`, `carrier sense, and the hidden terminal it
+cannot fix (§12.10)`, `a retry timer cannot run out before the packet exists (§12.11)` and
+`sender-side backpressure (§12.12)`; `media transport in the UI` and `the radio channel in the
+UI` in `src/__tests__/components.test.tsx`; and `test/media_test.dart` plus
+`test/channel_test.dart` in the Dart engine, which mirrors every one of the radio cases.
