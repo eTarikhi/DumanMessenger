@@ -168,8 +168,18 @@ else
   opt "gh" "not installed — remote CI monitoring (make watch) needs it"
 fi
 
-if [ -f "$ROOT/.git/hooks/pre-push" ] && [ -x "$ROOT/.git/hooks/pre-push" ]; then
-  ok "pre-push hook" "installed — runs the fast subset before every push"
+# Ask git where hooks come from rather than assuming .git/hooks. `make install-hooks` sets
+# core.hooksPath to .githooks so the hook is versioned, and when that is set git ignores
+# .git/hooks entirely — so checking the default location reported an installed hook as
+# missing, which is the one answer a doctor must not get wrong.
+HOOKS_PATH="$(git -C "$ROOT" config core.hooksPath 2>/dev/null || true)"
+[ -n "$HOOKS_PATH" ] || HOOKS_PATH=".git/hooks"
+case "$HOOKS_PATH" in /*) ;; *) HOOKS_PATH="$ROOT/$HOOKS_PATH" ;; esac
+
+if [ -x "$HOOKS_PATH/pre-push" ]; then
+  ok "pre-push hook" "installed at ${HOOKS_PATH#$ROOT/} — runs the fast subset before every push"
+elif [ -x "$ROOT/.githooks/pre-push" ]; then
+  opt "pre-push hook" "present in .githooks/ but not active — run: make install-hooks"
 else
   opt "pre-push hook" "not installed — run: make install-hooks"
 fi
