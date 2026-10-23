@@ -18,7 +18,7 @@ enum TransportType { bleGatt, wifiDirect, wifiAware, multipeer }
 > **Built (Oct 2026 — `sim/mesh_sim/lib/src/transport.dart`, `test/transport_test.dart`, roadmap Phase 1 item 15):** the interface above is implemented as
 > specified — six verbs, same order, same signatures — with `SimulatedMeshTransport` as a reference implementation and a test double, driven by the mesh engine.
 > It is pure Dart with no dependency beyond the SDK, so it lifts into the mono-repo's `core/` (item 13) unchanged, and the app layer can be written against it
-> before `BleGattTransportAndroid` exists. Ten decisions in it are tested: the 12-byte beacon's byte order and its 8-byte digest, that refreshing an
+> before `BleGattTransportAndroid` exists. Its decisions are tested rather than asserted in prose: the 12-byte beacon's byte order and its 8-byte digest, that refreshing an
 > advertisement replaces it rather than adding one, that `connect` **refuses a peer the local scan has not reported** even when that peer exists in the world,
 > that the radio is sized on the *packet* and per *chunk* (a 929-byte body is a 1024 B packet that still rides BLE; 930 crosses — the threshold `docs/07` §3
 > corrected), that `onReceive` is per connection and delivers each payload exactly once, and that the seam consumes **no random numbers**, so a world driven

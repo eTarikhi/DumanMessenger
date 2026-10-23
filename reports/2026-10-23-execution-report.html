@@ -510,20 +510,42 @@ npm run field:capture -- campus_quad 42 /tmp/cap.jsonl [flood-all]
 npm run field:report  -- /tmp/cap.jsonl /tmp/base.jsonl
 ALLOW_ANY_DEV_HOST=1 npm run dev -- --port 5173     # the React visualiser
 
-cd sim/mesh_sim &amp;&amp; dart pub get &amp;&amp; dart test     # 181 Dart cases
+cd sim/mesh_sim &amp;&amp; dart pub get &amp;&amp; dart test     # 194 Dart cases
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42          # asserts the criteria
 dart run bin/mesh_sim.dart --sos | --group 10 | --media | --history  # the four probes
 dart run bin/mesh_sim.dart --trace | --capture | --capture-ogm       # hop routes, pcap-like log
 dart run bin/mesh_sim.dart --duty-cycle --json                       # skills/07 arm</pre>
 
 <h2>14. What remains</h2>
-<p>Twenty-nine roadmap items are still open, and every one of them is app or platform work rather than
+<p>Twenty-eight roadmap items are still open, and every one of them is app or platform work rather than
 protocol work: the BLE GATT hello and iOS beacon, permissions flows, the foreground service, SQLite,
-<code>WifiP2pManager</code> and MultipeerConnectivity, the Opus codec, QR pairing, distribution, legal.
-On the simulation side five things remain named in the evidence documents as the next lever to pull, and two
-of the five are already answered: the community-relay preference and observed-maximum normalisation were both
-built, measured and rejected, so what is left <em>unbuilt</em> is hop-by-hop flow control, a signal-strength
-capture effect with RTS/CTS, and a voice-priority policy for the transmit queue. Eleven levers were built and
+<code>WifiP2pManager</code> and MultipeerConnectivity, the Opus codec, QR pairing, distribution, legal.</p>
+<p><strong>That sentence said twenty-nine, and the twenty-ninth was wrong.</strong> Phase 1 item 15, the
+<code>MeshTransport {advertise(), scan(), connect(), send()}</code> abstraction, carried a note saying the
+interface itself was app work. It is not: the interface is pure Dart with no dependency beyond the SDK, and the
+decisions inside it &mdash; what a 12-byte beacon contains and in which byte order, which radio a payload rides
+and at what size, when a connection is refused rather than attempted, and what a scan is permitted to report
+&mdash; are testable without a phone. <code>skills/01</code> had already specified all six verbs, so the seam is
+built to that signature with <code>SimulatedMeshTransport</code> as a reference implementation and a test double,
+and it lifts into the mono-repo's <code>core/</code> unchanged when item 13 creates it. What is still app work is
+the four concrete implementations beneath it. The useful part of the correction is not the item count: it is that
+&ldquo;needs hardware&rdquo; had been used to close a category rather than to check it, and one member of the
+category was checkable.</p>
+<p>Two of its rules are load-bearing rather than plumbing. <code>connect</code> refuses a peer the local scan has
+not reported even when that peer exists in the world, and <code>scan</code> reads the device's own scan cycle
+&mdash; stale while a NORMAL node sleeps &mdash; rather than the geometry. An implementation that reaches an
+unheard peer hands the app an oracle, and an app built on an oracle passes every test in this repository and then
+fails on a phone in a pocket. A test moves a peer into range mid-run and asserts the two disagree at that instant
+and agree again later, so the invariant cannot pass vacuously. And the seam consumes no random numbers: a world
+driven through it is identical to the same world driven by hand, delivery for delivery, so the cross-language
+golden vectors hold.</p>
+<p>
+On the simulation side five things remain named in the evidence documents as the next lever to pull, and four
+of the five are now answered: the community-relay preference and observed-maximum normalisation were both built,
+measured and rejected; hop-by-hop flow control was built, found broken in three places, corrected and measured as
+a trade rather than a rescue (&sect;5); and the voice-priority policy is the <code>channelPriority: "class"</code>
+arm, measured in &sect;5 and not shipped because promoting voice does not pay. What is left <em>unbuilt</em> is a
+signal-strength capture effect with RTS/CTS. Eleven levers were built and
 measured while writing this report &mdash; two channel-access models, a receiver model, two queue disciplines, a
 contention window, sender-side backpressure, a community-relay cap and preference, a DTN carrier preference, and
 observed-maximum peer normalisation &mdash; and every one of them defaults to the behaviour the acceptance gates
