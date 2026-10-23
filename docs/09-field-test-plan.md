@@ -183,9 +183,8 @@ app build's logger can be checked against a reference file before anybody travel
 | atrium node | SUPER within **2 election cycles** (60 s) **if it is also healthy** — full battery, long uptime, low packet loss. Verified in all four simulated worlds | §18.1 | it does not → read its battery and uptime before reading its position: a drained phone at 199 peers (0.688) still loses to a healthy one at nine (0.708), because the peer term saturates logarithmically (§18) |
 | atrium node, drained | **NORMAL**, in three of four worlds — health carries 0.45 of the score and position only 0.55 of a compressed term | §18 | if a drained atrium phone *is* elected, something is inflating the position terms: check the RSSI normalization against the calibration fit |
 | atrium node, **as spawned** | **NORMAL** in three of four worlds, and not because of its score: it clears the 0.60 promote gate on the campus world and still loses on **rank** — 7th of the 13 candidates it can hear, where the top-20% cap is 3 | §18.4 | record the *rank among heard candidates* next to the score. Normalising openness against the observed maximum was built for exactly this case and changes nothing: the score rises 0.05-0.19 and the rank does not move at all, because every open neighbour gains the same way |
-| delivery, with a receiver in the model | **0.9056** with collisions and no transmit queue, **0.9000** with both — against 0.9889 in the shipped model | `docs/08` §12.9 | the shipped model has no contention at all, so the real number is below every row above. This is the criterion with no margin left: measure it first, on the first walk, before tuning anything else |
-| delivery, with a receiver in the model | **0.9056** with collisions and no transmit queue, **0.9000** with both — against 0.9889 in the shipped model | `docs/08` §12.9 | the shipped model has no contention at all, so the real number is below every row above. This is the criterion with no margin left: measure it first, on the first walk, before tuning anything else |
-| delivery, with carrier sense as well | **0.7889** listening with no collisions modelled, **0.7222** with both; overhead 81.3% and 77.2% of flood-all | `docs/08` §12.10 | if the floor delivers nine in ten, the real radios are behaving like the §12.9 arms and *not* like the carrier-sense arm — which is the useful inference, because that arm is what a simulator with no backpressure produces when it is told to listen. A real stack defers *and* stops generating work; this engine only defers |
+| delivery, with a receiver in the model | **0.9056** with collisions and no transmit queue, **0.8556** with both — against 0.9889 in the shipped model | `docs/08` §12.9 | the shipped model has no contention at all, so the real number is below every row above. This is the criterion with no margin left: measure it first, on the first walk, before tuning anything else |
+| delivery, with carrier sense as well | **0.7944** listening with no collisions modelled, **0.7389** with both; overhead 80.2% and 78.0% of flood-all | `docs/08` §12.10 | if the floor delivers nine in ten, the real radios are behaving like the §12.9 arms and *not* like the carrier-sense arm — which is the useful inference, because that arm is what a simulator with no backpressure produces when it is told to listen. A real stack defers *and* stops generating work; this engine only defers |
 | media on a real radio (`channelAccess: "halfDuplex"`) | 10 MB at 3 hops in **3.97 min** instead of 33.0 s; a 10 s streamed note at 3 hops finishes **17.8 s after release** instead of 757 ms; text delivery with a file in flight 0.955 instead of 0.994 | `docs/08` §12 | the shipped model is `free`, so the field numbers will sit between the two rows above; which side they fall on is the single most useful thing a media field test can report |
 | latency | p50 ~0.3 s, p95 ~1.3-4.8 s (traffic-dependent); 1 hop ≈ 0.16-0.5 s | §4, §8 | p95 over 5 s at 3 hops → the retry timer, not the routing |
 | NORMAL battery, duty cycle on | **10.0%/8 h** campus, 10.9% crowd, 7.1% stationary | §7 | over 15% → the scan window is not being honoured by the OS |
@@ -207,22 +206,23 @@ Listed so a disagreement is diagnosed rather than argued about:
   direction is known — real delivery will be *lower* and real overhead *higher*, because a
   suppressed relay is free in the model and a collided one costs a retry. `"halfDuplex"`
   supplies the missing mechanism (one transmitter, a bounded queue, drop-tail) and predicts
-  overhead 38.6% against 9.3%, and delivery 0.956 against 0.989 on the same campus world
+  overhead 35.5% against 9.3%, and delivery 0.944 against 0.989 on the same campus world
   (`docs/08` §12.6); it still omits receiver capture and collisions, both optimistic. The
   field test should report which of the two it lands nearer, per criterion, because that
   decides whether the acceptance gates in `skills/02` and `skills/08` are calibrated against
   a radio anybody carries. `channelCapture: "first"` adds the receiver half — a busy receiver
   loses the second of two packets, a transmitting node hears nothing — and that is the larger
-  mechanism: 13.6 points of delivery against a transmit queue's 4.0 with a 10 MB file in
-  flight. With both on, the campus measures **0.9000** against skills/02's and skills/08's
-  ≥90% (`docs/08` §12.9), so the prediction to test first is not overhead or battery but
-  whether a real floor delivers nine messages in ten.
+  mechanism: 13.6 points of delivery against a transmit queue's 2.8 with a 10 MB file in
+  flight, and once collisions exist the queue is worth 4.9 points back. With both on, the campus
+  measures **0.8556** against skills/02's and skills/08's ≥90% (`docs/08` §12.9), so the
+  prediction to test first is not overhead or battery but whether a real floor delivers nine
+  messages in ten.
 * **Carrier sense is modelled, and it is the pessimistic arm.** `channelAccess: "csma"` adds
   what BLE and Wi-Fi both do at the link layer — listen, and wait if a peer within range is
   transmitting — with no contention window, no random backoff and no RTS/CTS. It removes almost
   every collision a node can hear (self-deafness 808 → 8 with a file in flight) and still
-  measures **worse** than transmitting blind under load: delivery 0.7222-0.7889, overhead
-  77-81% of flood-all, p95 up 50%. The reason is that waiting is not free in an engine whose
+  measures **worse** than transmitting blind under load: delivery 0.7389-0.7944, overhead
+  78-80% of flood-all, p95 up 42%. The reason is that waiting is not free in an engine whose
   layers above keep generating packets while the queue fills, and whose retry timers (4 s for
   text, 600 ms for media) retransmit anything that waits longer than they do. A real stack
   defers *and* applies backpressure; this one only defers. So the field result to compare

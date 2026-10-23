@@ -850,7 +850,7 @@ function captureTable(): void {
     }
   }
 
-  console.log("\n--- the acceptance gates under all four radios (20-node campus, 3 seeds) ---");
+  console.log("\n--- the acceptance gates under all six radios (20-node campus, 3 seeds) ---");
   console.log("transmitter  receiver   delivery   within5   overhead vs flood-all   SUPER ratio   collisions");
   for (const access of ACCESSES) {
     for (const capture of CAPTURES) {
@@ -866,22 +866,23 @@ function captureTable(): void {
     }
   }
   console.log(
-    "\nRead: the receiver is where contention lives. A transmitter queue alone costs text 4.0 points\n" +
-      "when a file is in flight; receiver collisions alone cost 13.6. Once collisions exist the queue\n" +
-      "earns its keep — it is worth 3.4 points back — because serialising a node's own transmissions\n" +
-      "removes the overlaps it was causing everybody else. And collisions are paid in latency before\n" +
-      "delivery: a lost packet is re-sent into an idle radio four seconds later, so p95 moves first.\n" +
-      "Carrier sense is the third arm and the surprising one: it removes almost every collision a\n" +
-      "node can hear (§12.10) and still loses delivery under load, because waiting is not free."
+    "\nRead: the receiver is where contention lives. With a file in flight a transmitter queue\n" +
+      "alone costs text 2.8 points and receiver collisions alone cost 13.6; both together cost 8.5,\n" +
+      "so once collisions exist the queue earns its keep and is worth 4.9 points back, because\n" +
+      "serialising a node's own transmissions removes the overlaps it was causing everybody else.\n" +
+      "Collisions are paid in latency before delivery, because a lost packet is re-sent into an\n" +
+      "idle radio four seconds later. Carrier sense is the third transmitter arm and the surprising\n" +
+      "one: it removes almost every collision a node can hear (§12.10) and still loses delivery\n" +
+      "under load, because waiting is not free in an engine with no backpressure."
   );
 
   console.log("\n--- carrier sense against queue depth: waiting is not free (docs/08 §12.10) ---");
   console.log(
-    "Both arms with a receiver in them, a 10 MB file in flight, and the transmit queue deepened.\n" +
-      "The intuition is that a deeper queue holds what carrier sense makes you wait for. It does not:\n" +
-      "a packet that waits longer than its own retry timer gets retransmitted while the original is\n" +
-      "still queued, so depth converts collisions into load. Bufferbloat, with a 4 s text timer and a\n" +
-      "600 ms media timer as the mechanism."
+    "Both transmitters that queue, a receiver in the model, a 10 MB file in flight, and the transmit\n" +
+      "queue deepened. The intuition is that a deeper queue holds what carrier sense makes you wait\n" +
+      "for. It does not: depth holds packets past the point where anybody is waiting for them, so the\n" +
+      "transfer slows and the text tail grows. Retry timers now start when a packet goes on air\n" +
+      "(§12.11), so this is queueing delay rather than duplicate load — and it is still monotonic."
   );
   console.log("transmitter  depth   delivery   p95 ms   parked  captured  deaf  queue drops  deferred   file");
   for (const access of ["halfDuplex", "csma"] as ChannelAccess[]) {
@@ -1281,14 +1282,16 @@ function priorityTable(): void {
   }
 
   console.log(
-    "\nRead: promoting acknowledgements is what pays — an ACK is ~100 bytes and it releases the\n" +
-      "next chunk, so letting it overtake 64 KB slices takes 6% off a file that has text to compete\n" +
-      "with and 17% off one that has a note to compete with, and text delivery moves the same way.\n" +
-      "Promoting voice on top of that buys the file another 24% (bulk chunks are now the lowest\n" +
-      "class of all) and costs text about a point when a note is in flight. What it does not do is\n" +
-      "rescue push-to-talk: the note's own air time is the bottleneck at three hops, and no queue\n" +
-      "order creates air time. An SOS is unaffected in every arm, because four floods of a 100-byte\n" +
-      "packet are not what a busy radio is waiting on."
+    "\nRead: no ordering is free, and each one trades a flow against another. Promoting\n" +
+      "acknowledgements buys text 1.1 points of delivery and 158 ms of p95 and charges the file\n" +
+      "14% for it, because every slice an ACK overtakes is a slice the transfer waits for.\n" +
+      "Promoting voice and an SOS on top of that is the best arm for a note competing with a\n" +
+      "file — 49.26 s of play delay against 1.33 min, and the file itself is fastest there too,\n" +
+      "because bulk chunks are the lowest class of all — and it costs 1.7 points of text delivery\n" +
+      "when a note is in flight instead. What none of them do is rescue push-to-talk on its own:\n" +
+      "the note's air time is the bottleneck at three hops, and no queue order creates air time.\n" +
+      "An SOS is unaffected in every arm, because four floods of a 100-byte packet are not what a\n" +
+      "busy radio is waiting on. Arrival order ships."
   );
 }
 

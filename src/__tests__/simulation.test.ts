@@ -2633,7 +2633,7 @@ describe("which packet a busy radio takes next (docs/08 §12.8)", () => {
     return { sim, file };
   }
 
-  it("lets a voice note overtake the bulk transfer, and only when asked to", () => {
+  it("lets a voice note overtake the bulk transfer, and charges the transfer for it", () => {
     const arms = (["fifo", "class"] as const).map((priority) => {
       const { sim, file } = busyRadio(priority, (s, a, b) => {
         s.sendVoice(a, b, 5, { stream: true });
@@ -2654,17 +2654,19 @@ describe("which packet a busy radio takes next (docs/08 §12.8)", () => {
     });
     const [fifo, cls] = arms;
 
-    // Arrival order: under FIFO the note's frames sit behind the chunks already queued,
-    // so the note finishes when the file does.
-    expect(fifo.noteFirst).toBe(false);
-    expect(fifo.framesBeforeFile).toBeLessThan(fifo.frames);
-    // Under `class` the same ten frames all go first and the note is done 9 s sooner.
-    expect(cls.noteFirst).toBe(true);
+    // Under FIFO the note's frames sit behind the chunks already queued, so it takes as long
+    // as the transfer does to clear them; under `class` the same ten frames go first and the
+    // note is done less than half as long after it started (6.1 s against 13.6 s).
+    expect(fifo.framesBeforeFile).toBe(fifo.frames);
     expect(cls.framesBeforeFile).toBe(cls.frames);
-    expect(cls.noteSeconds).toBeLessThan(fifo.noteSeconds - 5);
+    expect(cls.noteSeconds).toBeLessThan(fifo.noteSeconds / 2);
+    // The frames that jump the queue are frames the file did not send, so the transfer is
+    // not the winner here either way — it just finishes sooner when the note is done with
+    // the radio (16.3 s against 21.4 s).
+    expect(cls.noteFirst).toBe(true);
   });
 
-  it("promoting acknowledgements is what pays for the bulk transfer", () => {
+  it("promoting acknowledgements moves them, and the bulk transfer pays for it", () => {
     const arms = (["fifo", "ackFirst"] as const).map((priority) => {
       const { sim, file } = busyRadio(priority, (s, a, b) => {
         s.sendMessage(a, b, "probe-ack", "ack");
@@ -2680,12 +2682,17 @@ describe("which packet a busy radio takes next (docs/08 §12.8)", () => {
     });
     const [fifo, ackFirst] = arms;
 
+    // The mechanism: an ACK handed to the radio after six 64 KB chunks goes on air after
+    // two of them instead of after all eight.
     expect(ackFirst.chunksBeforeAck).toBeLessThan(fifo.chunksBeforeAck);
-    // An ACK is ~100 bytes and it releases the next chunk, so letting it overtake six
-    // 64 KB slices takes 17% off the transfer — the same direction the three-seed campus
-    // measurement shows (200 s -> 189 s with text competing, 225 s -> 186 s with a note).
-    expect(ackFirst.fileSeconds).toBeLessThan(fifo.fileSeconds);
-    expect(ackFirst.fileSeconds).toBeGreaterThan(fifo.fileSeconds * 0.7);
+    expect(fifo.chunksBeforeAck).toBe(8);
+    expect(ackFirst.chunksBeforeAck).toBe(5);
+    // And the cost, which is why the flag ships off: every slice the ACK overtakes is a
+    // slice the transfer waits for, so the same 2 MB file takes 21.2 s instead of 13.4 s.
+    // The campus measurement (docs/08 §12.8) is the same trade at scale — text delivery
+    // 0.9661 -> 0.9774 and the file 2.12 -> 2.42 min — and it is a trade, not a win.
+    expect(ackFirst.fileSeconds).toBeGreaterThan(fifo.fileSeconds);
+    expect(ackFirst.chunks).toBe(fifo.chunks);
   });
 
   it("is never consulted on the shipped radio, because nothing ever waits there", () => {
@@ -3226,5 +3233,75 @@ describe("carrier sense, and the hidden terminal it cannot fix (docs/08 §12.10)
 
     expect(run("halfDuplex")).toBe(1);
     expect(run("csma")).toBe(1);
+  });
+});
+
+describe("a retry timer cannot run out before the packet exists (docs/08 §12.11)", () => {
+  function lineWorld(over: Partial<SimConfig> = {}): MeshSimulation {
+    const sim = new MeshSimulation({
+      ...DEFAULT_CONFIG,
+      nodeCount: 2,
+      stationaryRatio: 1,
+      chargingRatio: 0,
+      trafficIntervalMs: 0,
+      enableSuperElection: false,
+      warmupMs: 0,
+      obstacles: [],
+      ...over,
+    });
+    sim.nodes.forEach((node, i) => {
+      node.pos = { x: 10 + i * 20, y: 10 };
+      node.target = { x: 10 + i * 20, y: 10 };
+      node.mobility = 0;
+      node.isOnline = true;
+      node.battery = 1;
+    });
+    sim.runFor(20000);
+    sim.clearRecords();
+    return sim;
+  }
+
+  /** Three messages into one radio at once. Each air time is about 440 ms with jitter, so
+   *  the third of them waits roughly 888 ms for the medium — longer than the 600 ms timer
+   *  it is measured against below, and shorter than the 4 s one that ships for text. */
+  function burst(ackTimeoutMs: number) {
+    const sim = lineWorld({ channelAccess: "halfDuplex", ackTimeoutMs });
+    const a = sim.nodes[0].id;
+    const b = sim.nodes[1].id;
+    for (let i = 0; i < 3; i++) sim.sendMessage(a, b, `t-${i}`, "text");
+    let elapsed = 0;
+    while (
+      sim.deliveries.filter((d) => d.to === b && d.type === "text").length < 3 &&
+      elapsed < 30000
+    ) {
+      sim.runFor(100);
+      elapsed += 100;
+    }
+    const stats = sim.refresh();
+    return {
+      deferMs: stats.channelDeferMs,
+      retries: stats.retriesSent,
+      delivered: sim.deliveries.filter((d) => d.to === b && d.type === "text").length,
+    };
+  }
+
+  it("measures silence after a transmission, not after a hand-over", () => {
+    const timed = burst(600);
+
+    // The queue really does hold a packet longer than the timer: 888 ms of waiting against
+    // a 600 ms clock. Before this fix the clock started when the message was handed to the
+    // radio, so the third message timed out at 600 ms — 288 ms before it ever went on air —
+    // and was retransmitted while its original was still queued. That duplicate is the
+    // mechanism §12.10 measured as "waiting turns into load".
+    expect(timed.deferMs).toBeGreaterThan(600);
+    expect(timed.retries).toBe(0);
+    expect(timed.delivered).toBe(3);
+
+    // And the timer still does its job when there is genuine silence: at 300 ms, which is
+    // shorter than one round trip on this radio, packets really do go unacknowledged and
+    // really are retransmitted.
+    const short = burst(300);
+    expect(short.retries).toBeGreaterThan(0);
+    expect(short.delivered).toBe(3);
   });
 });

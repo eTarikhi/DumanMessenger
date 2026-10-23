@@ -542,24 +542,34 @@ Stated so no number above is read as more than it is:
 
 §9's null result is a property of the model, and §11 named it as the largest limitation
 here: with no shared medium, a transmission occupies no exclusive resource, so media has
-no mechanism by which it could compete with text. This section closes that gap behind a
-flag — `channelAccess` — and re-measures the same questions on the radio a phone actually
-has.
+no mechanism by which it could compete with text. This section closes that gap behind
+flags — `channelAccess` and `channelCapture` — and re-measures the same questions on the
+radio a phone actually has.
 
-`"free"` ships and is the default: an infinitely wide radio, exactly what every number in
-this document so far was measured under, byte-identical golden vectors included.
-`"halfDuplex"` gives each device one transmitter doing one thing at a time. Packets join a
-bounded FIFO (`channelQueueDepth`, 8) and go on air when the radio comes free; when the
-FIFO is full the newest packet is dropped, because a real radio sheds load rather than
-promising air time it does not have. Air time is what §2 already computes: hop latency plus
-serialization plus jitter — and a packet that is *lost* still occupied the radio for all of
-it. Two things remain unmodelled, both in the optimistic direction: a busy **receiver** can
-still take a packet (no capture effect), and packets waiting their turn do not collide.
+> **Every number in this section was measured twice.** The first pass was taken with a
+> retry timer that started when a packet was handed to the radio instead of when it went
+> on air, which under a queued radio retransmitted packets that had not been transmitted
+> yet and made queueing look substantially worse than it is. §12.11 documents the defect
+> and what each table said before it was fixed; the tables below are the corrected ones.
+
+`channelAccess: "free"` ships and is the default: an infinitely wide radio, exactly what
+every number in this document before §12 was measured under, golden vectors byte-identical
+included. `"halfDuplex"` gives each device one transmitter doing one thing at a time —
+packets join a bounded FIFO (`channelQueueDepth`, 8), go on air when the radio comes free,
+and are dropped at the tail when it is full, because a real radio sheds load rather than
+promising air time it does not have. `"csma"` adds carrier sense on top of that (§12.10).
+Air time is what §2 already computes — hop latency plus serialization plus jitter — and a
+packet that is *lost* still occupied the radio for all of it.
+
+`channelCapture` is the receiver. `"none"` ships: a busy receiver takes everything.
+`"first"` locks the receiver onto whichever packet arrived first and makes a transmitting
+node deaf (§12.9). Both are modelled as losses, not deferrals, because that is what a
+collision is.
 
 ### 12.1 Two wrong implementations, kept on the record
 
-The flag took three attempts, and the first two failures are more instructive than the
-result.
+The transmitter flag took three attempts, and the first two failures are more instructive
+than the result.
 
 **Committing air time instead of queueing it.** The first implementation let `transmit()`
 schedule a delivery at `max(now, radioFreeAt)` and push `radioFreeAt` forward, for both
@@ -580,31 +590,31 @@ different cause: 0.37 delivery, no media. Both are pinned by tests now
 
 ### 12.2 One file, alone: the window's parallelism was imaginary
 
-10 MB, one transfer, nothing else in the world, mean of the probe's pair selection:
+10 MB, one transfer, nothing else in the world:
 
 | hops | `free` | `halfDuplex` | throughput | dropped |
 |---|---|---|---|---|
-| 1 | **7.60 s** | **1.45 min** | 11,039 → 962 kbit/s | 0 → 239 |
-| 2 | 17.99 s | 2.21 min | 4,663 → 632 kbit/s | 0 → 449 |
-| 3 | 33.00 s | 3.97 min | 2,542 → 352 kbit/s | 0 → 6,235 |
+| 1 | **7.60 s** | **1.50 min** | 11,039 → 930 kbit/s | 0 → 198 |
+| 2 | 17.99 s | 2.31 min | 4,663 → 606 kbit/s | 0 → 388 |
+| 3 | 33.00 s | 4.44 min | 2,542 → 315 kbit/s | 0 → 6,698 |
 
 §4 measured the sliding window as the lever that turns 31.98 s into 2.06 s — 15.5×. That
 was four transmissions happening *at once*, which one radio cannot do:
 
 | window | `free`, 1 hop | `halfDuplex`, 1 hop | dropped |
 |---|---|---|---|
-| 1 | 31.98 s | 1.78 min | 20 |
-| 2 | 15.31 s | 1.84 min | 36 |
-| 4 | 7.60 s | 1.45 min | 239 |
-| 8 | 3.82 s | 1.32 min | 270 |
-| 16 | 2.06 s | 1.11 min | 368 |
+| 1 | 31.98 s | 1.53 min | 72 |
+| 2 | 15.31 s | 1.64 min | 67 |
+| 4 | 7.60 s | 1.50 min | 198 |
+| 8 | 3.82 s | 1.27 min | 299 |
+| 16 | 2.06 s | 1.22 min | 323 |
 
-On a real radio the same sweep is worth **1.6× instead of 15.5×**, and what it is worth is
+On a real radio the same sweep is worth **1.25× instead of 15.5×**, and what it is worth is
 only ACK-latency hiding — the radio was always going to spend the same air time. Note the
 drop column: depth does not merely stop paying, it starts costing, because a deeper window
-commits more chunks than the queue can hold and the transfer retransmits them. On the
-2-node pair the tests pin, window 1 → 4 is 3.8× under `free` and 1.1× under `halfDuplex`,
-while the whole transfer is 10× slower.
+commits more chunks than the queue can hold and the transfer retransmits them. On the 2-node
+pair the tests pin, window 1 → 4 is 3.8× under `free` (35.0 s → 9.2 s) and **1.02×** under
+`halfDuplex` (92.3 s → 90.2 s), while the whole transfer is 9.8× slower.
 
 ### 12.3 Voice: the capture clock is the limit, not the codec
 
@@ -617,15 +627,14 @@ one retransmission starts a queue that never drains), and impossible at three.
 | hops | `free` play delay | `halfDuplex` play delay | underruns |
 |---|---|---|---|
 | 1 | 488 ms | **449 ms** | 0 → 0 |
-| 2 | 1.22 s | **51.56 s** | 3 → 29 |
+| 2 | 1.22 s | **54.59 s** | 3 → 29 |
 | 3 | 1.17 s | unfinished in 150 s | 2 → 27 |
 
 The 30 s note at three hops on the campus world did not finish inside the probe's 150 s
-budget. On the quiet 4-node line the tests use, a 10 s note finishes — 17.8 s after the
-user let go, against 757 ms under `free`, a 23× difference — and a 30 s note finishes 60.6 s
-after release, i.e. it takes three times the length of the note to deliver the note.
-Nothing is lost; every frame arrives. It arrives long after it was worth hearing, which is
-a different failure and a worse one for push-to-talk.
+budget. On the quiet 4-node line the tests use, a 10 s note finishes — **26.8 s after the
+user let go**, against 0.76 s under `free`, a 35× difference — and at one hop both models
+are identical at 0.20 s. Nothing is lost; every frame arrives. It arrives long after it was
+worth hearing, which is a different failure and a worse one for push-to-talk.
 
 ### 12.4 The §9 A/B again, on a real radio
 
@@ -635,53 +644,54 @@ nothing competes:
 
 | | `free` quiet | `free` + 10 MB | `halfDuplex` quiet | `halfDuplex` + 10 MB |
 |---|---|---|---|---|
-| delivery ratio | 0.9944 | 0.9944 | **0.9831** | **0.9548** |
-| within 5 hops | 0.9944 | 0.9944 | 0.9774 | 0.9435 |
-| p95 latency | 4,472 ms | 3,275 ms | 5,077 ms | 7,954 ms |
-| retries sent | 11 | 59 | 17 | 272 |
-| messages parked | 1.0 | 1.0 | 4.0 | 12.3 |
-| queue drops | 0 | 0 | 248 | 2,409 |
-| deferred air time | 0 | 0 | 17.3 min | 46.8 min |
+| delivery ratio | 0.9944 | 0.9944 | **0.9831** | **0.9661** |
+| within 5 hops | 0.9944 | 0.9944 | 0.9774 | 0.9605 |
+| p95 latency | 4,472 ms | 3,275 ms | 4,669 ms | 9,079 ms |
+| relay transmissions | 1,728 | 5,311 | 1,400 | 2,981 |
+| retries sent | 11 | 59 | 13 | 309 |
+| messages parked | 1.0 | 1.0 | 1.3 | 5.0 |
+| queue drops | 0 | 0 | 209 | 2,672 |
+| deferred air time | 0 | 0 | 14.8 min | 42.5 min |
 
 Two things to read carefully. Text alone is barely hurt by having a real radio (0.9944 →
 0.9831): 250-byte packets are short, and a 20-node campus at one message per two seconds is
-nowhere near the air-time budget. **A 10 MB file costs 2.8 points of delivery, 3.4 points of
-within-5, and 2.9 s of p95** — so §9's conclusion holds exactly as far as its model does,
+nowhere near the air-time budget. **A 10 MB file costs 1.7 points of delivery, 1.7 points of
+within-5, and 4.4 s of p95** — so §9's conclusion holds exactly as far as its model does,
 and no further.
 
-### 12.5 So is a load gate motivated? Yes — and it is the window, not the chunk size
+### 12.5 So is a load gate motivated? Yes, and it costs something
 
 With the transfer allowed to finish, so both sides of the trade are one experiment:
 
 | | delivery | within 5 | p95 | parked | file time | dropped |
 |---|---|---|---|---|---|---|
-| no file | 0.9831 | 0.9774 | 5,077 ms | 4.0 | — | 248 |
-| file, window 4 (ships) | **0.9548** | 0.9435 | 7,954 ms | 12.3 | 3.33 min | 2,409 |
-| file, window 1 | **0.9887** | 0.9831 | 7,047 ms | 7.0 | **3.30 min** | 2,191 |
+| no file | 0.9831 | 0.9774 | 4,669 ms | 1.3 | — | 209 |
+| file, window 4 (ships) | **0.9661** | 0.9605 | 9,079 ms | 5.0 | **2.12 min** | 2,672 |
+| file, window 1 | **0.9774** | 0.9774 | 6,123 ms | 3.0 | 3.10 min | 1,810 |
 
-Committing one chunk at a time instead of four recovers **all** of the lost delivery — it
-lands slightly *above* the no-file arm, which is within one message of noise and should be
-read as "back to baseline" — and costs **nothing** in file time, because the air time was
-serial anyway. That is the whole gate: no load sensor, no policy engine, one integer.
+Committing one chunk at a time instead of four recovers most of the lost delivery (0.9661 →
+0.9774, against a no-file baseline of 0.9831) and a third of the p95 — and it charges the
+sender **46% more transfer time** for it, 2.12 → 3.10 min. That is the whole gate: no load
+sensor, no policy engine, one integer, and a trade rather than a free win. Before §12.11's
+fix this looked free (3.33 → 3.30 min), which is worth remembering the next time a knob
+appears to cost nothing.
 
-The intuitive alternative is wrong, and worth recording because it is the first thing an
-engineer reaches for. Slicing the file smaller interleaves text *between* chunks instead of
-*behind* them:
+The intuitive alternative is still wrong, and more clearly now:
 
 | chunk | delivery | p95 | file time | dropped |
 |---|---|---|---|---|
-| 64 KB (ships) | 0.9548 | 7,954 ms | 3.33 min | 2,409 |
-| 16 KB | 0.9774 | 8,867 ms | **10.74 min** | 3,447 |
-| 4 KB | 0.9718 | **16,839 ms** | unfinished in 15 min | 2,609 |
+| 64 KB (ships) | 0.9661 | 9,079 ms | **2.12 min** | 2,672 |
+| 16 KB | 0.9605 | 7,514 ms | 9.25 min | 2,949 |
+| 4 KB | 0.9605 | 7,560 ms | unfinished in 15 min | 2,817 |
 
-Adaptive fragmentation buys ~2 points of delivery and pays 3.2× in file time and 2.1× in
-p95, and at 4 KB the transfer never finishes. The reason is §2's own arithmetic: air time is
-`base + serialization + jitter`, and at 64 KB on Wi-Fi the fixed part (40 ms hop latency +
-~125 ms jitter) is six times the serialization part (26 ms). Slicing 16× finer barely
-reduces the air time of a byte and multiplies the fixed cost 16×: 10 MB is 30.6 s of air as
-160 chunks and 427 s as 2,560. **Being polite in smaller pieces is not cheaper; it is much
-more expensive.** The unit of politeness is how far ahead you commit, not how big you
-commit.
+Adaptive fragmentation buys p95 and nothing else: 4.4× the transfer time at 16 KB, an
+unfinished transfer at 4 KB, and delivery that does not improve. The reason is §2's own
+arithmetic — air time is `base + serialization + jitter`, and at 64 KB on Wi-Fi the fixed
+part (40 ms hop latency + ~125 ms jitter) is six times the serialization part (26 ms).
+Slicing 16× finer barely reduces the air time of a byte and multiplies the fixed cost 16×:
+10 MB is 30.6 s of air as 160 chunks and 427 s as 2,560. **Being polite in smaller pieces is
+not cheaper; it is much more expensive.** The unit of politeness is how far ahead you commit,
+not how big you commit.
 
 ### 12.6 The acceptance gates under a real radio
 
@@ -689,56 +699,56 @@ Same 20-node campus, same three seeds, no media:
 
 | gate | `free` | `halfDuplex` | skills/02 and /08 want |
 |---|---|---|---|
-| delivery ratio | 0.9889 | **0.9556** | ≥ 0.90 ✓ |
-| within 5 hops | 0.9889 | 0.9556 | ≥ 0.90 ✓ |
-| overhead vs flood-all | 9.3 % | **38.6 %** | ≤ 70 % ✓ |
+| delivery ratio | 0.9889 | **0.9444** | ≥ 0.90 ✓ |
+| within 5 hops | 0.9889 | 0.9389 | ≥ 0.90 ✓ |
+| overhead vs flood-all | 9.3 % | **35.5 %** | ≤ 70 % ✓ |
 | SUPER ratio | 21.7 % | 25.0 % | 15–25 % ✓ (at the edge) |
 
-The gates still pass, but the numbers are not the same network: overhead quadruples because
-flood-all — which the ratio is measured against — is *also* slowed by the radio, and MPR's
-advantage shrinks when air time rather than packet count is the scarce resource. That is
-the honest reading, and it is why `halfDuplex` is a flag rather than a default: skills/02
+The gates still pass, but the numbers are not the same network: overhead nearly quadruples
+because flood-all — which the ratio is measured against — is *also* slowed by the radio, and
+MPR's advantage shrinks when air time rather than packet count is the scarce resource. That
+is the honest reading, and it is why `halfDuplex` is a flag rather than a default: skills/02
 and skills/08 were written against a model with no channel, and changing the shipped model
 would silently redefine every acceptance number in the roadmap.
 
 ### 12.7 What ships, and what would change it
 
-* `channelAccess: "free"` and `channelQueueDepth: 8` are in `DEFAULT_CONFIG`, and `free` is
-  inert by construction: no counters move, no random draw changes order, golden vectors are
+* `channelAccess: "free"`, `channelQueueDepth: 8`, `channelPriority: "fifo"` and
+  `channelCapture: "none"` are in `DEFAULT_CONFIG`, and the shipped combination is inert by
+  construction: no counters move, no random draw changes order, golden vectors are
   byte-identical.
-* If the team decides the real radio is the model to plan against, the one change with
-  evidence behind it is **`transferWindow: 1`** (§12.5) — free in file time, worth 2.8
-  points of everybody else's delivery.
+* If the team decides the real radio is the model to plan against, the changes with evidence
+  behind them are **`transferWindow: 1`** (§12.5) — worth 1.1 points of everybody else's
+  delivery and a third of the p95, for 46% more transfer time — and nothing else. The queue
+  discipline (§12.8) and carrier sense (§12.10) are both trades or losses.
 * Push-to-talk beyond two hops needs a decision, not a parameter: at three hops a streamed
   note cannot keep up with its own capture clock on one radio (§12.3). Either the path is
   capped at two hops for streaming and longer notes are sent as blobs, or voice gets
-  priority in the transmit queue — which this model does not implement, and which would be
-  the next thing to measure.
-* Voice priority in the transmit queue **is** implemented and measured (§12.8), and it does
-  not do what it was for: it cannot rescue push-to-talk beyond two hops. It ships off.
-* The receiver is modelled separately, by `channelCapture` (§12.9), and it is where most of
-  the contention turns out to live. Carrier sense is modelled too, as `channelAccess: "csma"`
-  (§12.10), and measured as a loss under load. What remains unmodelled: a capture effect that
-  compares signal strengths rather than arrival order, a contention window with random backoff,
-  RTS/CTS for the hidden terminal, and backpressure from the radio to the layers above it —
-  which §12.10 argues is the one that matters.
+  priority in the transmit queue — which §12.8 measures, and which does not rescue it.
+* The receiver is modelled by `channelCapture` (§12.9) and it is where most of the contention
+  lives. Carrier sense is modelled too (§12.10) and is the pessimistic arm.
+* Still unmodelled, with the direction of each error named: a capture effect that compares
+  signal strengths rather than arrival order (optimistic), a contention window with random
+  backoff (pessimistic — two nodes that defer for each other are separated only by event
+  ordering), RTS/CTS for the hidden terminal (optimistic, and a test pins that carrier sense
+  cannot fix it), and backpressure from the radio to the layers above it (§12.10's verdict:
+  the missing half).
 
 ### 12.8 Which packet a busy radio takes next
 
-Once packets wait, the order they wait in is a design decision, and the obvious one is
-wrong. `channelPriority` has three settings: `"fifo"` (arrival order, ships), `"ackFirst"`
-(acknowledgements jump the queue), and `"class"` (a WMM-like ranking: an SOS and a voice
-frame first, then acknowledgements, then everything else in arrival order — so a text
-message overtakes the 64 KB chunk queued ahead of it). Mean of three seeds on the campus
-world, all under `halfDuplex`:
+Once packets wait, the order they wait in is a design decision. `channelPriority` has three
+settings: `"fifo"` (arrival order, ships), `"ackFirst"` (acknowledgements jump the queue),
+and `"class"` (a WMM-like ranking: an SOS and a voice frame first, then acknowledgements,
+then everything else in arrival order — so a text message overtakes the 64 KB chunk queued
+ahead of it). Mean of three seeds on the campus world, all under `halfDuplex`:
 
 **Text traffic with a 10 MB file in flight**
 
 | priority | delivery | p95 | file time | queue drops |
 |---|---|---|---|---|
-| `fifo` | 0.9548 | 7,954 ms | 3.33 min | 2,409 |
-| `ackFirst` | **0.9605** | **7,193 ms** | **3.15 min** | 2,545 |
-| `class` | 0.9605 | 7,193 ms | 3.15 min | 2,545 |
+| `fifo` | 0.9661 | 9,079 ms | **2.12 min** | 2,672 |
+| `ackFirst` | **0.9774** | **8,921 ms** | 2.42 min | 2,769 |
+| `class` | 0.9774 | 8,921 ms | 2.42 min | 2,769 |
 
 `class` and `ackFirst` are identical here because nothing but text and chunks is in flight,
 so the two settings make the same choice — a useful check that the ranking is doing what the
@@ -748,55 +758,48 @@ code says.
 
 | priority | note delay after release | underruns | file time |
 |---|---|---|---|
-| `fifo` | 33.29 s | 21.7 | 3.74 min |
-| `ackFirst` | **40.76 s** | 23.3 | 3.09 min |
-| `class` | 33.45 s | 22.0 | **2.40 min** |
+| `fifo` | 40.36 s | 25.3 | 2.86 min |
+| `ackFirst` | **1.33 min** | 29.0 | 2.64 min |
+| `class` | **49.26 s** | **22.7** | **2.47 min** |
 
 **Text with a 30 s note in flight, and an SOS with a file in flight**
 
 | priority | text delivery | SOS mean latency |
 |---|---|---|
-| `fifo` | **0.9658** | 8.33 s |
-| `ackFirst` | 0.9573 | 8.32 s |
-| `class` | 0.9573 | 8.33 s |
+| `fifo` | **0.9487** | 8.39 s |
+| `ackFirst` | 0.9487 | 8.37 s |
+| `class` | 0.9316 | 8.32 s |
 
-Three things follow, and only the first is what the feature was for.
+No ordering is free; each one trades a flow against another, and which trade is right depends
+on what the product is doing at the time.
 
-**Promoting acknowledgements is what pays.** An ACK is about 100 bytes and it is what
-releases the next chunk of somebody's transfer, so letting it overtake a 64 KB slice takes
-5% off a file that has text to compete with and 17% off one that has a note, and text
-delivery and p95 move the same way. The tests pin the mechanism on one radio: with a 2 MB
-transfer already committed, an ACK arrives after 8 chunks under `fifo` and after 5 under
-`ackFirst`, and the transfer finishes in 15.0 s instead of 18.1 s.
+**Promoting acknowledgements** buys text 1.1 points of delivery and 158 ms of p95, and
+charges the file 14% for it — every slice an ACK overtakes is a slice the transfer waits
+for. The tests pin the mechanism on one radio: with a 2 MB transfer already committed, an ACK
+handed to the radio goes on air after 5 chunks instead of 8, and the transfer takes 21.2 s
+instead of 13.4 s.
 
-**Promoting voice buys the file more and the voice nothing.** `class` cuts the same
-note-competed transfer by a further 22% (3.09 → 2.40 min, 36% below `fifo`) because bulk
-chunks are now the lowest class of all — and the note's own delay is unchanged at 33.4 s
-with the same underruns. `ackFirst` alone actually *hurts* the note (33.3 → 40.8 s) because
-voice frames now wait behind acknowledgements. On one radio the tests pin it: a 5 s note
-started while a 2 MB file is in flight finishes at 24.3 s under `fifo`, with 9 of its 10
-frames arriving before the file does, and at **15.4 s** under `class`, with all 10 first.
+**Promoting voice and SOS on top** is the best arm when a note is competing with a file —
+49.26 s of play delay against `ackFirst`'s 1.33 min, and the fastest file of the three,
+because bulk chunks are the lowest class of all — and it costs 1.7 points of text delivery
+when a note is in flight instead. On one radio the tests pin the same trade: a 5 s note
+started while a 2 MB file is committed finishes in 6.1 s under `class` against 13.6 s under
+`fifo`.
 
 **Nothing rescues push-to-talk at three hops.** §12.3's limit is the note's own air time —
 735 ms of radio per 500 ms of capture — and no queue discipline creates air time. Priority
-changes who waits, not how much waiting there is; a note that is over-subscribed on its own
-path stays over-subscribed while everybody else pays for the attempt, which is the 0.9 point
-of text delivery `class` costs when a note is in flight. An SOS is untouched in every arm:
-four floods of a 100-byte packet are not what a busy radio is waiting on.
+changes who waits, not how much waiting there is. An SOS is untouched in every arm: four
+floods of a 100-byte packet are not what a busy radio is waiting on.
 
-So `"fifo"` ships. If the real radio is the model to plan against, the evidence-backed order
-is: window 1 (§12.5), then `"ackFirst"`, and only then `"class"` — and `"class"` should be
-chosen for bulk-transfer speed, not for voice.
+So `"fifo"` ships, and the honest summary is that the queue discipline is a product decision
+rather than an optimisation: `ackFirst` for a mesh carrying text while somebody transfers a
+file, `class` for a mesh where a note is in flight and the file can wait.
 
 ### 12.9 Receiver contention, and why the acceptance gates lose their margin
 
-§12 gave the device one transmitter and left the receiver infinitely attentive: a node on air
-could still hear, and two packets arriving together both landed. `channelCapture` closes both.
-`"first"` — the only setting besides the shipped `"none"` — makes the receiver lock onto
-whichever packet arrived first, and makes a transmitting node deaf. Both are modelled as losses
-rather than deferrals, because that is what a collision is, and neither compares signal
-strengths, so the earlier packet always wins. The flag is independent of `channelAccess`, which
-is what makes the two mechanisms separable:
+`channelCapture: "first"` makes the receiver lock onto whichever packet arrived first, and
+makes a transmitting node deaf. It is independent of `channelAccess`, which is what makes the
+two mechanisms separable:
 
 **60 text messages at 2 s, nothing else** (3 seeds, 20-node campus)
 
@@ -804,8 +807,10 @@ is what makes the two mechanisms separable:
 |---|---|---|---|---|---|---|---|---|
 | `free` | `none` | **0.9944** | 0.9944 | 4,472 ms | 11 | 1.0 | 0 | 0 |
 | `free` | `first` | 0.9831 | 0.9774 | **7,534 ms** | 32 | 8.7 | 661 | 180 |
-| `halfDuplex` | `none` | 0.9831 | 0.9774 | 5,077 ms | 17 | 4.0 | 0 | 0 |
-| `halfDuplex` | `first` | **0.9040** | 0.9040 | 10,550 ms | 52 | 15.3 | 291 | 267 |
+| `halfDuplex` | `none` | 0.9831 | 0.9774 | 4,669 ms | 13 | 1.3 | 0 | 0 |
+| `halfDuplex` | `first` | 0.9718 | 0.9718 | 13,587 ms | 39 | 13.0 | 253 | 233 |
+| `csma` | `none` | 0.9661 | 0.9661 | 11,002 ms | 35 | 5.3 | 0 | 0 |
+| `csma` | `first` | 0.9266 | 0.9266 | 13,294 ms | 49 | 8.0 | 231 | **2** |
 
 **The same traffic with a 10 MB file in flight**
 
@@ -813,35 +818,34 @@ is what makes the two mechanisms separable:
 |---|---|---|---|---|---|---|---|---|---|
 | `free` | `none` | **0.9944** | 3,275 ms | 59 | 1.0 | 0 | 0 | 0 | 10.71 s |
 | `free` | `first` | **0.8588** | 10,314 ms | 379 | 37.3 | 3,625 | 1,256 | 0 | 1.98 min |
-| `halfDuplex` | `none` | 0.9548 | 7,954 ms | 272 | 12.3 | 0 | 0 | 2,409 | 3.33 min |
-| `halfDuplex` | `first` | 0.8927 | 11,681 ms | 310 | 21.0 | 603 | 808 | 1,744 | 3.75 min |
+| `halfDuplex` | `none` | 0.9661 | 9,079 ms | 309 | 5.0 | 0 | 0 | 2,672 | 2.12 min |
+| `halfDuplex` | `first` | 0.9096 | 11,399 ms | 293 | 19.7 | 511 | 693 | 1,441 | 3.28 min |
+| `csma` | `none` | 0.9096 | 28,740 ms | 285 | 16.3 | 0 | 0 | 2,488 | 3.80 min |
+| `csma` | `first` | 0.8757 | 16,212 ms | 296 | 27.7 | 330 | **7** | 2,995 | 3.64 min |
 
 Four things follow.
 
 **The receiver is where contention lives.** With a file in flight, a transmitter queue alone
-costs text 4.0 points of delivery (0.9944 → 0.9548) and receiver collisions alone cost **13.6**
-(0.9944 → 0.8588). §9's null result was not wrong about the transmitter; it was missing the
-larger half of the mechanism. A single radio that can still hear everything is a much friendlier
-network than a radio that cannot.
+costs text 2.8 points of delivery (0.9944 → 0.9661) and receiver collisions alone cost
+**13.6** (0.9944 → 0.8588). §9's null result was not wrong about the transmitter; it was
+missing the larger half of the mechanism.
 
-**Once collisions exist, the queue earns its keep.** Under `"none"` adding a transmitter queue
-costs 4.0 points; under `"first"` adding one *recovers* 3.4 (0.8588 → 0.8927), because
-serialising a node's own transmissions removes the overlaps it was causing everybody else. That
-is the closest thing to a CSMA result in this repository: the discipline is worth having only
-once there is something to collide with, and §12.5's window-1 recommendation still holds on top
-of it.
+**Once collisions exist, the queue earns its keep.** Adding a transmitter queue to a network
+that already has collisions is worth **4.9 points** (0.8588 → 0.9096), because serialising a
+node's own transmissions removes the overlaps it was causing everybody else. That is the
+closest thing to a CSMA result in this repository: the discipline is worth having only once
+there is something to collide with.
 
-**Collisions are paid in latency before delivery.** In a quiet mesh, receiver contention moves
-p95 by +68% (4,472 → 7,534 ms) to cost 1.1 points of delivery, because a collided packet is not
-lost — the sender's ACK timeout re-sends it into an idle radio four seconds later. The unit
-tests pin exactly that: two packets sent to one receiver at the same instant produce one
-collision and *two* deliveries.
+**Collisions are paid in latency before delivery.** In a quiet mesh, receiver contention
+moves p95 by +68% (4,472 → 7,534 ms) to cost 1.1 points of delivery, because a collided
+packet is not lost — the sender's ACK timeout re-sends it into an idle radio. The unit tests
+pin exactly that: two packets sent to one receiver at the same instant produce one collision
+and *two* deliveries.
 
 **Most of the collisions are a node not hearing itself.** With a file in flight under
-`halfDuplex` + `first`, 808 losses are deaf-receiver against 603 first-capture. A real CSMA/CA
-radio defers rather than transmitting blind, so this arm overstates that half of the harm —
-while the missing capture effect (a strong packet surviving a weak one) understates the other.
-The two omissions do not cancel and are not claimed to.
+`halfDuplex` + `first`, 693 losses are deaf-receiver against 511 first-capture. A real
+CSMA/CA radio defers rather than transmitting blind, which is §12.10 — and there the deaf
+count falls to 7.
 
 **And the acceptance gates lose their margin.** The same 20-node campus, three seeds, gates
 measured against a naive flood-all run under the same radio:
@@ -850,99 +854,66 @@ measured against a naive flood-all run under the same radio:
 |---|---|---|---|---|---|---|
 | `free` | `none` (ships) | 0.9889 | 0.9889 | 9.3 % | 21.7 % | 0 |
 | `free` | `first` | **0.9056** | 0.9056 | 15.8 % | 25.0 % | 0 |
-| `halfDuplex` | `none` | 0.9556 | 0.9556 | 38.6 % | 25.0 % | 538 |
-| `halfDuplex` | `first` | **0.9000** | 0.9000 | 27.1 % | 21.7 % | 185 |
+| `halfDuplex` | `none` | 0.9444 | 0.9389 | 35.5 % | 25.0 % | 443 |
+| `halfDuplex` | `first` | **0.8556** | 0.8500 | 25.5 % | 23.3 % | 180 |
+| `csma` | `none` | **0.7944** | 0.7944 | **80.2 %** | 25.0 % | 699 |
+| `csma` | `first` | **0.7389** | 0.7389 | **78.0 %** | 23.3 % | 562 |
 
-skills/02 and skills/08 both ask for delivery ≥ 0.90. Under the two radios that have a receiver
-in them, the campus measures **0.9056** and **0.9000** — the gate is met with nothing to spare.
-Overhead stays comfortably inside 70% in every arm and the SUPER ratio stays inside its band, so
-delivery is the binding criterion and contention is what binds it. That is the most consequential
-number in this document: the roadmap's acceptance gates were calibrated against a radio with no
-contention, and the moment a receiver is added the margin is zero. It is also an argument about
-ordering — `docs/09`'s field test should measure delivery ratio on a real floor before anybody
-tunes anything else, because the simulator can no longer claim headroom it does not have.
-
-Neither flag ships: `channelCapture: "none"` is inert by construction (no counter moves, no
-random draw changes order, golden vectors byte-identical), and the four-arm comparison above is
-what the two flags are for — a decomposition, not a setting to leave on without deciding which
-radio you are claiming to have.
-
-### 12.10 Carrier sense: the mechanism real radios have, and what it is worth here
-
-§12.9 left a radio that transmits blind. BLE and Wi-Fi both listen before they talk, so
-`channelAccess: "csma"` adds exactly that on top of `halfDuplex`: before a queued packet goes
-on air the node checks whether any peer within radio range is transmitting, and waits for the
-medium to come free if one is. There is no contention window, no random backoff and no
-RTS/CTS — three things 802.11 has and this does not, and §12.10's verdict depends on all
-three.
-
-**Quiet mesh** (60 messages at 2 s, 3 seeds, receiver model on in both rows)
-
-| transmitter | delivery | p95 | captured | deaf | queue drops |
-|---|---|---|---|---|---|
-| `halfDuplex` | 0.9040 | 10,550 ms | 291 | 267 | 211 |
-| `csma` | **0.9322** | 15,146 ms | 245 | **3** | 546 |
-
-**With a 10 MB file in flight**
-
-| transmitter | delivery | p95 | captured | deaf | queue drops | file time |
-|---|---|---|---|---|---|---|
-| `halfDuplex` | **0.8927** | 11,681 ms | 603 | 808 | 1,744 | 3.75 min |
-| `csma` | 0.8588 | 17,484 ms | 368 | **8** | 3,232 | 4.71 min |
-
-**It does exactly what it was invented to do.** Self-deafness all but disappears — 808 losses
-become 8 — and first-capture falls 39%, because a node that can hear the medium does not
-transmit into it. The unit test pins the mechanism at its smallest: two nodes sending to each
-other at the same instant produce one deaf loss and one retransmission under `halfDuplex`, and
-zero of each under `csma`, paid for with 573 ms of waiting.
-
-**And whether that is worth anything depends entirely on the load.** In a quiet mesh, where
-collisions are the only problem, listening buys **2.8 points** of delivery. With a file in
-flight it costs **3.4**, and p95 grows half as much again. The reason is that waiting is not
-free: deferring holds packets in a bounded queue while the layers above keep generating them,
-so the queue overflows harder (1,744 → 3,232 drops) and every packet that waits longer than its
-own retry timer — 4 s for text, 600 ms for media — is retransmitted while the original is still
-queued. Carrier sense converts collisions into congestion, and congestion is what this engine's
-retry timers turn into load.
-
-**The gates get worse, not better.** The same 20-node campus, three seeds:
-
-| transmitter | receiver | delivery | within 5 | overhead vs flood-all | SUPER ratio |
-|---|---|---|---|---|---|
-| `free` | `none` (ships) | 0.9889 | 0.9889 | 9.3 % | 21.7 % |
-| `free` | `first` | 0.9056 | 0.9056 | 15.8 % | 25.0 % |
-| `halfDuplex` | `none` | 0.9556 | 0.9556 | 38.6 % | 25.0 % |
-| `halfDuplex` | `first` | 0.9000 | 0.9000 | 27.1 % | 21.7 % |
-| `csma` | `none` | **0.7889** | 0.7889 | **81.3 %** | 25.0 % |
-| `csma` | `first` | **0.7222** | 0.7222 | **77.2 %** | 23.3 % |
-
-Carrier sense fails both gates it is measured against: delivery 0.72-0.79 against ≥0.90, and
-overhead 77-81% against ≤70%. So §12.9's zero margin is the *best* contended case, not the
-worst, and the invitation to read listening as the rescue is declined. One caveat on the
-overhead column, which is a metric artefact rather than a routing result: the ratio's
-denominator is flood-all's transmissions, and under heavy queue shedding flood-all's packets
-are dropped at the tail before they are ever counted, so the denominator shrinks and the ratio
-rises. Overhead-vs-flood-all stops meaning what it meant in a model where every attempted
+skills/02 and skills/08 both ask for delivery ≥ 0.90 and overhead ≤ 70%. Only two of these six
+radios meet the delivery gate — the shipped one, and `free` + `first` with nothing to spare —
+and the two carrier-sense arms fail both gates. So the margin the roadmap's acceptance numbers
+were calibrated on was contention that did not exist. One caveat on the overhead column, which
+is a metric artefact rather than a routing result: the ratio's denominator is flood-all's
+transmissions, and under heavy queue shedding flood-all's packets are dropped at the tail
+before they are ever counted, so the denominator shrinks and the ratio rises.
+Overhead-vs-flood-all stops meaning what it meant in a model where every attempted
 transmission happens.
 
-**Depth is not the fix either.** The obvious response to "the queue overflows" is a bigger
-queue. Same arms, same file in flight, three seeds:
+### 12.10 Carrier sense: the mechanism real radios have, and why it is the pessimistic arm
+
+`channelAccess: "csma"` is `halfDuplex` plus listen-before-talk over peers in range, which is
+what BLE and Wi-Fi both do at the link layer. There is no contention window, no random backoff
+and no RTS/CTS.
+
+| | quiet mesh | with a 10 MB file | deaf losses | first-capture losses | p95 with the file | queue drops |
+|---|---|---|---|---|---|---|
+| `halfDuplex` (transmits blind) | 0.9718 | **0.9096** | 693 | 511 | 11,399 ms | 1,441 |
+| `csma` (listens first) | **0.9266** | 0.8757 | **7** | 330 | 16,212 ms | 2,995 |
+
+**It does exactly what it was invented to do.** Self-deafness all but disappears — 693 losses
+become 7 — and first-capture falls 35%, because a node that can hear the medium does not
+transmit into it. The unit test pins the mechanism at its smallest: two nodes sending to each
+other at the same instant produce one deaf loss and one retransmission under `halfDuplex`, and
+zero of each under `csma`, paid for with 573 ms of waiting. A second test pins what it cannot
+do: in a three-node line the two end nodes are 40 m apart and out of each other's range but
+both in range of the middle one, and the collision survives `csma` exactly as it survives
+`halfDuplex`. That is the hidden terminal, and RTS/CTS is what exists for it.
+
+**And it is still the pessimistic arm.** Under load, listening costs delivery (0.9096 →
+0.8757 with a file, 0.9718 → 0.9266 quiet) and p95 grows 42%, because waiting is not free:
+deferring holds packets in a bounded queue while the layers above keep generating them, so the
+queue overflows harder (1,441 → 2,995 drops). On the gates it is the worst of the six radios
+(0.7389-0.7944 delivery, 78-80% overhead).
+
+**Depth is not the fix.** The obvious response to "the queue overflows" is a bigger queue.
+Same arms, same file in flight, three seeds:
 
 | transmitter | depth | delivery | p95 | parked | queue drops | deferred air time | file time |
 |---|---|---|---|---|---|---|---|
-| `halfDuplex` | 8 | 0.8927 | 11,681 ms | 21.0 | 1,744 | 30.9 min | 3.75 min |
-| `halfDuplex` | 32 | **0.9266** | 14,960 ms | 23.0 | 1,085 | 79.7 min | 3.97 min |
-| `halfDuplex` | 128 | 0.8305 | 20,934 ms | 64.7 | 2,161 | 235.4 min | 10.18 min |
-| `csma` | 8 | 0.8588 | 17,484 ms | 36.3 | 3,232 | 78.2 min | 4.71 min |
-| `csma` | 32 | 0.7458 | 37,552 ms | 27.0 | 2,774 | 275.5 min | 6.90 min |
-| `csma` | 128 | **0.6667** | 57,163 ms | 57.3 | 3,009 | **450.1 min** | 16.44 min |
+| `halfDuplex` | 8 | **0.9096** | 11,399 ms | 19.7 | 1,441 | 26.1 min | 3.28 min |
+| `halfDuplex` | 32 | 0.8588 | 14,432 ms | 27.0 | 1,434 | 78.6 min | 3.87 min |
+| `halfDuplex` | 128 | 0.8588 | 19,533 ms | 23.3 | 1,334 | 208.7 min | 8.18 min |
+| `csma` | 8 | **0.8757** | 16,212 ms | 27.7 | 2,995 | 67.4 min | 3.64 min |
+| `csma` | 32 | 0.7966 | 38,597 ms | 48.7 | 2,969 | 227.4 min | 7.12 min |
+| `csma` | 128 | 0.7062 | 55,055 ms | 65.7 | 2,799 | **429.4 min** | 16.96 min |
 
-Blind transmission tolerates one step of depth (0.8927 → 0.9266 at 32) and then collapses;
-listening degrades monotonically, and at 128 the deferred air time totals seven and a half
-hours across three 60-node runs — the mesh spends its whole life waiting for a radio horizon
-that keeps moving. This is bufferbloat with a discrete-event clock, and it is the same runaway
-§12.1 hit by accident, now reachable on purpose through a config knob. The mechanism is
-identical: a wait longer than a retry timer produces a duplicate, and a duplicate is more load.
+Monotonic in both arms, and at depth 128 the deferred air time totals seven hours across three
+60-node runs — the mesh spends its whole life waiting for a radio horizon that keeps moving.
+This is bufferbloat with a discrete-event clock, and it is the same runaway §12.1 hit by
+accident, now reachable on purpose through a config knob. Since §12.11 the retry timers start
+when a packet goes on air, so what depth buys is no longer duplicate load — it is plain delay,
+and plain delay is still worse than a dropped packet, because a dropped packet is retried and a
+delayed one is waited for.
 
 **What would change the verdict**, in order of how much it matters here:
 
@@ -953,18 +924,57 @@ identical: a wait longer than a retry timer produces a duplicate, and a duplicat
    refinement; this is the missing half.
 2. **A contention window with random backoff**, which is 802.11's answer to two nodes that
    defer for each other. Without it, symmetry is broken only by event ordering.
-3. **RTS/CTS**, for the hidden terminal that carrier sense provably cannot fix: in the unit
-   test's three-node line, the two end nodes are 40 m apart and out of each other's range but
-   both in range of the middle one, and the collision survives `csma` exactly as it survives
-   `halfDuplex`.
+3. **RTS/CTS**, for the hidden terminal that carrier sense provably cannot fix.
 
-**Verdict:** implemented, measured, not shipped — `channelAccess` stays `"free"` and the
-receiver stays `"none"`, so the golden vectors and every acceptance number in this repository
-are untouched. The number to carry into the platform work is the pair: carrier sense removes
-self-deafness completely and is worth **+2.8 points in a quiet mesh and −3.4 under load**, and
-the entire difference between those two is a queueing question that a simulator without
+**Verdict:** implemented, measured, not shipped. The number to carry into the platform work is
+the pair: carrier sense removes self-deafness completely (693 → 7) and still costs delivery
+under load, and the reason it costs is a queueing question that a simulator without
 backpressure cannot answer honestly. If the field test shows a real floor behaving like the
 loaded arm, the fix is not in the radio model — it is in the layers above it.
+
+### 12.11 The defect the channel model found in the retry timer
+
+Every table above was measured twice, and the difference is a defect in the engine rather than
+a modelling choice.
+
+`sendMessage` scheduled the ACK timeout at the moment a message was handed over, and the
+retransmission fired from that instant. Under `channelAccess: "free"` the two instants are the
+same — a packet goes on air the moment it is handed to the radio — so nothing in §1-§11 was
+affected, and the golden vectors do not move. Under a queued radio they are not the same: a
+packet can sit in the transmit FIFO for hundreds of milliseconds or, with a file in flight, for
+minutes. A timer that starts at hand-over then expires *before the packet has been
+transmitted*, retransmits it, and puts a duplicate into the same saturated queue behind the
+original. The retry timer measured the queue instead of measuring the silence.
+
+The fix is one rule: **a retry timer measures silence after a transmission, so it starts when
+the packet goes on air.** `pendingAcks` records the instant the originator's own copy left, and
+the timeout handler reschedules to that instant plus the timeout if the silence has not elapsed
+yet. The reschedule is pushed as an absolute deadline rather than `now + remainder`, because
+recomputing a remainder accumulates float error and a remainder of 1e-13 ms reschedules the
+same event forever — the first version of the fix hung the test suite, which is its own kind of
+evidence. A test pins the behaviour: three messages into one radio with a 600 ms timer wait
+888 ms between them and produce **zero** retransmissions, while the same burst with a 300 ms
+timer — shorter than one round trip on that radio — produces four, so the timer still fires when
+there is genuine silence.
+
+What it changed, because the direction matters more than the magnitude:
+
+| claim | before the fix | after |
+|---|---|---|
+| a 10 MB file costs text (§12.4) | 2.8 points | **1.7 points** |
+| window 1 instead of 4 (§12.5) | free: 3.33 → 3.30 min | **costs 46%**: 2.12 → 3.10 min |
+| promoting acknowledgements (§12.8) | paid: file 3.33 → 3.15 min | **costs**: file 2.12 → 2.42 min |
+| `halfDuplex` gates (§12.6) | 0.9556 delivery, 38.6% overhead | 0.9444, 35.5% |
+| `halfDuplex` + `first` gates (§12.9) | 0.9000 delivery | **0.8556** |
+| a voice note against a file (§12.8) | 33.3 s play delay | 40.4 s |
+| 10 MB at three hops, alone (§12.2) | 3.97 min | 4.44 min |
+
+Two of the day's conclusions reversed: the load gate stopped being free, and promoting
+acknowledgements stopped paying for itself. Both had been measured correctly, of the wrong
+engine — one whose retry timer was manufacturing the load that made queueing look expensive.
+That is the same class of error as §9's confounded A/B, and the same lesson: a measurement is
+only as good as the model's bookkeeping, and a model that gains a queue has to re-check
+everything that assumed there wasn't one.
 
 ## 13. Reproducing
 

@@ -20,6 +20,7 @@ void main() {
     int channelQueueDepth = 8,
     ChannelPriority channelPriority = ChannelPriority.fifo,
     ChannelCapture channelCapture = ChannelCapture.none,
+    double ackTimeoutMs = 4000,
   }) {
     final sim = MeshSimulation(SimConfig(
       nodeCount: n,
@@ -33,6 +34,7 @@ void main() {
       channelQueueDepth: channelQueueDepth,
       channelPriority: channelPriority,
       channelCapture: channelCapture,
+      ackTimeoutMs: ackTimeoutMs,
     ));
     for (var i = 0; i < sim.nodes.length; i++) {
       final node = sim.nodes[i];
@@ -414,5 +416,42 @@ void main() {
       expect(stats.channelDeafRx, 0);
       expect(stats.totalForwarded, greaterThan(100));
     }
+  });
+
+  test('a retry timer measures silence after a transmission, not after a hand-over', () {
+    /// Three messages into one radio at once. Each air time is about 440 ms with jitter, so
+    /// the third waits roughly 888 ms for the medium — longer than the 600 ms clock it is
+    /// measured against below, and shorter than the 4 s one that ships for text.
+    ({double deferMs, int retries, int delivered}) burst(double ackTimeoutMs) {
+      final sim = lineWorld(
+          n: 2,
+          channelAccess: ChannelAccess.halfDuplex,
+          ackTimeoutMs: ackTimeoutMs);
+      final a = sim.nodes[0].id;
+      final b = sim.nodes[1].id;
+      for (var i = 0; i < 3; i++) {
+        sim.sendMessage(a, b, 't-$i');
+      }
+      int texts() =>
+          sim.deliveries.where((d) => d.to == b && d.type == MsgType.text).length;
+      runUntil(sim, () => texts() >= 3, 30000);
+      final st = sim.refresh();
+      return (deferMs: st.channelDeferMs, retries: st.retriesSent, delivered: texts());
+    }
+
+    final timed = burst(600);
+    // The queue really does hold a packet longer than the timer, and nothing is
+    // retransmitted for it, because there is no silence to measure until the packet leaves.
+    // Before docs/08 §12.11 the clock started at hand-over, so the third message timed out
+    // 288 ms before it ever went on air and was sent again into the same saturated queue.
+    expect(timed.deferMs, greaterThan(600.0));
+    expect(timed.retries, 0);
+    expect(timed.delivered, 3);
+
+    // And the timer still does its job when there is genuine silence: 300 ms is shorter than
+    // one round trip on this radio, so packets really do go unacknowledged.
+    final short = burst(300);
+    expect(short.retries, greaterThan(0));
+    expect(short.delivered, 3);
   });
 }

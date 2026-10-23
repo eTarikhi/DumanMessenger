@@ -917,7 +917,17 @@ export class MeshSimulation {
   /** Logical msgId -> the originator still waiting for its ACK. */
   private pendingAcks = new Map<
     string,
-    { msg: MeshMessage; from: NodeId; attempts: number; sentAt: number }
+    {
+      msg: MeshMessage;
+      from: NodeId;
+      attempts: number;
+      sentAt: number;
+      /** When the originator's own copy of this message last went on air. Only maintained
+       *  under a queued radio, where handing a packet over and transmitting it are different
+       *  instants and a retry timer that cannot tell them apart multiplies load
+       *  (docs/08 §12.11). */
+      onAirAt?: number;
+    }
   >();
   private listeners = new Set<() => void>();
 
@@ -1970,6 +1980,20 @@ export class MeshSimulation {
   private onAckTimeout(nodeId: string, msgId: string): void {
     const pending = this.pendingAcks.get(msgId);
     if (!pending || pending.from !== nodeId) return;
+    if (pending.onAirAt !== undefined) {
+      // The packet went on air later than the timer assumed, so the silence it measures has
+      // not elapsed yet. Restart from the transmission instead of retransmitting a packet
+      // that may still be sitting in the queue: under a saturated radio that duplicate is
+      // what turns waiting into load (docs/08 §12.11).
+      // Pushed as an absolute deadline rather than `now + wait`: recomputing the remainder
+      // every time accumulates float error, and a remainder of 1e-13 ms reschedules the same
+      // event forever.
+      const deadline = pending.onAirAt + this.ackTimeoutFor(pending.msg);
+      if (this.now < deadline - 1e-9) {
+        this.queue.push(deadline, "acktimeout", nodeId, msgId);
+        return;
+      }
+    }
     const node = this.byId(nodeId);
     if (!node || !node.isOnline) {
       this.pendingAcks.delete(msgId);
@@ -2269,6 +2293,12 @@ export class MeshSimulation {
     const occupied =
       (msg.transport === "wifiDirect" ? this.config.hopLatencyWifiMs : this.config.hopLatencyBleMs) +
       this.serializationMs(msg.sizeBytes, msg.transport);
+    if (this.config.channelAccess !== "free") {
+      // A retry timer measures the silence after a transmission, so under a queued radio it
+      // has to start when the packet leaves rather than when it was handed over.
+      const pending = this.pendingAcks.get(msg.id);
+      if (pending && pending.from === node.id) pending.onAirAt = this.now;
+    }
     const capture = this.config.channelCapture !== "none";
     const sense = this.config.channelAccess === "csma";
     // A radio is deaf from the moment it starts transmitting, whether or not the packet

@@ -1208,6 +1208,12 @@ class _PendingAck {
 
   /// Simulation time this attempt went on air, so an ACK can report a round trip.
   final double sentAt;
+
+  /// When the originator's own copy last actually went on air. Only maintained under a queued
+  /// radio, where handing a packet over and transmitting it are different instants and a retry
+  /// timer that cannot tell them apart retransmits packets that were never sent
+  /// (docs/08 §12.11).
+  double? onAirAt;
 }
 
 class MeshSimulation {
@@ -2255,6 +2261,20 @@ class MeshSimulation {
   void _onAckTimeout(String nodeId, String msgId) {
     final pending = _pendingAcks[msgId];
     if (pending == null || pending.from != nodeId) return;
+    final onAirAt = pending.onAirAt;
+    if (onAirAt != null) {
+      // The packet went on air later than the timer assumed, so the silence it measures has
+      // not elapsed yet. Restart from the transmission instead of retransmitting a packet that
+      // may still be sitting in the queue: under a saturated radio that duplicate is what turns
+      // waiting into load (docs/08 §12.11). Pushed as an absolute deadline rather than
+      // `now + wait`, because recomputing a remainder accumulates float error and a remainder
+      // of 1e-13 ms reschedules the same event forever.
+      final deadline = onAirAt + _ackTimeoutFor(pending.msg);
+      if (now < deadline - 1e-9) {
+        _queue.push(deadline, EventKind.ackTimeout, nodeId, msgId);
+        return;
+      }
+    }
     final node = _byId(nodeId);
     if (node == null || !node.isOnline) {
       _pendingAcks.remove(msgId);
@@ -2511,6 +2531,12 @@ class MeshSimulation {
             ? config.hopLatencyWifiMs
             : config.hopLatencyBleMs) +
         serializationMs(msg.sizeBytes, msg.transport);
+    if (config.channelAccess != ChannelAccess.free) {
+      // A retry timer measures the silence after a transmission, so under a queued radio it
+      // has to start when the packet leaves rather than when it was handed over.
+      final pending = _pendingAcks[msg.id];
+      if (pending != null && pending.from == node.id) pending.onAirAt = now;
+    }
     final capture = config.channelCapture != ChannelCapture.none;
     final sense = config.channelAccess == ChannelAccess.csma;
     // A radio is deaf from the moment it starts transmitting, whether or not the packet

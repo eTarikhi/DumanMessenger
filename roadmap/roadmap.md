@@ -178,14 +178,14 @@
 > **Calibration note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/08-media-transport-ptt.md` §12.9):** every simulated number behind this exit
   criterion was measured with a radio that has no contention: no shared medium, and a receiver that takes every
   packet however busy it is. Both halves now exist as flags (`channelAccess`, `channelCapture`), both ship off,
-  and separating them says which one matters — with a 10 MB file in flight, a transmit queue costs text 4.0 points
+  and separating them says which one matters — with a 10 MB file in flight, a transmit queue costs text 2.8 points
   of delivery and receiver collisions cost **13.6**. On the 20-node campus the same flags put delivery at
-  **0.9056** (collisions only) and **0.9000** (both) against the ≥90% this criterion inherits from skills/02 and
-  skills/08, while overhead stays at 15.8% and 27.1% of flood-all and the SUPER ratio stays inside its band. So the
+  **0.9056** (collisions only) and **0.8556** (both) against the ≥90% this criterion inherits from skills/02 and
+  skills/08, while overhead stays at 15.8% and 25.5% of flood-all and the SUPER ratio stays inside its band. So the
   overhead half of this exit criterion has margin and the delivery half has none, and the 10-phone test should
   measure delivery ratio before it measures anything else. A third arm adds what real link layers do —
-  `channelAccess: "csma"`, listen before talking — and it is worse than either: delivery **0.7222-0.7889** and
-  overhead **77-81%** of flood-all, failing both gates, because listening converts collisions into queueing and
+  `channelAccess: "csma"`, listen before talking — and it is worse than either: delivery **0.7389-0.7944** and
+  overhead **78-80%** of flood-all, failing both gates, because listening converts collisions into queueing and
   this engine's retry timers convert queueing into load (§12.10). The missing mechanism is backpressure: a real
   stack defers *and* stops generating work, while the simulator only defers. If a real floor delivers nine
   messages in ten, that is the finding to act on, and it is not in the radio model.
@@ -267,13 +267,14 @@
   once, so a transfer costs nothing but its own time. Giving the device the one radio it actually has —
   `channelAccess: "halfDuplex"`, a bounded transmit queue that drops at the tail, shipped **off** because this
   exit criterion and skills/02's and skills/08's gates were written against the channel-free model — moves the
-  same three clauses: the 10 MB image takes **3.97 min** at three hops instead of 33.00 s, and a streamed note
-  at three hops arrives **17.8 s after the user let go** for a 10 s recording (757 ms under `free`), because one
+  same three clauses: the 10 MB image takes **4.44 min** at three hops instead of 33.00 s, and a streamed note
+  at three hops arrives **26.8 s after the user let go** for a 10 s recording (0.76 s under `free`), because one
   frame needs ≈245 ms of air per hop against a 500 ms capture clock. At one hop both still pass, and at two the
   note is already marginal. Two consequences worth carrying into the platform work: the sliding window's 15.5×
-  is **1.6×** on a real radio, since there is one transmitter to fill; and a load gate on transfers *is*
-  motivated there — window 1 instead of 4 recovers all 2.8 points of text delivery a file costs, at no cost in
-  file time, while slicing chunks smaller (the intuitive alternative) costs 3.2× the transfer time for 2 points.
+  is **1.25×** on a real radio, since there is one transmitter to fill; and a load gate on transfers *is*
+  motivated there — window 1 instead of 4 recovers 1.1 of the 1.7 points of text delivery a file costs, and a
+  third of the p95, for 46% more transfer time; slicing chunks smaller (the intuitive alternative) costs 4.4× the
+  transfer time and buys no delivery at all.
 
 > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §11.3):** the SOS clause is met in simulation and needs a denominator to be
   meaningful: over the sender's radio-connected component, reach is **100%** in all four worlds, while
