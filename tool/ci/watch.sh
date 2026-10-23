@@ -18,6 +18,7 @@
 #   tool/ci/watch.sh --all               # recent runs on every branch
 #   tool/ci/watch.sh --diagnose [RUN]    # jobs + annotations for a run (default: newest)
 #   tool/ci/watch.sh --run RUN --follow
+#   tool/ci/watch.sh --classify-run [RUN]  # print billing|runner|none and exit (for scripts)
 
 set -uo pipefail
 
@@ -31,6 +32,7 @@ LIMIT=8
 FOLLOW=0
 SCOPE_BRANCH=1
 DIAGNOSE=0
+CLASSIFY_RUN=""
 RUN_ID=""
 INTERVAL=30
 
@@ -43,6 +45,9 @@ while [ $# -gt 0 ]; do
     --branch|-b)   BRANCH="$2"; shift 2 ;;
     --diagnose|-d) DIAGNOSE=1; [ "${2:-}" != "" ] && case "$2" in -*) ;; *) RUN_ID="$2"; shift ;; esac; shift ;;
     --run|-r)      RUN_ID="$2"; shift 2 ;;
+    --classify-run) CLASSIFY_RUN=1
+                    [ "${2:-}" != "" ] && case "$2" in -*) ;; *) CLASSIFY_RUN="$2"; shift ;; esac
+                    shift ;;
     --limit|-n)    LIMIT="$2"; shift 2 ;;
     --interval)    INTERVAL="$2"; shift 2 ;;
     -h|--help)     usage; exit 0 ;;
@@ -189,6 +194,29 @@ diagnose_run() {
   log_dim "annotations above are the only machine-readable channel, which is why the Dart job"
   log_dim "publishes them."
 }
+
+# --- machine-readable classification ------------------------------------------
+#
+# For scripts that need the verdict without parsing prose. tool/ci/pr-flow.sh uses this to
+# tell "CI is unavailable" from "the build is red", because the correct responses are
+# opposites: one means do not merge and say why, the other means go and fix something.
+# Printing a single word keeps that contract from drifting with the human-facing text.
+if [ -n "$CLASSIFY_RUN" ]; then
+  if [ "$CLASSIFY_RUN" = 1 ]; then
+    CLASSIFY_RUN="$(gh run list "${GH_SCOPE[@]}" --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null)"
+  fi
+  if [ -z "$CLASSIFY_RUN" ]; then
+    printf 'no-run\n'
+    exit 0
+  fi
+  reason="$(billing_block "$CLASSIFY_RUN" 2>/dev/null || true)"
+  case "$reason" in
+    billing) printf 'billing\n' ;;
+    runner)  printf 'runner\n' ;;
+    *)       printf 'none\n' ;;
+  esac
+  exit 0
+fi
 
 # --- drive --------------------------------------------------------------------
 

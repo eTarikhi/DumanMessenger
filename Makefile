@@ -20,6 +20,7 @@ CI    := ./tool/ci
         test typecheck build golden dev media history \
         dart-get dart-analyze dart-test dart-cli \
         push push-dry push-force commit-push watch watch-all follow diagnose \
+        pr pr-dry pr-open pr-local pr-branch pr-squash check-ps1 \
         act install-hooks clean clean-artifacts
 
 ## --- setup -------------------------------------------------------------------
@@ -29,7 +30,9 @@ help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
 	  | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 	@printf '\n%s\n' "Pipeline exit codes: 0 verified · 1 failed or incomplete · 2 partial"
-	@printf '%s\n\n' "Docs: docs/10-local-development-and-ci.md"
+	@printf '%s\n'   "Docs: docs/10-local-development-and-ci.md  (pipeline, exit codes, monitoring)"
+	@printf '%s\n'   "      docs/11-windows-11-workflow.md       (WSL2, Git Bash, make.ps1)"
+	@printf '%s\n\n' "      docs/12-cli-cheat-sheet.md           (every command, by task)"
 
 doctor: ## Check this machine against the toolchain CI actually pins
 	@$(CI)/doctor.sh
@@ -82,6 +85,32 @@ push-force: ## Push after a PARTIAL run, and record that it was partial
 commit-push: ## Commit everything with MSG="...", validate, then push
 	@test -n "$(MSG)" || { printf '\033[31merror:\033[0m usage: make commit-push MSG="fix: ..."\n'; exit 64; }
 	@$(CI)/validate-and-push.sh --message "$(MSG)"
+
+## --- pull request ------------------------------------------------------------
+#
+# pr-flow.sh validates locally, pushes, opens the PR, then decides about merging.
+# Local validation gates *opening* the PR; it does not by itself justify *merging*,
+# because a local run is only as broad as the toolchain on this machine. --merge-on
+# chooses what evidence the merge may rest on, and every outcome is logged.
+
+pr: ## Validate, push, open a PR, merge only when the CI checks pass
+	@$(CI)/pr-flow.sh
+
+pr-dry: ## Every PR decision printed, with no side effects at all
+	@$(CI)/pr-flow.sh --dry-run
+
+pr-open: ## Open the PR and stop — leave the merge to a human
+	@$(CI)/pr-flow.sh --merge-on never
+
+pr-local: ## Merge on the local run alone; for when CI cannot run. Records that it did not
+	@$(CI)/pr-flow.sh --merge-on local --yes
+
+pr-branch: ## The whole flow on a new branch: make pr-branch BRANCH=fix/your-change
+	@test -n "$(BRANCH)" || { printf '\033[31merror:\033[0m usage: make pr-branch BRANCH="fix/your-change"\n'; exit 64; }
+	@$(CI)/pr-flow.sh --new-branch "$(BRANCH)"
+
+pr-squash: ## Like pr, but squash-merge and delete the branch afterwards
+	@$(CI)/pr-flow.sh --squash --delete-branch
 
 ## --- monitoring --------------------------------------------------------------
 
@@ -145,8 +174,11 @@ dart-cli: ## The gated CLI acceptance run (campus_quad, seed 42)
 ## --- housekeeping ------------------------------------------------------------
 
 clean: clean-artifacts ## Remove build output and CI artifacts
-	@rm -rf dist tool/.build
-	@printf 'cleaned dist/ and tool/.build/\n'
+	@rm -rf dist tool/.build sim/mesh_sim/build
+	@printf 'cleaned dist/, tool/.build/ and sim/mesh_sim/build/\n'
+
+check-ps1: ## Static check of make.ps1, for machines that cannot run PowerShell
+	@python3 $(CI)/check-ps1.py make.ps1
 
 clean-artifacts: ## Remove captured CI run artifacts
 	@rm -rf artifacts/ci

@@ -1766,7 +1766,7 @@ function main(): void {
       `Hop latency BLE ${DEFAULT_CONFIG.hopLatencyBleMs} ms / Wi-Fi ${DEFAULT_CONFIG.hopLatencyWifiMs} ms, ` +
       `jitter ${DEFAULT_CONFIG.jitterMinMs}-${DEFAULT_CONFIG.jitterMaxMs} ms.`
   );
-  // `npm run media` runs all twelve sections, which is minutes of simulation. A section name as
+  // `npm run media` runs all thirteen sections, which is minutes of simulation. A section name as
   // the first argument runs just that one — the whole file is a build, so re-measuring §10
   // should not mean re-measuring §1-§9 to get at it.
   const only = process.argv[2];

@@ -49,6 +49,10 @@ probes `registry.npmjs.org`, `pub.dev` and `api.github.com`, since a restricted 
 It exits nonzero when something required is missing, and prints the install command for your
 platform when it is.
 
+**On Windows 11**, read `docs/11-windows-11-workflow.md` first: the runtime choice (WSL2 vs Git
+Bash), the two configuration steps that are easy to miss (`core.longpaths`, and the line endings
+`.gitattributes` now pins), and how to run the commands natively when there is no bash at all.
+
 ---
 
 ## 2. Installing the Dart SDK
@@ -302,6 +306,37 @@ A scoped run that is entirely green still says nothing about the jobs it left ou
 may be untouched by the change — but the record must not imply a Dart job ran when none did.
 `jobs` names what actually ran, so the two fields cannot be read apart from each other.
 
+### Opening a pull request, and deciding whether to merge it
+
+```bash
+make pr                                    # validate, push, open the PR, merge only if CI passes
+make pr-dry                                # every decision printed, no side effects
+make pr-open                               # open the PR and stop — leave merging to a human
+make pr-local                              # merge on the local run alone; recorded as such
+make pr-branch BRANCH=fix/your-change      # create the branch, then the whole flow
+```
+
+`tool/ci/pr-flow.sh` uses the same validation as `make push`, then adds the PR and the merge.
+The judgement is in the merge step, and it is deliberately **not** "local validation passed, so
+merge". Local validation gates *opening* the PR: it is fast and it stops you publishing something
+broken. It is not sufficient for *merging*, because a local run is only as broad as the toolchain
+installed locally — a machine with no Dart SDK verifies one job out of four and cannot tell you the
+authoritative engine builds.
+
+So `--merge-on` chooses what evidence a merge may rest on:
+
+| | merges when | use it when |
+| --- | --- | --- |
+| `checks` *(default)* | every remote CI check passes | CI is healthy. The right default. |
+| `local` | the local run passed | CI cannot run at all, and you are choosing to accept local evidence. Recorded in the PR body and the verification log. |
+| `never` | it does not | you want a human to review first |
+
+With `--merge-on checks`, a failed check is **classified before it is acted on**, using the same
+`billing_block()` `make diagnose` uses. "The build is red" and "CI could not run" look identical in
+a PR's check summary and need opposite responses: one means go and fix something, the other means do
+not merge and say why. Reading "no checks reported" as "checks passed" is how unverified code gets
+merged, so the script refuses and lists the options in order of how much truth they preserve.
+
 `--json` writes the same verdict per run, with the toolchain versions it was produced with:
 
 ```json
@@ -376,6 +411,15 @@ mechanisms keep that true, and both are deliberate.
 workflow step it mirrors and runs the same command with the same flags in the same working
 directory. When you change `ci.yml`, change `run-pipeline.sh` in the same commit — `make doctor`
 prints the job count from the workflow so a new job is at least visible.
+
+**One pipeline, two front doors.** `make.ps1` gives Windows 11 the same targets, and it is a
+*dispatcher*: it finds WSL2 or Git Bash, translates the path, forwards your arguments unchanged and
+returns the pipeline's exit code. It deliberately contains no pipeline logic. A second
+implementation of the same policy — in PowerShell, or anywhere else — is a second thing that can
+drift from the workflow while still looking green, which is the failure this section exists to
+prevent. `tool/ci/check-ps1.py` statically checks it (delimiter balance, and PowerShell-7-only
+syntax that fails on the Windows PowerShell 5.1 Windows 11 ships) because it cannot be executed on a
+Linux runner. See `docs/11-windows-11-workflow.md`.
 
 **The diagnostics parser is one file both sides call.** `tool/ci/diagnostics.py` used to be an
 inline heredoc inside `ci.yml`. That meant the local runner either duplicated it — and then the
