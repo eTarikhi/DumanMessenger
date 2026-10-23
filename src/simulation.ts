@@ -50,6 +50,7 @@ import {
   ogmToGossip,
   pruneStaleEntries,
   receiveOGM,
+  TQ_USABLE,
 } from "./election";
 import {
   BLE_MAX_BYTES,
@@ -561,6 +562,19 @@ export interface SimulationStats {
   /** Packets a busy transmitter could not hold: the queue was full, so they were
    *  dropped at the radio rather than lost on a link. */
   channelDrops: number;
+  /** Where those drops happen, which is the question docs/08 §12.12 answered by argument and
+   *  §12.13 needs answered by measurement. `channelDropsRelayed` counts the packets shed by a
+   *  node forwarding somebody else's message (`hopCount > 0`); the difference is shed by the
+   *  node that originated it. `channelDropsMedia` counts the shed packets that were file or
+   *  voice chunks, i.e. the ones a transfer window is responsible for. */
+  channelDropsRelayed: number;
+  channelDropsMedia: number;
+  /** Of the packets shed by a relay, how many had a peer in range that was at least as close
+   *  to the destination as the next hop that was chosen — i.e. how many could have gone round
+   *  the congestion instead of into it. This is the number that decides whether congestion-aware
+   *  forwarding is a mechanism this topology can offer at all, and it is measured rather than
+   *  assumed because docs/08 §12.12's argument for hop-by-hop flow control depends on it. */
+  channelDropsWithAlternative: number;
   /** Packets lost because the receiver was locked onto a packet that arrived first
    *  (`channelCapture: "first"`, docs/08 §12.9). */
   channelCaptured: number;
@@ -570,6 +584,9 @@ export interface SimulationStats {
   /** Contention-window draws: how often a node found the medium free and still had to wait
    *  a random number of slots for it (`channelBackoff`, docs/08 §12.13). */
   channelBackoffs: number;
+  /** Times a transfer was refused air by its own radio and had to wait for a slot to free
+   *  (`mediaBackpressure`, docs/08 §12.12). This is backpressure working, not a failure. */
+  transferBlocks: number;
   /** Anti-entropy packets put on air: beacons, bucket requests and replies. */
   sentSync: number;
   bytesDelivered: number;
@@ -974,9 +991,13 @@ export class MeshSimulation {
   private channelDeferrals = 0;
   private channelDeferMs = 0;
   private channelDrops = 0;
+  private channelDropsRelayed = 0;
+  private channelDropsMedia = 0;
+  private channelDropsWithAlternative = 0;
   private channelCaptured = 0;
   private channelDeafRx = 0;
   private channelBackoffs = 0;
+  private transferBlocks = 0;
   /** Whether the transmission that just went on air collided at its receiver. Read by the
    *  contention window to decide whether to widen; written by `onAir`. */
   private lastTxCollided = false;
@@ -1081,9 +1102,13 @@ export class MeshSimulation {
     this.channelDeferrals = 0;
     this.channelDeferMs = 0;
     this.channelDrops = 0;
+    this.channelDropsRelayed = 0;
+    this.channelDropsMedia = 0;
+    this.channelDropsWithAlternative = 0;
     this.channelCaptured = 0;
     this.channelDeafRx = 0;
     this.channelBackoffs = 0;
+    this.transferBlocks = 0;
     this.lastTxCollided = false;
     this.channel.clear();
     this.txUntil.clear();
@@ -1681,20 +1706,46 @@ export class MeshSimulation {
    *  `mediaBackpressure`, for as long as the sender's radio has slots to put them in. */
   private pushWindow(t: Transfer): void {
     const window = this.effectiveWindow(t);
+    if (window <= 0) {
+      // Blocked on the sender's own radio. Nothing is sent and nothing is lost: the drain
+      // that frees a slot calls this again, so the transfer resumes without a timer having
+      // to notice (docs/08 §12.12). Counted only when backpressure is what closed the window,
+      // so a transfer configured with no window at all is not reported as throttled.
+      if (this.config.mediaBackpressure) this.transferBlocks++;
+      return;
+    }
     while (t.nextToSend < t.chunks && t.nextToSend < t.received + window) {
       this.sendChunk(t, t.nextToSend++);
     }
   }
 
+  /** Transmit-queue slots [nodeId] has left. Infinite on the shipped radio, where nothing
+   *  queues, so a caller cannot accidentally throttle itself under `channelAccess: "free"`. */
+  private radioSlotsFree(nodeId: NodeId): number {
+    if (this.config.channelAccess === "free") return Number.POSITIVE_INFINITY;
+    const queued = this.channel.get(nodeId)?.queue.length ?? 0;
+    return Math.max(0, this.config.channelQueueDepth - queued);
+  }
+
   /** The window the sender may fill right now. Without backpressure it is the configured
-   *  depth. With it, the radio's free slots cap it at a floor of one, so a transfer that is
-   *  already committed as far ahead as the queue allows simply waits for the medium instead
-   *  of pushing everybody else out of it (docs/08 §12.12). */
+   *  depth. With it, the radio's free slots cap it — and unlike the first implementation of
+   *  this flag the cap is allowed to reach **zero**, because a window floored at one still
+   *  hands a packet to a queue that is already full, which is then shed at the tail. That is
+   *  not backpressure, it is a slower way of dropping: measured, it *raised* the drop count
+   *  (1441 → 1637 on the campus half-duplex arm). Blocking and resuming on drain is what a
+   *  socket does (docs/08 §12.12). */
   private effectiveWindow(t: Transfer): number {
     if (!this.config.mediaBackpressure) return t.window;
-    const queued = this.channel.get(t.from)?.queue.length ?? 0;
-    const free = Math.max(1, this.config.channelQueueDepth - queued);
-    return Math.max(1, Math.min(t.window, free));
+    return Math.min(t.window, this.radioSlotsFree(t.from));
+  }
+
+  /** Resume any transfer this node is the source of. Called when its radio frees a slot, so a
+   *  blocked transfer waits for the medium rather than for a timeout. */
+  private resumeBlockedTransfers(nodeId: NodeId): void {
+    if (!this.config.mediaBackpressure) return;
+    for (const t of this.transfers.values()) {
+      if (t.state === "active" && t.from === nodeId) this.pushWindow(t);
+    }
   }
 
   private sendChunk(t: Transfer, index: number): void {
@@ -1737,7 +1788,11 @@ export class MeshSimulation {
       const missing: number[] = [];
       for (const i of t.onAir) if (!t.receivedChunks.has(i)) missing.push(i);
       missing.sort((x, y) => x - y);
-      if (missing.length > 0) {
+      // A sender waiting on its own full radio is doing what backpressure asked it to do, so
+      // that wait is not a stall. Counting it would re-send into the queue that caused it —
+      // the stall path bypasses the window, so it has to consult the same gate.
+      const room = this.config.mediaBackpressure ? this.radioSlotsFree(nodeId) : missing.length;
+      if (missing.length > 0 && room > 0) {
         t.stalls++;
         this.transferStalls++;
         t.lastProgressAt = this.now;
@@ -1748,7 +1803,7 @@ export class MeshSimulation {
             `${Math.min(missing.length, t.window)} of ${missing.length} missing chunk${missing.length === 1 ? "" : "s"} (stall ${t.stalls})`,
           { msgType: "file" }
         );
-        for (const i of missing.slice(0, t.window)) this.sendChunk(t, i);
+        for (const i of missing.slice(0, Math.min(t.window, room))) this.sendChunk(t, i);
       }
     }
     this.queueStallCheck(transferId, nodeId);
@@ -2249,6 +2304,11 @@ export class MeshSimulation {
       // queue that grows without bound does not deliver packets later — it delivers
       // them after the run is over.
       this.channelDrops++;
+      if (msg.hopCount > 0) {
+        this.channelDropsRelayed++;
+        if (this.hasAlternativeNextHop(node, msg)) this.channelDropsWithAlternative++;
+      }
+      if (msg.type === "file" || msg.type === "voice") this.channelDropsMedia++;
       this.pushLog(
         "loss",
         node.id,
@@ -2259,6 +2319,26 @@ export class MeshSimulation {
     }
     ch.queue.push({ msg, targetId, queuedAt: this.now });
     this.drainChannel(node);
+  }
+
+  /** Whether [node] could have reached [msg]'s destination through a peer other than the one
+   *  it chose, at no cost in hops. A relay's route is one next hop, so "round the congestion"
+   *  only exists if some peer in range is at least as close to the destination as that hop is;
+   *  this counts the shed packets for which such a peer was there. Derived from the route table
+   *  and the geometry, so it consumes no random numbers and cannot move a golden vector. */
+  private hasAlternativeNextHop(node: MeshNode, msg: MeshMessage): boolean {
+    const dest = msg.to;
+    if (dest === "BROADCAST" || dest === GROUP_ADDRESS) return false;
+    const mine = node.nextHopTable[dest];
+    if (!mine || mine.tq < TQ_USABLE) return false;
+    for (const peer of peersInRange(node, this.nodes, this.rf)) {
+      if (peer.id === mine.bestNeighbor) continue;
+      const theirs = peer.nextHopTable[dest];
+      // Forwarding to this peer costs one hop to reach it, so it is no worse than the route
+      // already chosen only if the peer is strictly closer to the destination.
+      if (theirs && theirs.tq >= TQ_USABLE && theirs.hopCount <= mine.hopCount - 1) return true;
+    }
+    return false;
   }
 
   /** Put the next queued packet on air if the radio is free, and schedule the drain that
@@ -2330,6 +2410,10 @@ export class MeshSimulation {
     }
     const airTime = this.onAir(node, next.msg, next.targetId);
     ch.busyUntil = this.now + airTime;
+    // A slot just freed. Anything this node was holding back for want of one goes now, which
+    // is the resume half of blocking — without it a transfer that was refused air waits for a
+    // timeout instead of for the medium.
+    this.resumeBlockedTransfers(node.id);
     if (this.config.channelBackoff !== "none") {
       // Binary exponential backoff: a radio that just collided draws from a window twice as
       // wide next time, so two radios that keep meeting keep backing off until they stop
@@ -3264,8 +3348,12 @@ export class MeshSimulation {
       channelDeferrals: this.channelDeferrals,
       channelDeferMs: this.channelDeferMs,
       channelDrops: this.channelDrops,
+      channelDropsRelayed: this.channelDropsRelayed,
+      channelDropsMedia: this.channelDropsMedia,
+      channelDropsWithAlternative: this.channelDropsWithAlternative,
       channelCaptured: this.channelCaptured,
       channelBackoffs: this.channelBackoffs,
+      transferBlocks: this.transferBlocks,
       channelDeafRx: this.channelDeafRx,
       sentSync: this.sentSync,
       bytesDelivered: this.bytesDelivered,

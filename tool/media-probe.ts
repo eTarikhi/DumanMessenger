@@ -770,6 +770,10 @@ interface CaptureCell {
   drops: number;
   deferMs: number;
   backoffs: number;
+  dropsRelayed: number;
+  dropsMedia: number;
+  dropsWithAlternative: number;
+  blocks: number;
   fileMs: number | null;
 }
 
@@ -780,7 +784,8 @@ function captureCell(
   withFile: boolean,
   queueDepth?: number,
   backoff?: ChannelBackoff,
-  cwMin?: number
+  cwMin?: number,
+  mediaBackpressure?: boolean
 ): CaptureCell {
   const sim = simFor({
     ...campusQuad(seed),
@@ -790,6 +795,7 @@ function captureCell(
     ...(queueDepth === undefined ? {} : { channelQueueDepth: queueDepth }),
     ...(backoff === undefined ? {} : { channelBackoff: backoff }),
     ...(cwMin === undefined ? {} : { channelCwMin: cwMin }),
+    ...(mediaBackpressure === undefined ? {} : { mediaBackpressure }),
   });
   const plan = contentionPlan(seed, sim.nodes.length, 60);
   const t = withFile ? sim.sendFile(sim.nodes[plan[0][0]].id, sim.nodes[plan[0][1]].id, 10 * MB) : null;
@@ -825,6 +831,10 @@ function captureCell(
     drops: stats.channelDrops,
     deferMs: stats.channelDeferMs,
     backoffs: stats.channelBackoffs,
+    dropsRelayed: stats.channelDropsRelayed,
+    dropsMedia: stats.channelDropsMedia,
+    dropsWithAlternative: stats.channelDropsWithAlternative,
+    blocks: stats.transferBlocks,
     fileMs: t && t.completedAt !== null ? t.completedAt - t.startedAt : null,
   };
 }
@@ -1356,6 +1366,9 @@ function csmaFileRun(
   drops: number;
   deferMs: number;
   backoffs: number;
+  dropsRelayed: number;
+  dropsMedia: number;
+  dropsWithAlternative: number;
   fileMs: number | null;
 } {
   const sim = simFor({
@@ -1394,6 +1407,9 @@ function csmaFileRun(
     drops: st.channelDrops,
     deferMs: st.channelDeferMs,
     backoffs: st.channelBackoffs,
+    dropsRelayed: st.channelDropsRelayed,
+    dropsMedia: st.channelDropsMedia,
+    dropsWithAlternative: st.channelDropsWithAlternative,
     fileMs: t && t.completedAt !== null ? t.completedAt - t.startedAt : null,
   };
 }
@@ -1508,6 +1524,134 @@ function backoffTable(): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 11. Where the queue actually overflows, and whether it could have gone round
+// ---------------------------------------------------------------------------
+
+function sheddingTable(): void {
+  console.log("\n=== 11. Where the shedding happens (docs/08 §12.14) ===");
+  console.log(
+    "§12.12 argued that the queue which overflows in a mesh belongs to a relay, and §12.13 found\n" +
+      "that queue drops outnumber receiver collisions about eight to one under carrier sense. Both\n" +
+      "were read off totals. This attributes them: who sheds, what they shed, and — the question\n" +
+      "that decides whether congestion-aware forwarding is even available — whether the shedding\n" +
+      "relay had a peer in range at least as close to the destination as the next hop it chose. If\n" +
+      "it did, the packet could have gone round the congestion. If it did not, the only mechanism\n" +
+      "left is to stop generating the packet, which means propagating pressure to the source."
+  );
+  console.log("transmitter  receiver   media  drops   at a relay   file/voice   alternative existed   file");
+  for (const access of ["halfDuplex", "csma"] as ChannelAccess[]) {
+    for (const withFile of [false, true]) {
+      const rows = SEEDS.map((seed) => captureCell(access, "first", seed, withFile));
+      const mean = (f: (r: CaptureCell) => number) => rows.reduce((a, r) => a + f(r), 0) / rows.length;
+      const drops = mean((r) => r.drops);
+      const relayed = mean((r) => r.dropsRelayed);
+      console.log(
+        `${access.padEnd(12)} ${"first".padEnd(10)} ${(withFile ? "yes" : "no").padEnd(6)} ` +
+          `${drops.toFixed(0).padStart(5)}   ` +
+          `${((relayed / Math.max(1, drops)) * 100).toFixed(0).padStart(6)} %      ` +
+          `${((mean((r) => r.dropsMedia) / Math.max(1, drops)) * 100).toFixed(0).padStart(6)} %      ` +
+          `${((mean((r) => r.dropsWithAlternative) / Math.max(1, relayed)) * 100).toFixed(0).padStart(11)} %          ` +
+          `${mean((r) => (r.fileMs === null ? Number.NaN : r.fileMs / 60000)).toFixed(2)} min`
+      );
+    }
+  }
+  console.log(
+    "\nRead the third column first: if the shed packets are mostly file or voice chunks, the thing\n" +
+      "generating the pressure is a transfer window, and the fix that reaches it is pressure\n" +
+      "propagated to the source. The fourth column is the fork in the road — a high share means\n" +
+      "congestion-aware forwarding has somewhere to put the packet, and a low one means it does\n" +
+      "not, so rerouting around a saturated relay is not a mechanism this topology offers."
+  );
+
+  console.log("\n--- the one-peer case, which is where a sender can throttle itself ---");
+  console.log(
+    "Two nodes, one hop, a 1 MB file through a window of 8 into a queue 4 deep, so the transfer\n" +
+      "is committed twice as far ahead as the radio can hold. This is the case §12.12 measured the\n" +
+      "flag on, re-measured here because the mechanism was wrong when it was: the window was floored\n" +
+      "at one, so a throttled sender still handed a packet to a full queue and had it shed, and the\n" +
+      "stall path bypassed the window altogether. A window that can reach zero, a stall path that\n" +
+      "consults the same gate, and a resume when the radio drains are what a socket does."
+  );
+  console.log("depth  backpressure  queue drops  retransmitted  stalls  blocked  file time");
+  for (const depth of [4, 2]) {
+    for (const bp of [false, true]) {
+      const sim = new MeshSimulation({
+        ...DEFAULT_CONFIG,
+        nodeCount: 2,
+        stationaryRatio: 1,
+        chargingRatio: 0,
+        trafficIntervalMs: 0,
+        enableSuperElection: false,
+        warmupMs: 0,
+        obstacles: [],
+        channelAccess: "halfDuplex",
+        channelQueueDepth: depth,
+        transferWindow: 8,
+        mediaBackpressure: bp,
+      });
+      sim.nodes.forEach((node, i) => {
+        node.pos = { x: 10 + i * 20, y: 10 };
+        node.target = { x: 10 + i * 20, y: 10 };
+        node.mobility = 0;
+        node.isOnline = true;
+        node.battery = 1;
+      });
+      sim.runFor(20000);
+      sim.clearRecords();
+      const t = sim.sendFile(sim.nodes[0].id, sim.nodes[1].id, 1 * MB)!;
+      let waited = 0;
+      while (t.state === "active" && waited < 300_000) {
+        sim.runFor(50);
+        waited += 50;
+      }
+      const st = sim.refresh();
+      console.log(
+        `${String(depth).padEnd(6)} ${(bp ? "on" : "off").padEnd(13)} ` +
+          `${String(st.channelDrops).padStart(9)}  ${String(t.retransmitted).padStart(13)}  ` +
+          `${String(t.stalls).padStart(6)}  ${String(st.transferBlocks).padStart(7)}  ` +
+          `${(((t.completedAt ?? Number.NaN) - t.startedAt) / 1000).toFixed(2)} s`
+      );
+    }
+  }
+
+  console.log("\n--- so propagate the pressure to the source, which is where it is ---");
+  console.log(
+    "The columns above say the shedding is the source's and the packets are a transfer's, which is\n" +
+      "the case `mediaBackpressure` was built for. §12.12 rejected it on the strength of a crowd run\n" +
+      "and an argument about whose queue overflows; this is the campus arm the argument was about,\n" +
+      "measured instead of reasoned."
+  );
+  console.log(
+    "transmitter  backpressure  delivery   within5   p95 ms   drops  at source  chunks  retrans  blocked   file"
+  );
+  for (const access of ["halfDuplex", "csma"] as ChannelAccess[]) {
+    for (const bp of [false, true]) {
+      const rows = SEEDS.map((seed) =>
+        captureCell(access, "first", seed, true, undefined, undefined, undefined, bp)
+      );
+      const mean = (f: (r: CaptureCell) => number) => rows.reduce((a, r) => a + f(r), 0) / rows.length;
+      const drops = mean((r) => r.drops);
+      console.log(
+        `${access.padEnd(12)} ${(bp ? "on" : "off").padEnd(13)} ${mean((r) => r.ratio)
+          .toFixed(4)
+          .padEnd(10)} ${mean((r) => r.within5).toFixed(4).padEnd(9)} ` +
+          `${mean((r) => r.p95).toFixed(0).padStart(6)}   ${drops.toFixed(0).padStart(5)}  ` +
+          `${(((drops - mean((r) => r.dropsRelayed)) / Math.max(1, drops)) * 100).toFixed(0).padStart(7)} %  ` +
+          `${((mean((r) => r.dropsMedia) / Math.max(1, drops)) * 100).toFixed(0).padStart(6)} %   ` +
+          `${mean((r) => r.retries).toFixed(0).padStart(6)}   ` +
+          `${mean((r) => r.blocks).toFixed(0).padStart(7)}   ` +
+          `${mean((r) => (r.fileMs === null ? Number.NaN : r.fileMs / 60000)).toFixed(2)} min`
+      );
+    }
+  }
+  console.log(
+    "\nIf the source is really where the pressure is, `on` should cut the drop count by most of the\n" +
+      "share in the \"at source\" column and pay for it in file time. If it cuts the drops and does not\n" +
+      "move delivery, the shed packets were ones nobody was waiting for any more."
+  );
+}
+
 function main(): void {
   console.log("Duman media transport probe — every number below is measured, not assumed.");
   console.log(
@@ -1531,6 +1675,7 @@ function main(): void {
     ["priority", priorityTable],
     ["capture", captureTable],
     ["backoff", backoffTable],
+    ["shedding", sheddingTable],
   ];
   if (only && !sections.some(([name]) => name === only)) {
     console.error(`unknown section "${only}". one of: ${sections.map(([name]) => name).join(", ")}`);

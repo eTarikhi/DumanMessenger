@@ -3495,6 +3495,7 @@ describe("sender-side backpressure (docs/08 §12.12)", () => {
       drops: stats.channelDrops,
       retransmitted: t.retransmitted,
       stalls: t.stalls,
+      blocks: stats.transferBlocks,
     };
   }
 
@@ -3504,16 +3505,24 @@ describe("sender-side backpressure (docs/08 §12.12)", () => {
 
     // Without it, a window of 8 keeps handing chunks to a radio that can hold 4, so the tail
     // drops them, the window stalls waiting for chunks that were never sent, and the chunks
-    // are retransmitted: 25 dropped, 6 retransmitted, one stall.
+    // are retransmitted: 25 dropped, 6 retransmitted, one stall, 9.37 s.
     expect(blind.drops).toBeGreaterThan(20);
     expect(blind.stalls).toBeGreaterThan(0);
-    // With it, the sender fills only the slots the radio has: 3 dropped, 1 retransmitted, no
-    // stall — and the same file arrives in 5.2 s instead of 9.4 s, because a chunk that was
-    // never dropped never had to be sent twice.
+    expect(blind.blocks).toBe(0); // nothing throttles it, so nothing ever refuses it air
+    // With it, the sender fills only the slots the radio has: 5 dropped, none retransmitted,
+    // no stall, and the same file arrives in 6.04 s instead of 9.37 s, because a chunk that
+    // was never dropped never had to be sent twice.
     expect(throttled.drops).toBeLessThan(blind.drops / 4);
-    expect(throttled.retransmitted).toBeLessThan(blind.retransmitted);
     expect(throttled.stalls).toBe(0);
     expect(throttled.seconds).toBeLessThan(blind.seconds);
+    // The window has to be allowed to reach zero, and the sender has to be woken when a slot
+    // frees. Floored at one it still hands a packet to a full queue and has it shed at the
+    // tail, which is not backpressure but a slower way of dropping — measured, it *raised* the
+    // drop count (1441 → 1637 on the campus half-duplex arm) and left a retransmission behind.
+    // Blocking shows up in `blocks`, and resuming on drain is what makes the retransmissions
+    // and the stalls both go to zero rather than merely shrink.
+    expect(throttled.blocks).toBeGreaterThan(0);
+    expect(throttled.retransmitted).toBe(0);
   });
 
   it("is inert on the shipped radio, where nothing ever queues", () => {
