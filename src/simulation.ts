@@ -929,7 +929,8 @@ export class MeshSimulation {
   private channelCaptured = 0;
   private channelDeafRx = 0;
   /** Until when each node is transmitting, and until when it is locked onto a reception.
-   *  Both maintained only while `channelCapture` is on, so the shipped model pays nothing. */
+   *  Maintained only while the receiver model or carrier sense is on, so the shipped model
+   *  pays nothing. */
   private txUntil = new Map<NodeId, number>();
   private rxUntil = new Map<NodeId, number>();
   /** One radio per node: when it comes free, and what is waiting for it. Only
@@ -2193,6 +2194,20 @@ export class MeshSimulation {
       }
       return;
     }
+    if (this.config.channelAccess === "csma") {
+      // Carrier sense: the medium is busy if anybody within radio range is transmitting, and
+      // a node that waits is not itself on air, so this always terminates.
+      const freeAt = this.mediumFreeAt(node);
+      if (freeAt > this.now) {
+        this.channelDeferrals++;
+        this.channelDeferMs += freeAt - this.now;
+        if (!ch.drainScheduled) {
+          ch.drainScheduled = true;
+          this.queue.push(freeAt, "channel", node.id);
+        }
+        return;
+      }
+    }
     const next = this.takeNextTx(ch);
     const waited = this.now - next.queuedAt;
     if (waited > 0) {
@@ -2205,6 +2220,18 @@ export class MeshSimulation {
       ch.drainScheduled = true;
       this.queue.push(ch.busyUntil, "channel", node.id);
     }
+  }
+
+  /** The instant the medium around [node] comes free: the latest transmit window it can
+   *  hear, or `now` if it hears nobody. Carrier sense only, and only over peers in range — a
+   *  node cannot sense a transmission it could not receive (docs/08 §12.10). */
+  private mediumFreeAt(node: MeshNode): number {
+    let freeAt = this.now;
+    for (const peer of peersInRange(node, this.nodes, this.rf)) {
+      const until = this.txUntil.get(peer.id) ?? 0;
+      if (until > freeAt) freeAt = until;
+    }
+    return freeAt;
   }
 
   /** Take the next packet off the queue: arrival order, or by class when the config asks
@@ -2243,9 +2270,11 @@ export class MeshSimulation {
       (msg.transport === "wifiDirect" ? this.config.hopLatencyWifiMs : this.config.hopLatencyBleMs) +
       this.serializationMs(msg.sizeBytes, msg.transport);
     const capture = this.config.channelCapture !== "none";
+    const sense = this.config.channelAccess === "csma";
     // A radio is deaf from the moment it starts transmitting, whether or not the packet
-    // survives the link.
-    if (capture) this.txUntil.set(node.id, this.now + occupied);
+    // survives the link — and carrier sense needs the same fact from the other side, because
+    // what a sender listens for is exactly its peers' transmit windows.
+    if (capture || sense) this.txUntil.set(node.id, this.now + occupied);
     if (chance(this.rng, loss)) {
       this.lostDataTx++;
       this.recordTxOutcome(node, 0);

@@ -159,7 +159,7 @@ export function ConfigPanel({
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <span style={{ fontSize: 11, color: "#9fb0c3" }}>Radio channel</span>
         <div style={{ display: "flex", gap: 6 }}>
-          {(["free", "halfDuplex"] as const).map((p) => (
+          {(["free", "halfDuplex", "csma"] as const).map((p) => (
             <button
               key={p}
               aria-pressed={draft.channelAccess === p}
@@ -180,7 +180,9 @@ export function ConfigPanel({
           succeed, so a 10 MB file costs nobody else anything (docs/08 §9).{" "}
           <b style={{ color: "#9fb0c3" }}>Half-duplex</b> is the one radio a phone has — a bounded transmit queue
           that drops at the tail when it is full — and on it the same file costs 2.8 points of everybody else's
-          delivery (docs/08 §12). Ships free, because that is the model the roadmap's acceptance gates were
+          delivery (docs/08 §12). <b style={{ color: "#9fb0c3" }}>Carrier sense</b> adds what BLE and Wi-Fi both
+          do at the link layer: listen first, and wait if a peer is transmitting, which recovers most of that
+          loss (docs/08 §12.10). Ships free, because that is the model the roadmap's acceptance gates were
           written against.
         </span>
       </div>
@@ -267,6 +269,7 @@ function dutySummary(d: Draft): string {
 const CHANNEL_LABELS: Record<ChannelAccess, string> = {
   free: "Free (ships)",
   halfDuplex: "Half-duplex",
+  csma: "Carrier sense",
 };
 
 const POLICY_LABELS: Record<RelayPolicy, string> = {

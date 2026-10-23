@@ -45,6 +45,14 @@ export type RelayPolicy = "mpr" | "route-flood" | "flood-all";
  *                This is what made the first contention measurement in docs/08 §9
  *                come out null — correctly null, but null for a reason that has
  *                nothing to do with mesh etiquette.
+ * - `csma`       `halfDuplex` plus carrier sense: before a packet goes on air the node
+ *                checks whether any peer within radio range is transmitting, and waits for
+ *                the medium to come free if one is. This is what BLE and Wi-Fi both do at
+ *                the link layer, so it is the most realistic of the three — and it is the
+ *                mechanism that stops a node transmitting into a receiver that cannot hear
+ *                it (docs/08 §12.10). No contention window and no random backoff: two nodes
+ *                that sense each other busy simply wait, and progress is guaranteed because
+ *                a node that is waiting is not itself on air.
  * - `halfDuplex` one radio per device, and it does one thing at a time. Packets
  *                go into a bounded FIFO and on air when the radio comes free;
  *                when the FIFO is full the newest packet is dropped, because a
@@ -58,7 +66,7 @@ export type RelayPolicy = "mpr" | "route-flood" | "flood-all";
  * that they belong to a different (harder) network than the one the roadmap
  * specifies. Flip it to measure what a shared medium would cost.
  */
-export type ChannelAccess = "free" | "halfDuplex";
+export type ChannelAccess = "free" | "halfDuplex" | "csma";
 
 /**
  * Which queued packet a busy radio takes next (docs/08 §12.8).

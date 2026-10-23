@@ -717,9 +717,11 @@ would silently redefine every acceptance number in the roadmap.
 * Voice priority in the transmit queue **is** implemented and measured (§12.8), and it does
   not do what it was for: it cannot rescue push-to-talk beyond two hops. It ships off.
 * The receiver is modelled separately, by `channelCapture` (§12.9), and it is where most of
-  the contention turns out to live. Two things remain unmodelled there as well: a capture
-  effect that compares signal strengths rather than arrival order, and any carrier sense —
-  a real radio defers before transmitting instead of transmitting blind.
+  the contention turns out to live. Carrier sense is modelled too, as `channelAccess: "csma"`
+  (§12.10), and measured as a loss under load. What remains unmodelled: a capture effect that
+  compares signal strengths rather than arrival order, a contention window with random backoff,
+  RTS/CTS for the hidden terminal, and backpressure from the radio to the layers above it —
+  which §12.10 argues is the one that matters.
 
 ### 12.8 Which packet a busy radio takes next
 
@@ -865,10 +867,109 @@ random draw changes order, golden vectors byte-identical), and the four-arm comp
 what the two flags are for — a decomposition, not a setting to leave on without deciding which
 radio you are claiming to have.
 
+### 12.10 Carrier sense: the mechanism real radios have, and what it is worth here
+
+§12.9 left a radio that transmits blind. BLE and Wi-Fi both listen before they talk, so
+`channelAccess: "csma"` adds exactly that on top of `halfDuplex`: before a queued packet goes
+on air the node checks whether any peer within radio range is transmitting, and waits for the
+medium to come free if one is. There is no contention window, no random backoff and no
+RTS/CTS — three things 802.11 has and this does not, and §12.10's verdict depends on all
+three.
+
+**Quiet mesh** (60 messages at 2 s, 3 seeds, receiver model on in both rows)
+
+| transmitter | delivery | p95 | captured | deaf | queue drops |
+|---|---|---|---|---|---|
+| `halfDuplex` | 0.9040 | 10,550 ms | 291 | 267 | 211 |
+| `csma` | **0.9322** | 15,146 ms | 245 | **3** | 546 |
+
+**With a 10 MB file in flight**
+
+| transmitter | delivery | p95 | captured | deaf | queue drops | file time |
+|---|---|---|---|---|---|---|
+| `halfDuplex` | **0.8927** | 11,681 ms | 603 | 808 | 1,744 | 3.75 min |
+| `csma` | 0.8588 | 17,484 ms | 368 | **8** | 3,232 | 4.71 min |
+
+**It does exactly what it was invented to do.** Self-deafness all but disappears — 808 losses
+become 8 — and first-capture falls 39%, because a node that can hear the medium does not
+transmit into it. The unit test pins the mechanism at its smallest: two nodes sending to each
+other at the same instant produce one deaf loss and one retransmission under `halfDuplex`, and
+zero of each under `csma`, paid for with 573 ms of waiting.
+
+**And whether that is worth anything depends entirely on the load.** In a quiet mesh, where
+collisions are the only problem, listening buys **2.8 points** of delivery. With a file in
+flight it costs **3.4**, and p95 grows half as much again. The reason is that waiting is not
+free: deferring holds packets in a bounded queue while the layers above keep generating them,
+so the queue overflows harder (1,744 → 3,232 drops) and every packet that waits longer than its
+own retry timer — 4 s for text, 600 ms for media — is retransmitted while the original is still
+queued. Carrier sense converts collisions into congestion, and congestion is what this engine's
+retry timers turn into load.
+
+**The gates get worse, not better.** The same 20-node campus, three seeds:
+
+| transmitter | receiver | delivery | within 5 | overhead vs flood-all | SUPER ratio |
+|---|---|---|---|---|---|
+| `free` | `none` (ships) | 0.9889 | 0.9889 | 9.3 % | 21.7 % |
+| `free` | `first` | 0.9056 | 0.9056 | 15.8 % | 25.0 % |
+| `halfDuplex` | `none` | 0.9556 | 0.9556 | 38.6 % | 25.0 % |
+| `halfDuplex` | `first` | 0.9000 | 0.9000 | 27.1 % | 21.7 % |
+| `csma` | `none` | **0.7889** | 0.7889 | **81.3 %** | 25.0 % |
+| `csma` | `first` | **0.7222** | 0.7222 | **77.2 %** | 23.3 % |
+
+Carrier sense fails both gates it is measured against: delivery 0.72-0.79 against ≥0.90, and
+overhead 77-81% against ≤70%. So §12.9's zero margin is the *best* contended case, not the
+worst, and the invitation to read listening as the rescue is declined. One caveat on the
+overhead column, which is a metric artefact rather than a routing result: the ratio's
+denominator is flood-all's transmissions, and under heavy queue shedding flood-all's packets
+are dropped at the tail before they are ever counted, so the denominator shrinks and the ratio
+rises. Overhead-vs-flood-all stops meaning what it meant in a model where every attempted
+transmission happens.
+
+**Depth is not the fix either.** The obvious response to "the queue overflows" is a bigger
+queue. Same arms, same file in flight, three seeds:
+
+| transmitter | depth | delivery | p95 | parked | queue drops | deferred air time | file time |
+|---|---|---|---|---|---|---|---|
+| `halfDuplex` | 8 | 0.8927 | 11,681 ms | 21.0 | 1,744 | 30.9 min | 3.75 min |
+| `halfDuplex` | 32 | **0.9266** | 14,960 ms | 23.0 | 1,085 | 79.7 min | 3.97 min |
+| `halfDuplex` | 128 | 0.8305 | 20,934 ms | 64.7 | 2,161 | 235.4 min | 10.18 min |
+| `csma` | 8 | 0.8588 | 17,484 ms | 36.3 | 3,232 | 78.2 min | 4.71 min |
+| `csma` | 32 | 0.7458 | 37,552 ms | 27.0 | 2,774 | 275.5 min | 6.90 min |
+| `csma` | 128 | **0.6667** | 57,163 ms | 57.3 | 3,009 | **450.1 min** | 16.44 min |
+
+Blind transmission tolerates one step of depth (0.8927 → 0.9266 at 32) and then collapses;
+listening degrades monotonically, and at 128 the deferred air time totals seven and a half
+hours across three 60-node runs — the mesh spends its whole life waiting for a radio horizon
+that keeps moving. This is bufferbloat with a discrete-event clock, and it is the same runaway
+§12.1 hit by accident, now reachable on purpose through a config knob. The mechanism is
+identical: a wait longer than a retry timer produces a duplicate, and a duplicate is more load.
+
+**What would change the verdict**, in order of how much it matters here:
+
+1. **Backpressure.** A real stack tells the layer above to stop generating work when the radio
+   is saturated. This engine has none — the MPR fan-out, the retry timers and the transfer
+   window all keep producing packets regardless of what the queue is doing — which is why
+   listening makes the queue worse instead of better. Everything else on this list is a
+   refinement; this is the missing half.
+2. **A contention window with random backoff**, which is 802.11's answer to two nodes that
+   defer for each other. Without it, symmetry is broken only by event ordering.
+3. **RTS/CTS**, for the hidden terminal that carrier sense provably cannot fix: in the unit
+   test's three-node line, the two end nodes are 40 m apart and out of each other's range but
+   both in range of the middle one, and the collision survives `csma` exactly as it survives
+   `halfDuplex`.
+
+**Verdict:** implemented, measured, not shipped — `channelAccess` stays `"free"` and the
+receiver stays `"none"`, so the golden vectors and every acceptance number in this repository
+are untouched. The number to carry into the platform work is the pair: carrier sense removes
+self-deafness completely and is worth **+2.8 points in a quiet mesh and −3.4 under load**, and
+the entire difference between those two is a queueing question that a simulator without
+backpressure cannot answer honestly. If the field test shows a real floor behaving like the
+loaded arm, the fix is not in the radio model — it is in the layers above it.
+
 ## 13. Reproducing
 
 ```bash
-npm run media                                            # TypeScript probe, every table above (§7-§9 for the radio)
+npm run media                                            # TypeScript probe, every table above (§7-§9 for the radio, incl. carrier sense)
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media --no-check
 npm test                                                 # 243 TS tests, incl. 18 media + 6 channel cases
 cd sim/mesh_sim && dart test                             # 18 Dart media cases + test/channel_test.dart
@@ -880,13 +981,14 @@ Engine surface: `sendFile(from, to, bytes, {chunkBytes, window, transport})`,
 `wifiDirectKbps`, `transferChunkBytes`, `transferWindow`, `transferStallMs`,
 `mediaAckTimeoutMs`, `adaptiveMediaAck`, `voiceKbps`, `voiceFrameMs`, `jitterBufferMs`,
 `voiceTtl`, `maxTransferBytes`, `channelAccess`, `channelQueueDepth`, `channelPriority`,
-`channelCapture`.
+`channelCapture`, and the `csma` value of `channelAccess`.
 
 Tests that pin this document's claims: `media transport (docs/05 §3.2-3.3, roadmap
 Phase 3)`, `media against skills/05 (Voice PTT & Media)`, `media under load, measured
 without confounding the A/B (docs/08 §9)` and `channel access: one radio, half-duplex
 (docs/08 §12)` and `which packet a busy radio takes next (docs/08 §12.8)` and
-`receiver contention: what a busy receiver does (docs/08 §12.9)` in
+`receiver contention: what a busy receiver does (docs/08 §12.9)` and
+`carrier sense, and the hidden terminal it cannot fix (docs/08 §12.10)` in
 `src/__tests__/simulation.test.ts`, `media transport in the UI` in
 `src/__tests__/components.test.tsx`, and `test/media_test.dart` plus `test/channel_test.dart`
 in the Dart engine.

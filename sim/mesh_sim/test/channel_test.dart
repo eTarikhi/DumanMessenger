@@ -339,10 +339,72 @@ void main() {
     expect(first.arrived, 2);
   });
 
+  test('carrier sense turns a collision into a wait, and the retry goes away with it', () {
+    ({int deaf, int retries, int deferrals, double deferMs, int arrived}) run(
+        ChannelAccess channelAccess) {
+      final sim = lineWorld(
+          n: 2, channelAccess: channelAccess, channelCapture: ChannelCapture.first);
+      final a = sim.nodes[0];
+      final b = sim.nodes[1];
+      sim.sendMessage(a.id, b.id, 'a-to-b');
+      sim.sendMessage(b.id, a.id, 'b-to-a');
+      sim.runFor(20000);
+      final st = sim.refresh();
+      return (
+        deaf: st.channelDeafRx,
+        retries: st.retriesSent,
+        deferrals: st.channelDeferrals,
+        deferMs: st.channelDeferMs,
+        arrived: sim.deliveries.where((d) => d.type == MsgType.text).length,
+      );
+    }
+
+    // Blind: each node transmits while the other is on air, so one packet lands on a deaf
+    // receiver and its sender retransmits four seconds later.
+    final blind = run(ChannelAccess.halfDuplex);
+    expect(blind.deaf, 1);
+    expect(blind.retries, 1);
+    expect(blind.deferrals, 0);
+
+    // Listening: the same two packets, and nobody collides. What the collision became is
+    // 573 ms of waiting, and the retry it would have caused disappears with it.
+    final listening = run(ChannelAccess.csma);
+    expect(listening.deaf, 0);
+    expect(listening.retries, 0);
+    expect(listening.deferrals, greaterThan(0));
+    expect(listening.deferMs, greaterThan(0.0));
+    expect(listening.arrived, blind.arrived);
+  });
+
+  test('carrier sense cannot help a hidden terminal, which the geometry reproduces', () {
+    // A and C are 40 m apart with B between them: neither can hear the other, and both can
+    // hear B. Carrier sense listens to the medium it can hear, so it does not fire here and
+    // the collision survives it - the case RTS/CTS exists for, which this model does not
+    // have (docs/08 §12.10).
+    int captured(ChannelAccess channelAccess) {
+      final sim = lineWorld(
+          n: 3, channelAccess: channelAccess, channelCapture: ChannelCapture.first);
+      final a = sim.nodes[0];
+      final b = sim.nodes[1];
+      final c = sim.nodes[2];
+      expect(canReach(a, b, sim.rf), isTrue);
+      expect(canReach(c, b, sim.rf), isTrue);
+      expect(canReach(a, c, sim.rf), isFalse); // hidden from each other
+      sim.sendMessage(a.id, b.id, 'from-a');
+      sim.sendMessage(c.id, b.id, 'from-c');
+      sim.runFor(20000);
+      return sim.refresh().channelCaptured;
+    }
+
+    expect(captured(ChannelAccess.halfDuplex), 1);
+    expect(captured(ChannelAccess.csma), 1);
+  });
+
   test('counts nothing at all in the shipped model, whatever the transmitter does', () {
     for (final channelAccess in <ChannelAccess>[
       ChannelAccess.free,
-      ChannelAccess.halfDuplex
+      ChannelAccess.halfDuplex,
+      ChannelAccess.csma
     ]) {
       final sim = MeshSimulation(campusQuad(42)
           .copyWith(trafficIntervalMs: 1000, channelAccess: channelAccess));

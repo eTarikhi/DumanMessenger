@@ -748,7 +748,7 @@ function gateRow(
 // ---------------------------------------------------------------------------
 
 const CAPTURES: ChannelCapture[] = ["none", "first"];
-const ACCESSES: ChannelAccess[] = ["free", "halfDuplex"];
+const ACCESSES: ChannelAccess[] = ["free", "halfDuplex", "csma"];
 
 interface CaptureCell {
   ratio: number;
@@ -760,6 +760,7 @@ interface CaptureCell {
   captured: number;
   deaf: number;
   drops: number;
+  deferMs: number;
   fileMs: number | null;
 }
 
@@ -767,13 +768,15 @@ function captureCell(
   access: ChannelAccess,
   capture: ChannelCapture,
   seed: number,
-  withFile: boolean
+  withFile: boolean,
+  queueDepth?: number
 ): CaptureCell {
   const sim = simFor({
     ...campusQuad(seed),
     trafficIntervalMs: 0,
     channelAccess: access,
     channelCapture: capture,
+    ...(queueDepth === undefined ? {} : { channelQueueDepth: queueDepth }),
   });
   const plan = contentionPlan(seed, sim.nodes.length, 60);
   const t = withFile ? sim.sendFile(sim.nodes[plan[0][0]].id, sim.nodes[plan[0][1]].id, 10 * MB) : null;
@@ -807,6 +810,7 @@ function captureCell(
     captured: stats.channelCaptured,
     deaf: stats.channelDeafRx,
     drops: stats.channelDrops,
+    deferMs: stats.channelDeferMs,
     fileMs: t && t.completedAt !== null ? t.completedAt - t.startedAt : null,
   };
 }
@@ -866,8 +870,36 @@ function captureTable(): void {
       "when a file is in flight; receiver collisions alone cost 13.6. Once collisions exist the queue\n" +
       "earns its keep — it is worth 3.4 points back — because serialising a node's own transmissions\n" +
       "removes the overlaps it was causing everybody else. And collisions are paid in latency before\n" +
-      "delivery: a lost packet is re-sent into an idle radio four seconds later, so p95 moves first."
+      "delivery: a lost packet is re-sent into an idle radio four seconds later, so p95 moves first.\n" +
+      "Carrier sense is the third arm and the surprising one: it removes almost every collision a\n" +
+      "node can hear (§12.10) and still loses delivery under load, because waiting is not free."
   );
+
+  console.log("\n--- carrier sense against queue depth: waiting is not free (docs/08 §12.10) ---");
+  console.log(
+    "Both arms with a receiver in them, a 10 MB file in flight, and the transmit queue deepened.\n" +
+      "The intuition is that a deeper queue holds what carrier sense makes you wait for. It does not:\n" +
+      "a packet that waits longer than its own retry timer gets retransmitted while the original is\n" +
+      "still queued, so depth converts collisions into load. Bufferbloat, with a 4 s text timer and a\n" +
+      "600 ms media timer as the mechanism."
+  );
+  console.log("transmitter  depth   delivery   p95 ms   parked  captured  deaf  queue drops  deferred   file");
+  for (const access of ["halfDuplex", "csma"] as ChannelAccess[]) {
+    for (const depth of [8, 32, 128]) {
+      const rows = SEEDS.map((seed) => captureCell(access, "first", seed, true, depth));
+      const mean = (f: (r: CaptureCell) => number | null) => {
+        const vals = rows.map(f).filter((v): v is number => v !== null);
+        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : NaN;
+      };
+      console.log(
+        `${access.padEnd(12)} ${String(depth).padEnd(7)} ${mean((r) => r.ratio).toFixed(4).padEnd(10)} ` +
+          `${mean((r) => r.p95).toFixed(0).padEnd(8)} ${mean((r) => r.parked).toFixed(1).padEnd(7)} ` +
+          `${mean((r) => r.captured).toFixed(0).padEnd(9)} ${mean((r) => r.deaf).toFixed(0).padEnd(5)} ` +
+          `${mean((r) => r.drops).toFixed(0).padEnd(12)} ${fmt(mean((r) => r.deferMs)).padEnd(10)} ` +
+          `${fmt(mean((r) => r.fileMs))}`
+      );
+    }
+  }
 }
 
 function channelTable(): void {

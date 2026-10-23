@@ -1259,8 +1259,9 @@ class MeshSimulation {
   int _channelCaptured = 0;
   int _channelDeafRx = 0;
 
-  /// Until when each node is transmitting, and until when it is locked onto a reception. Both
-  /// maintained only while `channelCapture` is on, so the shipped model pays nothing.
+  /// Until when each node is transmitting, and until when it is locked onto a reception.
+  /// Maintained only while the receiver model or carrier sense is on, so the shipped model
+  /// pays nothing.
   final Map<NodeId, double> _txUntil = <NodeId, double>{};
   final Map<NodeId, double> _rxUntil = <NodeId, double>{};
 
@@ -2436,6 +2437,20 @@ class MeshSimulation {
       }
       return;
     }
+    if (config.channelAccess == ChannelAccess.csma) {
+      // Carrier sense: the medium is busy if anybody within radio range is transmitting, and
+      // a node that waits is not itself on air, so this always terminates.
+      final freeAt = _mediumFreeAt(node);
+      if (freeAt > now) {
+        _channelDeferrals++;
+        _channelDeferMs += freeAt - now;
+        if (!ch.drainScheduled) {
+          ch.drainScheduled = true;
+          _queue.push(freeAt, EventKind.channel, node.id);
+        }
+        return;
+      }
+    }
     final next = _takeNextTx(ch);
     final waited = now - next.queuedAt;
     if (waited > 0) {
@@ -2448,6 +2463,18 @@ class MeshSimulation {
       ch.drainScheduled = true;
       _queue.push(ch.busyUntil, EventKind.channel, node.id);
     }
+  }
+
+  /// The instant the medium around [node] comes free: the latest transmit window it can hear,
+  /// or `now` if it hears nobody. Carrier sense only, and only over peers in range — a node
+  /// cannot sense a transmission it could not receive (docs/08 §12.10).
+  double _mediumFreeAt(MeshNode node) {
+    var freeAt = now;
+    for (final peer in peersInRange(node, nodes, rf)) {
+      final until = _txUntil[peer.id] ?? 0;
+      if (until > freeAt) freeAt = until;
+    }
+    return freeAt;
   }
 
   /// Take the next packet off the queue: arrival order, or by class when the config asks
@@ -2485,9 +2512,11 @@ class MeshSimulation {
             : config.hopLatencyBleMs) +
         serializationMs(msg.sizeBytes, msg.transport);
     final capture = config.channelCapture != ChannelCapture.none;
+    final sense = config.channelAccess == ChannelAccess.csma;
     // A radio is deaf from the moment it starts transmitting, whether or not the packet
-    // survives the link.
-    if (capture) _txUntil[node.id] = now + occupied;
+    // survives the link — and carrier sense needs the same fact from the other side, because
+    // what a sender listens for is exactly its peers' transmit windows.
+    if (capture || sense) _txUntil[node.id] = now + occupied;
     if (chance(rng, loss)) {
       _lostDataTx++;
       _recordTxOutcome(node, 0);

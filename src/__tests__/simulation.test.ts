@@ -3143,3 +3143,88 @@ describe("receiver contention: what a busy receiver does (docs/08 §12.9)", () =
     }
   });
 });
+
+describe("carrier sense, and the hidden terminal it cannot fix (docs/08 §12.10)", () => {
+  /** A line of nodes 20 m apart, so a node hears its neighbours and nobody else: at three
+   *  nodes the two ends are 40 m apart, outside the 31.6 m line-of-sight budget. */
+  function lineWorld(n: number, over: Partial<SimConfig> = {}): MeshSimulation {
+    const sim = new MeshSimulation({
+      ...DEFAULT_CONFIG,
+      nodeCount: n,
+      stationaryRatio: 1,
+      chargingRatio: 0,
+      trafficIntervalMs: 0,
+      enableSuperElection: false,
+      warmupMs: 0,
+      obstacles: [],
+      ...over,
+    });
+    sim.nodes.forEach((node, i) => {
+      node.pos = { x: 10 + i * 20, y: 10 };
+      node.home = { x: 10 + i * 20, y: 10 };
+      node.target = { x: 10 + i * 20, y: 10 };
+      node.stationary = true;
+      node.mobility = 0;
+      node.isOnline = true;
+      node.battery = 1;
+    });
+    sim.runFor(20000);
+    sim.clearRecords();
+    return sim;
+  }
+
+  it("turns a collision into a wait, and the retry goes away with it", () => {
+    const run = (channelAccess: SimConfig["channelAccess"]) => {
+      const sim = lineWorld(2, { channelAccess, channelCapture: "first" });
+      const [a, b] = sim.nodes;
+      sim.sendMessage(a.id, b.id, "a-to-b", "text");
+      sim.sendMessage(b.id, a.id, "b-to-a", "text");
+      sim.runFor(20000);
+      const stats = sim.refresh();
+      return {
+        deaf: stats.channelDeafRx,
+        retries: stats.retriesSent,
+        deferrals: stats.channelDeferrals,
+        deferMs: stats.channelDeferMs,
+        arrived: sim.deliveries.filter((d) => d.type === "text").length,
+      };
+    };
+
+    // Blind: each node transmits while the other is on air, so one packet lands on a deaf
+    // receiver and its sender retransmits four seconds later.
+    const blind = run("halfDuplex");
+    expect(blind.deaf).toBe(1);
+    expect(blind.retries).toBe(1);
+    expect(blind.deferrals).toBe(0);
+
+    // Listening: the same two packets, and nobody collides. What the collision became is
+    // 573 ms of waiting, and the retry it would have caused disappears with it.
+    const listening = run("csma");
+    expect(listening.deaf).toBe(0);
+    expect(listening.retries).toBe(0);
+    expect(listening.deferrals).toBeGreaterThan(0);
+    expect(listening.deferMs).toBeGreaterThan(0);
+    expect(listening.arrived).toBe(blind.arrived);
+  });
+
+  it("cannot help a hidden terminal, which is the limitation the geometry reproduces", () => {
+    // A and C are 40 m apart with B between them: neither can hear the other, and both can
+    // hear B. Carrier sense listens to the medium it can hear, so it does not fire here and
+    // the collision survives it — the case RTS/CTS exists for, which this model does not
+    // have (docs/08 §12.10).
+    const run = (channelAccess: SimConfig["channelAccess"]) => {
+      const sim = lineWorld(3, { channelAccess, channelCapture: "first" });
+      const [a, b, c] = sim.nodes;
+      expect(canReach(a, b, sim.rf)).toBe(true);
+      expect(canReach(c, b, sim.rf)).toBe(true);
+      expect(canReach(a, c, sim.rf)).toBe(false); // hidden from each other
+      sim.sendMessage(a.id, b.id, "from-a", "text");
+      sim.sendMessage(c.id, b.id, "from-c", "text");
+      sim.runFor(20000);
+      return sim.refresh().channelCaptured;
+    };
+
+    expect(run("halfDuplex")).toBe(1);
+    expect(run("csma")).toBe(1);
+  });
+});

@@ -59,10 +59,17 @@ enum RelayPolicy { mpr, routeFlood, floodAll }
 /// [ChannelAccess.halfDuplex] is the one radio a phone actually has: packets go into a
 /// bounded FIFO and on air when the radio comes free, and when the FIFO is full the newest
 /// packet is dropped, because a real radio sheds load rather than promising air time it
-/// does not have. Two things it still does not model, both optimistic: a busy *receiver*
+/// does not have.
+///
+/// [ChannelAccess.csma] is that plus carrier sense, which is what BLE and Wi-Fi both do at
+/// the link layer: before a packet goes on air the node checks whether any peer within radio
+/// range is transmitting, and waits for the medium to come free if one is. No contention
+/// window, no random backoff and no RTS/CTS, so it cannot fix a hidden terminal — and
+/// measured under load it loses delivery rather than recovering it, because waiting is not
+/// free in an engine with no backpressure (docs/08 §12.10). Two things it still does not model, both optimistic: a busy *receiver*
 /// can still take a packet (no capture effect), and packets waiting their turn do not
 /// collide.
-enum ChannelAccess { free, halfDuplex }
+enum ChannelAccess { free, halfDuplex, csma }
 
 /// Which queued packet a busy radio takes next (docs/08 §12.8).
 ///
