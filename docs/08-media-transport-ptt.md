@@ -1210,7 +1210,7 @@ this section all independently arrive at.
 npm run media                                            # TypeScript probe, every table above (§7-§11 for the radio: channel, priority, capture, carrier sense, the contention window, who sheds)
 npm run media -- backoff                                 # one section; also `shedding`. The whole probe is minutes of simulation
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media --no-check
-npm test                                                 # 268 TS tests, incl. 18 media and 17 radio cases
+npm test                                                 # 271 TS tests, incl. 18 media and 17 radio cases
 cd sim/mesh_sim && dart test                             # 18 Dart media cases + test/channel_test.dart
 ```
 

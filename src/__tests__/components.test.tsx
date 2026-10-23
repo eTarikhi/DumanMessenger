@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MeshSimulation, deliveredChain, type SimConfig } from "../simulation";
+import { DEFAULT_CONFIG, MeshSimulation, deliveredChain, type SimConfig } from "../simulation";
 import { campusQuad } from "../scenarios";
 import { MessageTrace } from "../components/MessageTrace";
 import { MeshLogPanel } from "../components/MeshLogPanel";
@@ -523,6 +523,126 @@ describe("the radio channel in the UI (docs/08 §12)", () => {
         <MetricsPanel stats={free.stats} dutyCycleEnabled={false} nodes={free.nodes} config={free.config} />
       )
     ).not.toContain("Radio channel");
+  });
+
+  it("splits the shedding by who did it, and only once there is shedding", () => {
+    const busy = world({ channelAccess: "halfDuplex" });
+    expect(busy.stats.channelDrops).toBeGreaterThan(0);
+    // The two halves are exhaustive and disjoint: a shed packet was either forwarded for
+    // somebody else or originated here, and nothing else counts it.
+    expect(busy.stats.channelDropsRelayed).toBeLessThanOrEqual(busy.stats.channelDrops);
+    expect(busy.stats.channelDropsMedia).toBeLessThanOrEqual(busy.stats.channelDrops);
+    expect(busy.stats.channelDropsWithAlternative).toBeLessThanOrEqual(busy.stats.channelDropsRelayed);
+
+    const html = renderToStaticMarkup(
+      <MetricsPanel stats={busy.stats} dutyCycleEnabled={false} nodes={busy.nodes} config={busy.config} />
+    );
+    expect(html).toContain("Who shed them");
+    expect(html).toContain("by their own source");
+    expect(html).toContain("alternative route");
+
+    // No shedding, no split to show — the row would render "0% (0)" four times and read as a
+    // finding rather than as the absence of one.
+    const free = world();
+    expect(free.stats.channelDrops).toBe(0);
+    expect(
+      renderToStaticMarkup(
+        <MetricsPanel stats={free.stats} dutyCycleEnabled={false} nodes={free.nodes} config={free.config} />
+      )
+    ).not.toContain("Who shed them");
+  });
+
+  it("counts a backpressure block apart from a stall, because one is a timeout and one is not", () => {
+    // Two nodes on an empty field: the geometry is the only variable, so the queue the transfer
+    // overruns is unambiguously its sender's own. The 20-node campus cannot host this case
+    // because a chunk routed through a relay is acknowledged by the relay, and by the time the
+    // ACK lands the sender's radio has already drained — the queue is never full at the moment
+    // pushWindow is asked to fill it, so the flag never has to refuse air.
+    const sim = new MeshSimulation({
+      ...DEFAULT_CONFIG,
+      nodeCount: 2,
+      stationaryRatio: 1,
+      chargingRatio: 0,
+      trafficIntervalMs: 0,
+      enableSuperElection: false,
+      warmupMs: 0,
+      obstacles: [],
+      channelAccess: "halfDuplex",
+      channelQueueDepth: 4,
+      mediaBackpressure: true,
+      transferWindow: 8,
+    });
+    sim.nodes.forEach((node, i) => {
+      node.pos = { x: 10 + i * 20, y: 10 };
+      node.home = { ...node.pos };
+      node.target = { ...node.pos };
+      node.stationary = true;
+      node.mobility = 0;
+      node.isOnline = true;
+      node.battery = 1;
+      node.txPower = DEFAULT_CONFIG.txPowerDbm;
+    });
+    sim.runFor(20000);
+    sim.clearRecords();
+    // 1 MB at 64 KB chunks is 16 packets through a window of 8 into a queue of 4: the transfer
+    // is committed four times as far ahead as its radio can hold. A file that fits inside the
+    // window never blocks and would make this test pass vacuously.
+    const t = sim.sendFile("node-0", "node-1", 1048576);
+    expect(t).not.toBeNull();
+    let elapsed = 0;
+    while (t!.state !== "complete" && elapsed < 60000) {
+      sim.runFor(100);
+      elapsed += 100;
+    }
+    expect(t!.state).toBe("complete");
+    const stats = sim.refresh();
+    expect(stats.transferBlocks).toBeGreaterThan(0);
+    expect(stats.transferStalls).toBe(0);
+    expect(stats.channelDrops).toBeLessThan(10);
+
+    const html = renderToStaticMarkup(
+      <MetricsPanel stats={stats} dutyCycleEnabled={false} nodes={sim.nodes} config={sim.config} />
+    );
+    expect(html).toContain("Blocked on own radio");
+    expect(html).toContain("Window stalls");
+  });
+
+  it("offers the queue, discipline and backpressure knobs — and hides them under the shipped radio", () => {
+    const sim = world();
+    const panel = (over: Partial<SimConfig>) =>
+      renderToStaticMarkup(
+        <ConfigPanel
+          config={{ ...sim.config, ...over }}
+          onChange={() => null}
+          showLinks={false}
+          showRanges={false}
+          onToggleLinks={() => null}
+          onToggleRanges={() => null}
+          autoTraffic={false}
+          onToggleAutoTraffic={() => null}
+        />
+      );
+
+    // Under `free` nothing queues, so every one of these would be inert: the panel does not
+    // offer a control that cannot do anything, which is also how it keeps the shipped model
+    // from looking like a configuration somebody chose badly.
+    const shipped = panel({});
+    expect(shipped).not.toContain("Transmit queue depth");
+    expect(shipped).not.toContain("Queue discipline");
+    expect(shipped).not.toContain("Contention window");
+    expect(shipped).not.toContain("Media backpressure");
+
+    const half = panel({ channelAccess: "halfDuplex" });
+    expect(half).toContain("Transmit queue depth");
+    expect(half).toContain("FIFO (ships)");
+    expect(half).toContain("ACKs first");
+    expect(half).toContain("Media backpressure");
+    // The contention window is only consulted where a node listens first.
+    expect(half).not.toContain("Contention window");
+
+    const csma = panel({ channelAccess: "csma", channelBackoff: "binary" });
+    expect(csma).toContain("Contention window");
+    expect(csma).toContain("Binary exponential");
   });
 
   it("offers both channel models in the config panel, and says which one ships", () => {

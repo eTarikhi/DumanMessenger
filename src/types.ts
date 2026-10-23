@@ -108,8 +108,8 @@ export type ChannelBackoff = "none" | "binary";
  *            cannot be rescued by jumping the queue, and the text it jumps ahead of pays
  *            for the attempt.
  *
- * Only consulted under `channelAccess: "halfDuplex"`. With a free radio nothing ever
- * waits, so there is no order to choose.
+ * Only consulted where a radio queues at all — `"halfDuplex"` and `"csma"`. Under `"free"`
+ * nothing ever waits, so there is no order to choose.
  */
 export type ChannelPriority = "fifo" | "ackFirst" | "class";
 
