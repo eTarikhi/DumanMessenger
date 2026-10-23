@@ -235,6 +235,32 @@ build is a gate, and the difference only shows up on the day something is red.
 It also checks whether the push will fast-forward **before** running the pipeline, so a rejected
 push does not cost you four minutes of simulation first, and it refuses to `--force`.
 
+### Two gates, and how they avoid running the suite twice
+
+There are two independent gates: this script, and the `pre-push` hook from §3, which fires on any
+`git push`. Left to themselves they run the same test suite twice per push — roughly seven minutes
+for no additional information, which is enough to make people reach for `--no-verify` and lose both.
+
+So the script skips the hook **only when its own run already covered every job**, and says so:
+
+```
+==> pushing to origin/arena/5ce83e54-dumanmessenger
+    skipping the pre-push hook: this run already covered every job it would have
+```
+
+A scoped run is narrower than the hook, so there the hook keeps its say:
+
+```bash
+./tool/ci/validate-and-push.sh --job web --no-commit   # script verifies web; hook runs the fast subset
+git push                                               # hook is the only gate
+```
+
+The hook blocks on a **failed** run and warns on a **partial** one. That asymmetry is deliberate: a
+missing optional toolchain is not a broken build, and treating it as one would make the repository
+unusable rather than safe. What it must never do is stay quiet — so a partial push says out loud
+that remote CI is the authority on the jobs this machine could not run, and that if CI is
+unavailable the gap should be stated wherever the commits are described.
+
 ### Partial verification is recorded, not hidden
 
 Because a machine without a Dart SDK is a real situation and not a hypothetical one, there is

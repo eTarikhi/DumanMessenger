@@ -519,8 +519,35 @@ the lint set in <code>analysis_options.yaml</code> (<code>strict-casts</code>, <
 tested. Two earlier Dart commits in this session did compile and pass on CI before the billing stop, and the
 transport seam passed <code>dart analyze</code> and all 13 of its tests at <code>3c75d77</code>. The capture-effect
 mirror is the part that needs a green run before it should be trusted.</p>
+<p><strong>What was built in response.</strong> With Actions unavailable, the local alternative had been
+&ldquo;run the tests and hope&rdquo;, which is not the same claim as &ldquo;ran the pipeline CI runs&rdquo;.
+<code>tool/ci/</code> now executes the workflow&rsquo;s own commands in the workflow&rsquo;s own order, including the
+three behaviours that are easy to drop and expensive to lose: the <code>needs: dart</code> edges, the Dart
+job running all three of its checks before gating, and the golden-vector step failing when
+regenerating changes the committed file. <code>ci.yml</code> in turn calls the same
+<code>tool/ci/diagnostics.py</code> the local runner calls, so one parser serves both and they cannot
+drift. <code>make ci</code> runs it, <code>make doctor</code> compares this machine against the versions CI
+pins, <code>make push</code> validates before pushing, and <code>make diagnose</code> reads the remote
+annotations &mdash; which is how the billing refusal above gets reported as an infrastructure problem
+rather than as four build failures.</p>
+<p><strong>It closes the TypeScript half of the gap and none of the Dart half.</strong> A job that cannot
+run is a failure here, never a silent skip: on this machine <code>make ci</code> exits 1 with three of four
+jobs <code>MISSING</code>, because there is no Dart SDK and <code>pub.dev</code> is unreachable. The
+<code>web</code> job <em>was</em> run locally before each of the final pushes &mdash; <code>npm ci</code>,
+<code>npx tsc --noEmit</code>, 276 tests, golden vectors byte-identical, production build &mdash; and each is
+recorded in <code>artifacts/ci/verification-log.jsonl</code> as <code>scoped:web</code>, a label that names
+which jobs actually ran so a web-only push cannot later be mistaken for a verified Dart engine.
+Everything TypeScript above was therefore re-verified locally at the end of the session; the Dart
+capture-effect mirror is still uncompiled and still needs a green run before it should be trusted.
+<code>docs/10-local-development-and-ci.md</code> documents the toolchain, the runner, the exit codes and
+the monitoring.</p>
 <h3>Reproducing everything above</h3>
-<pre>npm ci &amp;&amp; npm test                # 276 TypeScript tests
+<pre>make doctor                        # does this machine match the versions CI pins?
+make ci                            # every CI job, locally  (tool/ci/run-pipeline.sh)
+make push                          # validate first, then push — refuses on red or partial
+make diagnose                      # why the remote run failed: billing refusal vs real failure
+                                   #   (docs/10-local-development-and-ci.md)
+npm ci &amp;&amp; npm test                # 276 TypeScript tests
 npm run golden                     # regenerate and diff the cross-language vectors
 npm run media                      # docs/08: files, PTT, retry timer, contention, the radio (§7-§9)
 npm run history                    # docs/06 §17: repair against the same world with it off
