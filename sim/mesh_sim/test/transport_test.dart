@@ -167,8 +167,12 @@ void main() {
       expect(t.lastSeen(peer), isNull);
       await expectLater(t.connect(peer), failsWith(TransportFailure.notHeard));
       // And a write down the link that was open when the peer left fails rather than
-      // silently succeeding into nothing.
-      await expectLater(t.send(conn, bytes(8)), failsWith(TransportFailure.notHeard));
+      // silently succeeding into nothing. It reports `disconnected` and not `notHeard`: the
+      // scan already dropped the link, so the specific thing wrong is that this Connection is
+      // stale, and "reconnect" is different advice from "the peer is out of range". `notHeard`
+      // is what a write gets in the window between the peer leaving and the next poll, when
+      // the link has not been dropped yet.
+      await expectLater(t.send(conn, bytes(8)), failsWith(TransportFailure.disconnected));
     });
 
     test('goes quiet once stopped, and leaves the engine running', () async {
