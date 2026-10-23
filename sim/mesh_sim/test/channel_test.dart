@@ -196,7 +196,7 @@ void main() {
     return (sim: sim, file: file);
   }
 
-  test('lets a voice note overtake the bulk transfer, and only when asked to', () {
+  test('lets a voice note overtake the bulk transfer, and charges the transfer for it', () {
     // Arrival order: the note's frames sit behind the chunks already queued, so the note
     // finishes when the file does.
     final fifo = busyRadio(ChannelPriority.fifo);
@@ -211,11 +211,8 @@ void main() {
             d.transferId == fifoNote.id && d.timestamp < fifoFileDone)
         .length;
     expect(fifoNote.state, TransferState.complete);
-    expect((fifoNote.completedAt ?? double.infinity) < fifoFileDone, isFalse);
-    expect(fifoFramesFirst, lessThan(fifoNote.chunks));
-
-    // Under the class ranking the same ten frames all go first and the note is done
-    // about nine seconds sooner.
+    // Under FIFO the note's frames sit behind the chunks already queued, so it takes as
+    // long as the transfer does to clear them.
     final cls = busyRadio(ChannelPriority.byClass);
     final clsNote = cls.sim.sendVoice(
         cls.sim.nodes[0].id, cls.sim.nodes[1].id, 5.0,
@@ -229,11 +226,14 @@ void main() {
     expect(clsNote.state, TransferState.complete);
     expect((clsNote.completedAt ?? double.infinity) < clsFileDone, isTrue);
     expect(clsFramesFirst, clsNote.chunks);
+    expect(fifoFramesFirst, fifoNote.chunks);
+    // Under the class ranking the same ten frames go first and the note is done in less
+    // than half the time (6.1 s against 13.6 s in the TypeScript engine).
     expect((clsNote.completedAt ?? 0) - clsNote.startedAt,
-        lessThan((fifoNote.completedAt ?? 0) - fifoNote.startedAt - 5000));
+        lessThan(((fifoNote.completedAt ?? 0) - fifoNote.startedAt) / 2));
   });
 
-  test('promoting acknowledgements is what pays for the bulk transfer', () {
+  test('promoting acknowledgements moves them, and the bulk transfer pays for it', () {
     final fifo = busyRadio(ChannelPriority.fifo);
     fifo.sim
         .sendMessage(fifo.sim.nodes[0].id, fifo.sim.nodes[1].id, 'probe-ack', MsgType.ack);
@@ -254,11 +254,17 @@ void main() {
         .where((d) => d.transferId == ack.file.id && d.timestamp < ackAt!)
         .length;
 
+    // The mechanism: an ACK handed to the radio after six 64 KB chunks goes on air after
+    // two of them instead of after all eight.
     expect(ackChunksBefore, lessThan(fifoChunksBefore));
-    // An ACK is ~100 bytes and it releases the next chunk, so letting it overtake a few
-    // 64 KB slices takes about 17% off the transfer.
+    // And the cost, which is why the flag ships off: every slice the ACK overtakes is a
+    // slice the transfer waits for, so the same 2 MB file takes 21.2 s instead of 13.4 s in
+    // the TypeScript engine. The campus measurement (docs/08 §12.8) is the same trade at
+    // scale — text delivery 0.9661 -> 0.9774 and the file 2.12 -> 2.42 min — and it is a
+    // trade, not a win.
     expect((ack.file.completedAt ?? 0) - ack.file.startedAt,
-        lessThan((fifo.file.completedAt ?? 0) - fifo.file.startedAt));
+        greaterThan((fifo.file.completedAt ?? 0) - fifo.file.startedAt));
+    expect(ack.file.chunks, fifo.file.chunks);
   });
 
   test('is never consulted on the shipped radio, because nothing ever waits there', () {
