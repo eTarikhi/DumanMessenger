@@ -65,9 +65,13 @@
 > One narrow exception to all of the above is a win rather than a trade, and it is this skill's
 > own acceptance box: for a transfer between two devices with nothing else on the radio — "2
 > phones exchange image <10 MB over WiFi Direct mesh" — letting the sender fill only the queue
-> slots its radio has (`mediaBackpressure`) cuts a 1 MB transfer's dropped chunks from 25 to 3,
-> its retransmissions from 6 to 1 and its window stalls from 1 to 0, and the file arrives in
-> **5.2 s instead of 9.4 s**, because a chunk that was never dropped never had to be sent twice.
-> The same flag does nothing for a mesh, where the queue that overflows belongs to a relay fed
-> by several senders at once (`docs/08` §12.12).
+> slots its radio has (`mediaBackpressure`) cuts a 1 MB transfer's dropped chunks from 25 to 5,
+> its retransmissions from 6 to **0** and its window stalls from 1 to 0, and the file arrives in
+> **6.04 s instead of 9.37 s**, because a chunk that was never dropped never had to be sent twice.
+> For this to work the window has to be allowed to close completely: floored at one slot the sender
+> still hands a packet to a full queue and has it shed at the tail, which is not backpressure but a
+> slower way of dropping, and it leaves a retransmission behind. In a mesh the same flag is a trade
+> rather than a win — it buys 1.7 points of delivery under carrier sense and loses 2.8 under plain
+> half-duplex, because a transfer window can ration a transfer's *share* of a radio but cannot create
+> slots (`docs/08` §12.12, and §12.14 for who is actually shedding).
 

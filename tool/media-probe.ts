@@ -1623,7 +1623,7 @@ function sheddingTable(): void {
       "measured instead of reasoned."
   );
   console.log(
-    "transmitter  backpressure  delivery   within5   p95 ms   drops  at source  chunks  retrans  blocked   file"
+    "transmitter  backpressure  delivery   within5   p95 ms  parked   drops  at source  chunks  retrans  blocked   file"
   );
   for (const access of ["halfDuplex", "csma"] as ChannelAccess[]) {
     for (const bp of [false, true]) {
@@ -1636,7 +1636,8 @@ function sheddingTable(): void {
         `${access.padEnd(12)} ${(bp ? "on" : "off").padEnd(13)} ${mean((r) => r.ratio)
           .toFixed(4)
           .padEnd(10)} ${mean((r) => r.within5).toFixed(4).padEnd(9)} ` +
-          `${mean((r) => r.p95).toFixed(0).padStart(6)}   ${drops.toFixed(0).padStart(5)}  ` +
+          `${mean((r) => r.p95).toFixed(0).padStart(6)}  ${mean((r) => r.parked).toFixed(1).padStart(6)}   ` +
+          `${drops.toFixed(0).padStart(5)}  ` +
           `${(((drops - mean((r) => r.dropsRelayed)) / Math.max(1, drops)) * 100).toFixed(0).padStart(7)} %  ` +
           `${((mean((r) => r.dropsMedia) / Math.max(1, drops)) * 100).toFixed(0).padStart(6)} %   ` +
           `${mean((r) => r.retries).toFixed(0).padStart(6)}   ` +

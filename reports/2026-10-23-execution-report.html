@@ -333,24 +333,52 @@ appears in miniature &mdash; the backoff fires (8 draws), turns 1250 ms of defer
 collision count does not move. <code>halfDuplex</code> + backoff is inert by construction and asserted so
 (0.9096, 0 draws, 3.28 min, identical to off).</p>
 
-<h3>Backpressure: the fix that works for a transfer and not for a mesh</h3>
+<h3>Backpressure: corrected, and the topology argument that had to be withdrawn</h3>
 <table><thead><tr><th>one radio, nobody else on it: 1 MB through a window of 8 into a 4-deep queue</th><th>backpressure off</th><th>backpressure on</th></tr></thead><tbody>
-<tr><td>queue drops</td><td class="num">25</td><td class="num pass">3</td></tr>
-<tr><td>chunks retransmitted</td><td class="num">6</td><td class="num pass">1</td></tr>
+<tr><td>queue drops</td><td class="num">25</td><td class="num pass">5</td></tr>
+<tr><td>chunks retransmitted</td><td class="num">6</td><td class="num pass">0</td></tr>
 <tr><td>window stalls</td><td class="num">1</td><td class="num pass">0</td></tr>
-<tr><td>file time</td><td class="num">9.4 s</td><td class="num pass">5.2 s</td></tr>
-<tr><td>crowd, 10 MB with text competing: delivery</td><td class="num pass">0.9096</td><td class="num part">0.8983</td></tr>
-<tr><td>crowd: that file's transfer time</td><td class="num pass">3.28 min</td><td class="num part">3.89 min</td></tr>
+<tr><td>waits on its own radio (the flag working)</td><td class="num">0</td><td class="num">4</td></tr>
+<tr><td>file time</td><td class="num">9.37 s</td><td class="num pass">6.04 s</td></tr>
 </tbody></table>
-<p class="sub">&sect;12.10 ended by naming backpressure as the missing half of the radio model, and
-<code>mediaBackpressure</code> is the smallest form of it: a transfer fills only the queue slots its sender's
-radio has. Where the sender is the only one queueing it is a strict improvement &mdash; fewer drops, fewer
-retransmissions, no stalls, and a <em>faster</em> file, because a chunk that was never dropped never had to be
-sent twice. In a mesh it is not, and the reason is topology: the queue that overflows belongs to a relay, which
-several senders feed at once, so throttling one source leaves that queue exactly as full while extending the
-period everybody is contending. The recommendation is therefore narrower than the flag &mdash; worth building
-for the one-peer case, which is exactly skills/05's &quot;2 phones exchange image &lt;10 MB&quot; box &mdash;
-and the mesh-wide version needs a relay that can tell its upstream to stop.</p>
+<p class="sub">This table was published before with <code>on</code> reading 3 drops, 1 retransmission and 5.2 s,
+because the flag was broken in three places: its window was floored at one, so a throttled sender still handed a
+packet to a full queue and had it shed at the tail &mdash; not backpressure, a slower way of dropping; its stall
+path bypassed the window entirely and re-sent up to a whole window into the queue that caused the stall; and
+nothing resumed a blocked transfer when a slot freed, so a sender correctly refusing itself air waited for a
+timeout instead of for the medium. Corrected, it removes the retransmission outright at a cost of 0.8 s. The
+<code>off</code> column is unchanged to the digit, which is the check that only the throttled path moved.</p>
+<table><thead><tr><th>who sheds the packets (20-node campus, 3 seeds, receiver model on)</th><th>queue drops</th><th>shed by a relay</th><th>file/voice chunks</th><th>alternative next hop existed</th></tr></thead><tbody>
+<tr><td><code>halfDuplex</code>, no media in flight</td><td class="num">176</td><td class="num">80%</td><td class="num">0%</td><td class="num">9%</td></tr>
+<tr><td><code>halfDuplex</code>, 10 MB in flight</td><td class="num">1441</td><td class="num fail">15%</td><td class="num">82%</td><td class="num fail">3%</td></tr>
+<tr><td><code>csma</code>, no media in flight</td><td class="num">563</td><td class="num">83%</td><td class="num">0%</td><td class="num">5%</td></tr>
+<tr><td><code>csma</code>, 10 MB in flight</td><td class="num">2995</td><td class="num fail">18%</td><td class="num">79%</td><td class="num fail">9%</td></tr>
+</tbody></table>
+<p>&sect;12.10 ended by naming backpressure as the missing half of the radio model, and the first measurement of
+<code>mediaBackpressure</code> in a mesh came out null, so this report explained it with an argument about
+topology: the queue that overflows belongs to a <em>relay</em>, which several senders feed at once, so throttling
+one source leaves it exactly as full. <strong>The argument was never measured, and measuring it contradicts
+it.</strong> With no media in flight the shedding really is a relay&rsquo;s, 80&ndash;83%. With a file in flight it
+inverts: <strong>82&ndash;85% of the shed packets are dropped by the node that originated them</strong>, and
+79&ndash;82% of what it sheds is transfer chunks. The premise was measured on the wrong arm.</p>
+<table><thead><tr><th>20-node campus, 10 MB with text competing, corrected mechanism</th><th>delivery</th><th>p95</th><th>queue drops</th><th>waits</th><th>file</th></tr></thead><tbody>
+<tr><td><code>halfDuplex</code>, backpressure off</td><td class="num pass">0.9096</td><td class="num">11,399 ms</td><td class="num">1441</td><td class="num">0</td><td class="num">3.28 min</td></tr>
+<tr><td><code>halfDuplex</code>, backpressure on</td><td class="num part">0.8814</td><td class="num">13,029 ms</td><td class="num">1401</td><td class="num">5</td><td class="num pass">3.10 min</td></tr>
+<tr><td><code>csma</code>, backpressure off</td><td class="num part">0.8757</td><td class="num">16,212 ms</td><td class="num">2995</td><td class="num">0</td><td class="num pass">3.64 min</td></tr>
+<tr><td><code>csma</code>, backpressure on</td><td class="num part">0.8927</td><td class="num fail">28,488 ms</td><td class="num pass">2113</td><td class="num">14</td><td class="num">4.41 min</td></tr>
+</tbody></table>
+<p class="sub">The corrected mechanism cuts drops in both arms and moves delivery in <em>opposite</em> directions:
++1.7 points under carrier sense, &minus;2.8 under plain half-duplex, and neither reaches the &ge;0.90 gate. Under
+<code>halfDuplex</code> it buys a faster file with text delivery, which is the wrong way round for an acceptance box
+about text; under <code>csma</code> it buys delivery with a p95 that nearly doubles.</p>
+<p>The second thing the attribution settles is the cheap alternative to flow control. Rerouting round a saturated
+relay needs somewhere to reroute to &mdash; a peer in range whose own route to the destination is no longer than the
+one already chosen &mdash; and one existed for <strong>3&ndash;9%</strong> of relay sheds. This topology does not have
+the path diversity, so congestion-aware forwarding is closed without being built. What is left being shed after the
+corrected gate is not the transfer&rsquo;s to give up: 70% of it is still shed at a source and 66% is still chunks,
+because a window can ration a transfer&rsquo;s <em>share</em> of a radio but cannot create slots. The remaining
+mechanism is a radio that can refuse the hand-over rather than shed it &mdash; which is what &sect;12.10,
+&sect;12.12, &sect;12.13 and &sect;12.14 each independently arrive at. <code>docs/08</code> &sect;12.12&ndash;12.14.</p>
 
 <h3>The defect the channel model found in the retry timer</h3>
 <div class="note warn">Every radio number above was measured twice. The first pass ran with a retry timer that
@@ -474,7 +502,7 @@ which is which, because a field report has to say which one it is quoting.</p>
 <h2>13. Repository inventory</h2>
 <table class=""><thead><tr><th>area</th><th>added lines</th><th>+</th><th>-</th></tr></thead><tbody><tr><td>src/ (TS engine + React visualiser)</td><td><div class="bar"><div class="fill" style="width:100.00%;background:#4de0ff"></div><span class="barlabel">+10,320</span></div></td><td class="num">+10,320</td><td class="num">-1,062</td></tr><tr><td>sim/mesh_sim/ (authoritative Dart)</td><td><div class="bar"><div class="fill" style="width:88.88%;background:#4de0ff"></div><span class="barlabel">+9,172</span></div></td><td class="num">+9,172</td><td class="num">-</td></tr><tr><td>docs/ (findings, E2EE, media, field test)</td><td><div class="bar"><div class="fill" style="width:25.19%;background:#4de0ff"></div><span class="barlabel">+2,600</span></div></td><td class="num">+2,600</td><td class="num">-</td></tr><tr><td>tool/ (golden, media, history, field probes)</td><td><div class="bar"><div class="fill" style="width:14.45%;background:#4de0ff"></div><span class="barlabel">+1,491</span></div></td><td class="num">+1,491</td><td class="num">-</td></tr><tr><td>roadmap/ + skills/ (annotation pass)</td><td><div class="bar"><div class="fill" style="width:3.00%;background:#4de0ff"></div><span class="barlabel">+310</span></div></td><td class="num">+310</td><td class="num">-23</td></tr><tr><td>.github/ (3 jobs + probes job)</td><td><div class="bar"><div class="fill" style="width:3.12%;background:#4de0ff"></div><span class="barlabel">+322</span></div></td><td class="num">+322</td><td class="num">-</td></tr><tr><td>test-fixtures/ (cross-language goldens)</td><td><div class="bar"><div class="fill" style="width:2.68%;background:#4de0ff"></div><span class="barlabel">+277</span></div></td><td class="num">+277</td><td class="num">-</td></tr><tr><td>reports/</td><td><div class="bar"><div class="fill" style="width:2.15%;background:#4de0ff"></div><span class="barlabel">+222</span></div></td><td class="num">+222</td><td class="num">-</td></tr></tbody></table>
 <h3>Reproducing everything above</h3>
-<pre>npm ci &amp;&amp; npm test                # 265 TypeScript tests
+<pre>npm ci &amp;&amp; npm test                # 268 TypeScript tests
 npm run golden                     # regenerate and diff the cross-language vectors
 npm run media                      # docs/08: files, PTT, retry timer, contention, the radio (§7-§9)
 npm run history                    # docs/06 §17: repair against the same world with it off
@@ -482,7 +510,7 @@ npm run field:capture -- campus_quad 42 /tmp/cap.jsonl [flood-all]
 npm run field:report  -- /tmp/cap.jsonl /tmp/base.jsonl
 ALLOW_ANY_DEV_HOST=1 npm run dev -- --port 5173     # the React visualiser
 
-cd sim/mesh_sim &amp;&amp; dart pub get &amp;&amp; dart test     # 178 Dart cases
+cd sim/mesh_sim &amp;&amp; dart pub get &amp;&amp; dart test     # 181 Dart cases
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42          # asserts the criteria
 dart run bin/mesh_sim.dart --sos | --group 10 | --media | --history  # the four probes
 dart run bin/mesh_sim.dart --trace | --capture | --capture-ogm       # hop routes, pcap-like log
@@ -509,15 +537,18 @@ carrier, where the work actually is.</li>
 <li><strong>Rank, not score, in the field record</strong> - observed-maximum normalisation is built,
 measured and rejected (&sect;18.4): the atrium phone loses on rank among the candidates it can hear, which a
 score threshold hides. <code>docs/09</code> &sect;5 should record that column.</li>
-<li><strong>Hop-by-hop backpressure</strong> - the sender-side version is built and measured
-(<code>mediaBackpressure</code>): on one radio with nobody else on it it cuts a 1 MB transfer's queue drops
-from 25 to 3, its retransmissions from 6 to 1 and its stalls from 1 to 0, and the file arrives in 5.2 s instead
-of 9.4 s. In a mesh it does nothing for delivery and costs the transfer 18%, because the queue that overflows
-in a multi-hop mesh belongs to a relay fed by several senders at once. The version that would fix the mesh is a
-relay that can tell its upstream to stop, which nothing in this stack has (docs/08 &sect;12.12). The contention
-window measurement makes this the load-bearing gap rather than one of several: under carrier sense the losses are
-queue drops outnumbering collisions about eight to one, so the shedding queue &mdash; not the medium in front of
-it &mdash; is where delivery is being lost (docs/08 &sect;12.13).</li>
+<li><strong>Hop-by-hop flow control</strong> - the sender-side version is built, was found broken
+in three places, and is now corrected (<code>mediaBackpressure</code>): on one radio with nobody else on it it cuts
+a 1 MB transfer's queue drops from 25 to 5, its retransmissions from 6 to <strong>0</strong> and its stalls from 1
+to 0, and the file arrives in 6.04 s instead of 9.37 s. In a mesh it is a trade rather than a win &mdash; +1.7
+points of delivery under carrier sense, &minus;2.8 under plain half-duplex, and neither reaches the gate. The
+version that would fix the mesh is a radio that can <em>refuse a hand-over</em> rather than shed it, with a layer
+above that holds the packet instead of counting it lost, which nothing in this stack has (docs/08
+&sect;12.12&ndash;12.14). Three measurements make this the load-bearing gap rather than one of several: under
+carrier sense the losses are queue drops outnumbering collisions about eight to one (&sect;12.13); with a file in
+flight 82&ndash;85% of the shedding is the <em>source's</em> own, not a relay's, which withdraws the topological
+argument this list used to carry (&sect;12.14); and the cheap alternative &mdash; rerouting round a congested relay
+&mdash; is unavailable, because an equal-cost alternative next hop existed for only 3&ndash;9% of relay sheds.</li>
 <li><strong>A capture effect that compares signal strengths, and RTS/CTS</strong> - the receiver model loses
 the later of two packets whatever their levels, and the hidden terminal is provably unfixable without RTS/CTS (a
 test pins it). Both are named with their direction in docs/08 &sect;12.9-12.10. The third omission that list
