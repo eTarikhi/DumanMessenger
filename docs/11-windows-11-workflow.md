@@ -55,6 +55,28 @@ and `dart-lang/setup-dart` with `stable`, against `sdk: ^3.4.0` in `sim/mesh_sim
 different Node major can produce different test results, and then a green local run stops predicting
 a green CI run — which is the whole value of having one.
 
+The Node requirement is declared in `package.json` as well as documented here, so the package
+manager enforces it and not just the reader:
+
+```json
+"engines": { "node": ">=22 <23" }
+```
+
+On a mismatched Node, `npm ci` prints `npm warn EBADENGINE` naming both the required and the
+current version. It is a warning by default, so a wrong Node does not silently produce a green run
+that means something narrower than it appears to. To make it a hard failure — worth doing on a
+machine that builds this repository often:
+
+```powershell
+npm config set engine-strict true     # then a mismatch fails npm ci outright
+```
+
+Verified both ways: with the constraint set to an impossible `>=99 <100`, plain `npm ci` warned and
+`npm ci --engine-strict` exited `1` with `npm error code EBADENGINE`.
+
+Dart's equivalent constraint already exists as `environment: sdk: ^3.4.0` in
+`sim/mesh_sim/pubspec.yaml`, which `dart pub get` enforces directly.
+
 ---
 
 ## 2. Installing the Dart SDK on Windows
