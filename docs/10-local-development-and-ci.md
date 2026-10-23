@@ -241,7 +241,8 @@ There are two independent gates: this script, and the `pre-push` hook from §3, 
 `git push`. Left to themselves they run the same test suite twice per push — roughly seven minutes
 for no additional information, which is enough to make people reach for `--no-verify` and lose both.
 
-So the script skips the hook **only when its own run already covered every job**, and says so:
+So the script skips the hook **only when its own run already covered every job**, and says so
+(both gates append to the same verification log, so skipping one does not lose the record):
 
 ```
 ==> pushing to origin/arena/5ce83e54-dumanmessenger
@@ -271,8 +272,14 @@ loud — in the run record and in an append-only log:
 $ tail -1 artifacts/ci/verification-log.jsonl
 {"timestamp":"<UTC>","branch":"<branch>","sha":"<short-sha>","verification":"<see below>",
  "jobs":"<the jobs that actually ran>","pipelineExit":<0|1|2>,"runId":"<artifact-dir>",
- "pushed":<true|false|null>}
+ "gate":"<pre-push|absent>","pushed":<true|false|null>}
 ```
+
+Both gates write here, so the trail covers a bare `git push` and not only `make push`. `gate`
+says which one. Records from the hook carry `pushed: null` **by design**: the hook runs *before*
+the push, so it cannot know whether the push succeeds, and asserting success there would be the
+same overclaim the log exists to prevent. Records from `validate-and-push.sh` start as `null` and
+are rewritten to `true` once the push is known.
 
 So a commit that was never fully verified stays discoverable later instead of looking like one
 that was. If you use it, say so wherever the work is described — a report that claims a build

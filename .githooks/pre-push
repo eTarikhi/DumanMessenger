@@ -37,11 +37,57 @@ fi
 ARGS=(--fast --keep-going --allow-missing-dart --label pre-push --quiet)
 [ "$MODE" = full ] && ARGS=(--keep-going --allow-missing-dart --label pre-push-full --quiet)
 
+JSON_TMP="$(mktemp)"
+trap 'rm -f "$JSON_TMP"' EXIT
+ARGS+=(--json "$JSON_TMP")
+
 printf '\n\033[36m==>\033[0m \033[1mpre-push gate (%s pipeline)\033[0m\n' "$MODE"
 printf '    set CI_PREPUSH=off to skip, or push with --no-verify\n\n'
 
 "$RUNNER" "${ARGS[@]}"
 RC=$?
+
+# Record this push in the same log validate-and-push.sh writes. Without this the message
+# below would be untrue for the most common case: a bare `git push` comes through this hook
+# and nowhere near that script, so the audit trail would show nothing at all for it.
+#
+# `pushed` is null rather than true because the hook runs *before* the push and cannot know
+# whether it succeeds — asserting success here would be the same overclaim this log exists
+# to prevent. `gate` records which of the two gates wrote the entry.
+LOG_FILE="$ROOT/artifacts/ci/verification-log.jsonl"
+mkdir -p "$(dirname "$LOG_FILE")"
+if [ -s "$JSON_TMP" ] && command -v python3 >/dev/null 2>&1; then
+  python3 -c '
+import json, subprocess, sys
+from datetime import datetime, timezone
+
+rec_path, log_path, rc = sys.argv[1], sys.argv[2], int(sys.argv[3])
+try:
+    r = json.load(open(rec_path, encoding="utf-8"))
+except Exception:
+    sys.exit(0)
+
+def git(*a):
+    try:
+        return subprocess.run(["git", *a], capture_output=True, text=True).stdout.strip()
+    except Exception:
+        return "unknown"
+
+entry = {
+    "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "branch": git("rev-parse", "--abbrev-ref", "HEAD"),
+    "sha": git("rev-parse", "--short", "HEAD"),
+    "verification": r.get("verification", "unknown"),
+    "jobs": ",".join(r.get("jobs") or {}),
+    "pipelineExit": rc,
+    "runId": r.get("runId", "unknown"),
+    "gate": "pre-push",
+    "pushed": None,
+}
+with open(log_path, "a", encoding="utf-8") as fh:
+    fh.write(json.dumps(entry) + "\n")
+' "$JSON_TMP" "$LOG_FILE" "$RC" 2>/dev/null || true
+fi
 
 case "$RC" in
   0)
@@ -51,7 +97,9 @@ case "$RC" in
   2)
     printf '\n\033[33m==>\033[0m \033[1mpre-push gate PARTIAL\033[0m — some jobs could not run.\n'
     printf '    The push is allowed, because a missing optional toolchain is not a broken\n'
-    printf '    build. It is recorded as partial in artifacts/ci/verification-log.jsonl.\n'
+    printf '    build. It is recorded in artifacts/ci/verification-log.jsonl with\n'
+    printf '    gate=pre-push and pushed=null — the hook runs before the push, so it cannot\n'
+    printf '    know whether the push succeeds, and guessing would defeat the log.\n'
     printf '    Remote CI is the authority on the jobs this machine could not run; if it is\n'
     printf '    unavailable, say so wherever these commits are described.\n\n'
     exit 0
