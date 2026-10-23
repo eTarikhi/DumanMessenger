@@ -3305,3 +3305,103 @@ describe("a retry timer cannot run out before the packet exists (docs/08 §12.11
     expect(short.delivered).toBe(3);
   });
 });
+
+describe("sender-side backpressure (docs/08 §12.12)", () => {
+  function lineWorld(over: Partial<SimConfig> = {}): MeshSimulation {
+    const sim = new MeshSimulation({
+      ...DEFAULT_CONFIG,
+      nodeCount: 2,
+      stationaryRatio: 1,
+      chargingRatio: 0,
+      trafficIntervalMs: 0,
+      enableSuperElection: false,
+      warmupMs: 0,
+      obstacles: [],
+      channelAccess: "halfDuplex",
+      ...over,
+    });
+    sim.nodes.forEach((node, i) => {
+      node.pos = { x: 10 + i * 20, y: 10 };
+      node.target = { x: 10 + i * 20, y: 10 };
+      node.mobility = 0;
+      node.isOnline = true;
+      node.battery = 1;
+    });
+    sim.runFor(20000);
+    sim.clearRecords();
+    return sim;
+  }
+
+  /** One megabyte through a window of 8 into a queue 4 deep: the transfer is committed
+   *  twice as far ahead as the radio can hold, which is the situation backpressure exists
+   *  for. */
+  function overrun(mediaBackpressure: boolean, channelQueueDepth = 4) {
+    const sim = lineWorld({ mediaBackpressure, channelQueueDepth });
+    const t = sim.sendFile(sim.nodes[0].id, sim.nodes[1].id, 1048576, { window: 8 })!;
+    let elapsed = 0;
+    while (t.state === "active" && elapsed < 900000) {
+      sim.runFor(100);
+      elapsed += 100;
+    }
+    expect(t.state).toBe("complete");
+    const stats = sim.refresh();
+    return {
+      seconds: ((t.completedAt ?? 0) - t.startedAt) / 1000,
+      drops: stats.channelDrops,
+      retransmitted: t.retransmitted,
+      stalls: t.stalls,
+    };
+  }
+
+  it("stops a transfer overrunning its own queue, and the transfer is faster for it", () => {
+    const blind = overrun(false);
+    const throttled = overrun(true);
+
+    // Without it, a window of 8 keeps handing chunks to a radio that can hold 4, so the tail
+    // drops them, the window stalls waiting for chunks that were never sent, and the chunks
+    // are retransmitted: 25 dropped, 6 retransmitted, one stall.
+    expect(blind.drops).toBeGreaterThan(20);
+    expect(blind.stalls).toBeGreaterThan(0);
+    // With it, the sender fills only the slots the radio has: 3 dropped, 1 retransmitted, no
+    // stall — and the same file arrives in 5.2 s instead of 9.4 s, because a chunk that was
+    // never dropped never had to be sent twice.
+    expect(throttled.drops).toBeLessThan(blind.drops / 4);
+    expect(throttled.retransmitted).toBeLessThan(blind.retransmitted);
+    expect(throttled.stalls).toBe(0);
+    expect(throttled.seconds).toBeLessThan(blind.seconds);
+  });
+
+  it("is inert on the shipped radio, where nothing ever queues", () => {
+    const run = (mediaBackpressure: boolean) => {
+      const sim = new MeshSimulation({
+        ...DEFAULT_CONFIG,
+        nodeCount: 2,
+        stationaryRatio: 1,
+        chargingRatio: 0,
+        trafficIntervalMs: 0,
+        enableSuperElection: false,
+        warmupMs: 0,
+        obstacles: [],
+        mediaBackpressure,
+      });
+      sim.nodes.forEach((node, i) => {
+        node.pos = { x: 10 + i * 20, y: 10 };
+        node.target = { x: 10 + i * 20, y: 10 };
+        node.mobility = 0;
+        node.isOnline = true;
+        node.battery = 1;
+      });
+      sim.runFor(20000);
+      sim.clearRecords();
+      const t = sim.sendFile(sim.nodes[0].id, sim.nodes[1].id, 1048576, { window: 8 })!;
+      let elapsed = 0;
+      while (t.state === "active" && elapsed < 900000) {
+        sim.runFor(100);
+        elapsed += 100;
+      }
+      return { seconds: ((t.completedAt ?? 0) - t.startedAt) / 1000, drops: sim.refresh().channelDrops };
+    };
+    expect(run(true).seconds).toBe(run(false).seconds);
+    expect(run(true).drops).toBe(0);
+  });
+});

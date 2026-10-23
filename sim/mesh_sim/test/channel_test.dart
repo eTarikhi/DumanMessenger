@@ -21,6 +21,7 @@ void main() {
     ChannelPriority channelPriority = ChannelPriority.fifo,
     ChannelCapture channelCapture = ChannelCapture.none,
     double ackTimeoutMs = 4000,
+    bool mediaBackpressure = false,
   }) {
     final sim = MeshSimulation(SimConfig(
       nodeCount: n,
@@ -35,6 +36,7 @@ void main() {
       channelPriority: channelPriority,
       channelCapture: channelCapture,
       ackTimeoutMs: ackTimeoutMs,
+      mediaBackpressure: mediaBackpressure,
     ));
     for (var i = 0; i < sim.nodes.length; i++) {
       final node = sim.nodes[i];
@@ -459,5 +461,42 @@ void main() {
     final short = burst(300);
     expect(short.retries, greaterThan(0));
     expect(short.delivered, 3);
+  });
+
+  test('backpressure stops a transfer overrunning its own queue, and it is faster for it', () {
+    /// One megabyte through a window of 8 into a queue 4 deep: the transfer is committed
+    /// twice as far ahead as the radio can hold, which is the situation backpressure exists
+    /// for.
+    ({double seconds, int drops, int retransmitted, int stalls}) overrun(bool bp) {
+      final sim = lineWorld(
+          n: 2,
+          channelAccess: ChannelAccess.halfDuplex,
+          channelQueueDepth: 4,
+          mediaBackpressure: bp);
+      final t =
+          sim.sendFile(sim.nodes[0].id, sim.nodes[1].id, 1048576, window: 8)!;
+      expect(runUntil(sim, () => t.state == TransferState.complete, 900000), isTrue);
+      return (
+        seconds: ((t.completedAt ?? 0) - t.startedAt) / 1000,
+        drops: sim.refresh().channelDrops,
+        retransmitted: t.retransmitted,
+        stalls: t.stalls,
+      );
+    }
+
+    final blind = overrun(false);
+    final throttled = overrun(true);
+
+    // Without it, a window of 8 keeps handing chunks to a radio that can hold 4, so the tail
+    // drops them, the window stalls waiting for chunks that were never sent, and they are
+    // retransmitted.
+    expect(blind.drops, greaterThan(20));
+    expect(blind.stalls, greaterThan(0));
+    // With it the sender fills only the slots the radio has, and the same file arrives
+    // sooner, because a chunk that was never dropped never had to be sent twice.
+    expect(throttled.drops, lessThan(blind.drops ~/ 4));
+    expect(throttled.retransmitted, lessThan(blind.retransmitted));
+    expect(throttled.stalls, 0);
+    expect(throttled.seconds, lessThan(blind.seconds));
   });
 }

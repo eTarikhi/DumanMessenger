@@ -727,6 +727,9 @@ would silently redefine every acceptance number in the roadmap.
   priority in the transmit queue — which §12.8 measures, and which does not rescue it.
 * The receiver is modelled by `channelCapture` (§12.9) and it is where most of the contention
   lives. Carrier sense is modelled too (§12.10) and is the pessimistic arm.
+* Backpressure is modelled at the sender only (§12.12), where it halves a one-peer
+  transfer's drops and its time, and does nothing for a mesh — because the queue that
+  overflows in a mesh belongs to a relay.
 * Still unmodelled, with the direction of each error named: a capture effect that compares
   signal strengths rather than arrival order (optimistic), a contention window with random
   backoff (pessimistic — two nodes that defer for each other are separated only by event
@@ -976,6 +979,59 @@ That is the same class of error as §9's confounded A/B, and the same lesson: a 
 only as good as the model's bookkeeping, and a model that gains a queue has to re-check
 everything that assumed there wasn't one.
 
+### 12.12 Backpressure: the mechanism §12.10 named, and why it is not the fix
+
+`mediaBackpressure` makes a transfer fill only the queue slots its sender's radio actually
+has, instead of committing a whole window to a queue that may be four deep. This is the
+"missing half" §12.10 asked for — a layer above the radio that stops generating work when the
+radio is saturated — in the smallest form that can be built: the sender throttles itself.
+
+**On one radio with nobody else on it, it works exactly as intended.** Two nodes, one hop, a
+1 MB file with a window of 8 into a queue 4 deep, so the transfer is committed twice as far
+ahead as the radio can hold:
+
+| queue depth | backpressure | queue drops | retransmitted | window stalls | file time |
+|---|---|---|---|---|---|
+| 4 | off | 25 | 6 | 1 | 9.4 s |
+| 4 | **on** | **3** | **1** | **0** | **5.2 s** |
+| 2 | off | 29 | 7 | 1 | 6.6 s |
+| 2 | **on** | **8** | **2** | **0** | **4.9 s** |
+
+The file arrives *sooner* with the throttle on, because a chunk that was never dropped never
+had to be sent twice and the window never stalled waiting for one. Under
+`channelAccess: "free"` the flag is inert by construction — nothing queues, so there is
+nothing to throttle — and a test pins both halves.
+
+**In a mesh it does not help, and slightly hurts.** Three seeds, 20-node campus, 60 messages
+at 2 s with a 10 MB file in flight, receiver model on:
+
+| transmitter | backpressure | delivery | p95 | parked | queue drops | file time |
+|---|---|---|---|---|---|---|
+| `halfDuplex` | off | **0.9096** | 11,399 ms | 19.7 | 1,441 | **3.28 min** |
+| `halfDuplex` | on | 0.8983 | 11,705 ms | 36.7 | 1,637 | 3.89 min |
+| `csma` | off | **0.8757** | 16,212 ms | 27.7 | 2,995 | **3.64 min** |
+| `csma` | on | 0.8757 | 16,915 ms | 31.7 | 2,894 | 5.03 min |
+
+With no media in flight the gates are identical to the digit (0.9718 and 0.9266 delivery),
+which is the inertness check: there is nothing to throttle when nobody is transferring.
+
+**The reason is topology, and it is the interesting part.** In a multi-hop mesh the queue that
+overflows is a *relay's*, and a relay is fed by several senders at once. Throttling one source
+leaves that relay's queue exactly as full, slows the transfer, and extends the period during
+which everybody is contending — so the mesh pays for a discipline that only the sender
+benefits from. Sender-side backpressure is a fix for the transfer it is applied to and not a
+fix for the network.
+
+**Verdict:** implemented, off by default, and the recommendation is narrower than the flag.
+The mechanism §12.10 wanted is **hop-by-hop** backpressure — a relay that can tell its
+upstream to stop — which nothing in this stack has, and which DTN's store-carry-forward
+deliberately avoids, since a bundle is parked rather than refused. Where sender-side
+throttling *is* a strict improvement is the one-peer case: a file to a neighbour over Wi-Fi
+Direct, which is exactly skills/05's "2 phones exchange image <10 MB" acceptance box, and
+exactly the case where the measurements above show it halving the drops and the transfer time
+together. That is worth building; the mesh-wide version is not, until somebody has a story for
+the relay.
+
 ## 13. Reproducing
 
 ```bash
@@ -991,14 +1047,14 @@ Engine surface: `sendFile(from, to, bytes, {chunkBytes, window, transport})`,
 `wifiDirectKbps`, `transferChunkBytes`, `transferWindow`, `transferStallMs`,
 `mediaAckTimeoutMs`, `adaptiveMediaAck`, `voiceKbps`, `voiceFrameMs`, `jitterBufferMs`,
 `voiceTtl`, `maxTransferBytes`, `channelAccess`, `channelQueueDepth`, `channelPriority`,
-`channelCapture`, and the `csma` value of `channelAccess`.
+`channelCapture`, `mediaBackpressure`, and the `csma` value of `channelAccess`.
 
 Tests that pin this document's claims: `media transport (docs/05 §3.2-3.3, roadmap
 Phase 3)`, `media against skills/05 (Voice PTT & Media)`, `media under load, measured
 without confounding the A/B (docs/08 §9)` and `channel access: one radio, half-duplex
 (docs/08 §12)` and `which packet a busy radio takes next (docs/08 §12.8)` and
 `receiver contention: what a busy receiver does (docs/08 §12.9)` and
-`carrier sense, and the hidden terminal it cannot fix (docs/08 §12.10)` in
-`src/__tests__/simulation.test.ts`, `media transport in the UI` in
+`carrier sense, and the hidden terminal it cannot fix (docs/08 §12.10)` and
+`sender-side backpressure (docs/08 §12.12)` in `src/__tests__/simulation.test.ts`, `media transport in the UI` in
 `src/__tests__/components.test.tsx`, and `test/media_test.dart` plus `test/channel_test.dart`
 in the Dart engine.

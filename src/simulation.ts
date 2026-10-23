@@ -272,6 +272,12 @@ export interface SimConfig {
    *  is itself transmitting (docs/08 §12.9). */
   channelCapture: ChannelCapture;
 
+  /** Whether a transfer stops pumping chunks when the sender's radio is full. A real socket
+   *  blocks; an engine that keeps handing packets to a saturated radio converts somebody
+   *  else's queue slots into drops, which is the mechanism docs/08 §12.10 could not answer
+   *  without. Off by default, and inert under `channelAccess: "free"` where nothing queues. */
+  mediaBackpressure: boolean;
+
   /** When two relays cover the same neighbours, pick the plugged one: a community relay's
    *  transmission costs nobody's battery and its position does not change. Off by default,
    *  and measured rather than assumed — see docs/06 §19.5. */
@@ -432,6 +438,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   communityRelayQuota: 0,
   peerNorm: "fixed",
   channelCapture: "none",
+  mediaBackpressure: false,
   communityRelayPreference: false,
   dtnPreferCommunity: false,
 
@@ -1633,11 +1640,24 @@ export class MeshSimulation {
     this.queue.push(this.now + this.config.transferStallMs, "transferstall", nodeId, { transferId });
   }
 
-  /** Put chunks on air for as long as the sliding window has room. */
+  /** Put chunks on air for as long as the sliding window has room — and, with
+   *  `mediaBackpressure`, for as long as the sender's radio has slots to put them in. */
   private pushWindow(t: Transfer): void {
-    while (t.nextToSend < t.chunks && t.nextToSend < t.received + t.window) {
+    const window = this.effectiveWindow(t);
+    while (t.nextToSend < t.chunks && t.nextToSend < t.received + window) {
       this.sendChunk(t, t.nextToSend++);
     }
+  }
+
+  /** The window the sender may fill right now. Without backpressure it is the configured
+   *  depth. With it, the radio's free slots cap it at a floor of one, so a transfer that is
+   *  already committed as far ahead as the queue allows simply waits for the medium instead
+   *  of pushing everybody else out of it (docs/08 §12.12). */
+  private effectiveWindow(t: Transfer): number {
+    if (!this.config.mediaBackpressure) return t.window;
+    const queued = this.channel.get(t.from)?.queue.length ?? 0;
+    const free = Math.max(1, this.config.channelQueueDepth - queued);
+    return Math.max(1, Math.min(t.window, free));
   }
 
   private sendChunk(t: Transfer, index: number): void {

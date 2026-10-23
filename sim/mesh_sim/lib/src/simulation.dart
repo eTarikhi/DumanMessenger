@@ -90,6 +90,7 @@ class SimConfig {
     this.communityRelayQuota = 0,
     this.peerNorm = PeerNorm.fixed,
     this.channelCapture = ChannelCapture.none,
+    this.mediaBackpressure = false,
     this.communityRelayPreference = false,
     this.dtnPreferCommunity = false,
     this.maxRetries = 2,
@@ -289,6 +290,14 @@ class SimConfig {
   /// packet that arrives while its receiver is transmitting (docs/08 §12.9).
   final ChannelCapture channelCapture;
 
+  /// Whether a transfer stops pumping chunks when its sender's radio is full. A real socket
+  /// blocks; an engine that keeps handing packets to a saturated radio converts somebody
+  /// else's queue slots into drops. Measured: it halves a one-peer transfer's drops and its
+  /// time together, and does nothing for a mesh, because the queue that overflows in a mesh
+  /// belongs to a relay (docs/08 §12.12). Off by default, and inert under
+  /// [ChannelAccess.free] where nothing queues.
+  final bool mediaBackpressure;
+
   /// When two relays cover the same neighbours, pick the plugged one. Off by default and
   /// measured as a null result: it moves 0.6 of 100 MPR slots in a crowd and nothing
   /// downstream, because who transmits is decided per packet from what was actually heard
@@ -359,6 +368,7 @@ class SimConfig {
     double? communityRelayQuota,
     PeerNorm? peerNorm,
     ChannelCapture? channelCapture,
+    bool? mediaBackpressure,
     bool? communityRelayPreference,
     bool? dtnPreferCommunity,
     double? voiceKbps,
@@ -409,6 +419,7 @@ class SimConfig {
         communityRelayQuota: communityRelayQuota ?? this.communityRelayQuota,
         peerNorm: peerNorm ?? this.peerNorm,
         channelCapture: channelCapture ?? this.channelCapture,
+        mediaBackpressure: mediaBackpressure ?? this.mediaBackpressure,
         communityRelayPreference:
             communityRelayPreference ?? this.communityRelayPreference,
         dtnPreferCommunity: dtnPreferCommunity ?? this.dtnPreferCommunity,
@@ -1885,10 +1896,24 @@ class MeshSimulation {
   }
 
   /// Put chunks on air for as long as the sliding window has room.
+  /// Put chunks on air for as long as the sliding window has room — and, with
+  /// `mediaBackpressure`, for as long as the sender's radio has slots to put them in.
   void _pushWindow(Transfer t) {
-    while (t.nextToSend < t.chunks && t.nextToSend < t.received + t.window) {
+    final window = _effectiveWindow(t);
+    while (t.nextToSend < t.chunks && t.nextToSend < t.received + window) {
       _sendChunk(t, t.nextToSend++);
     }
+  }
+
+  /// The window the sender may fill right now. Without backpressure it is the configured
+  /// depth. With it, the radio's free slots cap it at a floor of one, so a transfer that is
+  /// already committed as far ahead as the queue allows waits for the medium instead of
+  /// pushing everybody else out of it (docs/08 §12.12).
+  int _effectiveWindow(Transfer t) {
+    if (!config.mediaBackpressure) return t.window;
+    final queued = _channel[t.from]?.queue.length ?? 0;
+    final free = math.max(1, config.channelQueueDepth - queued);
+    return math.max(1, math.min(t.window, free));
   }
 
   void _sendChunk(Transfer t, int index) {
