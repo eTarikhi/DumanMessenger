@@ -88,146 +88,20 @@ jobs:
           dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 2>&1 |
             tee /tmp/dart-cli.txt
 
+      # Shares tool/ci/diagnostics.py with the local pipeline in tool/ci/, so the same
+      # parser runs here and on a developer's machine and the two cannot drift. It
+      # republishes the output captured above as annotations with real file paths (which
+      # the runner's generic problem matcher loses) and as the job summary.
+      #
+      # continue-on-error because this step only reports; the Gate step below decides.
+      # A bug in a reporter must not be able to fail an otherwise green build.
       - name: Publish diagnostics
         if: always()
-        run: |
-          python3 - <<'PY'
-          import os, re
-
-          SUMMARY = os.environ.get("GITHUB_STEP_SUMMARY") or os.devnull
-          MAX_ANALYZE_ANNOTATIONS = 20
-          MAX_TEST_ANNOTATIONS = 20
-
-
-          def read(path):
-              try:
-                  with open(path, encoding="utf-8", errors="replace") as handle:
-                      return handle.read().strip()
-              except OSError:
-                  return "(no output captured)"
-
-
-          def escape(text):
-              return (text.replace("%", "%25")
-                          .replace("\r", "%0D")
-                          .replace("\n", "%0A"))
-
-
-          def clip(text, limit=1200):
-              text = text.strip()
-              return text if len(text) <= limit else text[:limit] + " …(clipped)"
-
-
-          def analyze_issues(text):
-              """Parse `dart analyze` lines of the form
-              '<severity> • <field> • <field> • <code>'. Which field holds the location
-              differs between SDK versions, so pick the one that ends in :line:col."""
-              issues = []
-              for line in text.splitlines():
-                  parts = [p.strip() for p in line.split(" • ")]
-                  if len(parts) < 3 or parts[0] not in ("error", "warning", "info"):
-                      continue
-                  loc = next((p for p in parts if re.search(r":\d+:\d+$", p)), None)
-                  if loc is None:
-                      continue
-                  path, line_no, col = loc.rsplit(":", 2)
-                  rest = [p for p in parts[1:] if p != loc]
-                  code = rest[-1] if rest else ""
-                  message = " • ".join(rest[:-1]) if len(rest) > 1 else code
-                  issues.append((parts[0], path, line_no, col, code, message))
-              return issues
-
-
-          def test_failures(text):
-              """Group the expanded reporter's output into one entry per failing test.
-
-              A failure starts at '<mm:ss> +n -m: <name> [E]' and runs until the next
-              timestamped line; the first 'file.dart line:col' frame gives the location.
-              """
-              failures, current = [], None
-              for line in text.splitlines():
-                  header = re.match(r"^\d{2}:\d{2} \+\d+(?: -\d+)?: (.*?) \[E\]\s*$", line)
-                  if header:
-                      if current:
-                          failures.append(current)
-                      current = {"name": header.group(1), "detail": []}
-                      continue
-                  if current is None:
-                      continue
-                  if re.match(r"^\d{2}:\d{2} \+\d+", line):
-                      failures.append(current)
-                      current = None
-                      continue
-                  current["detail"].append(line)
-              if current:
-                  failures.append(current)
-
-              located = []
-              for failure in failures:
-                  detail = failure["detail"]
-                  frame = next((re.match(r"^\s*((?:test|lib|bin)/\S+\.dart) (\d+):(\d+)", l)
-                                for l in detail
-                                if re.match(r"^\s*((?:test|lib|bin)/\S+\.dart) (\d+):(\d+)", l)), None)
-                  body = [l for l in detail if not re.match(r"^\s*\S+\.dart \d+:\d+\s", l)]
-                  located.append({
-                      "name": failure["name"],
-                      "path": frame.group(1) if frame else None,
-                      "line": frame.group(2) if frame else None,
-                      "col": frame.group(3) if frame else None,
-                      "message": clip("\n".join(body).strip() or "(no detail captured)"),
-                  })
-              return located
-
-
-          def failing_test_text(text):
-              failures = test_failures(text)
-              if not failures:
-                  return "(no test failures in the captured output)"
-              out = []
-              for f in failures:
-                  where = "%s:%s:%s" % (f["path"], f["line"], f["col"]) if f["path"] else "location unknown"
-                  out.append("%s\n  at %s\n%s" % (f["name"], where, f["message"]))
-              return "\n\n".join(out)
-
-
-          analyze_out = read("/tmp/dart-analyze.txt")
-          test_out = read("/tmp/dart-test.txt")
-          cli_out = read("/tmp/dart-cli.txt")
-
-          emitted = 0
-          for severity, path, line_no, col, code, message in analyze_issues(analyze_out):
-              if emitted >= MAX_ANALYZE_ANNOTATIONS:
-                  print("::warning::More analyzer issues than fit the annotation budget "
-                        "— see the job summary.")
-                  break
-              level = "notice" if severity == "info" else severity
-              print("::%s file=%s,line=%s,col=%s,title=dart analyze: %s::%s"
-                    % (level, path, line_no, col, code or severity, escape(message)))
-              emitted += 1
-
-          emitted = 0
-          for failure in test_failures(test_out):
-              if emitted >= MAX_TEST_ANNOTATIONS:
-                  print("::warning::More failing tests than fit the annotation budget "
-                        "— see the job summary.")
-                  break
-              location = ""
-              if failure["path"]:
-                  location = " file=%s,line=%s,col=%s" % (failure["path"], failure["line"],
-                                                          failure["col"])
-              print("::error%s,title=dart test: %s::%s"
-                    % (location, escape(clip(failure["name"], 200)), escape(failure["message"])))
-              emitted += 1
-
-          tail = "\n".join(test_out.splitlines()[-25:]) or test_out
-          with open(SUMMARY, "a", encoding="utf-8") as summary:
-              summary.write("### dart analyze\n\n```\n%s\n```\n\n" % analyze_out)
-              summary.write("### dart test — failures\n\n```\n%s\n```\n\n"
-                            % failing_test_text(test_out))
-              summary.write("### dart test — tail\n\n```\n%s\n```\n\n" % tail)
-              summary.write("### CLI acceptance (campus_quad, seed 42)\n\n```\n%s\n```\n"
-                            % cli_out)
-          PY
+        continue-on-error: true
+        run: >-
+          python3 ../../tool/ci/diagnostics.py
+          --format github
+          --out /tmp/dart-analyze.issues.json
 
       - name: Gate
         if: always()

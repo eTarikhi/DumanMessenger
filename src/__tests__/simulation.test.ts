@@ -3057,6 +3057,142 @@ describe("preferring a community relay, measured and rejected (docs/06 §19.5)",
   });
 });
 
+describe("the capture effect: a stronger packet takes a busy receiver over (docs/08 §12.15)", () => {
+  /** A-B-C in a line, but not symmetrically: A is 10 m from B and C is 25 m, so A arrives
+   *  about 8 dB stronger — over the 6 dB margin the model ships with, and under the 12 dB one.
+   *  A and C are 35 m apart, past the 31.6 m line-of-sight budget, so neither hears the other
+   *  and both talk over B: the hidden terminal the capture effect exists to describe.
+   *
+   *  `linkRetries: 6` is not a tuning choice, it is isolation. At 25 m the weak sender's raw
+   *  link loss is 39%, and with the shipped two retries that is 6% of packets — enough to turn
+   *  "did a takeover happen" into a coin flip and make this test flaky on a seed. Six retries
+   *  takes it to 0.1%, so what is left to measure is the capture rule and nothing else. */
+  function lopsidedWorld(over: Partial<SimConfig> = {}): MeshSimulation {
+    const sim = new MeshSimulation({
+      ...DEFAULT_CONFIG,
+      nodeCount: 3,
+      stationaryRatio: 1,
+      chargingRatio: 0,
+      trafficIntervalMs: 0,
+      enableSuperElection: false,
+      warmupMs: 0,
+      obstacles: [],
+      linkRetries: 6,
+      // Fewer beacons, so the OGMs contesting the same receiver do not drown the twenty data
+      // pairs this measures. Routes still form inside the 20 s settle.
+      ogmIntervalMs: 8000,
+      channelCaptureRatioDb: 6,
+      ...over,
+    });
+    const xs = [10, 20, 45];
+    sim.nodes.forEach((node, i) => {
+      node.pos = { x: xs[i], y: 10 };
+      node.home = { x: xs[i], y: 10 };
+      node.target = { x: xs[i], y: 10 };
+      node.stationary = true;
+      node.mobility = 0;
+      node.isOnline = true;
+      node.battery = 1;
+    });
+    sim.runFor(20000);
+    sim.clearRecords();
+    return sim;
+  }
+
+  /** Twenty contested pairs. `strongFirst` decides which of the two senders is handed to the
+   *  engine first, and therefore which one the receiver is locked onto when the other lands. */
+  function contest(
+    capture: SimConfig["channelCapture"],
+    opts: { strongFirst?: boolean; margin?: number; pairs?: number } = {}
+  ) {
+    const { strongFirst = false, margin = 6, pairs = 20 } = opts;
+    const sim = lopsidedWorld({ channelCapture: capture, channelCaptureRatioDb: margin });
+    const [strong, rx, weak] = sim.nodes;
+    for (let i = 0; i < pairs; i++) {
+      const order = strongFirst ? [strong, weak] : [weak, strong];
+      for (const from of order) {
+        sim.sendMessage(from.id, rx.id, `${from.id === strong.id ? "s" : "w"}-${i}`, "text");
+      }
+      sim.runFor(5000);
+    }
+    sim.runFor(60000); // let every retry the collisions forced land
+    const stats = sim.refresh();
+    return {
+      sim,
+      stats,
+      effects: stats.channelCaptureEffects,
+      captured: stats.channelCaptured,
+      rx,
+      strong,
+      weak,
+    };
+  }
+
+  it("takes the receiver over for a stronger newcomer, and never for a weaker one", () => {
+    // The weak packet is the incumbent and the strong one lands 8 dB up, over the 6 dB
+    // margin: every pair is a takeover. Not exactly twenty, because the beacons contest the
+    // same receiver and a packet that lands while B is transmitting is deaf rather than
+    // captured — so assert the mechanism plainly fired rather than an exact count.
+    const weakIncumbent = contest("strongest");
+    expect(weakIncumbent.effects).toBeGreaterThanOrEqual(12);
+    // A takeover is not a rescue: it moves the loss from the newcomer to the incumbent, so
+    // the collision counter carries both.
+    expect(weakIncumbent.captured).toBeGreaterThanOrEqual(weakIncumbent.effects);
+
+    // Reverse the order and the strong packet is the incumbent. A weaker newcomer can never
+    // take a receiver over, so the only takeovers left are between beacons — which are the
+    // same beacons in both arms, and the difference is what isolates the data pairs.
+    const strongIncumbent = contest("strongest", { strongFirst: true });
+    expect(strongIncumbent.effects).toBeLessThan(weakIncumbent.effects);
+    expect(weakIncumbent.effects - strongIncumbent.effects).toBeGreaterThanOrEqual(12);
+    // …and the collisions did not stop happening, they just stopped being takeovers.
+    expect(strongIncumbent.captured).toBeGreaterThan(0);
+  });
+
+  it("is first-packet-wins under a margin the geometry cannot reach, and inert when shipped", () => {
+    // 8 dB of asymmetry cannot clear a 12 dB margin, so nothing is ever taken over — the model
+    // reduces to `first`, which is the sanity check on the knob.
+    expect(contest("strongest", { margin: 12 }).effects).toBe(0);
+    // A zero margin is loudest-wins with no protection, so it takes over at least as often.
+    // Both saturate at one takeover per contested pair here — the beacons do not add any —
+    // which is why this is a floor and not a strict increase: the geometry offers 8 dB, so
+    // every margin from 0 to 8 clears it and the knob only starts biting above that.
+    expect(contest("strongest", { margin: 0 }).effects).toBeGreaterThanOrEqual(
+      contest("strongest", { margin: 6 }).effects
+    );
+    expect(contest("strongest", { margin: 6 }).effects).toBe(20);
+    // `first` never compares signal strengths, so it never takes a receiver over. That is the
+    // whole difference between the two models, and why §12.9's figure was a bound.
+    const first = contest("first");
+    expect(first.effects).toBe(0);
+    expect(first.captured).toBeGreaterThan(0);
+    // And the shipped model counts nothing at all, which is what keeps the golden vectors
+    // where they were.
+    const shipped = contest("none");
+    expect(shipped.effects).toBe(0);
+    expect(shipped.captured).toBe(0);
+  });
+
+  it("does not condemn a retry of the message it took over", () => {
+    // The bookkeeping is per *transmission*, not per message. Keyed by message id, the
+    // incumbent that lost would have its retry dropped on arrival too, and a message that was
+    // merely overtaken would never land — which is the difference between modelling a
+    // collision and modelling a blackhole.
+    const run = contest("strongest");
+    expect(run.effects).toBeGreaterThanOrEqual(12);
+    const arrived = run.sim.deliveries.filter((d) => d.type === "text" && d.to === run.rx.id);
+    const bodies = new Set(arrived.map((d) => d.msgId));
+    expect(bodies.size).toBe(40); // every pair: the strong one, and the weak one it displaced
+    // The weak sender's packets are the ones being displaced, so they are also the ones whose
+    // retries have to work: without them the capture effect would be a way of silencing the
+    // distant node permanently rather than a way of choosing between two packets. Twenty of
+    // the forty arrivals are its own.
+    expect(arrived.filter((d) => d.from === run.weak.id).length).toBe(20);
+    expect(arrived.filter((d) => d.from === run.strong.id).length).toBe(20);
+    expect(run.stats.retriesSent).toBeGreaterThan(0);
+  });
+});
+
 describe("receiver contention: what a busy receiver does (docs/08 §12.9)", () => {
   /** A-B-C in a line, 20 m apart: A and C both reach B, and neither reaches the other. */
   function lineWorld(over: Partial<SimConfig> = {}): MeshSimulation {
@@ -3236,6 +3372,151 @@ describe("carrier sense, and the hidden terminal it cannot fix (docs/08 §12.10)
   });
 });
 
+describe("the contention window carrier sense was missing (docs/08 §12.13)", () => {
+  /** Three nodes 20 m apart in a triangle, so every pair is inside the 31.6 m line-of-sight
+   *  budget and every node can sense every other. This is the geometry carrier sense is
+   *  supposed to work in — no hidden terminal to excuse it. */
+  function triangleWorld(over: Partial<SimConfig> = {}): MeshSimulation {
+    const sim = new MeshSimulation({
+      ...DEFAULT_CONFIG,
+      nodeCount: 3,
+      stationaryRatio: 1,
+      chargingRatio: 0,
+      trafficIntervalMs: 0,
+      enableSuperElection: false,
+      warmupMs: 0,
+      obstacles: [],
+      ...over,
+    });
+    const at = [
+      { x: 10, y: 10 },
+      { x: 30, y: 10 },
+      { x: 20, y: 27.32 },
+    ];
+    sim.nodes.forEach((node, i) => {
+      node.pos = at[i];
+      node.home = at[i];
+      node.target = at[i];
+      node.stationary = true;
+      node.mobility = 0;
+      node.isOnline = true;
+      node.battery = 1;
+    });
+    sim.runFor(20000);
+    sim.clearRecords();
+    return sim;
+  }
+
+  /** Every node transmits at once, each to a different one, so all three radios want the
+   *  medium in the same instant. */
+  function allTalkAtOnce(over: Partial<SimConfig>) {
+    const sim = triangleWorld({ channelAccess: "csma", channelCapture: "first", ...over });
+    const [a, b, c] = sim.nodes;
+    // Every pair is inside the line-of-sight budget, so this is the geometry carrier sense is
+    // supposed to work in: nothing here is a hidden terminal.
+    for (const [x, y] of [
+      [a, b],
+      [b, c],
+      [a, c],
+    ]) {
+      expect(canReach(x, y, sim.rf)).toBe(true);
+    }
+    sim.sendMessage(a.id, b.id, "a-b", "text");
+    sim.sendMessage(b.id, c.id, "b-c", "text");
+    sim.sendMessage(c.id, a.id, "c-a", "text");
+    sim.runFor(60000);
+    const stats = sim.refresh();
+    return {
+      collisions: stats.channelCaptured + stats.channelDeafRx,
+      retries: stats.retriesSent,
+      draws: stats.channelBackoffs,
+      deferMs: stats.channelDeferMs,
+      deferrals: stats.channelDeferrals,
+      arrived: sim.deliveries.filter((d) => d.type === "text").length,
+    };
+  }
+
+  it("fires where carrier sense defers, and costs waiting to do it", () => {
+    const herd = allTalkAtOnce({ channelBackoff: "none" });
+    const spread = allTalkAtOnce({ channelBackoff: "binary", channelCwMin: 16, channelSlotMs: 5 });
+
+    // The control never draws, so every deferring node is released at the same instant the
+    // medium clears and they meet again there.
+    expect(herd.draws).toBe(0);
+    expect(spread.draws).toBe(8);
+    expect(spread.deferrals).toBeGreaterThan(herd.deferrals);
+    // Measured, not hoped for: at three nodes the wait is real (1250 ms becomes 2054 ms) and
+    // the collision count does not move — one collision either way, and all three messages
+    // arrive either way. The mechanism fires; at this scale it does not yet pay, which is the
+    // same thing §12.13 finds across a whole campus.
+    expect(spread.deferMs).toBeGreaterThan(herd.deferMs);
+    expect(spread.collisions).toBe(herd.collisions);
+    expect(spread.arrived).toBe(3);
+    expect(herd.arrived).toBe(3);
+  });
+
+  it("doubles the window after a collision, which is the exponential half of the backoff", () => {
+    // A one-slot window can only ever draw zero, so if the window never grew the price of a
+    // slot could not matter. It does matter here — which is the collision having doubled the
+    // window, observed from outside a private field.
+    const grow = (slotMs: number) =>
+      allTalkAtOnce({ channelBackoff: "binary", channelCwMin: 1, channelCwMax: 64, channelSlotMs: slotMs });
+    const cheap = grow(5);
+    const dear = grow(500);
+    expect(cheap.draws).toBeGreaterThan(0);
+    expect(dear.deferMs).toBeGreaterThan(cheap.deferMs);
+
+    // The same run with the ceiling at one slot: the window cannot widen, the draw cannot
+    // exceed zero, and now the price of a slot is irrelevant. Same draws, same totals.
+    const capped = (slotMs: number) =>
+      allTalkAtOnce({ channelBackoff: "binary", channelCwMin: 1, channelCwMax: 1, channelSlotMs: slotMs });
+    const cappedCheap = capped(5);
+    const cappedDear = capped(500);
+    expect(cappedCheap.draws).toBe(cheap.draws);
+    expect(cappedDear.deferMs).toBe(cappedCheap.deferMs);
+    expect(cappedDear.collisions).toBe(cappedCheap.collisions);
+    expect(cappedDear.arrived).toBe(3);
+
+    // A window that starts wide pays the slot price from its first attempt, so the same
+    // comparison holds without needing a collision to widen it. Comparing across *window
+    // widths* at a fixed slot price does not: the wait changes when transmissions happen,
+    // which changes how many of them there are, so two widths diverge chaotically and their
+    // totals are not ordered. The width sweep is a measurement (docs/08 §12.13), not an
+    // invariant, and is asserted nowhere here.
+    const wide = (slotMs: number) =>
+      allTalkAtOnce({ channelBackoff: "binary", channelCwMin: 64, channelSlotMs: slotMs });
+    expect(wide(500).deferMs).toBeGreaterThan(wide(5).deferMs);
+    expect(wide(5).draws).toBeGreaterThan(0);
+  });
+
+  it("is carrier sense's lever: a radio with no shared medium does not move", () => {
+    const run = (channelBackoff: SimConfig["channelBackoff"]) => {
+      const sim = triangleWorld({
+        channelAccess: "halfDuplex",
+        channelCapture: "first",
+        channelBackoff,
+        channelCwMin: 64,
+        channelSlotMs: 5,
+      });
+      const [a, b] = sim.nodes;
+      sim.sendMessage(a.id, b.id, "x", "text");
+      sim.sendMessage(b.id, a.id, "y", "text");
+      sim.runFor(30000);
+      const stats = sim.refresh();
+      return {
+        draws: stats.channelBackoffs,
+        deferMs: stats.channelDeferMs,
+        arrived: sim.deliveries.filter((d) => d.type === "text").length,
+      };
+    };
+    const off = run("none");
+    const on = run("binary");
+    expect(off.draws).toBe(0);
+    expect(on.draws).toBe(0);
+    expect(on).toEqual(off);
+  });
+});
+
 describe("a retry timer cannot run out before the packet exists (docs/08 §12.11)", () => {
   function lineWorld(over: Partial<SimConfig> = {}): MeshSimulation {
     const sim = new MeshSimulation({
@@ -3350,6 +3631,7 @@ describe("sender-side backpressure (docs/08 §12.12)", () => {
       drops: stats.channelDrops,
       retransmitted: t.retransmitted,
       stalls: t.stalls,
+      blocks: stats.transferBlocks,
     };
   }
 
@@ -3359,16 +3641,24 @@ describe("sender-side backpressure (docs/08 §12.12)", () => {
 
     // Without it, a window of 8 keeps handing chunks to a radio that can hold 4, so the tail
     // drops them, the window stalls waiting for chunks that were never sent, and the chunks
-    // are retransmitted: 25 dropped, 6 retransmitted, one stall.
+    // are retransmitted: 25 dropped, 6 retransmitted, one stall, 9.37 s.
     expect(blind.drops).toBeGreaterThan(20);
     expect(blind.stalls).toBeGreaterThan(0);
-    // With it, the sender fills only the slots the radio has: 3 dropped, 1 retransmitted, no
-    // stall — and the same file arrives in 5.2 s instead of 9.4 s, because a chunk that was
-    // never dropped never had to be sent twice.
+    expect(blind.blocks).toBe(0); // nothing throttles it, so nothing ever refuses it air
+    // With it, the sender fills only the slots the radio has: 5 dropped, none retransmitted,
+    // no stall, and the same file arrives in 6.04 s instead of 9.37 s, because a chunk that
+    // was never dropped never had to be sent twice.
     expect(throttled.drops).toBeLessThan(blind.drops / 4);
-    expect(throttled.retransmitted).toBeLessThan(blind.retransmitted);
     expect(throttled.stalls).toBe(0);
     expect(throttled.seconds).toBeLessThan(blind.seconds);
+    // The window has to be allowed to reach zero, and the sender has to be woken when a slot
+    // frees. Floored at one it still hands a packet to a full queue and has it shed at the
+    // tail, which is not backpressure but a slower way of dropping — measured, it *raised* the
+    // drop count (1441 → 1637 on the campus half-duplex arm) and left a retransmission behind.
+    // Blocking shows up in `blocks`, and resuming on drain is what makes the retransmissions
+    // and the stalls both go to zero rather than merely shrink.
+    expect(throttled.blocks).toBeGreaterThan(0);
+    expect(throttled.retransmitted).toBe(0);
   });
 
   it("is inert on the shipped radio, where nothing ever queues", () => {

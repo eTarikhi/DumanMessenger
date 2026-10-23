@@ -12,11 +12,24 @@
 
 - [ ] Mono-repo: `app/` Flutter + `transport/android` + `transport/ios` + `core/` Dart pure
 - [ ] Identity: Ed25519/X25519 keygen + QR add-contact (Briar-style)
-- [ ] Transport abstraction `MeshTransport {advertise(), scan(), connect(), send()}`
-> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/07-e2ee-noise-xx.md` §4, `docs/08-media-transport-ptt.md` §2`):** the *decision* the abstraction exists to make is implemented and measured in both engines — `selectTransport(size)`
-  picks Wi-Fi Direct above a 1024 B packet and BLE below it, and `docs/07` §4 and `docs/08` §5.3 pin the two thresholds
-  that matter (a text body crosses at 930 characters once padding is counted; a 500 ms voice frame crosses at
-  14.9 kbit/s). The interface itself is app work.
+- [x] Transport abstraction `MeshTransport {advertise(), scan(), connect(), send()}`
+> **Implementation note (Oct 2026 — `sim/mesh_sim/lib/src/transport.dart`, `test/transport_test.dart`):** built. This note used to say the interface was app
+  work; it is not, and the distinction matters for sequencing. The four verbs are the part of Phase 1 that does not need a phone: what `selectTransport` picks
+  and at what size, how big a discovery beacon is, whether a payload is refused or handed to the mesh, and what a scan is allowed to report are *decisions* and
+  are testable. The GATT server (item 20) and the CoreBluetooth peripheral (item 21) that implement `advertise()` on hardware are bridges, not decisions. So
+  the interface is pure Dart with no dependency beyond the SDK, it lifts into `core/` unchanged when item 13 creates the mono-repo, and the app layer can be
+  written and tested against `SimulatedMeshTransport` before either bridge exists.
+> Two of its rules are load-bearing rather than plumbing. `connect()` returns null for a peer the local scan has not reported instead of reaching anything in
+  the world, and `scan()` reports `node.peerIds` — the device's own scan cycle, refreshed on the beacon interval and stale while a NORMAL node sleeps (item 118's
+  duty cycle) — never `peersInRange`, which is the geometry. An implementation that reaches an unheard peer hands the app an oracle, and an app built on an
+  oracle passes every test in this repo and then fails on a phone in a pocket. A test polls both for a minute and asserts they disagree at least once, so that
+  invariant cannot pass vacuously.
+> The size decisions it inherits are measured in both engines — `selectTransport(size)` picks Wi-Fi Direct above a 1024 B packet and BLE below it, and `docs/07`
+  §4 and `docs/08` §5.3 pin the two thresholds that matter (a text body crosses at 930 characters once padding is counted; a 500 ms voice frame crosses at
+  14.9 kbit/s). The seam sizes on the *packet*, not the payload, and per *chunk*, not per file — the heuristic it replaced crossed at 241 characters, about four
+  times too early, which matters because transport is what sets per-hop latency in this model.
+> **What is not built:** the platform implementations (items 20, 21, 215, 220), and the opt-in consent and local-first store that item 350's analytics needs.
+  `SimulatedMeshTransport` is a reference and a test double, not a radio.
 - [ ] **BLE GATT hello:** Android GATT server + scanner + 12-byte beacon (DB hash + id)
 - [ ] **iOS beacon:** CoreBluetooth peripheral + central scan
 - [ ] Simple UI: peer list + 1:1 chat (plaintext first)
@@ -189,6 +202,23 @@
   this engine's retry timers convert queueing into load (§12.10). The missing mechanism is backpressure: a real
   stack defers *and* stops generating work, while the simulator only defers. If a real floor delivers nine
   messages in ten, that is the finding to act on, and it is not in the radio model.
+  The radio-layer answer has now been built and measured, and it does not change that conclusion — it sharpens
+  it. `channelBackoff: "binary"` adds the contention window carrier sense was missing (every deferring node is
+  otherwise released at the same instant the medium clears, so listening synchronises the herd instead of
+  dispersing it). It moves delivery ±1.1 points and leaves both csma arms ~14 short of the gate, because under
+  carrier sense the losses are **queue drops, 1994-3466 against 273-394 collisions**: a lever that makes nodes
+  wait longer feeds the queue that is shedding them (§12.13). So the fix is not in front of the queue and has
+  to be above the radio, which is why sender-side flow control was built too — and measuring it corrects the
+  reason. `mediaBackpressure` had to be fixed in three places before it did what it claims (a window floored at
+  one slot still hands a packet to a full queue; the stall path bypassed the window; nothing resumed a blocked
+  transfer). Corrected, it is a clear win on one radio — 25 → 5 drops, 6 → 0 retransmissions, 6.04 s instead of
+  9.37 s — and a trade in a mesh, +1.7 points under carrier sense against -2.8 under plain half-duplex, neither
+  reaching the gate (§12.12). Attribution says why the first version's null result was mis-explained: with a file
+  in flight **82-85% of the shedding is the source's own**, not a relay's, so a sender-side window is pointed at
+  most of the problem — and what it cannot fix is that a window rations a transfer's *share* of a radio rather
+  than creating slots. The cheap alternative, rerouting round a congested relay, is not available either: an
+  equal-cost alternative next hop existed for only 3-9% of relay sheds (§12.14). What remains is a radio that can
+  refuse a hand-over, with a layer above it that holds the packet instead of counting it lost.
 
 ---
 

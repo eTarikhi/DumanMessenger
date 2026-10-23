@@ -990,55 +990,318 @@ radio is saturated — in the smallest form that can be built: the sender thrott
 1 MB file with a window of 8 into a queue 4 deep, so the transfer is committed twice as far
 ahead as the radio can hold:
 
-| queue depth | backpressure | queue drops | retransmitted | window stalls | file time |
-|---|---|---|---|---|---|
-| 4 | off | 25 | 6 | 1 | 9.4 s |
-| 4 | **on** | **3** | **1** | **0** | **5.2 s** |
-| 2 | off | 29 | 7 | 1 | 6.6 s |
-| 2 | **on** | **8** | **2** | **0** | **4.9 s** |
+| queue depth | backpressure | queue drops | retransmitted | window stalls | waits on the radio | file time |
+|---|---|---|---|---|---|---|
+| 4 | off | 25 | 6 | 1 | 0 | 9.37 s |
+| 4 | **on** | **5** | **0** | **0** | 4 | **6.04 s** |
+| 2 | off | 29 | 7 | 1 | 0 | 6.63 s |
+| 2 | **on** | **7** | **0** | **0** | 4 | **4.90 s** |
 
 The file arrives *sooner* with the throttle on, because a chunk that was never dropped never
 had to be sent twice and the window never stalled waiting for one. Under
 `channelAccess: "free"` the flag is inert by construction — nothing queues, so there is
 nothing to throttle — and a test pins both halves.
 
+**This table was measured twice, and the first version of the flag was not backpressure.**
+Its window was floored at one, so a throttled sender *still* handed a packet to a queue that
+was already full and had it shed at the tail — a slower way of dropping, not a way of not
+dropping. Its stall path bypassed the window entirely and re-sent up to a whole window into
+the queue that had caused the stall. And nothing resumed a blocked transfer when a slot freed,
+so a sender that was correctly refusing itself air waited for a timeout instead of for the
+medium. Corrected — the window may reach zero, the stall path consults the same gate and does
+not count waiting-on-your-own-radio as a stall, and the channel drain resumes the transfer —
+the `on` rows above read 5 drops and **no** retransmissions where they read 3 and 1, at 6.04 s
+rather than 5.2 s. The corrected version is 0.8 s slower and removes the retransmission
+outright, which is the better trade: `transferBlocks` shows the sender waiting four times
+rather than the queue shedding on its behalf. The `off` rows are unchanged to the digit, which
+is the check that the correction touched only the throttled path.
+
 **In a mesh it does not help, and slightly hurts.** Three seeds, 20-node campus, 60 messages
 at 2 s with a 10 MB file in flight, receiver model on:
 
-| transmitter | backpressure | delivery | p95 | parked | queue drops | file time |
-|---|---|---|---|---|---|---|
-| `halfDuplex` | off | **0.9096** | 11,399 ms | 19.7 | 1,441 | **3.28 min** |
-| `halfDuplex` | on | 0.8983 | 11,705 ms | 36.7 | 1,637 | 3.89 min |
-| `csma` | off | **0.8757** | 16,212 ms | 27.7 | 2,995 | **3.64 min** |
-| `csma` | on | 0.8757 | 16,915 ms | 31.7 | 2,894 | 5.03 min |
+| transmitter | backpressure | delivery | p95 | parked | queue drops | waits | file time |
+|---|---|---|---|---|---|---|---|
+| `halfDuplex` | off | **0.9096** | 11,399 ms | 19.7 | 1,441 | 0 | 3.28 min |
+| `halfDuplex` | on | 0.8814 | 13,029 ms | 21.7 | **1,401** | 5 | **3.10 min** |
+| `csma` | off | 0.8757 | 16,212 ms | 27.7 | 2,995 | 0 | **3.64 min** |
+| `csma` | on | **0.8927** | 28,488 ms | **16.0** | **2,113** | 14 | 4.41 min |
+
+The corrected mechanism cuts drops in both arms (−3 % and −29 %) and cuts parked bundles and
+file time under `halfDuplex`. It moves delivery in **opposite directions**: +1.7 points under
+carrier sense, −2.8 under plain half-duplex, and neither arm reaches the ≥0.90 gate. Under
+`halfDuplex` it buys a faster file with text delivery, which is the wrong way round for an
+acceptance box about text; under `csma` it buys delivery with a p95 that nearly doubles and a
+file 21 % slower. The `off` rows reproduce the table this section published before the
+correction to the digit, so the two mechanisms are being compared on the same runs.
 
 With no media in flight the gates are identical to the digit (0.9718 and 0.9266 delivery),
 which is the inertness check: there is nothing to throttle when nobody is transferring.
 
-**The reason is topology, and it is the interesting part.** In a multi-hop mesh the queue that
-overflows is a *relay's*, and a relay is fed by several senders at once. Throttling one source
-leaves that relay's queue exactly as full, slows the transfer, and extends the period during
-which everybody is contending — so the mesh pays for a discipline that only the sender
-benefits from. Sender-side backpressure is a fix for the transfer it is applied to and not a
-fix for the network.
+**The reason this section gave for that verdict was wrong, and §12.14 measures it.** The
+argument was topological: in a multi-hop mesh the queue that overflows belongs to a *relay*,
+fed by several senders at once, so throttling one source leaves it exactly as full. Attributing
+every shed packet to the node that shed it says otherwise — with a file in flight, **82-85 % of
+the shedding is the source's own** and only 15-18 % is a relay's. The premise was never
+measured, and it is false. Sender-side backpressure reaches the queue that is actually
+overflowing; it just does not reach all of it, because a transfer window can only ration the
+transfer's share of a radio that the node's own text traffic is also asking for.
 
-**Verdict:** implemented, off by default, and the recommendation is narrower than the flag.
-The mechanism §12.10 wanted is **hop-by-hop** backpressure — a relay that can tell its
-upstream to stop — which nothing in this stack has, and which DTN's store-carry-forward
-deliberately avoids, since a bundle is parked rather than refused. Where sender-side
-throttling *is* a strict improvement is the one-peer case: a file to a neighbour over Wi-Fi
-Direct, which is exactly skills/05's "2 phones exchange image <10 MB" acceptance box, and
-exactly the case where the measurements above show it halving the drops and the transfer time
-together. That is worth building; the mesh-wide version is not, until somebody has a story for
-the relay.
+**Verdict:** implemented, corrected, off by default, and the recommendation is *wider* than this
+section first gave it — but still not a gate rescue. Where sender-side throttling is a strict
+improvement is the one-peer case: a file to a neighbour over Wi-Fi Direct, which is exactly
+skills/05's "2 phones exchange image <10 MB" acceptance box, and exactly the case where it cuts
+drops 80 % and the transfer time 36 % together, with no retransmissions and no stalls at all.
+That is worth building. In a mesh it is a trade rather than a win: it helps delivery under
+carrier sense and hurts it under plain half-duplex, and the price is latency in both.
+
+What it cannot reach is the part §12.14 isolates: the packets still being shed are the ones a
+transfer window has no claim on, offered by a node whose radio is busy for minutes at a time.
+The mechanism that would cover them is **hop-by-hop** flow control — a radio that can refuse a
+hand-over rather than shed it, and a layer above that holds the packet instead of counting it
+lost — which nothing in this stack has, and which DTN's store-carry-forward deliberately avoids,
+since a bundle is parked rather than refused. §12.14 also closes the door on the cheap
+alternative: rerouting round a congested relay, which needs an equal-cost alternative next hop
+to exist, and one exists for 3-9 % of relay sheds.
+
+### 12.13 The contention window: what carrier sense was missing, and why it still is not the fix
+
+§12.10 measured carrier sense and found it made delivery *worse* than not listening, which is
+not what listening is supposed to do. The diagnosis it offered was that waiting is not free.
+There is a second thing wrong, and it is structural: **the wake-up is synchronous.** Every node
+deferring on a busy medium is released at the instant the medium clears, because that instant is
+what it was scheduled against. They all find it free together and they all transmit together, so
+carrier sense synchronises the herd instead of dispersing it. A contention window is the standard
+answer and §12.10 noted this engine did not have one.
+
+`channelBackoff: "binary"` adds it: when the medium is free, draw a slot count uniformly from the
+current window and wait it out; after a collision double the window up to `channelCwMax`; after a
+clean transmission reset it to `channelCwMin`. It is consulted only under `channelAccess: "csma"`
+— a radio with no shared medium has nobody to contend with, and its own FIFO already serialises
+it — and it ships as `"none"`, so it consumes no random numbers and nothing above moves.
+
+**The gates, with and without the random wait** (20-node campus, 3 seeds, 60 messages, no media):
+
+| receiver | backoff | delivery | within 5 | overhead | SUPER | queue drops | deferred | draws |
+|---|---|---|---|---|---|---|---|---|
+| `none` | `none` | 0.7944 | 0.7944 | 80.2% | 25.0% | 699 | 3 042.0 s | 0 |
+| `none` | `binary` | 0.7889 | 0.7889 | 76.4% | 25.0% | 825 | 2 963.0 s | 1 058 |
+| `first` | `none` | 0.7389 | 0.7389 | 78.0% | 23.3% | 562 | 2 629.6 s | 0 |
+| `first` | `binary` | **0.7500** | 0.7500 | 77.3% | 25.0% | 590 | 2 794.6 s | 1 052 |
+
+The mechanism fires — 1 058 draws over the run — and it moves delivery by **+1.1 points with
+collisions modelled and −0.6 without**. Neither arm is within 14 points of the ≥0.90 gate. Backoff
+does not rescue carrier sense, and it helps only in the arm where there are collisions to prevent,
+which is at least the right shape for the mechanism.
+
+**How wide a window** (same world, 10 MB file in flight, collisions modelled, 3 seeds; the
+`backoff: none` control from §12.10 is delivery 0.8757, p95 16 212 ms, file 3.64 min):
+
+| `cwMin` | slot | delivery | p95 ms | captured | deaf | drops | deferred | draws | file |
+|---|---|---|---|---|---|---|---|---|---|
+| 2 | 1 ms | 0.8475 | 14 549 | 356 | 9 | 2 815 | 74.3 m | 2 067 | 4.20 min |
+| 2 | 5 ms | **0.9322** | 24 931 | 370 | 7 | 2 762 | 82.0 m | 2 152 | 4.50 min |
+| 4 | 1 ms | 0.8305 | 21 400 | 394 | 7 | 3 294 | 82.4 m | 2 147 | 4.21 min |
+| 4 | 5 ms | 0.8701 | 25 689 | 380 | 6 | 3 311 | 84.7 m | 2 185 | 4.54 min |
+| 16 | 1 ms | 0.8701 | 19 955 | 351 | 10 | 2 444 | 87.8 m | 2 158 | 4.27 min |
+| 16 | 5 ms | 0.9096 | 19 696 | 319 | 6 | 2 666 | 82.6 m | 2 023 | 4.69 min |
+| 64 | 1 ms | 0.8644 | 17 744 | 380 | 5 | 2 738 | 86.5 m | 2 154 | 5.11 min |
+| 64 | 5 ms | 0.8588 | 24 463 | 273 | 6 | 3 466 | 91.1 m | 1 884 | 5.61 min |
+
+Two arms clear the gate, which is more than any other radio lever managed. The sweep is also not
+monotonic in either knob: `cwMin` 2 beats 16 at a 5 ms slot and loses to it at a 1 ms slot, and 64
+beats 4 at one slot width and loses at the other. A lever whose effect reverses when a neighbouring
+setting changes is a lever whose effect may be noise, and §6's faster-beacon idea was exactly that
+— +2.6 points on three seeds, −1.1 on six. So the two arms that cleared the gate were re-run on the
+acceptance suite's six seeds with every seed printed:
+
+| arm | mean | per-seed delivery | drops | file |
+|---|---|---|---|---|
+| control (`none`) | 0.8672 | 0.898 0.831 0.898 0.847 0.831 0.898 | 2 215 | 3.77 min |
+| `binary` `cwMin` 2, 5 ms | **0.9040** | 0.915 0.932 0.949 **0.847** 0.864 0.915 | 2 108 | 4.07 min |
+| `binary` `cwMin` 16, 5 ms | 0.8955 | 0.915 0.847 0.966 0.932 **0.797** 0.915 | 1 994 | 4.37 min |
+
+The mean rises 3.7 points and clears the gate. The spread widens at the same time: `cwMin` 2's
+worst seed (0.847) is *below the control's mean*, and `cwMin` 16's worst (0.797) is below the
+control's worst. A lever that raises the mean by making good seeds better and bad seeds worse has
+not made the network more reliable — it has moved which seeds are unreliable, and an acceptance
+gate that has to hold per-run does not get to average over that. It costs 8–16% of file time to
+find out.
+
+**The reason it cannot work is in the columns nobody reads first.** Across every arm above, queue
+drops run **1 994–3 466** while receiver collisions run **273–394**: roughly eight packets shed at
+a full transmit queue for every one lost to a collision. Under carrier sense the dominant loss is
+*buffering*, not collision. Listening makes nodes wait; waiting fills an 8-deep transmit queue;
+the queue sheds. A contention window makes nodes wait **longer**, so it feeds the mechanism that is
+actually losing the packets, and it buys its few points by removing a loss that was never the
+binding one. Widening the window from 2 to 64 slots does cut collisions (370 → 273) and cuts
+delivery anyway.
+
+That revises §12.10's own diagnosis. It said waiting is not free in an engine with no
+backpressure, and reached for a contention window as the thing carrier sense was missing. The
+decomposition says the thing missing is flow control: the queue that sheds is the loss, and the
+mechanism that would stop it shedding is §12.12's **hop-by-hop** backpressure — a relay that can
+tell its upstream to stop — not a wider window in front of it. Backoff is the right answer to a
+question this network is not asking.
+
+At three nodes in a triangle, where every pair is inside the line-of-sight budget and there is no
+hidden terminal to excuse anything, the same result appears in miniature: the backoff fires (8
+draws) and turns 1 250 ms of deferral into 2 054 ms, and the collision count does not move — one
+either way, with all three messages arriving either way. `halfDuplex` + `binary` is inert by
+construction and asserted so (0.9096 delivery, 0 draws, 3.28 min, identical to `none`).
+
+**Verdict: rejected, and kept as a control.** Ships as `"none"`. It is the first radio lever to
+move the carrier-sense arm's mean toward the gate at all, so it is worth recording what it costs
+and why it does not hold — but the honest summary is that it optimises collisions in a network
+whose losses are queue drops. If a hop-by-hop flow control is ever built, the contention window
+should be re-measured against it, because the two address different halves of the same failure and
+backoff alone cannot be judged fairly in an engine that sheds.
+
+### 12.14 Who sheds the packets, and what that rules out
+
+§12.12 explained a null result with an argument about topology and §12.13 explained a rejection
+with a ratio read off two totals. Both deserve to be measured rather than reasoned, so the engine
+now attributes every packet its radios shed: `channelDropsRelayed` counts the ones a node dropped
+while forwarding somebody else's message (`hopCount > 0`), so the difference is shed by the node
+that originated it; `channelDropsMedia` counts the shed packets that were file or voice chunks;
+and `channelDropsWithAlternative` counts the relay sheds for which some peer in range was at least
+as close to the destination as the next hop that was chosen — the packets that could have gone
+*round* the congestion instead of into it. All three are derived from state the engine already
+keeps, consume no random numbers, and leave the golden vectors byte-identical.
+
+Three seeds, 20-node campus, 60 messages, receiver model on:
+
+| transmitter | media in flight | queue drops | shed by a relay | file/voice chunks | alternative next hop existed | file |
+|---|---|---|---|---|---|---|
+| `halfDuplex` | no | 176 | **80 %** | 0 % | 9 % | — |
+| `halfDuplex` | yes | 1,441 | **15 %** | **82 %** | 3 % | 3.28 min |
+| `csma` | no | 563 | **83 %** | 0 % | 5 % | — |
+| `csma` | yes | 2,995 | **18 %** | **79 %** | 9 % | 3.64 min |
+
+Three things follow, and they point in different directions.
+
+**With no media, the shedding really is a relay's** — 80-83 %, which is what §12.12 assumed. **With
+a file in flight it inverts**: 82-85 % of the shed packets are dropped by the node that originated
+them, and 79-82 % of what it sheds is transfer chunks. The premise behind rejecting sender-side
+backpressure was measured on the wrong arm. A transfer window *is* the thing generating the
+pressure, and the source *is* where it lands, which is why correcting that flag moved the mesh
+numbers at all (§12.12).
+
+**Congestion-aware forwarding is not on offer.** Rerouting round a saturated relay needs somewhere
+to reroute to: a peer in range whose own route to the destination is no longer than the one already
+chosen. One existed for **3-9 %** of relay sheds. This topology does not have the path diversity
+the mechanism needs, so "prefer a next hop that is not busy" would have almost nothing to prefer —
+and the 91-97 % with no alternative would be shed exactly as before. That closes the cheapest of the
+hop-by-hop designs without building it.
+
+**What is left after the corrected gate is not the transfer's to give up.** With `mediaBackpressure`
+on under `csma`, drops fall 2,995 → 2,113 and delivery rises 0.8757 → 0.8927 — but 70 % of what is
+still shed is shed at a source and 66 % of it is still chunks. A window can only ration the
+transfer's *share* of a radio; it cannot create slots. The radio is busy for minutes at a time, the
+node's own text traffic wants the same slots, and whichever packet arrives when the queue is full is
+the one that dies. That is why no arm of this reaches the ≥0.90 gate, and why the remaining mechanism
+is not a better policy at the queue but a refusal to accept the hand-over in the first place: a radio
+that can say "not now" to the layer above it, and a layer above that holds the packet rather than
+counting it lost. Nothing in this stack has that, and it is the one item §12.10, §12.12, §12.13 and
+this section all independently arrive at.
+
+### 12.15 The capture effect: does a realistic receiver lose less than a pessimistic one?
+
+§12.9 gave the receiver two models and neither is a real radio. `none` takes everything however busy
+it is, which is optimistic. `first` locks onto whichever packet arrived first and never lets a strong
+one survive a weak one, which is pessimistic — and it is the arm that produced the 13.6-point figure
+every later section quotes. Real receivers do a third thing: they demodulate the stronger signal
+*through* the weaker one when the margin is enough, which is the capture effect. `channelCapture:
+"strongest"` models it, with `channelCaptureRatioDb` as the margin (6 dB by default, the ratio usually
+quoted for an angle-modulated receiver). A newcomer at least that much stronger than the packet the
+receiver is holding takes the receiver over, and the incumbent is the packet that is lost.
+
+The question is not whether the mechanism works — it does, and a unit test pins it exactly. Three nodes
+in a lopsided line, 10 m and 25 m from a common receiver, 35 m from each other so neither sender hears
+the other: twenty contested pairs, weak sender handed to the engine first each time, produce **exactly
+twenty takeovers** at a 6 dB margin and **zero** at 12 dB, which the 8 dB of geometry cannot reach. All
+forty messages still arrive, because the bookkeeping is per *transmission* rather than per message: the
+incumbent that was overtaken is re-sent by its own retry timer and that retry is a fresh attempt. Keyed
+by message id instead, an overtaken packet would have its retry dropped on arrival too, and modelling a
+collision would have become modelling a blackhole.
+
+The question is whether it recovers the loss. It does not.
+
+**A correction made mid-measurement, because the first answer was an artefact.** The first run of this
+section had `csma` + a 10 MB file at **0.9266** over three seeds — clearing the ≥0.90 gate that no other
+receiver arm has ever cleared. It was wrong, and the reason is worth more than the number. A transmission
+is booked against its link's quality estimate when it goes on air, so under `first` the loser of a
+collision is booked as a *failure*. Under `strongest` the loser is the incumbent, which had already been
+booked as a success before anything was wrong with it, and the first implementation left that success
+standing. So the two arms differed in something other than capture: `strongest` was systematically
+optimistic about link quality, and routing believed it. Booking the outcome at arrival instead — which is
+when a transmission's fate is actually known, and which is more accurate under every mode — removed the
+win outright: 0.8870 on three seeds, and **0.8672 on six, which is `first`'s six-seed mean to four
+decimal places.**
+
+Six seeds, 20-node campus, 10 MB in flight:
+
+| transmitter | receiver | delivery mean | worst seed | takeovers | collisions | queue drops | file |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `halfDuplex` | `none` | **0.9689** | 0.9153 | 0 | 0 | 2258 | **1.95 min** |
+| `halfDuplex` | `first` | 0.9209 | 0.8475 | 0 | 510 | **984** | 3.13 min |
+| `halfDuplex` | `strongest` | 0.8983 | 0.8644 | 90 | 488 | 821 | 3.00 min |
+| `csma` | `none` | 0.9181 | 0.8136 | 0 | 0 | 2075 | **3.52 min** |
+| `csma` | `first` | 0.8672 | **0.8305** | 0 | 352 | 2215 | **3.77 min** |
+| `csma` | `strongest` | 0.8672 | 0.7458 | 58 | 359 | 2075 | 4.41 min |
+
+Under carrier sense the capture effect changes nothing at all: the same delivery to four decimals, a
+worse worst seed, and a slower file. Under plain half-duplex it is **2.3 points worse** than the model it
+was supposed to improve on. Nothing here reaches the gate, and the only arm that clears it remains the
+one with no receiver in it at all.
+
+How much margin the mechanism needs (`csma`, 10 MB in flight, six seeds):
+
+| margin | takeovers | collisions | delivery mean | worst seed | p95 ms | queue drops | file |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 dB | **167** | 391 | 0.8757 | 0.7797 | 17859 | **1782** | 4.01 min |
+| 3 dB | 100 | 392 | 0.8898 | 0.8305 | 17621 | 1807 | 4.06 min |
+| 6 dB | 58 | 359 | 0.8672 | 0.7458 | 18526 | 2075 | 4.41 min |
+| 12 dB | 16 | 373 | 0.8616 | 0.7966 | 18432 | 1981 | 4.23 min |
+| 20 dB | **2** | 355 | 0.8701 | 0.7966 | 18692 | 2012 | **3.83 min** |
+
+The takeover column is exactly monotone in the margin — 167, 100, 58, 16, 2 — so the knob does precisely
+what it says, from loudest-wins at 0 dB to first-packet-wins at 20 dB. The delivery column does not move
+with it: a flat, noisy band from 0.8616 to 0.8898 across an eighty-fold change in how often the mechanism
+fires. On three seeds this table looked monotone in the *other* direction, improving steadily toward 0 dB
+and reaching 0.9209; six seeds flattened it, which is the fourth time in this document that a three-seed
+trend has not survived being given more seeds.
+
+Why a takeover buys nothing is worth stating plainly, because it is not obvious. **A takeover is not a
+rescue; it moves the loss from the newcomer to the incumbent.** One packet is lost either way, so the
+collision count barely changes — and the incumbent's transmitter now has a retry to do, which is more
+load on the same radio, in the same direction §12.10 found that retry timers convert queueing into load.
+Under half-duplex there is a second effect: the takeover extends the period the receiver is locked, so
+more of what arrives next finds it busy or deaf, which is why the `deaf` count rises with the mechanism
+on. The one thing that does improve is the queue — drops fall from `first`'s 2215 to 1782–2075 — and
+delivery does not follow it, which is the same dissociation §12.13 and §12.14 both ran into: relieving
+the buffer is not the same as delivering the packet.
+
+**What this settles.** §12.9's cost for modelling a receiver is *not* an artefact of the pessimistic
+first-capture rule. A receiver with a realistic capture effect loses about the same amount, and under
+half-duplex loses more. So the bracket `docs/09` §5 asks a field test to locate itself in is narrower on
+this axis than §12.9 alone implied: the choice that matters is between modelling a receiver at all
+(0.867 under carrier sense) and not modelling one (0.918), not between two receiver models. A field
+capture that lands near 0.92 is telling you the radios are not contending; one that lands near 0.87 is
+telling you they are, and no assumption about capture ratio will change that reading by more than noise.
+
+Not shipped: `channelCapture` stays `"none"` and `channelCaptureRatioDb` is 6, so nothing above moves and
+the golden vectors are byte-identical. `npm run media -- captureEffect` reproduces both tables and
+`captureMargin` the sweep.
+
 
 ## 13. Reproducing
 
 ```bash
-npm run media                                            # TypeScript probe, every table above (§7-§9 for the radio, incl. carrier sense)
+npm run media                                            # TypeScript probe, every table above (§7-§12 for the radio: channel, priority, capture, carrier sense, the contention window, who sheds, the capture effect)
+npm run media -- backoff                                 # one section; also `shedding`, `captureEffect`, `captureMargin`. The whole probe is minutes of simulation
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media --no-check
-npm test                                                 # 265 TS tests, incl. 18 media and 14 radio cases
-cd sim/mesh_sim && dart test                             # 18 Dart media cases + test/channel_test.dart
+npm test                                                 # 276 TS tests, incl. 18 media cases and the 29-case §12 radio block
+cd sim/mesh_sim && dart test                             # 197 Dart cases, incl. 18 media and test/channel_test.dart
 ```
 
 Engine surface: `sendFile(from, to, bytes, {chunkBytes, window, transport})`,

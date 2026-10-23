@@ -1,0 +1,68 @@
+# Line endings.
+#
+# Git for Windows offers "Checkout Windows-style, commit Unix-style" during install, which
+# sets core.autocrlf=true. Under that setting every text file is checked out with CRLF —
+# including the shell scripts this repository's CI toolchain is built from. bash then fails
+# on the stray carriage return, typically as:
+#
+#     ./tool/ci/run-pipeline.sh: /bin/bash^M: bad interpreter: No such file or directory
+#     $'\r': command not found
+#     Makefile:22: *** missing separator
+#
+# Those errors look like a broken script rather than what they are, a line-ending problem,
+# and they cost an afternoon. `eol=lf` here makes the repository's intent override any
+# local autocrlf setting, so a Windows checkout gets working scripts.
+
+# --- must stay LF: interpreted by bash, make or python -------------------------
+*.sh            text eol=lf
+*.bash          text eol=lf
+Makefile        text eol=lf
+makefile        text eol=lf
+*.py            text eol=lf
+.githooks/*     text eol=lf
+
+# --- PowerShell: accepts either, but LF keeps diffs clean across platforms ------
+*.ps1           text eol=lf
+*.psm1          text eol=lf
+*.psd1          text eol=lf
+
+# --- Windows-native wrappers are conventionally CRLF ---------------------------
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+
+# --- source, config and docs: LF everywhere ------------------------------------
+# The JSON rule matters for CI, not just tidiness: the `web` job runs
+# `npm run golden` and then fails if test-fixtures/golden-vectors.json differs
+# from the committed file. Node writes "\n" on every platform, so pinning LF
+# stops a CRLF checkout from making an unchanged golden vector look modified.
+*.ts            text eol=lf
+*.tsx           text eol=lf
+*.js            text eol=lf
+*.jsx           text eol=lf
+*.dart          text eol=lf
+*.json          text eol=lf
+*.md            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.html          text eol=lf
+*.css           text eol=lf
+*.txt           text eol=lf
+*.gitignore     text eol=lf
+*.gitattributes text eol=lf
+
+# --- binary: never normalise ----------------------------------------------------
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.woff          binary
+*.woff2         binary
+*.ttf           binary
+*.zip           binary
+*.gz            binary
+*.pyc           binary
+*.pdf           binary
+*.mp3           binary
+*.wav           binary
+*.opus          binary

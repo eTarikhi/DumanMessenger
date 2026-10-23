@@ -61,14 +61,14 @@ next to the positive ones.</p>
 </header>
 
 <div class="grid">
-  <div class="card"><div class="k">TypeScript tests</div><div class="v">235</div><div class="n">engine, components, acceptance</div></div>
-  <div class="card"><div class="k">Dart test cases</div><div class="v">157</div><div class="n">authoritative engine</div></div>
+  <div class="card"><div class="k">TypeScript tests</div><div class="v">276</div><div class="n">engine, components, acceptance</div></div>
+  <div class="card"><div class="k">Dart test cases</div><div class="v">197</div><div class="n">authoritative engine</div></div>
   <div class="card"><div class="k">Cross-language goldens</div><div class="v">byte-identical</div><div class="n">unchanged by every feature added</div></div>
-  <div class="card"><div class="k">Lines added</div><div class="v">+26,434</div><div class="n">75 files, -1,097</div></div>
-  <div class="card"><div class="k">Defects found and fixed</div><div class="v">17</div><div class="n">5 of them in the specs</div></div>
-  <div class="card"><div class="k">Levers measured and rejected</div><div class="v">12</div><div class="n">documented, not shipped</div></div>
-  <div class="card"><div class="k">Evidence documents</div><div class="v">4</div><div class="n">docs/06 &sect;1-19, 07, 08, 09</div></div>
-  <div class="card"><div class="k">Roadmap items closed</div><div class="v">15</div><div class="n">25 dated notes, 29 remain app-side</div></div>
+  <div class="card"><div class="k">Lines added</div><div class="v">+32,569</div><div class="n">86 files, -1,400</div></div>
+  <div class="card"><div class="k">Defects found and fixed</div><div class="v">18</div><div class="n">5 of them in the specs</div></div>
+  <div class="card"><div class="k">Levers measured and rejected</div><div class="v">17</div><div class="n">documented, not shipped</div></div>
+  <div class="card"><div class="k">Evidence documents</div><div class="v">4</div><div class="n">docs/06 &sect;1-20, 07, 08 &sect;1-13, 09</div></div>
+  <div class="card"><div class="k">Roadmap items closed</div><div class="v">16</div><div class="n">26 dated notes, 28 remain app-side</div></div>
 </div>
 
 <h2>1. What this repository is</h2>
@@ -294,24 +294,91 @@ a discrete-event clock, and it is the same runaway the first implementation of t
 stack defers <em>and</em> stops generating work, while this engine only defers &mdash; its MPR fan-out, retry
 timers and transfer window keep producing packets whatever the radio is doing.</p>
 
-<h3>Backpressure: the fix that works for a transfer and not for a mesh</h3>
-<table><thead><tr><th>one radio, nobody else on it: 1 MB through a window of 8 into a 4-deep queue</th><th>backpressure off</th><th>backpressure on</th></tr></thead><tbody>
-<tr><td>queue drops</td><td class="num">25</td><td class="num pass">3</td></tr>
-<tr><td>chunks retransmitted</td><td class="num">6</td><td class="num pass">1</td></tr>
-<tr><td>window stalls</td><td class="num">1</td><td class="num pass">0</td></tr>
-<tr><td>file time</td><td class="num">9.4 s</td><td class="num pass">5.2 s</td></tr>
-<tr><td>crowd, 10 MB with text competing: delivery</td><td class="num pass">0.9096</td><td class="num part">0.8983</td></tr>
-<tr><td>crowd: that file's transfer time</td><td class="num pass">3.28 min</td><td class="num part">3.89 min</td></tr>
+<h3>The contention window carrier sense was missing &mdash; and why it is still not the fix</h3>
+<p>&sect;12.10 diagnosed carrier sense as &ldquo;waiting is not free&rdquo;. There is a second thing wrong and it is
+structural: every node deferring on a busy medium is released at <em>the same instant</em> the medium clears,
+because that instant is what it was scheduled against. They all find it free together and transmit together, so
+listening synchronises the herd instead of dispersing it. <code>channelBackoff: "binary"</code> adds the standard
+answer &mdash; draw a slot count from the current window, wait it out, double the window after a collision,
+reset it after a clean transmission. Consulted only under <code>csma</code>; ships off, so it consumes no random
+numbers and the golden vectors are byte-identical.</p>
+<table><thead><tr><th>the gates, with and without the random wait (20-node campus, 3 seeds, no media)</th><th>delivery</th><th>within 5</th><th>overhead</th><th>SUPER</th><th>queue drops</th><th>deferred</th><th>draws</th></tr></thead><tbody>
+<tr><td><code>free</code> receiver, no backoff</td><td class="num">0.7944</td><td class="num">0.7944</td><td class="num">80.2%</td><td class="num">25.0%</td><td class="num">699</td><td class="num">3042 s</td><td class="num">0</td></tr>
+<tr><td><code>free</code> receiver, backoff</td><td class="num">0.7889</td><td class="num">0.7889</td><td class="num">76.4%</td><td class="num">25.0%</td><td class="num">825</td><td class="num">2963 s</td><td class="num">1058</td></tr>
+<tr><td><code>first</code> receiver, no backoff</td><td class="num">0.7389</td><td class="num">0.7389</td><td class="num">78.0%</td><td class="num">23.3%</td><td class="num">562</td><td class="num">2630 s</td><td class="num">0</td></tr>
+<tr><td><code>first</code> receiver, backoff</td><td class="num">0.7500</td><td class="num">0.7500</td><td class="num">77.3%</td><td class="num">25.0%</td><td class="num">590</td><td class="num">2795 s</td><td class="num">1052</td></tr>
 </tbody></table>
-<p class="sub">&sect;12.10 ended by naming backpressure as the missing half of the radio model, and
-<code>mediaBackpressure</code> is the smallest form of it: a transfer fills only the queue slots its sender's
-radio has. Where the sender is the only one queueing it is a strict improvement &mdash; fewer drops, fewer
-retransmissions, no stalls, and a <em>faster</em> file, because a chunk that was never dropped never had to be
-sent twice. In a mesh it is not, and the reason is topology: the queue that overflows belongs to a relay, which
-several senders feed at once, so throttling one source leaves that queue exactly as full while extending the
-period everybody is contending. The recommendation is therefore narrower than the flag &mdash; worth building
-for the one-peer case, which is exactly skills/05's &quot;2 phones exchange image &lt;10 MB&quot; box &mdash;
-and the mesh-wide version needs a relay that can tell its upstream to stop.</p>
+<p class="sub">The mechanism fires &mdash; 1058 draws &mdash; and moves delivery <strong>+1.1 points with
+collisions modelled and &minus;0.6 without</strong>. Neither arm is within 14 points of the &ge;0.90 gate. With a
+10 MB file in flight two arms do clear it (0.9322 at <code>cwMin</code> 2, 0.9096 at 16), but the sweep is not
+monotonic in either knob, so those two were re-run on the acceptance suite&rsquo;s six seeds:</p>
+<table><thead><tr><th>six seeds, <code>csma</code> + <code>first</code>, 10 MB file in flight</th><th>mean</th><th>per-seed delivery</th><th>queue drops</th><th>file</th></tr></thead><tbody>
+<tr><td>control, no backoff</td><td class="num">0.8672</td><td class="num">0.898 0.831 0.898 0.847 0.831 0.898</td><td class="num">2215</td><td class="num">3.77 min</td></tr>
+<tr><td><code>cwMin</code> 2, 5 ms slots</td><td class="num pass">0.9040</td><td class="num">0.915 0.932 0.949 <strong>0.847</strong> 0.864 0.915</td><td class="num">2108</td><td class="num">4.07 min</td></tr>
+<tr><td><code>cwMin</code> 16, 5 ms slots</td><td class="num">0.8955</td><td class="num">0.915 0.847 0.966 0.932 <strong>0.797</strong> 0.915</td><td class="num">1994</td><td class="num">4.37 min</td></tr>
+</tbody></table>
+<p>The mean rises 3.7 points and clears the gate; the spread widens at the same time. <code>cwMin</code> 2&rsquo;s
+worst seed (0.847) is <em>below the control&rsquo;s mean</em>, and <code>cwMin</code> 16&rsquo;s worst (0.797) is
+below the control&rsquo;s worst. A lever that lifts the mean by making good seeds better and bad seeds worse has
+moved <em>which</em> seeds are unreliable, not how reliable the network is &mdash; and an acceptance gate that has
+to hold per-run cannot average over that. It costs 8-16% of file time to find out.</p>
+<p><strong>The reason it cannot work is in the columns nobody reads first.</strong> Across every arm, queue drops
+run <strong>1994-3466</strong> while receiver collisions run <strong>273-394</strong>: about eight packets shed at
+a full transmit queue for every one lost to a collision. Under carrier sense the dominant loss is
+<em>buffering</em>, not collision &mdash; and a contention window makes nodes wait <em>longer</em>, feeding the
+mechanism that is actually losing the packets. Widening the window from 2 to 64 slots does cut collisions
+(370 &rarr; 273) and cuts delivery anyway. That revises &sect;12.10&rsquo;s own diagnosis: what is missing is not a
+wider window in front of the queue but flow control above it. At three nodes in a triangle the same result
+appears in miniature &mdash; the backoff fires (8 draws), turns 1250 ms of deferral into 2054 ms, and the
+collision count does not move. <code>halfDuplex</code> + backoff is inert by construction and asserted so
+(0.9096, 0 draws, 3.28 min, identical to off).</p>
+
+<h3>Backpressure: corrected, and the topology argument that had to be withdrawn</h3>
+<table><thead><tr><th>one radio, nobody else on it: 1 MB through a window of 8 into a 4-deep queue</th><th>backpressure off</th><th>backpressure on</th></tr></thead><tbody>
+<tr><td>queue drops</td><td class="num">25</td><td class="num pass">5</td></tr>
+<tr><td>chunks retransmitted</td><td class="num">6</td><td class="num pass">0</td></tr>
+<tr><td>window stalls</td><td class="num">1</td><td class="num pass">0</td></tr>
+<tr><td>waits on its own radio (the flag working)</td><td class="num">0</td><td class="num">4</td></tr>
+<tr><td>file time</td><td class="num">9.37 s</td><td class="num pass">6.04 s</td></tr>
+</tbody></table>
+<p class="sub">This table was published before with <code>on</code> reading 3 drops, 1 retransmission and 5.2 s,
+because the flag was broken in three places: its window was floored at one, so a throttled sender still handed a
+packet to a full queue and had it shed at the tail &mdash; not backpressure, a slower way of dropping; its stall
+path bypassed the window entirely and re-sent up to a whole window into the queue that caused the stall; and
+nothing resumed a blocked transfer when a slot freed, so a sender correctly refusing itself air waited for a
+timeout instead of for the medium. Corrected, it removes the retransmission outright at a cost of 0.8 s. The
+<code>off</code> column is unchanged to the digit, which is the check that only the throttled path moved.</p>
+<table><thead><tr><th>who sheds the packets (20-node campus, 3 seeds, receiver model on)</th><th>queue drops</th><th>shed by a relay</th><th>file/voice chunks</th><th>alternative next hop existed</th></tr></thead><tbody>
+<tr><td><code>halfDuplex</code>, no media in flight</td><td class="num">176</td><td class="num">80%</td><td class="num">0%</td><td class="num">9%</td></tr>
+<tr><td><code>halfDuplex</code>, 10 MB in flight</td><td class="num">1441</td><td class="num fail">15%</td><td class="num">82%</td><td class="num fail">3%</td></tr>
+<tr><td><code>csma</code>, no media in flight</td><td class="num">563</td><td class="num">83%</td><td class="num">0%</td><td class="num">5%</td></tr>
+<tr><td><code>csma</code>, 10 MB in flight</td><td class="num">2995</td><td class="num fail">18%</td><td class="num">79%</td><td class="num fail">9%</td></tr>
+</tbody></table>
+<p>&sect;12.10 ended by naming backpressure as the missing half of the radio model, and the first measurement of
+<code>mediaBackpressure</code> in a mesh came out null, so this report explained it with an argument about
+topology: the queue that overflows belongs to a <em>relay</em>, which several senders feed at once, so throttling
+one source leaves it exactly as full. <strong>The argument was never measured, and measuring it contradicts
+it.</strong> With no media in flight the shedding really is a relay&rsquo;s, 80&ndash;83%. With a file in flight it
+inverts: <strong>82&ndash;85% of the shed packets are dropped by the node that originated them</strong>, and
+79&ndash;82% of what it sheds is transfer chunks. The premise was measured on the wrong arm.</p>
+<table><thead><tr><th>20-node campus, 10 MB with text competing, corrected mechanism</th><th>delivery</th><th>p95</th><th>queue drops</th><th>waits</th><th>file</th></tr></thead><tbody>
+<tr><td><code>halfDuplex</code>, backpressure off</td><td class="num pass">0.9096</td><td class="num">11,399 ms</td><td class="num">1441</td><td class="num">0</td><td class="num">3.28 min</td></tr>
+<tr><td><code>halfDuplex</code>, backpressure on</td><td class="num part">0.8814</td><td class="num">13,029 ms</td><td class="num">1401</td><td class="num">5</td><td class="num pass">3.10 min</td></tr>
+<tr><td><code>csma</code>, backpressure off</td><td class="num part">0.8757</td><td class="num">16,212 ms</td><td class="num">2995</td><td class="num">0</td><td class="num pass">3.64 min</td></tr>
+<tr><td><code>csma</code>, backpressure on</td><td class="num part">0.8927</td><td class="num fail">28,488 ms</td><td class="num pass">2113</td><td class="num">14</td><td class="num">4.41 min</td></tr>
+</tbody></table>
+<p class="sub">The corrected mechanism cuts drops in both arms and moves delivery in <em>opposite</em> directions:
++1.7 points under carrier sense, &minus;2.8 under plain half-duplex, and neither reaches the &ge;0.90 gate. Under
+<code>halfDuplex</code> it buys a faster file with text delivery, which is the wrong way round for an acceptance box
+about text; under <code>csma</code> it buys delivery with a p95 that nearly doubles.</p>
+<p>The second thing the attribution settles is the cheap alternative to flow control. Rerouting round a saturated
+relay needs somewhere to reroute to &mdash; a peer in range whose own route to the destination is no longer than the
+one already chosen &mdash; and one existed for <strong>3&ndash;9%</strong> of relay sheds. This topology does not have
+the path diversity, so congestion-aware forwarding is closed without being built. What is left being shed after the
+corrected gate is not the transfer&rsquo;s to give up: 70% of it is still shed at a source and 66% is still chunks,
+because a window can ration a transfer&rsquo;s <em>share</em> of a radio but cannot create slots. The remaining
+mechanism is a radio that can refuse the hand-over rather than shed it &mdash; which is what &sect;12.10,
+&sect;12.12, &sect;12.13 and &sect;12.14 each independently arrive at. <code>docs/08</code> &sect;12.12&ndash;12.14.</p>
 
 <h3>The defect the channel model found in the retry timer</h3>
 <div class="note warn">Every radio number above was measured twice. The first pass ran with a retry timer that
@@ -412,7 +479,7 @@ dividend: 3.005 to 2.877 %/h for NORMAL nodes.</p>
 <tbody><tr><td class="num">1</td><td><strong>tq tracked per destination instead of per (originator, via) link</strong><div class="sub">Every route looked as good as the best neighbour advertising it. Direct-neighbour tq 0.107 -&gt; 0.935, usable routes 29.7% -&gt; 86.8%.</div></td><td><code>docs/06 §7</code></td></tr><tr><td class="num">2</td><td><strong>The flood-all baseline was not actually naive</strong><div class="sub">It reused the route table, so the overhead ratio compared two routing policies. Rewritten as epidemic flooding, and a route-flood arm added so suppression can be isolated from routing.</div></td><td><code>docs/06 §6</code></td></tr><tr><td class="num">3</td><td><strong>A node relayed copies of its own message</strong><div class="sub">The originator treated its own broadcast as fresh traffic. Counting it as a duplicate cut relay transmissions 18.3% in a warm campus (3,009 -&gt; 2,458) and moved the golden vectors, which were regenerated.</div></td><td><code>docs/06 §12</code></td></tr><tr><td class="num">4</td><td><strong>The MPR fallback went quadratic at density</strong><div class="sub">At 200 nodes a beacon advertises at most 30 of ~179 heard peers, so coverage becomes unanswerable and the fallback fires for every peer: one 3-hop delivery cost 7,038 transmissions. Bounded to six sector-spread peers: -67% at 50 nodes, -86% at 100, -76% at 200.</div></td><td><code>docs/06 §15</code></td></tr><tr><td class="num">5</td><td><strong>The BLE payload ceiling was assumed at 241 characters</strong><div class="sub">The real packet model is ceil((95 + body)/256) x 256, so the ceiling is 930 characters - 3.9x more text per BLE packet than the engine had been assuming.</div></td><td><code>docs/07 §4</code></td></tr><tr><td class="num">6</td><td><strong>A media transfer could hang forever</strong><div class="sub">A chunk whose retries run out is carried in an OppQueue and its logical id is never seen again, so the sliding window never advances. A stall watchdog re-sends what went on air and never arrived; skills/05&#x27;s &#x27;resume after mid-transfer disconnect&#x27; only passes because of it.</div></td><td><code>docs/08 §6</code></td></tr><tr><td class="num">7</td><td><strong>Media retried on the text plane&#x27;s 4 s timer</strong><div class="sub">Four seconds is eight 500 ms voice frames, so one lost frame left an 8.53 s hole in the audio. A 600 ms media timer cut the worst gap to 1.21 s and underruns from 16 to 7 over three seeds.</div></td><td><code>docs/08 §7</code></td></tr><tr><td class="num">8</td><td><strong>Push-to-talk frames left one frame before they were recorded</strong><div class="sub">The first model scheduled frame i at i x 500 ms, which made a 3 s note fully received 400 ms before release - a negative play delay. Frames cover [i, i+1) x 500 ms, so they leave at the end of that window; the last one departs at release.</div></td><td><code>docs/08 §5.1</code></td></tr><tr><td class="num">9</td><td><strong>A voice blob was transmitted before it existed</strong><div class="sub">The non-streaming arm queued the whole note at capture start, which flattered it against streaming. Both modes now release at now + seconds.</div></td><td><code>docs/08 §5.1</code></td></tr><tr><td class="num">10</td><td><strong>A bounded anti-entropy reply stalled at the cap</strong><div class="sub">Replying with the first 32 entries of the differing buckets re-offered the same head of the same sorted list every round, so a 20-message absence converged to 8 and stopped. The request now lists the ids the requester already holds.</div></td><td><code>docs/06 §17.2</code></td></tr><tr><td class="num">11</td><td><strong>Digest beacons were counted as 1:1 traffic</strong><div class="sub">They inflated sentUnicast and made deliveryRatio a statement about how often a group repaired itself. Counted apart as sentSync and excluded from the ratio, the chat log and the dashboard&#x27;s message list.</div></td><td><code>docs/06 §17.6</code></td></tr><tr><td class="num">12</td><td><strong>A 10 MB file rendered as 160 empty chat bubbles</strong><div class="sub">The chat panel drew one bubble per sent record. Chunks are now filtered out and rendered as one progress row per transfer, with the radio it is riding and the window stalls it has taken.</div></td><td><code>docs/08 §3.1</code></td></tr><tr><td class="num">13</td><td><strong>Sprayed DTN copies reused the source retries&#x27; attempt numbers</strong><div class="sub">A bundle is parked after the originator&#x27;s two retries have used attempts 1 and 2, and the spray numbered its copies from 1 - so every relay that had heard the retries deduped the first two copies on id#attempt and the whole spray budget was spent on copies nobody forwarded. skills/04&#x27;s carry test could not pass.</div></td><td><code>docs/06 §20.1</code></td></tr><tr><td class="num">14</td><td><strong>A carried bundle with no route was deleted by MPR suppression</strong><div class="sub">With the destination offline the carrier&#x27;s route lookup fails, the copy falls into the flood branch, and a NORMAL node suppresses it - the log reads &#x27;heard relays cover all my neighbours&#x27;, where the relays it heard were the originator&#x27;s own transmissions. Suppression deletes duplicate copies of a flood; a bundle with nowhere to go is the message. Both fixes together: crowd delivery 0.867 -&gt; 0.947 over six seeds.</div></td><td><code>docs/06 §20.1</code></td></tr><tr><td class="num">15</td><td><strong>The OppQueue cap evicted by age alone</strong><div class="sub">&#x27;Keep newest 500 (LRU by priority)&#x27; was implemented as &#x27;drop the oldest&#x27;, which could throw away a fresh bundle to keep one that had already sprayed its three copies and been demoted. Priority now ranks before age.</div></td><td><code>docs/06 §20.3</code></td></tr><tr><td class="num">16</td><td><strong>Dart: initialising formals with no field declarations</strong><div class="sub">MeshMessage.transferId/chunkIndex and SentRecord.transferId were accepted by the constructor and unresolved everywhere they were read. Caught by CI, which is the only Dart compiler available in this sandbox.</div></td><td><code>commit cbe8716</code></td></tr><tr><td class="num">17</td><td><strong>A committed build artifact</strong><div class="sub">tsconfig.tsbuildinfo was tracked; it is now ignored and removed.</div></td><td><code>commit 7cdb255</code></td></tr></tbody></table>
 
 <h2>10. Levers measured and deliberately not shipped</h2>
-<table><thead><tr><th>Lever</th><th>Why not</th></tr></thead><tbody><tr><td><strong>Faster OGM beacons in the crowd</strong><div class="sub">1 s intervals looked like +2.6 points of within-5-hop delivery on three seeds and measured -1.1 on six. The sign flipped, not just the magnitude.</div></td><td><code>docs/06 §16.4</code></td></tr><tr><td><strong>More source retries (4 instead of 2)</strong><div class="sub">Delivery 91.7% -&gt; 93.2% in the crowd, at a p95 of 10.9 s - buying 1.5 points with a latency budget the spec does not have.</div></td><td><code>docs/06 §16</code></td></tr><tr><td><strong>Adaptive media retry timers</strong><div class="sub">Both RFC 6298&#x27;s srtt + 4 rttvar and a min-RTT rule were implemented and measured; both lose to a fixed 600 ms (file at 2 hops: 31.96 s and 28.38 s against 24.09 s). For a deadline-driven stream an early duplicate beats a correctly-sized timeout. Left in the code, off by default.</div></td><td><code>docs/08 §7.1</code></td></tr><tr><td><strong>Deeper transfer windows</strong><div class="sub">Window 16 is 15.5x faster than window 1 at one hop &mdash; on an infinitely wide radio. On the one radio a phone has the same sweep is worth 1.25x, and depth starts dropping chunks, because there is one transmitter to fill and the parallelism was never there. Ships at 4 under <code>free</code>; window 1 is the evidence-backed setting under <code>halfDuplex</code>, where it recovers 1.1 of the 1.7 points of delivery a file costs and a third of the p95, for 46% more transfer time.</div></td><td><code>docs/08 §4, §12.2, §12.5</code></td></tr><tr><td><strong>Promoting acknowledgements or voice in the transmit queue</strong><div class="sub">Both implemented (<code>channelPriority</code>) and both off. Neither is a win: promoting ACKs buys text 1.1 points of delivery and 158 ms of p95 and charges the file 14% for it, and promoting voice on top is the best arm for a note competing with a file (49.26 s of play delay against 1.33 min) while costing 1.7 points of text delivery instead. No queue order rescues push-to-talk at three hops, because the limit is the note's own air time and no ordering creates air time.</div></td><td><code>docs/08 §12.8</code></td></tr><tr><td><strong>Carrier sense</strong><div class="sub">Implemented as <code>channelAccess: "csma"</code> and off. It removes almost every collision a node can hear (self-deafness 693 &rarr; 7) and still costs delivery under load (0.9096 &rarr; 0.8757 with a file in flight) and fails both acceptance gates (0.7389-0.7944 delivery, 78-80% overhead), because waiting is not free in an engine whose layers above keep generating packets. Deepening the queue is monotonic in the wrong direction: 0.7062 delivery and 429 minutes of deferred air time at depth 128. The missing mechanism is backpressure.</div></td><td><code>docs/08 §12.10</code></td></tr><tr><td><strong>Assuming coverage from density</strong><div class="sub">A rule that treated &#x27;heard many SUPERs&#x27; as &#x27;covered&#x27; measured 95.0% delivery against 98.3% for the sector-bounded fallback.</div></td><td><code>docs/06 §15</code></td></tr><tr><td><strong>Preferring SUPER as bundle carrier (skills/04)</strong><div class="sub">Implemented and off by default. It measured +4.5 delivery points in the crowd *before* the two DTN defects were fixed and -3.5 points after them, with parked bundles growing 39 -&gt; 63 per run: spraying toward SUPERs duplicates work into the busiest queues. The rule&#x27;s intuition is about who should hold a bundle, not who should be handed extra copies.</div></td><td><code>docs/06 §20.4</code></td></tr><tr><td><strong>Gossiping ACKs so relays can prune bundles (skills/04)</strong><div class="sub">Implemented exactly as written - the bundle is acknowledged to the carrier that handed it over, and any node hearing the ACK drops its copy - and it pruned zero bundles in four worlds over six seeds, because the ACK is a unicast along the reverse path. Kept because it is free; a prune flood is not worth adding until a deployment shows cap pressure (worst measured: 97 of 500 slots).</div></td><td><code>docs/06 §20.5</code></td></tr><tr><td><strong>Relaying history digests across the mesh</strong><div class="sub">It would converge a spread membership and would cost a scoped flood every interval, forever, to repair traffic that mostly arrived. Not built; the peer-graph boundary is documented instead.</div></td><td><code>docs/06 §17.4</code></td></tr><tr><td><strong>Normalising peer count against the observed maximum</strong><div class="sub">Implemented as <code>peerNorm: &quot;observed&quot;</code> and rejected on measurement. The predicted trap was §15&#x27;s density rule from the other side; the real problem is that an election is a ranking and this is a level change. The most open node&#x27;s score rises 0.05-0.19 in all four worlds and its rank inside its own candidacy list does not move once (7 of 13 on campus, 2 of 4 in the village, 12 of 25 in the crowd), so it stays NORMAL in three worlds out of four either way. What it does move is the promote gate and the size of the elected set (village 2 &rarr; 3 SUPERs, crowd 13 &rarr; 11), and it spends skills/02&#x27;s margin: over six campus seeds one lands exactly on the 15% floor, for under half a point of delivery.</div></td><td><code>docs/06 §18.4</code></td></tr><tr><td><strong>Preferring a community relay as MPR or bundle carrier</strong><div class="sub">Both places the protocol chooses who does the work, both measured, both off. As an MPR tie-break it wins the tie it was written for and moves 0.6 of 100 slots in a crowd, with every metric identical to the digit across three seeds &mdash; who transmits is decided per packet from what was heard, not from the MPR label. As a bundle carrier it fires 40-51 times a run and grows parked bundles 27-55% for at most 0.7 extra opportunistic deliveries: a node that does not move is the best place to leave a bundle and the worst place to carry one.</div></td><td><code>docs/06 §19.5</code></td></tr><tr><td><strong>Cap-aware community-relay promotion</strong><div class="sub">Implemented in both proposed forms (<code>communityRelayQuota</code>: reserve part of the cap, or exempt tablets from it) and rejected on three seeds. The diagnosis decides it: a tablet that fails to be elected lost to <em>other tablets</em> &mdash; six better-scoring community relays against zero phones on seed 42 &mdash; so a reservation cannot help it, and the proximity guard that stops the others is docs/03 &sect;5 working as written. Exemption does elect all six and lifts delivery 1.7 points, but it raises everybody else&#x27;s transmissions 12% and puts the SUPER ratio at 25.0%, the ceiling of skills/02&#x27;s band. Reserving half the cap reserves nothing: those slots were already the tablets&#x27;, so what it actually does is hand one to a phone.</div></td><td><code>docs/06 §19.4</code></td></tr><tr><td><strong>Sleeping stabilises routing</strong><div class="sub">Falsified: the duty cycle is delivery-neutral (+0.8/+0.5 points) and its value is battery, not stability.</div></td><td><code>docs/06 §7</code></td></tr><tr><td><strong>Raising data TTL for the crowd&#x27;s 5-hop tail</strong><div class="sub">The tail decomposes into 2.2% of paths that are 6+ hops, 1.8% with no path at all, 5.8% lost or expired, and 5.8% in-flight churn - only one of which a TTL would touch.</div></td><td><code>docs/06 §16</code></td></tr></tbody></table>
+<table><thead><tr><th>Lever</th><th>Why not</th></tr></thead><tbody><tr><td><strong>Faster OGM beacons in the crowd</strong><div class="sub">1 s intervals looked like +2.6 points of within-5-hop delivery on three seeds and measured -1.1 on six. The sign flipped, not just the magnitude.</div></td><td><code>docs/06 §16.4</code></td></tr><tr><td><strong>More source retries (4 instead of 2)</strong><div class="sub">Delivery 91.7% -&gt; 93.2% in the crowd, at a p95 of 10.9 s - buying 1.5 points with a latency budget the spec does not have.</div></td><td><code>docs/06 §16</code></td></tr><tr><td><strong>A contention window for carrier sense</strong><div class="sub">Built, measured, rejected: &plusmn;1.1 points on delivery and both <code>csma</code> arms still ~14 short of the gate. With a file in flight the best six-seed mean clears it (0.9040 against 0.8672) while its spread widens, so it does not hold per-run. The decomposition is the finding &mdash; under carrier sense the losses are queue drops (1994-3466) rather than collisions (273-394), so the lever aimed at collisions cannot be the fix. <code>docs/08 §12.13</code></div></td><td><code>docs/08 §12.13</code></td></tr><tr><td><strong>A signal-strength capture effect at the receiver</strong><div class="sub">Built, measured, rejected: the mechanism is exactly monotone in its own knob &mdash; takeovers fall 167, 100, 58, 16, 2 across margins of 0, 3, 6, 12 and 20 dB &mdash; and delivery does not move with it, a flat band from 0.8616 to 0.8898 across an eighty-fold change in how often it fires. Six seeds with a file in flight: <code>csma</code> 0.8672, which is first-packet-wins to four decimals, and <code>halfDuplex</code> 0.8983 against <code>first</code>&rsquo;s 0.9209, so under plain half-duplex it is 2.3 points <em>worse</em> than the pessimistic model it was meant to improve on. A takeover is not a rescue: it moves the loss from the newcomer to the incumbent, one packet is lost either way, and the incumbent now has a retry to do. The first measurement of this read 0.9266 and appeared to clear the gate; the whole of that was the incumbent&rsquo;s link being booked as a success before its fate was known, and booking the outcome at arrival instead removed it. <code>docs/08 §12.15</code></div></td><td><code>docs/08 §12.15</code></td></tr><tr><td><strong>Adaptive media retry timers</strong><div class="sub">Both RFC 6298&#x27;s srtt + 4 rttvar and a min-RTT rule were implemented and measured; both lose to a fixed 600 ms (file at 2 hops: 31.96 s and 28.38 s against 24.09 s). For a deadline-driven stream an early duplicate beats a correctly-sized timeout. Left in the code, off by default.</div></td><td><code>docs/08 §7.1</code></td></tr><tr><td><strong>Deeper transfer windows</strong><div class="sub">Window 16 is 15.5x faster than window 1 at one hop &mdash; on an infinitely wide radio. On the one radio a phone has the same sweep is worth 1.25x, and depth starts dropping chunks, because there is one transmitter to fill and the parallelism was never there. Ships at 4 under <code>free</code>; window 1 is the evidence-backed setting under <code>halfDuplex</code>, where it recovers 1.1 of the 1.7 points of delivery a file costs and a third of the p95, for 46% more transfer time.</div></td><td><code>docs/08 §4, §12.2, §12.5</code></td></tr><tr><td><strong>Promoting acknowledgements or voice in the transmit queue</strong><div class="sub">Both implemented (<code>channelPriority</code>) and both off. Neither is a win: promoting ACKs buys text 1.1 points of delivery and 158 ms of p95 and charges the file 14% for it, and promoting voice on top is the best arm for a note competing with a file (49.26 s of play delay against 1.33 min) while costing 1.7 points of text delivery instead. No queue order rescues push-to-talk at three hops, because the limit is the note's own air time and no ordering creates air time.</div></td><td><code>docs/08 §12.8</code></td></tr><tr><td><strong>Carrier sense</strong><div class="sub">Implemented as <code>channelAccess: "csma"</code> and off. It removes almost every collision a node can hear (self-deafness 693 &rarr; 7) and still costs delivery under load (0.9096 &rarr; 0.8757 with a file in flight) and fails both acceptance gates (0.7389-0.7944 delivery, 78-80% overhead), because waiting is not free in an engine whose layers above keep generating packets. Deepening the queue is monotonic in the wrong direction: 0.7062 delivery and 429 minutes of deferred air time at depth 128. The missing mechanism is backpressure.</div></td><td><code>docs/08 §12.10</code></td></tr><tr><td><strong>Assuming coverage from density</strong><div class="sub">A rule that treated &#x27;heard many SUPERs&#x27; as &#x27;covered&#x27; measured 95.0% delivery against 98.3% for the sector-bounded fallback.</div></td><td><code>docs/06 §15</code></td></tr><tr><td><strong>Preferring SUPER as bundle carrier (skills/04)</strong><div class="sub">Implemented and off by default. It measured +4.5 delivery points in the crowd *before* the two DTN defects were fixed and -3.5 points after them, with parked bundles growing 39 -&gt; 63 per run: spraying toward SUPERs duplicates work into the busiest queues. The rule&#x27;s intuition is about who should hold a bundle, not who should be handed extra copies.</div></td><td><code>docs/06 §20.4</code></td></tr><tr><td><strong>Gossiping ACKs so relays can prune bundles (skills/04)</strong><div class="sub">Implemented exactly as written - the bundle is acknowledged to the carrier that handed it over, and any node hearing the ACK drops its copy - and it pruned zero bundles in four worlds over six seeds, because the ACK is a unicast along the reverse path. Kept because it is free; a prune flood is not worth adding until a deployment shows cap pressure (worst measured: 97 of 500 slots).</div></td><td><code>docs/06 §20.5</code></td></tr><tr><td><strong>Relaying history digests across the mesh</strong><div class="sub">It would converge a spread membership and would cost a scoped flood every interval, forever, to repair traffic that mostly arrived. Not built; the peer-graph boundary is documented instead.</div></td><td><code>docs/06 §17.4</code></td></tr><tr><td><strong>Normalising peer count against the observed maximum</strong><div class="sub">Implemented as <code>peerNorm: &quot;observed&quot;</code> and rejected on measurement. The predicted trap was §15&#x27;s density rule from the other side; the real problem is that an election is a ranking and this is a level change. The most open node&#x27;s score rises 0.05-0.19 in all four worlds and its rank inside its own candidacy list does not move once (7 of 13 on campus, 2 of 4 in the village, 12 of 25 in the crowd), so it stays NORMAL in three worlds out of four either way. What it does move is the promote gate and the size of the elected set (village 2 &rarr; 3 SUPERs, crowd 13 &rarr; 11), and it spends skills/02&#x27;s margin: over six campus seeds one lands exactly on the 15% floor, for under half a point of delivery.</div></td><td><code>docs/06 §18.4</code></td></tr><tr><td><strong>Preferring a community relay as MPR or bundle carrier</strong><div class="sub">Both places the protocol chooses who does the work, both measured, both off. As an MPR tie-break it wins the tie it was written for and moves 0.6 of 100 slots in a crowd, with every metric identical to the digit across three seeds &mdash; who transmits is decided per packet from what was heard, not from the MPR label. As a bundle carrier it fires 40-51 times a run and grows parked bundles 27-55% for at most 0.7 extra opportunistic deliveries: a node that does not move is the best place to leave a bundle and the worst place to carry one.</div></td><td><code>docs/06 §19.5</code></td></tr><tr><td><strong>Cap-aware community-relay promotion</strong><div class="sub">Implemented in both proposed forms (<code>communityRelayQuota</code>: reserve part of the cap, or exempt tablets from it) and rejected on three seeds. The diagnosis decides it: a tablet that fails to be elected lost to <em>other tablets</em> &mdash; six better-scoring community relays against zero phones on seed 42 &mdash; so a reservation cannot help it, and the proximity guard that stops the others is docs/03 &sect;5 working as written. Exemption does elect all six and lifts delivery 1.7 points, but it raises everybody else&#x27;s transmissions 12% and puts the SUPER ratio at 25.0%, the ceiling of skills/02&#x27;s band. Reserving half the cap reserves nothing: those slots were already the tablets&#x27;, so what it actually does is hand one to a phone.</div></td><td><code>docs/06 §19.4</code></td></tr><tr><td><strong>Sleeping stabilises routing</strong><div class="sub">Falsified: the duty cycle is delivery-neutral (+0.8/+0.5 points) and its value is battery, not stability.</div></td><td><code>docs/06 §7</code></td></tr><tr><td><strong>Raising data TTL for the crowd&#x27;s 5-hop tail</strong><div class="sub">The tail decomposes into 2.2% of paths that are 6+ hops, 1.8% with no path at all, 5.8% lost or expired, and 5.8% in-flight churn - only one of which a TTL would touch.</div></td><td><code>docs/06 §16</code></td></tr></tbody></table>
 <div class="note">Two methodological rules came out of this and are now written into the evidence document
 rather than remembered: an A/B baseline must not share the mechanism under test, and a parameter change
 proposed on three seeds of a 60-node mobile world needs six before anybody believes it - the OGM-interval
@@ -434,8 +501,53 @@ which is which, because a field report has to say which one it is quoting.</p>
 
 <h2>13. Repository inventory</h2>
 <table class=""><thead><tr><th>area</th><th>added lines</th><th>+</th><th>-</th></tr></thead><tbody><tr><td>src/ (TS engine + React visualiser)</td><td><div class="bar"><div class="fill" style="width:100.00%;background:#4de0ff"></div><span class="barlabel">+10,320</span></div></td><td class="num">+10,320</td><td class="num">-1,062</td></tr><tr><td>sim/mesh_sim/ (authoritative Dart)</td><td><div class="bar"><div class="fill" style="width:88.88%;background:#4de0ff"></div><span class="barlabel">+9,172</span></div></td><td class="num">+9,172</td><td class="num">-</td></tr><tr><td>docs/ (findings, E2EE, media, field test)</td><td><div class="bar"><div class="fill" style="width:25.19%;background:#4de0ff"></div><span class="barlabel">+2,600</span></div></td><td class="num">+2,600</td><td class="num">-</td></tr><tr><td>tool/ (golden, media, history, field probes)</td><td><div class="bar"><div class="fill" style="width:14.45%;background:#4de0ff"></div><span class="barlabel">+1,491</span></div></td><td class="num">+1,491</td><td class="num">-</td></tr><tr><td>roadmap/ + skills/ (annotation pass)</td><td><div class="bar"><div class="fill" style="width:3.00%;background:#4de0ff"></div><span class="barlabel">+310</span></div></td><td class="num">+310</td><td class="num">-23</td></tr><tr><td>.github/ (3 jobs + probes job)</td><td><div class="bar"><div class="fill" style="width:3.12%;background:#4de0ff"></div><span class="barlabel">+322</span></div></td><td class="num">+322</td><td class="num">-</td></tr><tr><td>test-fixtures/ (cross-language goldens)</td><td><div class="bar"><div class="fill" style="width:2.68%;background:#4de0ff"></div><span class="barlabel">+277</span></div></td><td class="num">+277</td><td class="num">-</td></tr><tr><td>reports/</td><td><div class="bar"><div class="fill" style="width:2.15%;background:#4de0ff"></div><span class="barlabel">+222</span></div></td><td class="num">+222</td><td class="num">-</td></tr></tbody></table>
+<p><strong>Verification status, and one thing that is not verified.</strong> Everything TypeScript above was
+run: <code>npm test</code> 276 passing, <code>npx tsc --noEmit</code> clean, and <code>npm run golden</code>
+byte-identical after every change. The Dart engine has no compiler in this workspace &mdash; the SDK is not
+installable from here &mdash; so CI was the only thing that ever compiled it, and <strong>GitHub Actions stopped
+running part-way through this session for a billing reason</strong>: every job since <code>8406717</code> reports
+&ldquo;The job was not started because recent account payments have failed or your spending limit needs to be
+increased.&rdquo; Re-running the workflow returns &ldquo;cannot be rerun&rdquo;. That is not a code failure and it is
+not something this branch can fix.</p>
+<p>What it means concretely: <code>sim/mesh_sim/lib/src/transport.dart</code>, <code>test/transport_test.dart</code>
+and the Dart mirror of the capture effect in <code>lib/src/simulation.dart</code>, <code>lib/src/types.dart</code>
+and <code>test/channel_test.dart</code> have never been compiled. They were written against the engine&rsquo;s API by
+reading it, hand-checked for balance, name collisions in every enclosing scope, exhaustiveness of every
+<code>switch</code>, the single <code>SimulationStats</code> construction site, nullable-assignment promotion and
+the lint set in <code>analysis_options.yaml</code> (<code>strict-casts</code>, <code>strict-raw-types</code>,
+<code>unused_import</code> as an error) &mdash; and the equivalent TypeScript mechanism they mirror is measured and
+tested. Two earlier Dart commits in this session did compile and pass on CI before the billing stop, and the
+transport seam passed <code>dart analyze</code> and all 13 of its tests at <code>3c75d77</code>. The capture-effect
+mirror is the part that needs a green run before it should be trusted.</p>
+<p><strong>What was built in response.</strong> With Actions unavailable, the local alternative had been
+&ldquo;run the tests and hope&rdquo;, which is not the same claim as &ldquo;ran the pipeline CI runs&rdquo;.
+<code>tool/ci/</code> now executes the workflow&rsquo;s own commands in the workflow&rsquo;s own order, including the
+three behaviours that are easy to drop and expensive to lose: the <code>needs: dart</code> edges, the Dart
+job running all three of its checks before gating, and the golden-vector step failing when
+regenerating changes the committed file. <code>ci.yml</code> in turn calls the same
+<code>tool/ci/diagnostics.py</code> the local runner calls, so one parser serves both and they cannot
+drift. <code>make ci</code> runs it, <code>make doctor</code> compares this machine against the versions CI
+pins, <code>make push</code> validates before pushing, and <code>make diagnose</code> reads the remote
+annotations &mdash; which is how the billing refusal above gets reported as an infrastructure problem
+rather than as four build failures.</p>
+<p><strong>It closes the TypeScript half of the gap and none of the Dart half.</strong> A job that cannot
+run is a failure here, never a silent skip: on this machine <code>make ci</code> exits 1 with three of four
+jobs <code>MISSING</code>, because there is no Dart SDK and <code>pub.dev</code> is unreachable. The
+<code>web</code> job <em>was</em> run locally before each of the final pushes &mdash; <code>npm ci</code>,
+<code>npx tsc --noEmit</code>, 276 tests, golden vectors byte-identical, production build &mdash; and each is
+recorded in <code>artifacts/ci/verification-log.jsonl</code> as <code>scoped:web</code>, a label that names
+which jobs actually ran so a web-only push cannot later be mistaken for a verified Dart engine.
+Everything TypeScript above was therefore re-verified locally at the end of the session; the Dart
+capture-effect mirror is still uncompiled and still needs a green run before it should be trusted.
+<code>docs/10-local-development-and-ci.md</code> documents the toolchain, the runner, the exit codes and
+the monitoring.</p>
 <h3>Reproducing everything above</h3>
-<pre>npm ci &amp;&amp; npm test                # 265 TypeScript tests
+<pre>make doctor                        # does this machine match the versions CI pins?
+make ci                            # every CI job, locally  (tool/ci/run-pipeline.sh)
+make push                          # validate first, then push — refuses on red or partial
+make diagnose                      # why the remote run failed: billing refusal vs real failure
+                                   #   (docs/10-local-development-and-ci.md)
+npm ci &amp;&amp; npm test                # 276 TypeScript tests
 npm run golden                     # regenerate and diff the cross-language vectors
 npm run media                      # docs/08: files, PTT, retry timer, contention, the radio (§7-§9)
 npm run history                    # docs/06 §17: repair against the same world with it off
@@ -443,20 +555,49 @@ npm run field:capture -- campus_quad 42 /tmp/cap.jsonl [flood-all]
 npm run field:report  -- /tmp/cap.jsonl /tmp/base.jsonl
 ALLOW_ANY_DEV_HOST=1 npm run dev -- --port 5173     # the React visualiser
 
-cd sim/mesh_sim &amp;&amp; dart pub get &amp;&amp; dart test     # 178 Dart cases
+cd sim/mesh_sim &amp;&amp; dart pub get &amp;&amp; dart test     # 197 Dart cases
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42          # asserts the criteria
 dart run bin/mesh_sim.dart --sos | --group 10 | --media | --history  # the four probes
 dart run bin/mesh_sim.dart --trace | --capture | --capture-ogm       # hop routes, pcap-like log
 dart run bin/mesh_sim.dart --duty-cycle --json                       # skills/07 arm</pre>
 
 <h2>14. What remains</h2>
-<p>Twenty-nine roadmap items are still open, and every one of them is app or platform work rather than
+<p>Twenty-eight roadmap items are still open, and every one of them is app or platform work rather than
 protocol work: the BLE GATT hello and iOS beacon, permissions flows, the foreground service, SQLite,
-<code>WifiP2pManager</code> and MultipeerConnectivity, the Opus codec, QR pairing, distribution, legal.
-Two things on the simulation side are named in the evidence documents as the next lever to pull. Four
-others &mdash; a channel-access model, media gating on mesh load, cap-aware community-relay promotion and
-observed-maximum peer normalisation &mdash; were built and measured while writing this report; two ship as
-flags that default to off, and their results are in &sect;5 and &sect;8.</p>
+<code>WifiP2pManager</code> and MultipeerConnectivity, the Opus codec, QR pairing, distribution, legal.</p>
+<p><strong>That sentence said twenty-nine, and the twenty-ninth was wrong.</strong> Phase 1 item 15, the
+<code>MeshTransport {advertise(), scan(), connect(), send()}</code> abstraction, carried a note saying the
+interface itself was app work. It is not: the interface is pure Dart with no dependency beyond the SDK, and the
+decisions inside it &mdash; what a 12-byte beacon contains and in which byte order, which radio a payload rides
+and at what size, when a connection is refused rather than attempted, and what a scan is permitted to report
+&mdash; are testable without a phone. <code>skills/01</code> had already specified all six verbs, so the seam is
+built to that signature with <code>SimulatedMeshTransport</code> as a reference implementation and a test double,
+and it lifts into the mono-repo's <code>core/</code> unchanged when item 13 creates it. What is still app work is
+the four concrete implementations beneath it. The useful part of the correction is not the item count: it is that
+&ldquo;needs hardware&rdquo; had been used to close a category rather than to check it, and one member of the
+category was checkable.</p>
+<p>Two of its rules are load-bearing rather than plumbing. <code>connect</code> refuses a peer the local scan has
+not reported even when that peer exists in the world, and <code>scan</code> reads the device's own scan cycle
+&mdash; stale while a NORMAL node sleeps &mdash; rather than the geometry. An implementation that reaches an
+unheard peer hands the app an oracle, and an app built on an oracle passes every test in this repository and then
+fails on a phone in a pocket. A test moves a peer into range mid-run and asserts the two disagree at that instant
+and agree again later, so the invariant cannot pass vacuously. And the seam consumes no random numbers: a world
+driven through it is identical to the same world driven by hand, delivery for delivery, so the cross-language
+golden vectors hold.</p>
+<p>
+On the simulation side five things remain named in the evidence documents as the next lever to pull, and four
+of the five are now answered: the community-relay preference and observed-maximum normalisation were both built,
+measured and rejected; hop-by-hop flow control was built, found broken in three places, corrected and measured as
+a trade rather than a rescue (&sect;5); the voice-priority policy is the <code>channelPriority: &quot;class&quot;</code>
+arm, measured in &sect;5 and not shipped because promoting voice does not pay; and the signal-strength capture
+effect is built, measured and rejected in &sect;10 &mdash; RTS/CTS along with it, since a receiver that can be taken
+over by a stronger packet is the mechanism RTS/CTS exists to protect, and neither changes how many packets are
+lost. <strong>All five are now answered, and none of them ships.</strong> Twelve levers were built and
+measured while writing this report &mdash; two channel-access models, two receiver models, two queue disciplines, a
+contention window, sender-side backpressure, a community-relay cap and preference, a DTN carrier preference, and
+observed-maximum peer normalisation &mdash; and every one of them defaults to the behaviour the acceptance gates
+were met under, which is why the golden vectors never moved. Their results are in &sect;5 and &sect;8, and the
+two that changed a published conclusion are called out where they were measured.</p>
 <ul>
 <li><strong>Preference rather than promotion for community relays</strong> - the cap-aware promotion
 &sect;19.2 asked for is built, measured and rejected (&sect;19.4): a tablet that is not elected lost to other
@@ -465,16 +606,24 @@ carrier, where the work actually is.</li>
 <li><strong>Rank, not score, in the field record</strong> - observed-maximum normalisation is built,
 measured and rejected (&sect;18.4): the atrium phone loses on rank among the candidates it can hear, which a
 score threshold hides. <code>docs/09</code> &sect;5 should record that column.</li>
-<li><strong>Hop-by-hop backpressure</strong> - the sender-side version is built and measured
-(<code>mediaBackpressure</code>): on one radio with nobody else on it it cuts a 1 MB transfer's queue drops
-from 25 to 3, its retransmissions from 6 to 1 and its stalls from 1 to 0, and the file arrives in 5.2 s instead
-of 9.4 s. In a mesh it does nothing for delivery and costs the transfer 18%, because the queue that overflows
-in a multi-hop mesh belongs to a relay fed by several senders at once. The version that would fix the mesh is a
-relay that can tell its upstream to stop, which nothing in this stack has (docs/08 &sect;12.12).</li>
-<li><strong>A capture effect that compares signal strengths, a contention window, and RTS/CTS</strong> - the
-receiver model loses the later of two packets whatever their levels, two nodes that defer for each other are
-separated only by event ordering, and the hidden terminal is provably unfixable without RTS/CTS (a test pins
-it). Each omission is named with its direction in docs/08 &sect;12.9-12.10.</li>
+<li><strong>Hop-by-hop flow control</strong> - the sender-side version is built, was found broken
+in three places, and is now corrected (<code>mediaBackpressure</code>): on one radio with nobody else on it it cuts
+a 1 MB transfer's queue drops from 25 to 5, its retransmissions from 6 to <strong>0</strong> and its stalls from 1
+to 0, and the file arrives in 6.04 s instead of 9.37 s. In a mesh it is a trade rather than a win &mdash; +1.7
+points of delivery under carrier sense, &minus;2.8 under plain half-duplex, and neither reaches the gate. The
+version that would fix the mesh is a radio that can <em>refuse a hand-over</em> rather than shed it, with a layer
+above that holds the packet instead of counting it lost, which nothing in this stack has (docs/08
+&sect;12.12&ndash;12.14). Three measurements make this the load-bearing gap rather than one of several: under
+carrier sense the losses are queue drops outnumbering collisions about eight to one (&sect;12.13); with a file in
+flight 82&ndash;85% of the shedding is the <em>source's</em> own, not a relay's, which withdraws the topological
+argument this list used to carry (&sect;12.14); and the cheap alternative &mdash; rerouting round a congested relay
+&mdash; is unavailable, because an equal-cost alternative next hop existed for only 3&ndash;9% of relay sheds.</li>
+<li><strong>A capture effect that compares signal strengths, and RTS/CTS</strong> - the receiver model loses
+the later of two packets whatever their levels, and the hidden terminal is provably unfixable without RTS/CTS (a
+test pins it). Both are named with their direction in docs/08 &sect;12.9-12.10. The third omission that list
+carried is now closed: two nodes that defer for each other <em>were</em> separated only by event ordering, so a
+contention window was built &mdash; and measured, and rejected (&sect;5 above, docs/08 &sect;12.13). It is the
+first radio lever to move the carrier-sense mean toward the gate at all, and it does not hold per-seed.</li>
 <li><strong>Voice priority in the transmit queue</strong> - at three hops a streamed note cannot keep up
 with its own capture clock on one radio, so either streaming is capped at two hops and longer notes are
 sent as blobs, or voice jumps the queue. Not implemented; it is the next thing to measure (docs/08

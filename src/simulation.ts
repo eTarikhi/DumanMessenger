@@ -21,13 +21,14 @@ import type {
   ChannelAccess,
   ChannelPriority,
   ChannelCapture,
+  ChannelBackoff,
   PeerNorm,
   RelayPolicy,
   Role,
 } from "./types";
 import type { ForwardDecision, ForwardMode } from "./routing";
 import type { Rng } from "./rng";
-import { chance, createRng, randRange } from "./rng";
+import { chance, createRng, randInt, randRange } from "./rng";
 import type { RfParams } from "./rf";
 import {
   batteryDrain,
@@ -49,6 +50,7 @@ import {
   ogmToGossip,
   pruneStaleEntries,
   receiveOGM,
+  TQ_USABLE,
 } from "./election";
 import {
   BLE_MAX_BYTES,
@@ -104,6 +106,14 @@ interface ChannelState {
    *  last drain has nothing to wake the radio up, and waits for the next transmission
    *  to be handed to it — which is how a mesh stalls (docs/08 §12.1). */
   drainScheduled: boolean;
+  /** Contention window this radio currently draws from, in slots (`channelBackoff`). Starts
+   *  at `channelCwMin`, doubles after a collision, resets after a clean transmission. */
+  cw: number;
+  /** Whether a slot count has already been drawn for the attempt now in progress, and how
+   *  many slots of it are left to wait. Drawn once per attempt so a radio that is deferred
+   *  again mid-backoff keeps the turn it already paid for. */
+  backoffArmed: boolean;
+  backoffSlots: number;
 }
 
 export interface SimConfig {
@@ -271,6 +281,26 @@ export interface SimConfig {
    *  `"first"` loses the later packet, and loses any packet that arrives while its receiver
    *  is itself transmitting (docs/08 §12.9). */
   channelCapture: ChannelCapture;
+  /** How much stronger a newcomer has to be to take a busy receiver over, in dB. Only
+   *  consulted under `channelCapture: "strongest"`. Six dB is the capture ratio usually
+   *  quoted for an angle-modulated receiver, and 0 dB reduces the model to "loudest wins
+   *  regardless of margin" while a large value reduces it to `first`. */
+  channelCaptureRatioDb: number;
+
+  /** Whether a node that has been waiting for the medium waits a *random* number of slots
+   *  before taking it, and how wide the window it draws from is. Carrier sense alone wakes
+   *  every waiting node at the same instant the medium clears, so they transmit together;
+   *  the random wait is what disperses them, and doubling the window after a collision is
+   *  what stops two nodes that keep meeting from keeping meeting (docs/08 §12.13). Only
+   *  consulted under `channelAccess: "csma"`. */
+  channelBackoff: ChannelBackoff;
+  /** Contention window after a clean transmission, in slots. */
+  channelCwMin: number;
+  /** Contention window ceiling after repeated collisions, in slots. */
+  channelCwMax: number;
+  /** How long one backoff slot lasts. 802.11's is 9 µs at 2.4 GHz; a BLE mesh has no such
+   *  constant, so this is a knob rather than a calibration. */
+  channelSlotMs: number;
 
   /** Whether a transfer stops pumping chunks when the sender's radio is full. A real socket
    *  blocks; an engine that keeps handing packets to a saturated radio converts somebody
@@ -438,6 +468,11 @@ export const DEFAULT_CONFIG: SimConfig = {
   communityRelayQuota: 0,
   peerNorm: "fixed",
   channelCapture: "none",
+  channelCaptureRatioDb: 6,
+  channelBackoff: "none",
+  channelCwMin: 4,
+  channelCwMax: 64,
+  channelSlotMs: 1,
   mediaBackpressure: false,
   communityRelayPreference: false,
   dtnPreferCommunity: false,
@@ -533,12 +568,36 @@ export interface SimulationStats {
   /** Packets a busy transmitter could not hold: the queue was full, so they were
    *  dropped at the radio rather than lost on a link. */
   channelDrops: number;
+  /** Where those drops happen, which is the question docs/08 §12.12 answered by argument and
+   *  §12.13 needs answered by measurement. `channelDropsRelayed` counts the packets shed by a
+   *  node forwarding somebody else's message (`hopCount > 0`); the difference is shed by the
+   *  node that originated it. `channelDropsMedia` counts the shed packets that were file or
+   *  voice chunks, i.e. the ones a transfer window is responsible for. */
+  channelDropsRelayed: number;
+  channelDropsMedia: number;
+  /** Of the packets shed by a relay, how many had a peer in range that was at least as close
+   *  to the destination as the next hop that was chosen — i.e. how many could have gone round
+   *  the congestion instead of into it. This is the number that decides whether congestion-aware
+   *  forwarding is a mechanism this topology can offer at all, and it is measured rather than
+   *  assumed because docs/08 §12.12's argument for hop-by-hop flow control depends on it. */
+  channelDropsWithAlternative: number;
   /** Packets lost because the receiver was locked onto a packet that arrived first
    *  (`channelCapture: "first"`, docs/08 §12.9). */
   channelCaptured: number;
+  /** Times a stronger newcomer took a busy receiver over from the packet it was holding,
+   *  under `channelCapture: "strongest"`. Each one is also a collision loss — of the
+   *  incumbent — so it is counted in `channelCaptured` as well. This is the count that says
+   *  how much of `first`'s pessimism the capture effect actually buys back. */
+  channelCaptureEffects: number;
   /** Packets lost because the receiver was itself transmitting: a half-duplex radio cannot
    *  hear over its own transmitter. */
   channelDeafRx: number;
+  /** Contention-window draws: how often a node found the medium free and still had to wait
+   *  a random number of slots for it (`channelBackoff`, docs/08 §12.13). */
+  channelBackoffs: number;
+  /** Times a transfer was refused air by its own radio and had to wait for a slot to free
+   *  (`mediaBackpressure`, docs/08 §12.12). This is backpressure working, not a failure. */
+  transferBlocks: number;
   /** Anti-entropy packets put on air: beacons, bucket requests and replies. */
   sentSync: number;
   bytesDelivered: number;
@@ -856,6 +915,12 @@ function percentile(sorted: number[], p: number): number {
 interface MsgPayload {
   msg: MeshMessage;
   via: NodeId;
+  /** Which *transmission* this is, not which message. A message can be on air several times
+   *  over — a retry, or two relays racing with the same copy — and `channelCapture:
+   *  "strongest"` has to be able to say "this one was taken over" without condemning every
+   *  later attempt at the same message. Only assigned under `"strongest"`; undefined
+   *  otherwise, so the other two modes never touch it. */
+  seq?: number;
 }
 
 /** How a forwarding decision shows up in a message's hop trace. `wait-mpr` is
@@ -943,8 +1008,23 @@ export class MeshSimulation {
   private channelDeferrals = 0;
   private channelDeferMs = 0;
   private channelDrops = 0;
+  private channelDropsRelayed = 0;
+  private channelDropsMedia = 0;
+  private channelDropsWithAlternative = 0;
   private channelCaptured = 0;
+  private channelCaptureEffects = 0;
   private channelDeafRx = 0;
+  /** Per-transmission sequence, for `channelCapture: "strongest"` only. Not a random draw,
+   *  so it cannot move a golden vector. */
+  private txSeq = 0;
+  private rxRssi = new Map<NodeId, number>();
+  private rxSeq = new Map<NodeId, number>();
+  private superseded = new Set<number>();
+  private channelBackoffs = 0;
+  private transferBlocks = 0;
+  /** Whether the transmission that just went on air collided at its receiver. Read by the
+   *  contention window to decide whether to widen; written by `onAir`. */
+  private lastTxCollided = false;
   /** Until when each node is transmitting, and until when it is locked onto a reception.
    *  Maintained only while the receiver model or carrier sense is on, so the shipped model
    *  pays nothing. */
@@ -1046,11 +1126,22 @@ export class MeshSimulation {
     this.channelDeferrals = 0;
     this.channelDeferMs = 0;
     this.channelDrops = 0;
+    this.channelDropsRelayed = 0;
+    this.channelDropsMedia = 0;
+    this.channelDropsWithAlternative = 0;
     this.channelCaptured = 0;
+    this.channelCaptureEffects = 0;
     this.channelDeafRx = 0;
+    this.txSeq = 0;
+    this.superseded.clear();
+    this.channelBackoffs = 0;
+    this.transferBlocks = 0;
+    this.lastTxCollided = false;
     this.channel.clear();
     this.txUntil.clear();
     this.rxUntil.clear();
+    this.rxRssi.clear();
+    this.rxSeq.clear();
     this.ogmTx = 0;
     this.lostDataTx = 0;
     this.lostOgmTx = 0;
@@ -1256,6 +1347,8 @@ export class MeshSimulation {
         this.queue.cancel("channel", node.id);
         this.txUntil.delete(node.id);
         this.rxUntil.delete(node.id);
+        this.rxRssi.delete(node.id);
+        this.rxSeq.delete(node.id);
       }
     }
     this.queue.push(this.now + this.config.physicsIntervalMs, "physics", "*");
@@ -1644,20 +1737,46 @@ export class MeshSimulation {
    *  `mediaBackpressure`, for as long as the sender's radio has slots to put them in. */
   private pushWindow(t: Transfer): void {
     const window = this.effectiveWindow(t);
+    if (window <= 0) {
+      // Blocked on the sender's own radio. Nothing is sent and nothing is lost: the drain
+      // that frees a slot calls this again, so the transfer resumes without a timer having
+      // to notice (docs/08 §12.12). Counted only when backpressure is what closed the window,
+      // so a transfer configured with no window at all is not reported as throttled.
+      if (this.config.mediaBackpressure) this.transferBlocks++;
+      return;
+    }
     while (t.nextToSend < t.chunks && t.nextToSend < t.received + window) {
       this.sendChunk(t, t.nextToSend++);
     }
   }
 
+  /** Transmit-queue slots [nodeId] has left. Infinite on the shipped radio, where nothing
+   *  queues, so a caller cannot accidentally throttle itself under `channelAccess: "free"`. */
+  private radioSlotsFree(nodeId: NodeId): number {
+    if (this.config.channelAccess === "free") return Number.POSITIVE_INFINITY;
+    const queued = this.channel.get(nodeId)?.queue.length ?? 0;
+    return Math.max(0, this.config.channelQueueDepth - queued);
+  }
+
   /** The window the sender may fill right now. Without backpressure it is the configured
-   *  depth. With it, the radio's free slots cap it at a floor of one, so a transfer that is
-   *  already committed as far ahead as the queue allows simply waits for the medium instead
-   *  of pushing everybody else out of it (docs/08 §12.12). */
+   *  depth. With it, the radio's free slots cap it — and unlike the first implementation of
+   *  this flag the cap is allowed to reach **zero**, because a window floored at one still
+   *  hands a packet to a queue that is already full, which is then shed at the tail. That is
+   *  not backpressure, it is a slower way of dropping: measured, it *raised* the drop count
+   *  (1441 → 1637 on the campus half-duplex arm). Blocking and resuming on drain is what a
+   *  socket does (docs/08 §12.12). */
   private effectiveWindow(t: Transfer): number {
     if (!this.config.mediaBackpressure) return t.window;
-    const queued = this.channel.get(t.from)?.queue.length ?? 0;
-    const free = Math.max(1, this.config.channelQueueDepth - queued);
-    return Math.max(1, Math.min(t.window, free));
+    return Math.min(t.window, this.radioSlotsFree(t.from));
+  }
+
+  /** Resume any transfer this node is the source of. Called when its radio frees a slot, so a
+   *  blocked transfer waits for the medium rather than for a timeout. */
+  private resumeBlockedTransfers(nodeId: NodeId): void {
+    if (!this.config.mediaBackpressure) return;
+    for (const t of this.transfers.values()) {
+      if (t.state === "active" && t.from === nodeId) this.pushWindow(t);
+    }
   }
 
   private sendChunk(t: Transfer, index: number): void {
@@ -1700,7 +1819,11 @@ export class MeshSimulation {
       const missing: number[] = [];
       for (const i of t.onAir) if (!t.receivedChunks.has(i)) missing.push(i);
       missing.sort((x, y) => x - y);
-      if (missing.length > 0) {
+      // A sender waiting on its own full radio is doing what backpressure asked it to do, so
+      // that wait is not a stall. Counting it would re-send into the queue that caused it —
+      // the stall path bypasses the window, so it has to consult the same gate.
+      const room = this.config.mediaBackpressure ? this.radioSlotsFree(nodeId) : missing.length;
+      if (missing.length > 0 && room > 0) {
         t.stalls++;
         this.transferStalls++;
         t.lastProgressAt = this.now;
@@ -1711,7 +1834,7 @@ export class MeshSimulation {
             `${Math.min(missing.length, t.window)} of ${missing.length} missing chunk${missing.length === 1 ? "" : "s"} (stall ${t.stalls})`,
           { msgType: "file" }
         );
-        for (const i of missing.slice(0, t.window)) this.sendChunk(t, i);
+        for (const i of missing.slice(0, Math.min(t.window, room))) this.sendChunk(t, i);
       }
     }
     this.queueStallCheck(transferId, nodeId);
@@ -2197,7 +2320,14 @@ export class MeshSimulation {
     }
     let ch = this.channel.get(node.id);
     if (!ch) {
-      ch = { busyUntil: 0, queue: [], drainScheduled: false };
+      ch = {
+        busyUntil: 0,
+        queue: [],
+        drainScheduled: false,
+        cw: this.config.channelCwMin,
+        backoffArmed: false,
+        backoffSlots: 0,
+      };
       this.channel.set(node.id, ch);
     }
     if (ch.queue.length >= this.config.channelQueueDepth) {
@@ -2205,6 +2335,11 @@ export class MeshSimulation {
       // queue that grows without bound does not deliver packets later — it delivers
       // them after the run is over.
       this.channelDrops++;
+      if (msg.hopCount > 0) {
+        this.channelDropsRelayed++;
+        if (this.hasAlternativeNextHop(node, msg)) this.channelDropsWithAlternative++;
+      }
+      if (msg.type === "file" || msg.type === "voice") this.channelDropsMedia++;
       this.pushLog(
         "loss",
         node.id,
@@ -2215,6 +2350,26 @@ export class MeshSimulation {
     }
     ch.queue.push({ msg, targetId, queuedAt: this.now });
     this.drainChannel(node);
+  }
+
+  /** Whether [node] could have reached [msg]'s destination through a peer other than the one
+   *  it chose, at no cost in hops. A relay's route is one next hop, so "round the congestion"
+   *  only exists if some peer in range is at least as close to the destination as that hop is;
+   *  this counts the shed packets for which such a peer was there. Derived from the route table
+   *  and the geometry, so it consumes no random numbers and cannot move a golden vector. */
+  private hasAlternativeNextHop(node: MeshNode, msg: MeshMessage): boolean {
+    const dest = msg.to;
+    if (dest === "BROADCAST" || dest === GROUP_ADDRESS) return false;
+    const mine = node.nextHopTable[dest];
+    if (!mine || mine.tq < TQ_USABLE) return false;
+    for (const peer of peersInRange(node, this.nodes, this.rf)) {
+      if (peer.id === mine.bestNeighbor) continue;
+      const theirs = peer.nextHopTable[dest];
+      // Forwarding to this peer costs one hop to reach it, so it is no worse than the route
+      // already chosen only if the peer is strictly closer to the destination.
+      if (theirs && theirs.tq >= TQ_USABLE && theirs.hopCount <= mine.hopCount - 1) return true;
+    }
+    return false;
   }
 
   /** Put the next queued packet on air if the radio is free, and schedule the drain that
@@ -2251,6 +2406,32 @@ export class MeshSimulation {
         }
         return;
       }
+      if (this.config.channelBackoff !== "none") {
+        // The medium is free *now* — which is exactly when every other node waiting on the
+        // same medium also finds it free, because they were all woken at this instant. Left
+        // alone they transmit together and listening has synchronised the herd instead of
+        // dispersing it. Draw a random number of slots and wait them out (docs/08 §12.13).
+        if (!ch.backoffArmed) {
+          // `randInt` draws only here, so `channelBackoff: "none"` consumes no random
+          // numbers and the shipped model stays bit-identical.
+          ch.backoffSlots = randInt(this.rng, 0, ch.cw);
+          ch.backoffArmed = true;
+          this.channelBackoffs++;
+        }
+        if (ch.backoffSlots > 0) {
+          const wait = ch.backoffSlots * this.config.channelSlotMs;
+          // Paid in full rather than a slot at a time: a 64-slot window drained one event
+          // per slot is 64 wakeups per transmission, and the answer is the same.
+          ch.backoffSlots = 0;
+          this.channelDeferrals++;
+          this.channelDeferMs += wait;
+          if (!ch.drainScheduled) {
+            ch.drainScheduled = true;
+            this.queue.push(this.now + wait, "channel", node.id);
+          }
+          return;
+        }
+      }
     }
     const next = this.takeNextTx(ch);
     const waited = this.now - next.queuedAt;
@@ -2260,6 +2441,19 @@ export class MeshSimulation {
     }
     const airTime = this.onAir(node, next.msg, next.targetId);
     ch.busyUntil = this.now + airTime;
+    // A slot just freed. Anything this node was holding back for want of one goes now, which
+    // is the resume half of blocking — without it a transfer that was refused air waits for a
+    // timeout instead of for the medium.
+    this.resumeBlockedTransfers(node.id);
+    if (this.config.channelBackoff !== "none") {
+      // Binary exponential backoff: a radio that just collided draws from a window twice as
+      // wide next time, so two radios that keep meeting keep backing off until they stop
+      // meeting; a radio that got through goes back to the narrow window it started with.
+      ch.cw = this.lastTxCollided
+        ? Math.min(ch.cw * 2, this.config.channelCwMax)
+        : this.config.channelCwMin;
+      ch.backoffArmed = false;
+    }
     if (ch.queue.length > 0 && !ch.drainScheduled) {
       ch.drainScheduled = true;
       this.queue.push(ch.busyUntil, "channel", node.id);
@@ -2302,6 +2496,9 @@ export class MeshSimulation {
    */
   private onAir(node: MeshNode, msg: MeshMessage, targetId: NodeId): number {
     const target = this.byId(targetId)!;
+    // Cleared per transmission so the contention window sees this packet's fate and not the
+    // last one's.
+    this.lastTxCollided = false;
     node.txCount++;
     this.relayTx++;
     const loss = effectiveLossProbability(node, target, this.rf, this.config.linkRetries);
@@ -2342,12 +2539,21 @@ export class MeshSimulation {
     if (capture) {
       // Two ways a packet that survived the link still does not arrive: its receiver is
       // transmitting, or its receiver is locked onto a packet that got there first. Both
-      // are losses rather than deferrals — that is what a collision is — and neither is
-      // modelled with a signal-strength comparison, so the earlier packet always wins
-      // (docs/08 §12.9).
+      // are losses rather than deferrals — that is what a collision is. Under `first` the
+      // earlier packet always wins and no signal-strength comparison happens, which is the
+      // pessimistic bound (docs/08 §12.9). Under `strongest` a newcomer that is enough
+      // stronger takes the receiver over instead, and the incumbent is what is lost — the
+      // capture effect, and the reason `first` and `none` bracket the truth rather than
+      // either of them being it (docs/08 §12.15).
       const deaf = (this.txUntil.get(target.id) ?? 0) > this.now;
-      const captured = !deaf && (this.rxUntil.get(target.id) ?? 0) > this.now;
-      if (deaf || captured) {
+      const busy = !deaf && (this.rxUntil.get(target.id) ?? 0) > this.now;
+      const held = this.rxRssi.get(target.id) ?? Number.NEGATIVE_INFINITY;
+      const captures =
+        busy &&
+        this.config.channelCapture === "strongest" &&
+        rssi >= held + this.config.channelCaptureRatioDb;
+      if ((deaf || busy) && !captures) {
+        this.lastTxCollided = true;
         if (deaf) this.channelDeafRx++;
         else this.channelCaptured++;
         this.recordTxOutcome(node, 0);
@@ -2355,14 +2561,39 @@ export class MeshSimulation {
           "loss",
           node.id,
           `${msg.id} → ${targetId} collided (${
-            deaf ? "receiver was transmitting" : "receiver was locked onto an earlier packet"
+            deaf
+              ? "receiver was transmitting"
+              : this.config.channelCapture === "strongest"
+                ? `receiver held a stronger packet (${held.toFixed(0)} vs ${rssi.toFixed(0)} dBm)`
+                : "receiver was locked onto an earlier packet"
           })`,
           { peerId: targetId, msgId: msg.id, msgType: msg.type, hop: msg.hopCount, rssi }
         );
         return occupied;
       }
+      if (captures) {
+        // The newcomer wins the receiver. The incumbent is condemned by transmission
+        // sequence rather than by message id, so that a retry of the same message — or a
+        // second relay carrying the same copy — is a fresh attempt.
+        const victim = this.rxSeq.get(target.id);
+        if (victim !== undefined) this.superseded.add(victim);
+        this.channelCaptureEffects++;
+        // …and the incumbent is a collision loss, so it is counted as one.
+        this.channelCaptured++;
+        // `lastTxCollided` stays clear for the winner: its own transmission was clean, and
+        // doubling its contention window would punish the packet that survived. The
+        // incumbent's transmitter is not told, which is the honest limit of modelling this
+        // at the receiver — a real radio gets no such notification either, and it is why
+        // `channelBackoff` and `channelCapture: "strongest"` do not compose into anything
+        // better than each alone.
+      }
     }
-    this.recordTxOutcome(node, 1);
+    // Under `strongest` the outcome is booked at arrival instead, because a packet taken over
+    // part-way through was not a success and booking it as one here would leave the link
+    // estimate optimistic about a radio that is losing packets to third parties. That would
+    // also make the arm incomparable with `first`, where the loser of a collision *is* booked
+    // as a failure: the only difference between the two arms should be which packet survives.
+    if (this.config.channelCapture !== "strongest") this.recordTxOutcome(node, 1);
     this.pushLog("tx", node.id, `${msg.id} → ${targetId} (${msg.type}, hop ${msg.hopCount}, ${rssi.toFixed(0)} dBm)`, {
       peerId: targetId,
       msgId: msg.id,
@@ -2380,7 +2611,15 @@ export class MeshSimulation {
       this.serializationMs(msg.sizeBytes, msg.transport) +
       randRange(this.rng, this.config.jitterMinMs, this.config.jitterMaxMs);
     if (capture) this.rxUntil.set(target.id, this.now + airTime);
-    this.queue.push(this.now + airTime, "msg", targetId, { msg, via: node.id } as MsgPayload);
+    let seq: number | undefined;
+    if (this.config.channelCapture === "strongest") {
+      // Only assigned here, so the two shipped modes consume nothing and behave exactly as
+      // every published number in this repository was measured.
+      seq = ++this.txSeq;
+      this.rxRssi.set(target.id, rssi);
+      this.rxSeq.set(target.id, seq);
+    }
+    this.queue.push(this.now + airTime, "msg", targetId, { msg, via: node.id, seq } as MsgPayload);
     return airTime;
   }
 
@@ -2405,6 +2644,28 @@ export class MeshSimulation {
     if (!node || !node.isOnline) return;
     const { msg, via } = payload;
     const sender = this.byId(via);
+
+    // A transmission the receiver gave up on part-way through, because a stronger packet took
+    // it over (`channelCapture: "strongest"`). Checked before anything else: the receiver
+    // never decoded this one, so it is not coverage evidence, not a delivery, and not a
+    // duplicate. Keyed by transmission rather than by message id, so a retry of the same
+    // message is a fresh attempt and not a condemned one. Under every other mode `seq` is
+    // undefined and this cannot fire.
+    const seq = payload.seq;
+    if (seq !== undefined && sender) {
+      if (this.superseded.has(seq)) {
+        this.superseded.delete(seq);
+        this.recordTxOutcome(sender, 0);
+        this.pushLog("loss", nodeId, `${msg.id} lost (receiver was taken over by a stronger packet)`, {
+          peerId: via,
+          msgId: msg.id,
+          msgType: msg.type,
+          hop: msg.hopCount,
+        });
+        return;
+      }
+      this.recordTxOutcome(sender, 1);
+    }
 
     // Coverage evidence for the MPR gate. Any neighbour we receive a copy from
     // already holds the message, so it never needs covering again; and that
@@ -3181,7 +3442,13 @@ export class MeshSimulation {
       channelDeferrals: this.channelDeferrals,
       channelDeferMs: this.channelDeferMs,
       channelDrops: this.channelDrops,
+      channelDropsRelayed: this.channelDropsRelayed,
+      channelDropsMedia: this.channelDropsMedia,
+      channelDropsWithAlternative: this.channelDropsWithAlternative,
       channelCaptured: this.channelCaptured,
+      channelCaptureEffects: this.channelCaptureEffects,
+      channelBackoffs: this.channelBackoffs,
+      transferBlocks: this.transferBlocks,
       channelDeafRx: this.channelDeafRx,
       sentSync: this.sentSync,
       bytesDelivered: this.bytesDelivered,

@@ -225,7 +225,9 @@ export function MetricsPanel({ stats, dutyCycleEnabled, nodes, config }: Props) 
       {(stats.channelDeferrals > 0 ||
         stats.channelDrops > 0 ||
         stats.channelCaptured > 0 ||
-        stats.channelDeafRx > 0) && (
+        stats.channelDeafRx > 0 ||
+        stats.channelBackoffs > 0 ||
+        stats.channelCaptureEffects > 0) && (
         <section style={{ marginTop: 14 }}>
           <div style={sectionStyle}>📻 Radio channel (docs/08 §12)</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -246,16 +248,78 @@ export function MetricsPanel({ stats, dutyCycleEnabled, nodes, config }: Props) 
               value={`${stats.channelDeafRx}`}
               accent={stats.channelDeafRx === 0 ? "#b6ff4a" : "#ff6b6b"}
             />
+            <Counter
+              label="Contention-window waits"
+              value={`${stats.channelBackoffs}`}
+              accent={stats.channelBackoffs === 0 ? "#b6ff4a" : "#7fb3ff"}
+            />
+            {stats.channelCaptureEffects > 0 && (
+              <Counter
+                label="Receivers taken over by a stronger packet"
+                value={`${stats.channelCaptureEffects}`}
+                accent="#4de0ff"
+              />
+            )}
           </div>
+          {stats.channelDrops > 0 && (
+            <>
+              <div style={{ ...sectionStyle, marginTop: 10, fontSize: 11 }}>
+                Who shed them (docs/08 §12.14)
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <Counter
+                  label="…by a relay"
+                  value={pct(stats.channelDropsRelayed, stats.channelDrops)}
+                  accent="#7fb3ff"
+                />
+                <Counter
+                  label="…by their own source"
+                  value={pct(stats.channelDrops - stats.channelDropsRelayed, stats.channelDrops)}
+                  accent="#7fb3ff"
+                />
+                <Counter
+                  label="…that were file/voice chunks"
+                  value={pct(stats.channelDropsMedia, stats.channelDrops)}
+                  accent="#7fb3ff"
+                />
+                <Counter
+                  label="…of relays' with an alternative route"
+                  value={stats.channelDropsRelayed > 0
+                    ? pct(stats.channelDropsWithAlternative, stats.channelDropsRelayed)
+                    : "—"}
+                  accent={stats.channelDropsWithAlternative === 0 ? "#ff9f4d" : "#7fb3ff"}
+                />
+              </div>
+              <div style={{ fontSize: 10, color: "#5a6a7a", marginTop: 6, lineHeight: 1.5 }}>
+                The split that decides whether flow control or rerouting is the right lever, and the one thing
+                about this network an aggregate drop count cannot tell you. With no media in flight the shedding
+                really is a relay's — 80–83% of it. <b style={{ color: "#9fb0c3" }}>With a file in flight it
+                inverts: 82–85% of the shed packets are dropped by the node that originated them</b>, and
+                79–82% of what it sheds is transfer chunks, so a sender-side window is pointed at most of the
+                problem. The last counter is the cheaper fix's availability: it counts the relays' sheds for which
+                a peer in range was at least as close to the destination as the next hop chosen. That was 3–9%, so
+                there is nowhere to reroute to and congestion-aware forwarding is closed without being built
+                (docs/08 §12.12, §12.14).
+              </div>
+            </>
+          )}
           <div style={{ fontSize: 10, color: "#5a6a7a", marginTop: 6, lineHeight: 1.5 }}>
             Only the channel flags produce these. A device with one transmitter (<code>channelAccess</code>) queues
             each packet until the radio is free and drops it when the {config?.channelQueueDepth ?? 8}-deep queue is
             full, because a real radio sheds load rather than promising air time does not have;{" "}
             <code>channelCapture: "first"</code> adds the receiver, which loses whatever arrives while it is locked
-            onto an earlier packet or while it is itself transmitting. Under the shipped model every counter stays at
-            zero by construction — there is no shared medium and no inattentive receiver, so a transmission cannot
-            delay or lose another one. That is why a 10 MB file costs nobody else anything there, and costs 1.7 points
-            of delivery with a queue and 13.6 with a receiver (docs/08 §12.9).
+            onto an earlier packet or while it is itself transmitting. <code>"strongest"</code> adds the capture
+            effect a real receiver has on top of that: a packet enough stronger than the one being held takes the
+            receiver over, and the packet already there is what is lost — so the takeover counter is not a rescue
+            count, it says how many losses moved from one packet to the other (docs/08 §12.15).{" "}
+            <code>channelBackoff: "binary"</code> adds the
+            contention window carrier sense was missing — a random wait, doubled after each collision — and counts the
+            times a node found the medium free and still had to wait for it. Under the shipped model every counter
+            stays at zero by construction: there is no shared medium and no inattentive receiver, so a transmission
+            cannot delay or lose another one. That is why a 10 MB file costs nobody else anything there, and costs 1.7 points
+            of delivery with a queue and 13.6 with a receiver (docs/08 §12.9) — a figure a realistic
+            capture-effect receiver does not improve on, because a takeover moves a loss rather than
+            removing one (docs/08 §12.15).
           </div>
         </section>
       )}
@@ -275,6 +339,11 @@ export function MetricsPanel({ stats, dutyCycleEnabled, nodes, config }: Props) 
               value={`${stats.transferStalls}`}
               accent={stats.transferStalls === 0 ? "#b6ff4a" : "#ff9f4d"}
             />
+            <Counter
+              label="Blocked on own radio"
+              value={`${stats.transferBlocks}`}
+              accent={stats.transferBlocks === 0 ? "#9fb0c3" : "#4de0ff"}
+            />
             <Counter label="Payload delivered" value={fmtBytes(stats.bytesDelivered)} accent="#b6ff4a" />
           </div>
           <div style={{ fontSize: 10, color: "#5a6a7a", marginTop: 6, lineHeight: 1.5 }}>
@@ -290,6 +359,17 @@ export function MetricsPanel({ stats, dutyCycleEnabled, nodes, config }: Props) 
             {((config?.ackTimeoutMs ?? 4000) / 1000).toFixed(0)} s a text message waits, because one lost voice frame
             is a hole in the audio; "window stalls" counts the times nothing arrived for that long and the missing
             chunks had to be re-sent.
+            <br />
+            <br />
+            "Blocked on own radio" is <code>mediaBackpressure</code> working rather than failing: with the flag on a
+            transfer fills only the queue slots its sender's radio has, so when the radio is full the transfer waits
+            and the drain that frees a slot resumes it. It is counted apart from stalls precisely because a stall is a
+            timeout and a block is not — a sender waiting on its own full radio is doing what backpressure asked it to
+            do. On one radio with nobody else on it the flag takes a 1 MB transfer from 25 dropped chunks to 5, its
+            retransmissions from 6 to zero, and its time from 9.37 s to 6.04 s. In a mesh it is a trade, not a win:
+            +1.7 points of delivery under carrier sense against −2.8 under plain half-duplex, and neither reaches the
+            gate, because a window can ration a transfer's <em>share</em> of a radio but cannot create slots
+            (docs/08 §12.12).
           </div>
         </section>
       )}
@@ -392,6 +472,13 @@ const headerStyle: React.CSSProperties = {
   color: "#eaf2ff",
   letterSpacing: 0.5,
 };
+
+/** A share of a number already shown above it: the panel renders counts elsewhere, so this one
+ *  carries its denominator with it — "82% (1177)" — rather than asking the reader to divide. */
+function pct(part: number, total: number): string {
+  if (total <= 0) return "0%";
+  return `${Math.round((part / total) * 100)}% (${part})`;
+}
 
 const sectionStyle: React.CSSProperties = {
   fontSize: 11,

@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# Pre-push gate: run the quick pipeline before anything leaves this machine.
+#
+# Installed by `make install-hooks`, which sets core.hooksPath to .githooks — that keeps the
+# hook in version control instead of in .git/hooks where nobody can review or update it.
+# Bypass a single push with `git push --no-verify`.
+#
+# Tuning, via environment:
+#   CI_PREPUSH=off    do not run anything
+#   CI_PREPUSH=fast   the default: typecheck, unit tests, dart analyze, dart test
+#   CI_PREPUSH=full   every job, including the production build and the CLI matrix
+#
+# Behaviour on a partial run is deliberate. A machine with no Dart SDK cannot verify the
+# authoritative engine, and blocking every push over that would make the repository
+# unusable rather than safe — so a partial run warns, records itself, and lets the push
+# through. A run that actually *failed* blocks it. The distinction is the whole design:
+# never silently claim verification you did not do, but do not punish a missing optional
+# toolchain as though it were a broken build.
+
+set -uo pipefail
+
+MODE="${CI_PREPUSH:-fast}"
+case "$MODE" in
+  off|0|no) exit 0 ;;
+  fast|full) ;;
+  *) printf 'pre-push: CI_PREPUSH=%s is not one of off|fast|full\n' "$MODE" >&2; exit 1 ;;
+esac
+
+ROOT="$(git rev-parse --show-toplevel)"
+RUNNER="$ROOT/tool/ci/run-pipeline.sh"
+
+if [ ! -x "$RUNNER" ]; then
+  printf 'pre-push: %s is missing or not executable — skipping the gate.\n' "$RUNNER" >&2
+  exit 0
+fi
+
+ARGS=(--fast --keep-going --allow-missing-dart --label pre-push --quiet)
+[ "$MODE" = full ] && ARGS=(--keep-going --allow-missing-dart --label pre-push-full --quiet)
+
+JSON_TMP="$(mktemp)"
+trap 'rm -f "$JSON_TMP"' EXIT
+ARGS+=(--json "$JSON_TMP")
+
+printf '\n\033[36m==>\033[0m \033[1mpre-push gate (%s pipeline)\033[0m\n' "$MODE"
+printf '    set CI_PREPUSH=off to skip, or push with --no-verify\n\n'
+
+"$RUNNER" "${ARGS[@]}"
+RC=$?
+
+# Record this push in the same log validate-and-push.sh writes. Without this the message
+# below would be untrue for the most common case: a bare `git push` comes through this hook
+# and nowhere near that script, so the audit trail would show nothing at all for it.
+#
+# `pushed` is null rather than true because the hook runs *before* the push and cannot know
+# whether it succeeds — asserting success here would be the same overclaim this log exists
+# to prevent. `gate` records which of the two gates wrote the entry.
+LOG_FILE="$ROOT/artifacts/ci/verification-log.jsonl"
+mkdir -p "$(dirname "$LOG_FILE")"
+if [ -s "$JSON_TMP" ] && command -v python3 >/dev/null 2>&1; then
+  python3 -c '
+import json, subprocess, sys
+from datetime import datetime, timezone
+
+rec_path, log_path, rc = sys.argv[1], sys.argv[2], int(sys.argv[3])
+try:
+    r = json.load(open(rec_path, encoding="utf-8"))
+except Exception:
+    sys.exit(0)
+
+def git(*a):
+    try:
+        return subprocess.run(["git", *a], capture_output=True, text=True).stdout.strip()
+    except Exception:
+        return "unknown"
+
+entry = {
+    "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "branch": git("rev-parse", "--abbrev-ref", "HEAD"),
+    "sha": git("rev-parse", "--short", "HEAD"),
+    "verification": r.get("verification", "unknown"),
+    "jobs": ",".join(r.get("jobs") or {}),
+    "pipelineExit": rc,
+    "runId": r.get("runId", "unknown"),
+    "gate": "pre-push",
+    "pushed": None,
+}
+with open(log_path, "a", encoding="utf-8") as fh:
+    fh.write(json.dumps(entry) + "\n")
+' "$JSON_TMP" "$LOG_FILE" "$RC" 2>/dev/null || true
+fi
+
+case "$RC" in
+  0)
+    printf '\n\033[32m==>\033[0m \033[1mpre-push gate passed (%s)\033[0m\n\n' "$MODE"
+    exit 0
+    ;;
+  2)
+    printf '\n\033[33m==>\033[0m \033[1mpre-push gate PARTIAL\033[0m — some jobs could not run.\n'
+    printf '    The push is allowed, because a missing optional toolchain is not a broken\n'
+    printf '    build. It is recorded in artifacts/ci/verification-log.jsonl with\n'
+    printf '    gate=pre-push and pushed=null — the hook runs before the push, so it cannot\n'
+    printf '    know whether the push succeeds, and guessing would defeat the log.\n'
+    printf '    Remote CI is the authority on the jobs this machine could not run; if it is\n'
+    printf '    unavailable, say so wherever these commits are described.\n\n'
+    exit 0
+    ;;
+  *)
+    printf '\n\033[31m==>\033[0m \033[1mpre-push gate FAILED\033[0m — push blocked.\n'
+    printf '    Fix the failures above, or bypass once with: git push --no-verify\n'
+    printf '    Captured output is in the artifact directory named in the run.\n\n'
+    exit 1
+    ;;
+esac

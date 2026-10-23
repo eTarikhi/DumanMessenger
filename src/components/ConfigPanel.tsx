@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import type { SimConfig } from "../simulation";
-import type { ChannelAccess, ChannelCapture, RelayPolicy } from "../types";
+import type {
+  ChannelAccess,
+  ChannelBackoff,
+  ChannelCapture,
+  ChannelPriority,
+  RelayPolicy,
+} from "../types";
 
 interface Props {
   config: SimConfig;
@@ -24,6 +30,11 @@ type Draft = {
   relayPolicy: RelayPolicy;
   channelAccess: ChannelAccess;
   channelCapture: ChannelCapture;
+  channelCaptureRatioDb: number;
+  channelQueueDepth: number;
+  channelPriority: ChannelPriority;
+  channelBackoff: ChannelBackoff;
+  mediaBackpressure: boolean;
   enableSuperElection: boolean;
   enableMobility: boolean;
   enableDtn: boolean;
@@ -47,6 +58,11 @@ function toDraft(c: SimConfig): Draft {
     relayPolicy: c.relayPolicy,
     channelAccess: c.channelAccess,
     channelCapture: c.channelCapture,
+    channelCaptureRatioDb: c.channelCaptureRatioDb,
+    channelQueueDepth: c.channelQueueDepth,
+    channelPriority: c.channelPriority,
+    channelBackoff: c.channelBackoff,
+    mediaBackpressure: c.mediaBackpressure,
     enableSuperElection: c.enableSuperElection,
     enableMobility: c.enableMobility,
     enableDtn: c.enableDtn,
@@ -94,6 +110,11 @@ export function ConfigPanel({
       relayPolicy: draft.relayPolicy,
       channelAccess: draft.channelAccess,
       channelCapture: draft.channelCapture,
+      channelCaptureRatioDb: draft.channelCaptureRatioDb,
+      channelQueueDepth: draft.channelQueueDepth,
+      channelPriority: draft.channelPriority,
+      channelBackoff: draft.channelBackoff,
+      mediaBackpressure: draft.mediaBackpressure,
       enableSuperElection: draft.enableSuperElection,
       enableMobility: draft.enableMobility,
       enableDtn: draft.enableDtn,
@@ -190,10 +211,65 @@ export function ConfigPanel({
         </span>
       </div>
 
+      {draft.channelAccess !== "free" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: -6 }}>
+          <Slider label="Transmit queue depth" value={draft.channelQueueDepth} min={1} max={128} step={1}
+            onChange={(v) => set("channelQueueDepth", v)} />
+          <Segmented
+            label="Queue discipline"
+            options={["fifo", "ackFirst", "class"] as const}
+            labels={PRIORITY_LABELS}
+            value={draft.channelPriority}
+            onChange={(v) => set("channelPriority", v)}
+          />
+          <span style={{ fontSize: 10, color: "#5a6a7a", lineHeight: 1.5 }}>
+            Which queued packet a busy radio takes next (docs/08 §12.8).{" "}
+            <b style={{ color: "#9fb0c3" }}>ACKs first</b> is the one that pays: an ACK is 100 bytes and it is
+            what releases the next chunk of somebody's transfer, so promoting it cuts a 10 MB file by a third.{" "}
+            <b style={{ color: "#9fb0c3" }}>By class</b> also puts a text message ahead of the 64 KB chunk queued
+            behind it — and promoting voice on top of that does not pay, because a streamed note three hops away
+            already needs more air time than its capture clock gives it, so the text it jumps ahead of pays for
+            an attempt that cannot succeed. Depth is a buffer, not a rescue: measured at 8/32/128 the
+            carrier-sense arm runs 0.8757 → 0.7966 → 0.7062 and the file 3.64 → 16.96 min, because a deeper
+            queue only decides <em>later</em> which packet to shed (§12.6).
+          </span>
+          {draft.channelAccess === "csma" && (
+            <>
+              <Segmented
+                label="Contention window"
+                options={["none", "binary"] as const}
+                labels={BACKOFF_LABELS}
+                value={draft.channelBackoff}
+                onChange={(v) => set("channelBackoff", v)}
+              />
+              <span style={{ fontSize: 10, color: "#5a6a7a", lineHeight: 1.5 }}>
+                The standard answer to listening: draw a random slot count, wait it out, and double the window
+                after each collision. Without it every deferring node is released at the same instant the medium
+                clears, so listening synchronises the herd instead of dispersing it. Measured, it moves delivery
+                ±1.1 points and leaves both carrier-sense arms ~14 short of the gate, because the losses are
+                queue drops outnumbering collisions about eight to one — a lever aimed at the medium in front of
+                the queue cannot fix the queue (docs/08 §12.13).
+              </span>
+            </>
+          )}
+          <Toggle label="Media backpressure (sender-side flow control)" value={draft.mediaBackpressure}
+            onChange={() => set("mediaBackpressure", !draft.mediaBackpressure)} />
+          <span style={{ fontSize: 10, color: "#5a6a7a", lineHeight: 1.5 }}>
+            A transfer fills only the queue slots its sender's radio has, instead of committing twice as far
+            ahead as the radio can hold. On one radio with nobody else on it that takes a 1 MB transfer from 25
+            dropped chunks to 5, its retransmissions from 6 to zero, and its time from 9.37 s to 6.04 s. In a
+            mesh it is a trade rather than a win — +1.7 points of delivery under carrier sense against −2.8
+            under plain half-duplex, neither reaching the gate — because a window can ration a transfer's{" "}
+            <em>share</em> of a radio but cannot create slots (docs/08 §12.12). Watch "Blocked on own radio" in
+            the metrics panel: that counter is the flag working, not failing.
+          </span>
+        </div>
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <span style={{ fontSize: 11, color: "#9fb0c3" }}>Receiver</span>
         <div style={{ display: "flex", gap: 6 }}>
-          {(["none", "first"] as const).map((p) => (
+          {(["none", "first", "strongest"] as const).map((p) => (
             <button
               key={p}
               aria-pressed={draft.channelCapture === p}
@@ -214,8 +290,24 @@ export function ConfigPanel({
           <b style={{ color: "#9fb0c3" }}>First packet wins</b> loses whatever arrives while the receiver is
           locked onto an earlier packet, and whatever arrives while the receiver is itself transmitting
           (docs/08 §12.9): with a 10 MB file in flight that is 13.6 points of delivery, against a transmit
-          queue's 2.8.
+          queue's 2.8. <b style={{ color: "#9fb0c3" }}>Strongest signal wins</b> adds the
+          capture effect a real receiver has: a newcomer at least the margin below stronger than
+          the packet being held takes the receiver over, and the incumbent is what is lost. That
+          makes <b style={{ color: "#9fb0c3" }}>first packet wins</b> the pessimistic bound and{" "}
+          <b style={{ color: "#9fb0c3" }}>takes everything</b> the optimistic one, with the truth
+          somewhere in between (docs/08 §12.15).
         </span>
+        {draft.channelCapture === "strongest" && (
+          <>
+            <Slider label="Capture margin (dB)" value={draft.channelCaptureRatioDb} min={0} max={20} step={1}
+              onChange={(v) => set("channelCaptureRatioDb", v)} />
+            <span style={{ fontSize: 10, color: "#5a6a7a", lineHeight: 1.5 }}>
+              How much stronger the newcomer has to be. 6 dB is the capture ratio usually quoted
+              for an angle-modulated receiver; 0 dB is loudest-wins with no margin, and a large
+              value collapses the model back onto first-packet-wins.
+            </span>
+          </>
+        )}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -297,9 +389,21 @@ function dutySummary(d: Draft): string {
   );
 }
 
+const BACKOFF_LABELS: Record<ChannelBackoff, string> = {
+  none: "None (ships)",
+  binary: "Binary exponential",
+};
+
+const PRIORITY_LABELS: Record<ChannelPriority, string> = {
+  fifo: "FIFO (ships)",
+  ackFirst: "ACKs first",
+  class: "By class",
+};
+
 const CAPTURE_LABELS: Record<ChannelCapture, string> = {
   none: "Takes everything (ships)",
   first: "First packet wins",
+  strongest: "Strongest signal wins",
 };
 
 const CHANNEL_LABELS: Record<ChannelAccess, string> = {
@@ -336,6 +440,37 @@ function Slider({ label, value, min, max, step, onChange }: {
         onChange={(e) => onChange(Number(e.target.value))}
         style={{ width: "100%", accentColor: "#4de0ff" }}
       />
+    </div>
+  );
+}
+
+/** A small mutually-exclusive control, for the radio knobs that have two or three arms and no
+ *  sensible continuous range. */
+function Segmented<T extends string>({ label, options, labels, value, onChange }: {
+  label: string; options: readonly T[]; labels: Record<T, string>; value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <span style={{ fontSize: 11, color: "#9fb0c3" }}>{label}</span>
+      <div style={{ display: "flex", gap: 6 }}>
+        {options.map((o) => (
+          <button
+            key={o}
+            type="button"
+            aria-pressed={value === o}
+            onClick={() => onChange(o)}
+            style={{
+              flex: 1, padding: "6px 8px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 700,
+              border: "1px solid #1e2a3a",
+              background: value === o ? "rgba(77,224,255,0.18)" : "rgba(255,255,255,0.03)",
+              color: value === o ? "#4de0ff" : "#9fb0c3",
+            }}
+          >
+            {labels[o]}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

@@ -20,6 +20,7 @@ import { canReach, effectiveLossProbability, peersInRange } from "../src/rf";
 import { createRng } from "../src/rng";
 import type {
   ChannelAccess,
+  ChannelBackoff,
   ChannelCapture,
   ChannelPriority,
   MeshNode,
@@ -33,6 +34,10 @@ const BLE_MTU_BYTES = 512;
 
 const MB = 1048576;
 const SEEDS = [42, 7, 1234];
+/** The six seeds `src/__tests__/acceptance.test.ts` gates on. Used wherever a claim is a few
+ *  points wide on a system that is chaotic in the seed: three of them have already reversed a
+ *  conclusion in this file once. */
+const SIX_SEEDS = [42, 7, 1234, 99, 2026, 555];
 
 /** Shortest hop count from `from` to every online node, over links that can carry
  *  a packet right now. Used to place a sender and receiver an exact distance apart. */
@@ -690,13 +695,16 @@ interface GateRow {
   deferrals: number;
   deferMs: number;
   drops: number;
+  backoffs: number;
 }
 
 function gateRow(
   seed: number,
   channelAccess: ChannelAccess,
   messages = 60,
-  channelCapture: ChannelCapture = "none"
+  channelCapture: ChannelCapture = "none",
+  backoff?: ChannelBackoff,
+  cwMin?: number
 ): GateRow {
   const run = (policy: SimConfig["relayPolicy"]) => {
     const sim = simFor({
@@ -704,6 +712,8 @@ function gateRow(
       trafficIntervalMs: 0,
       channelAccess,
       channelCapture,
+      ...(backoff === undefined ? {} : { channelBackoff: backoff }),
+      ...(cwMin === undefined ? {} : { channelCwMin: cwMin }),
       relayPolicy: policy,
     });
     const plan = contentionPlan(seed, sim.nodes.length, messages);
@@ -726,6 +736,7 @@ function gateRow(
       deferrals: stats.channelDeferrals,
       deferMs: stats.channelDeferMs,
       drops: stats.channelDrops,
+      backoffs: stats.channelBackoffs,
       sent,
     };
   };
@@ -740,6 +751,7 @@ function gateRow(
     deferrals: mpr.deferrals,
     deferMs: mpr.deferMs,
     drops: mpr.drops,
+    backoffs: mpr.backoffs,
   };
 }
 
@@ -748,6 +760,16 @@ function gateRow(
 // ---------------------------------------------------------------------------
 
 const CAPTURES: ChannelCapture[] = ["none", "first"];
+/** The three receiver models, from the one that ships to the one that bounds the loss. */
+const RECEIVER_ARMS: ChannelCapture[] = ["none", "first", "strongest"];
+/** Capture margins to sweep, in dB. 6 is the ratio usually quoted for an angle-modulated
+ *  receiver; 0 is loudest-wins with no margin; 20 collapses back onto first-packet-wins. */
+const CAPTURE_MARGINS = [0, 3, 6, 12, 20];
+
+function cellMean(rows: CaptureCell[], f: (r: CaptureCell) => number | null): number {
+  const vals = rows.map(f).filter((v): v is number => v !== null);
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : NaN;
+}
 const ACCESSES: ChannelAccess[] = ["free", "halfDuplex", "csma"];
 
 interface CaptureCell {
@@ -761,6 +783,12 @@ interface CaptureCell {
   deaf: number;
   drops: number;
   deferMs: number;
+  backoffs: number;
+  dropsRelayed: number;
+  dropsMedia: number;
+  dropsWithAlternative: number;
+  blocks: number;
+  effects: number;
   fileMs: number | null;
 }
 
@@ -769,7 +797,11 @@ function captureCell(
   capture: ChannelCapture,
   seed: number,
   withFile: boolean,
-  queueDepth?: number
+  queueDepth?: number,
+  backoff?: ChannelBackoff,
+  cwMin?: number,
+  mediaBackpressure?: boolean,
+  captureRatioDb?: number
 ): CaptureCell {
   const sim = simFor({
     ...campusQuad(seed),
@@ -777,6 +809,10 @@ function captureCell(
     channelAccess: access,
     channelCapture: capture,
     ...(queueDepth === undefined ? {} : { channelQueueDepth: queueDepth }),
+    ...(backoff === undefined ? {} : { channelBackoff: backoff }),
+    ...(cwMin === undefined ? {} : { channelCwMin: cwMin }),
+    ...(mediaBackpressure === undefined ? {} : { mediaBackpressure }),
+    ...(captureRatioDb === undefined ? {} : { channelCaptureRatioDb: captureRatioDb }),
   });
   const plan = contentionPlan(seed, sim.nodes.length, 60);
   const t = withFile ? sim.sendFile(sim.nodes[plan[0][0]].id, sim.nodes[plan[0][1]].id, 10 * MB) : null;
@@ -811,6 +847,12 @@ function captureCell(
     deaf: stats.channelDeafRx,
     drops: stats.channelDrops,
     deferMs: stats.channelDeferMs,
+    backoffs: stats.channelBackoffs,
+    dropsRelayed: stats.channelDropsRelayed,
+    dropsMedia: stats.channelDropsMedia,
+    dropsWithAlternative: stats.channelDropsWithAlternative,
+    blocks: stats.transferBlocks,
+    effects: stats.channelCaptureEffects,
     fileMs: t && t.completedAt !== null ? t.completedAt - t.startedAt : null,
   };
 }
@@ -1320,6 +1362,402 @@ function withinFiveRatio(sim: MeshSimulation): number {
   return within.length / sent.length;
 }
 
+// ---------------------------------------------------------------------------
+// 10. The contention window: does listening need a random wait to pay?
+// ---------------------------------------------------------------------------
+
+const BACKOFFS: ChannelBackoff[] = ["none", "binary"];
+
+/** One 20-node campus run with a 10 MB file in flight, under carrier sense, at a given
+ *  contention window. Shared by the sweep and by the six-seed robustness check below, so
+ *  the two cannot disagree about what they measured. */
+function csmaFileRun(
+  seed: number,
+  backoff: ChannelBackoff,
+  cwMin: number,
+  slotMs: number
+): {
+  ratio: number;
+  p95: number;
+  captured: number;
+  deaf: number;
+  drops: number;
+  deferMs: number;
+  backoffs: number;
+  dropsRelayed: number;
+  dropsMedia: number;
+  dropsWithAlternative: number;
+  fileMs: number | null;
+} {
+  const sim = simFor({
+    ...campusQuad(seed),
+    trafficIntervalMs: 0,
+    channelAccess: "csma",
+    channelCapture: "first",
+    channelBackoff: backoff,
+    channelCwMin: cwMin,
+    channelSlotMs: slotMs,
+  });
+  const plan = contentionPlan(seed, sim.nodes.length, 60);
+  const t = sim.sendFile(sim.nodes[plan[0][0]].id, sim.nodes[plan[0][1]].id, 10 * MB);
+  let sent = 0;
+  for (let i = 1; i < plan.length; i++) {
+    const from = sim.nodes[plan[i][0]];
+    const to = sim.nodes[plan[i][1]];
+    if (from.isOnline && to.isOnline && sim.sendMessage(from.id, to.id, `b-${i}`, "text")) sent++;
+    sim.runFor(2000);
+  }
+  const st = sim.refresh();
+  const uni = sim.deliveries.filter(
+    (d) => d.type !== "ack" && d.type !== "broadcast" && !d.groupId && !d.transferId
+  );
+  const lat = uni.map((d) => d.latencyMs).sort((x, y) => x - y);
+  let waited = 0;
+  while (t && t.state === "active" && waited < 900_000) {
+    sim.runFor(250);
+    waited += 250;
+  }
+  return {
+    ratio: uni.length / Math.max(1, sent),
+    p95: lat.length ? lat[Math.floor(lat.length * 0.95)] : 0,
+    captured: st.channelCaptured,
+    deaf: st.channelDeafRx,
+    drops: st.channelDrops,
+    deferMs: st.channelDeferMs,
+    backoffs: st.channelBackoffs,
+    dropsRelayed: st.channelDropsRelayed,
+    dropsMedia: st.channelDropsMedia,
+    dropsWithAlternative: st.channelDropsWithAlternative,
+    fileMs: t && t.completedAt !== null ? t.completedAt - t.startedAt : null,
+  };
+}
+
+function backoffTable(): void {
+  console.log("\n=== 10. Contention window: the thing carrier sense was missing (docs/08 §12.13) ===");
+  console.log(
+    "§12.10 measured carrier sense and found it made things worse, which is not what listening is\n" +
+      "supposed to do. The reason is in the wake-up: every node waiting on a busy medium is woken at\n" +
+      "the instant it clears, so they all find it free together and transmit together. Carrier sense\n" +
+      "synchronised the herd instead of dispersing it. `channelBackoff: \"binary\"` draws a random\n" +
+      "number of slots before taking a medium that is already free, and doubles the window it draws\n" +
+      "from after a collision — the 802.11 answer, which §12.10 noted it had not modelled."
+  );
+
+  console.log("\n--- the acceptance gates, with and without the random wait (20-node campus, 3 seeds) ---");
+  console.log("transmitter  backoff  receiver   delivery   within5   overhead   SUPER    drops   deferred   draws");
+  for (const capture of CAPTURES) {
+    for (const backoff of BACKOFFS) {
+      const rows = SEEDS.map((seed) => gateRow(seed, "csma", 60, capture, backoff));
+      const mean = (f: (r: GateRow) => number) => rows.reduce((a, r) => a + f(r), 0) / rows.length;
+      console.log(
+        `${"csma".padEnd(12)} ${backoff.padEnd(8)} ${capture.padEnd(10)} ${mean((r) => r.ratio)
+          .toFixed(4)
+          .padEnd(10)} ${mean((r) => r.within5).toFixed(4).padEnd(9)} ` +
+          `${(mean((r) => r.overhead) * 100).toFixed(1).padStart(5)} %   ` +
+          `${(mean((r) => r.superRatio) * 100).toFixed(1).padStart(5)} %  ` +
+          `${mean((r) => r.drops).toFixed(0).padStart(5)}   ` +
+          `${(mean((r) => r.deferMs) / 1000).toFixed(1).padStart(6)} s   ` +
+          `${mean((r) => r.backoffs).toFixed(0).padStart(6)}`
+      );
+    }
+  }
+  console.log(
+    "\nThe gate is delivery ≥0.90. `backoff: none` is §12.10's csma arm, repeated here as the control."
+  );
+
+  console.log("\n--- how wide a window, and against a 10 MB file (3 seeds) ---");
+  console.log(
+    "A window that is too narrow does not separate anybody; one that is too wide makes every node\n" +
+      "wait longer than the transmission it is waiting for. Swept against the case that matters: a\n" +
+      "file in flight, collisions modelled, which is where §12.10 lost the most."
+  );
+  console.log("cwMin  slotMs  delivery   p95 ms   captured  deaf  drops  deferred   draws   file");
+  for (const cwMin of [2, 4, 16, 64]) {
+    for (const slotMs of [1, 5]) {
+      const rows = SEEDS.map((seed) => csmaFileRun(seed, "binary", cwMin, slotMs));
+      const mean = (f: (r: (typeof rows)[number]) => number) =>
+        rows.reduce((a, r) => a + f(r), 0) / rows.length;
+      console.log(
+        `${String(cwMin).padEnd(6)} ${String(slotMs).padEnd(7)} ${mean((r) => r.ratio)
+          .toFixed(4)
+          .padEnd(10)} ${mean((r) => r.p95).toFixed(0).padStart(6)}   ` +
+          `${mean((r) => r.captured).toFixed(0).padStart(7)}  ${mean((r) => r.deaf).toFixed(0).padStart(4)}  ` +
+          `${mean((r) => r.drops).toFixed(0).padStart(5)}   ${(mean((r) => r.deferMs) / 60000).toFixed(1).padStart(6)} m   ` +
+          `${mean((r) => r.backoffs).toFixed(0).padStart(6)}   ` +
+          `${mean((r) => (r.fileMs === null ? Number.NaN : r.fileMs / 60000)).toFixed(2)} min`
+      );
+    }
+  }
+
+  console.log("\n--- does the best arm hold up? Six seeds, and the spread, not just the mean ---");
+  console.log(
+    "The sweep above is not monotonic in either knob: cwMin 2 beats 16 at a 5 ms slot and loses\n" +
+      "to it at a 1 ms slot, and 64 beats 4 at one slot width and loses at the other. A lever whose\n" +
+      "effect reverses when a neighbouring setting changes is a lever whose effect is noise. This\n" +
+      "repository has been wrong that way before — §6's faster-beacon idea looked like +2.6 points\n" +
+      "on three seeds and measured -1.1 on six — so the two arms that cleared the gate are re-run\n" +
+      "on the acceptance suite's six seeds with every seed printed."
+  );
+  const ROBUST_SEEDS = [42, 7, 1234, 99, 2026, 555];
+  const arms: Array<[string, ChannelBackoff, number, number]> = [
+    ["control (no backoff)", "none", DEFAULT_CONFIG.channelCwMin, DEFAULT_CONFIG.channelSlotMs],
+    ["binary cwMin 2 slot 5 ms", "binary", 2, 5],
+    ["binary cwMin 16 slot 5 ms", "binary", 16, 5],
+  ];
+  console.log("arm".padEnd(26) + "mean     per-seed delivery".padEnd(12) + "  drops   file");
+  for (const [name, backoff, cwMin, slotMs] of arms) {
+    const rows = ROBUST_SEEDS.map((seed) => csmaFileRun(seed, backoff, cwMin, slotMs));
+    const mean = (f: (r: (typeof rows)[number]) => number) =>
+      rows.reduce((a, r) => a + f(r), 0) / rows.length;
+    console.log(
+      name.padEnd(26) +
+        mean((r) => r.ratio).toFixed(4).padEnd(9) +
+        rows.map((r) => r.ratio.toFixed(3)).join(" ") +
+        "  " +
+        mean((r) => r.drops).toFixed(0).padStart(5) +
+        "   " +
+        mean((r) => (r.fileMs === null ? Number.NaN : r.fileMs / 60000)).toFixed(2) +
+        " min"
+    );
+  }
+  console.log(
+    "\nRead the per-seed column before the mean. If an arm's seeds straddle the control's, the\n" +
+      "difference between their means is not a property of the backoff."
+  );
+
+  console.log("\n--- the lever is carrier-sense-only: `halfDuplex` must not move ---");
+  console.log(
+    "A node whose own radio is busy is already serialised by its FIFO, and with no shared medium\n" +
+      "there is nobody to contend with. Backoff under `halfDuplex` would be delay for its own sake,\n" +
+      "so the engine ignores it — asserted here rather than assumed."
+  );
+  for (const backoff of BACKOFFS) {
+    const rows = SEEDS.map((seed) => captureCell("halfDuplex", "first", seed, true, undefined, backoff));
+    const mean = (f: (r: CaptureCell) => number) => rows.reduce((a, r) => a + f(r), 0) / rows.length;
+    console.log(
+      `halfDuplex + ${backoff.padEnd(7)} delivery ${mean((r) => r.ratio).toFixed(4)}   draws ${mean((r) =>
+        r.backoffs
+      ).toFixed(0)}   file ${(mean((r) => (r.fileMs === null ? Number.NaN : r.fileMs / 60000))).toFixed(2)} min`
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 11. Where the queue actually overflows, and whether it could have gone round
+// ---------------------------------------------------------------------------
+
+function sheddingTable(): void {
+  console.log("\n=== 11. Where the shedding happens (docs/08 §12.14) ===");
+  console.log(
+    "§12.12 argued that the queue which overflows in a mesh belongs to a relay, and §12.13 found\n" +
+      "that queue drops outnumber receiver collisions about eight to one under carrier sense. Both\n" +
+      "were read off totals. This attributes them: who sheds, what they shed, and — the question\n" +
+      "that decides whether congestion-aware forwarding is even available — whether the shedding\n" +
+      "relay had a peer in range at least as close to the destination as the next hop it chose. If\n" +
+      "it did, the packet could have gone round the congestion. If it did not, the only mechanism\n" +
+      "left is to stop generating the packet, which means propagating pressure to the source."
+  );
+  console.log("transmitter  receiver   media  drops   at a relay   file/voice   alternative existed   file");
+  for (const access of ["halfDuplex", "csma"] as ChannelAccess[]) {
+    for (const withFile of [false, true]) {
+      const rows = SEEDS.map((seed) => captureCell(access, "first", seed, withFile));
+      const mean = (f: (r: CaptureCell) => number) => rows.reduce((a, r) => a + f(r), 0) / rows.length;
+      const drops = mean((r) => r.drops);
+      const relayed = mean((r) => r.dropsRelayed);
+      console.log(
+        `${access.padEnd(12)} ${"first".padEnd(10)} ${(withFile ? "yes" : "no").padEnd(6)} ` +
+          `${drops.toFixed(0).padStart(5)}   ` +
+          `${((relayed / Math.max(1, drops)) * 100).toFixed(0).padStart(6)} %      ` +
+          `${((mean((r) => r.dropsMedia) / Math.max(1, drops)) * 100).toFixed(0).padStart(6)} %      ` +
+          `${((mean((r) => r.dropsWithAlternative) / Math.max(1, relayed)) * 100).toFixed(0).padStart(11)} %          ` +
+          `${mean((r) => (r.fileMs === null ? Number.NaN : r.fileMs / 60000)).toFixed(2)} min`
+      );
+    }
+  }
+  console.log(
+    "\nRead the third column first: if the shed packets are mostly file or voice chunks, the thing\n" +
+      "generating the pressure is a transfer window, and the fix that reaches it is pressure\n" +
+      "propagated to the source. The fourth column is the fork in the road — a high share means\n" +
+      "congestion-aware forwarding has somewhere to put the packet, and a low one means it does\n" +
+      "not, so rerouting around a saturated relay is not a mechanism this topology offers."
+  );
+
+  console.log("\n--- the one-peer case, which is where a sender can throttle itself ---");
+  console.log(
+    "Two nodes, one hop, a 1 MB file through a window of 8 into a queue 4 deep, so the transfer\n" +
+      "is committed twice as far ahead as the radio can hold. This is the case §12.12 measured the\n" +
+      "flag on, re-measured here because the mechanism was wrong when it was: the window was floored\n" +
+      "at one, so a throttled sender still handed a packet to a full queue and had it shed, and the\n" +
+      "stall path bypassed the window altogether. A window that can reach zero, a stall path that\n" +
+      "consults the same gate, and a resume when the radio drains are what a socket does."
+  );
+  console.log("depth  backpressure  queue drops  retransmitted  stalls  blocked  file time");
+  for (const depth of [4, 2]) {
+    for (const bp of [false, true]) {
+      const sim = new MeshSimulation({
+        ...DEFAULT_CONFIG,
+        nodeCount: 2,
+        stationaryRatio: 1,
+        chargingRatio: 0,
+        trafficIntervalMs: 0,
+        enableSuperElection: false,
+        warmupMs: 0,
+        obstacles: [],
+        channelAccess: "halfDuplex",
+        channelQueueDepth: depth,
+        transferWindow: 8,
+        mediaBackpressure: bp,
+      });
+      sim.nodes.forEach((node, i) => {
+        node.pos = { x: 10 + i * 20, y: 10 };
+        node.target = { x: 10 + i * 20, y: 10 };
+        node.mobility = 0;
+        node.isOnline = true;
+        node.battery = 1;
+      });
+      sim.runFor(20000);
+      sim.clearRecords();
+      const t = sim.sendFile(sim.nodes[0].id, sim.nodes[1].id, 1 * MB)!;
+      let waited = 0;
+      while (t.state === "active" && waited < 300_000) {
+        sim.runFor(50);
+        waited += 50;
+      }
+      const st = sim.refresh();
+      console.log(
+        `${String(depth).padEnd(6)} ${(bp ? "on" : "off").padEnd(13)} ` +
+          `${String(st.channelDrops).padStart(9)}  ${String(t.retransmitted).padStart(13)}  ` +
+          `${String(t.stalls).padStart(6)}  ${String(st.transferBlocks).padStart(7)}  ` +
+          `${(((t.completedAt ?? Number.NaN) - t.startedAt) / 1000).toFixed(2)} s`
+      );
+    }
+  }
+
+  console.log("\n--- so propagate the pressure to the source, which is where it is ---");
+  console.log(
+    "The columns above say the shedding is the source's and the packets are a transfer's, which is\n" +
+      "the case `mediaBackpressure` was built for. §12.12 rejected it on the strength of a crowd run\n" +
+      "and an argument about whose queue overflows; this is the campus arm the argument was about,\n" +
+      "measured instead of reasoned."
+  );
+  console.log(
+    "transmitter  backpressure  delivery   within5   p95 ms  parked   drops  at source  chunks  retrans  blocked   file"
+  );
+  for (const access of ["halfDuplex", "csma"] as ChannelAccess[]) {
+    for (const bp of [false, true]) {
+      const rows = SEEDS.map((seed) =>
+        captureCell(access, "first", seed, true, undefined, undefined, undefined, bp)
+      );
+      const mean = (f: (r: CaptureCell) => number) => rows.reduce((a, r) => a + f(r), 0) / rows.length;
+      const drops = mean((r) => r.drops);
+      console.log(
+        `${access.padEnd(12)} ${(bp ? "on" : "off").padEnd(13)} ${mean((r) => r.ratio)
+          .toFixed(4)
+          .padEnd(10)} ${mean((r) => r.within5).toFixed(4).padEnd(9)} ` +
+          `${mean((r) => r.p95).toFixed(0).padStart(6)}  ${mean((r) => r.parked).toFixed(1).padStart(6)}   ` +
+          `${drops.toFixed(0).padStart(5)}  ` +
+          `${(((drops - mean((r) => r.dropsRelayed)) / Math.max(1, drops)) * 100).toFixed(0).padStart(7)} %  ` +
+          `${((mean((r) => r.dropsMedia) / Math.max(1, drops)) * 100).toFixed(0).padStart(6)} %   ` +
+          `${mean((r) => r.retries).toFixed(0).padStart(6)}   ` +
+          `${mean((r) => r.blocks).toFixed(0).padStart(7)}   ` +
+          `${mean((r) => (r.fileMs === null ? Number.NaN : r.fileMs / 60000)).toFixed(2)} min`
+      );
+    }
+  }
+  console.log(
+    "\nIf the source is really where the pressure is, `on` should cut the drop count by most of the\n" +
+      "share in the \"at source\" column and pay for it in file time. If it cuts the drops and does not\n" +
+      "move delivery, the shed packets were ones nobody was waiting for any more."
+  );
+}
+
+function captureEffectTable(): void {
+  console.log("\n=== 12. The capture effect: bracketing the receiver instead of guessing it (docs/08 §12.15) ===");
+  console.log(
+    "§12.9 gave the receiver two models and neither is a real radio. `none` takes everything\n" +
+      "however busy it is, which is optimistic; `first` locks onto whichever packet arrived first and\n" +
+      "never lets a strong one survive a weak one, which is pessimistic. Real receivers do the third\n" +
+      "thing: they demodulate the stronger signal *through* the weaker one when the margin is enough.\n" +
+      "`strongest` models that, and the point of measuring it is not to pick a winner but to turn a\n" +
+      "point estimate into a bracket — `first` bounds the loss from above, `none` from below, and a\n" +
+      "field test lands somewhere between."
+  );
+
+  for (const withFile of [false, true]) {
+    console.log(
+      `\n--- ${withFile ? "60 messages at 2 s, with a 10 MB file in flight" : "60 messages at 2 s, nothing else"} (3 seeds) ---`
+    );
+    console.log(
+      "transmitter  receiver     delivery   within5   p95 ms   captured  takeovers  deaf  queue drops  at source  file"
+    );
+    for (const access of ["halfDuplex", "csma"] as ChannelAccess[]) {
+      for (const capture of RECEIVER_ARMS) {
+        const rows = SEEDS.map((seed) => captureCell(access, capture, seed, withFile));
+        const src =
+          cellMean(rows, (r) => r.drops) > 0
+            ? `${((1 - cellMean(rows, (r) => r.dropsRelayed) / cellMean(rows, (r) => r.drops)) * 100).toFixed(0)}%`
+            : "—";
+        console.log(
+          `${access.padEnd(12)} ${capture.padEnd(12)} ${cellMean(rows, (r) => r.ratio).toFixed(4).padEnd(10)} ` +
+            `${cellMean(rows, (r) => r.within5).toFixed(4).padEnd(9)} ${cellMean(rows, (r) => r.p95).toFixed(0).padEnd(8)} ` +
+            `${cellMean(rows, (r) => r.captured).toFixed(0).padEnd(9)} ${cellMean(rows, (r) => r.effects).toFixed(0).padEnd(10)} ` +
+            `${cellMean(rows, (r) => r.deaf).toFixed(0).padEnd(5)} ${cellMean(rows, (r) => r.drops).toFixed(0).padEnd(12)} ` +
+            `${src.padEnd(10)} ${withFile ? fmt(cellMean(rows, (r) => r.fileMs)) : "—"}`
+        );
+      }
+    }
+  }
+
+  console.log(
+    "\nRead `takeovers` against `captured`: a takeover is not a rescue, it moves the loss from the\n" +
+      "newcomer to the incumbent, so `captured` counts both. What the capture effect can actually\n" +
+      "buy back is the part of `first`'s loss that was a strong packet being killed by a weak one."
+  );
+
+  // Three seeds is not enough for a claim of a few points on a chaotic system: at a 20 dB
+  // margin the model takes over almost nothing and still lands a point away from `first`,
+  // which is the size of the perturbation two takeovers make. Six seeds, with the worst one
+  // printed beside the mean, is what separates a mechanism from a lucky draw.
+  console.log("\n--- six seeds, 10 MB in flight: mean and worst ---");
+  console.log("transmitter  receiver     mean      worst     takeovers  captured  queue drops  file");
+  for (const access of ["halfDuplex", "csma"] as ChannelAccess[]) {
+    for (const capture of RECEIVER_ARMS) {
+      const rows = SIX_SEEDS.map((seed) => captureCell(access, capture, seed, true));
+      const worst = Math.min(...rows.map((r) => r.ratio));
+      console.log(
+        `${access.padEnd(12)} ${capture.padEnd(12)} ${cellMean(rows, (r) => r.ratio).toFixed(4).padEnd(9)} ` +
+          `${worst.toFixed(4).padEnd(9)} ${cellMean(rows, (r) => r.effects).toFixed(0).padEnd(10)} ` +
+          `${cellMean(rows, (r) => r.captured).toFixed(0).padEnd(9)} ${cellMean(rows, (r) => r.drops).toFixed(0).padEnd(12)} ` +
+          `${fmt(cellMean(rows, (r) => r.fileMs))}`
+      );
+    }
+  }
+}
+
+function captureMarginTable(): void {
+  console.log("\n=== 12b. How much margin the capture effect needs (csma, 10 MB in flight, six seeds) ===");
+  console.log(
+    "A margin of 0 dB is loudest-wins and should take the most receivers over; a large margin\n" +
+      "should stop taking any over at all and converge on `first`. If the delivery column is not\n" +
+      "monotone in the margin, the mechanism is not doing what it says. Six seeds and the worst\n" +
+      "one beside the mean, because on three this table showed a monotone improvement toward a\n" +
+      "0 dB margin that the six-seed receiver table did not confirm."
+  );
+  console.log("margin dB    takeovers  captured   mean      worst     p95 ms   queue drops  file");
+  for (const margin of CAPTURE_MARGINS) {
+    const rows = SIX_SEEDS.map((seed) =>
+      captureCell("csma", "strongest", seed, true, undefined, undefined, undefined, undefined, margin)
+    );
+    const worst = Math.min(...rows.map((r) => r.ratio));
+    console.log(
+      `${String(margin).padEnd(12)} ${cellMean(rows, (r) => r.effects).toFixed(0).padEnd(10)} ` +
+        `${cellMean(rows, (r) => r.captured).toFixed(0).padEnd(10)} ${cellMean(rows, (r) => r.ratio).toFixed(4).padEnd(9)} ` +
+        `${worst.toFixed(4).padEnd(9)} ${cellMean(rows, (r) => r.p95).toFixed(0).padEnd(8)} ` +
+        `${cellMean(rows, (r) => r.drops).toFixed(0).padEnd(12)} ${fmt(cellMean(rows, (r) => r.fileMs))}`
+    );
+  }
+}
+
 function main(): void {
   console.log("Duman media transport probe — every number below is measured, not assumed.");
   console.log(
@@ -1328,15 +1766,30 @@ function main(): void {
       `Hop latency BLE ${DEFAULT_CONFIG.hopLatencyBleMs} ms / Wi-Fi ${DEFAULT_CONFIG.hopLatencyWifiMs} ms, ` +
       `jitter ${DEFAULT_CONFIG.jitterMinMs}-${DEFAULT_CONFIG.jitterMaxMs} ms.`
   );
-  serializationTable();
-  fileTable();
-  voiceTable();
-  retryTimerTable();
-  acceptanceTable();
-  contentionTable();
-  channelTable();
-  priorityTable();
-  captureTable();
+  // `npm run media` runs all thirteen sections, which is minutes of simulation. A section name as
+  // the first argument runs just that one — the whole file is a build, so re-measuring §10
+  // should not mean re-measuring §1-§9 to get at it.
+  const only = process.argv[2];
+  const sections: Array<[string, () => void]> = [
+    ["serialization", serializationTable],
+    ["file", fileTable],
+    ["voice", voiceTable],
+    ["retry", retryTimerTable],
+    ["acceptance", acceptanceTable],
+    ["contention", contentionTable],
+    ["channel", channelTable],
+    ["priority", priorityTable],
+    ["capture", captureTable],
+    ["backoff", backoffTable],
+    ["shedding", sheddingTable],
+    ["captureEffect", captureEffectTable],
+    ["captureMargin", captureMarginTable],
+  ];
+  if (only && !sections.some(([name]) => name === only)) {
+    console.error(`unknown section "${only}". one of: ${sections.map(([name]) => name).join(", ")}`);
+    process.exit(2);
+  }
+  for (const [name, run] of sections) if (!only || name === only) run();
   console.log("\nDone.");
 }
 

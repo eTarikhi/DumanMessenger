@@ -18,4 +18,5 @@ export 'src/rng.dart';
 export 'src/routing.dart';
 export 'src/scenarios.dart';
 export 'src/simulation.dart';
+export 'src/transport.dart';
 export 'src/types.dart';
