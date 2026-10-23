@@ -2888,9 +2888,12 @@ class MeshSimulation {
     if (config.channelCapture == ChannelCapture.strongest) {
       // Only assigned here, so the two shipped modes consume nothing and behave exactly as
       // every published number in this repository was measured.
-      seq = ++_txSeq;
+      final n = ++_txSeq;
+      seq = n;
       _rxRssi[target.id] = rssi;
-      _rxSeq[target.id] = seq;
+      // `n` rather than `seq`: the map's value type is non-nullable and this does not rely on
+      // the compiler having promoted the nullable local.
+      _rxSeq[target.id] = n;
     }
     _queue.push(
         now + airTime, EventKind.msg, targetId, _MsgPayload(msg, node.id, seq: seq));

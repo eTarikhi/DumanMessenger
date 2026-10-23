@@ -219,6 +219,18 @@ Listed so a disagreement is diagnosed rather than argued about:
   measures **0.8556** against skills/02's and skills/08's ≥90% (`docs/08` §12.9), so the
   prediction to test first is not overhead or battery but whether a real floor delivers nine
   messages in ten.
+  **That pessimism has since been tested rather than assumed, and it survives.** `"first"` never
+  compares signal strengths, so it is a bound and not a radio: a real receiver demodulates the
+  stronger of two overlapping packets through the weaker one when the margin is enough. That is
+  `channelCapture: "strongest"`, and over six seeds with a 10 MB file in flight it delivers
+  **0.8672 under carrier sense — first-packet-wins to four decimals — and 0.8983 under plain
+  half-duplex against `first`'s 0.9209**, so the realistic receiver is if anything worse than the
+  pessimistic one (`docs/08` §12.15). The mechanism is not in doubt: its takeover count is exactly
+  monotone in the margin, 167 → 100 → 58 → 16 → 2 across 0 → 20 dB. Delivery simply does not move
+  with it, because a takeover moves a loss from the newcomer to the incumbent rather than removing
+  one, and leaves the incumbent a retry to do. So the receiver axis of the range below is much
+  narrower than §12.9 alone implied: what a field test is locating itself against is *whether a
+  receiver is modelled at all*, not which model of one.
 * **Carrier sense is modelled, and it is the pessimistic arm.** `channelAccess: "csma"` adds
   what BLE and Wi-Fi both do at the link layer — listen, and wait if a peer within range is
   transmitting. It removes almost every collision a node can hear (self-deafness 808 → 8 with a
@@ -233,10 +245,18 @@ Listed so a disagreement is diagnosed rather than argued about:
   makes nodes wait longer feeds the mechanism that is losing them. With a file in flight the best
   arm's six-seed mean clears the gate (0.9040 against a 0.8672 control) while its spread widens —
   its worst seed falls below the control's mean — so it does not hold per-run (`docs/08` §12.13).
-  RTS/CTS is still not modelled, and the hidden terminal at §12.10 is still open.
+  RTS/CTS is still not modelled. The hidden terminal at §12.10 is now measured from the receiving
+  side — §12.15's capture effect is precisely what a receiver does when two senders that cannot hear
+  each other both talk over it, and its unit test is built on one — and it does not change how many
+  packets are lost. So what RTS/CTS would add is *avoidance* of the collision rather than a better
+  resolution of it, which is a different claim and an untested one.
 * **What the field test should therefore compare against is a range, not a number.** Near the
   `free`+`none` end means contention is not binding in practice; near the `csma` end means the
-  radios are deferring into a saturated queue, and the fix belongs above the radio: §12.13 rules
+  radios are deferring into a saturated queue. One axis of that range has since closed: the receiver
+  can be modelled pessimistically (`"first"`) or realistically (`"strongest"`) and the answer moves
+  by noise, so the meaningful distance is between modelling a receiver and not modelling one
+  (`docs/08` §12.15). The remaining axes are the transmitter model and the load, and where a floor
+  lands on them decides where the fix belongs — above the radio rather than in it: §12.13 rules
   out the window in front of the queue, and §12.14 finds the queue being shed is mostly the
   *source's* own (82-85% of it with a file in flight), so sender-side flow control is pointed at
   most of the problem — it is built and measured, and it is a trade rather than a rescue (§12.12).
