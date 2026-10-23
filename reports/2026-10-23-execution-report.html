@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Duman Messenger - execution report, 2026-10-23</title>
+<style>
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin:0; background:#0b1017; color:#eaf2ff;
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+.wrap { max-width:1180px; margin:0 auto; padding:32px 24px 80px; }
+header { border-bottom:1px solid #1e2a3a; padding-bottom:20px; margin-bottom:28px; }
+h1 { font-size:30px; margin:0 0 8px; letter-spacing:-0.3px; }
+h2 { font-size:21px; margin:44px 0 6px; padding-top:18px; border-top:1px solid #16202c; }
+h3 { font-size:16px; margin:24px 0 6px; color:#b6ff4a; }
+p { margin:8px 0; color:#c9d7e6; }
+.sub { color:#9fb0c3; font-size:14px; margin:0; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:10px; margin:18px 0; }
+.card { background:rgba(17,24,35,0.92); border:1px solid #1e2a3a; border-radius:12px; padding:12px 14px; }
+.card .k { font-size:11px; text-transform:uppercase; letter-spacing:0.6px; color:#7d8ea1; }
+.card .v { font-size:22px; font-weight:700; color:#4de0ff; margin-top:2px; }
+.card .n { font-size:11px; color:#7d8ea1; margin-top:2px; }
+table { width:100%; border-collapse:collapse; margin:12px 0 4px; font-size:13px; }
+th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;
+  color:#7d8ea1; border-bottom:1px solid #1e2a3a; padding:7px 8px; font-weight:600; }
+td { border-bottom:1px solid #141d29; padding:7px 8px; color:#c9d7e6; vertical-align:top; }
+tr:hover td { background:rgba(77,224,255,0.04); }
+td.num { font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; }
+.bar { position:relative; background:#141d29; border-radius:4px; height:18px; min-width:120px; overflow:hidden; }
+.bar .fill { position:absolute; left:0; top:0; bottom:0; border-radius:4px; opacity:0.85; }
+.bar .barlabel { position:relative; z-index:1; font-size:11px; line-height:18px; padding-left:7px;
+  color:#eaf2ff; font-variant-numeric:tabular-nums; }
+.pass { color:#b6ff4a; font-weight:600; }
+.part { color:#ffd166; font-weight:600; }
+.blocked { color:#ff9f4d; font-weight:600; }
+.note { background:rgba(127,179,255,0.07); border-left:3px solid #7fb3ff; padding:10px 14px;
+  border-radius:0 8px 8px 0; margin:14px 0; font-size:13.5px; color:#c9d7e6; }
+.warn { background:rgba(255,159,77,0.07); border-left-color:#ff9f4d; }
+.good { background:rgba(182,255,74,0.07); border-left-color:#b6ff4a; }
+code, pre { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+code { background:#141d29; padding:1px 5px; border-radius:4px; font-size:12.5px; color:#9fe8ff; }
+pre { background:#0e1520; border:1px solid #1e2a3a; border-radius:10px; padding:12px 14px;
+  overflow-x:auto; font-size:12.5px; color:#c9d7e6; }
+.two { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+@media (max-width:820px){ .two { grid-template-columns:1fr; } }
+ul { margin:8px 0 8px 20px; padding:0; color:#c9d7e6; }
+li { margin:5px 0; }
+.tag { display:inline-block; font-size:10.5px; padding:1px 7px; border-radius:20px;
+  border:1px solid #1e2a3a; color:#9fb0c3; margin-right:5px; }
+footer { margin-top:56px; padding-top:18px; border-top:1px solid #1e2a3a; color:#7d8ea1; font-size:12.5px; }
+</style></head><body><div class="wrap">
+
+<header>
+<h1>Duman Messenger - simulator execution report</h1>
+<p class="sub">2026-10-23 &middot; branch <code>arena/acc5e9a6-dumanmessenger</code> &middot; HEAD <code>a99856c</code>
+ &middot; 45 commits over the base <code>8b01928</code> &middot; CI 35 green runs,
+ 8 jobs per run</p>
+<p>Everything below was produced in this working session: two deterministic mesh engines, the protocol
+defects they exposed, the measurements behind every acceptance criterion the repository states, and the
+four documents that record them. Numbers are measured, not estimated, and the negative results are kept
+next to the positive ones.</p>
+</header>
+
+<div class="grid">
+  <div class="card"><div class="k">TypeScript tests</div><div class="v">235</div><div class="n">engine, components, acceptance</div></div>
+  <div class="card"><div class="k">Dart test cases</div><div class="v">157</div><div class="n">authoritative engine</div></div>
+  <div class="card"><div class="k">Cross-language goldens</div><div class="v">byte-identical</div><div class="n">unchanged by every feature added</div></div>
+  <div class="card"><div class="k">Lines added</div><div class="v">+26,434</div><div class="n">75 files, -1,097</div></div>
+  <div class="card"><div class="k">Defects found and fixed</div><div class="v">17</div><div class="n">5 of them in the specs</div></div>
+  <div class="card"><div class="k">Levers measured and rejected</div><div class="v">12</div><div class="n">documented, not shipped</div></div>
+  <div class="card"><div class="k">Evidence documents</div><div class="v">4</div><div class="n">docs/06 &sect;1-19, 07, 08, 09</div></div>
+  <div class="card"><div class="k">Roadmap items closed</div><div class="v">15</div><div class="n">25 dated notes, 29 remain app-side</div></div>
+</div>
+
+<h2>1. What this repository is</h2>
+<p>A research and specification corpus - roughly 1,150 lines of Markdown across <code>docs/01-05</code>,
+<code>roadmap/</code> and <code>skills/00-08</code> - describing <strong>Duman Messenger</strong>: a
+serverless, offline-first messenger whose phones form the network. Android-first, Flutter with
+Kotlin/Swift transport bridges, a BATMAN-lite control plane with MPR flood suppression and
+Spray-and-Wait DTN store-carry-forward, Noise_XX end-to-end encryption, BLE for universality and
+Wi-Fi Direct for bandwidth. No servers, no internet, no accounts.</p>
+<p>What it also contains now is the thing the roadmap asks for in Phase 2 and that every claim in the
+specification needed in order to be checked: a <strong>deterministic discrete-event mesh simulator</strong>
+in two languages, a React visualiser, a CI pipeline that fails when the two engines disagree, and the
+measurements that turn the specification's assertions into numbers with error bars.</p>
+
+<h2>2. The two engines and the determinism contract</h2>
+<div class="two">
+<div>
+<h3>Authoritative: Dart</h3>
+<p><code>sim/mesh_sim/</code> - the engine the roadmap names (<code>mesh_sim.dart</code>), headless, with a
+CLI that runs scenarios, asserts the acceptance criteria and exits non-zero when they fail, and carries
+probes for SOS reach, group delivery modes, media transport, and history repair.</p>
+</div>
+<div>
+<h3>Reference and visualiser: TypeScript</h3>
+<p><code>src/</code> - the same protocol as a React dashboard: a canvas world, a node inspector, a chat
+panel with group and media controls, a metrics dashboard, per-hop message traces and a pcap-like capture
+log viewer.</p>
+</div>
+</div>
+<p>They are held together by <code>test-fixtures/golden-vectors.json</code>: 277 lines of exact integers
+and floats - relay transmissions, OGM counts, retry counts, hop sums, average score to six decimals,
+p95 latency to three - generated from the TypeScript engine by <code>npm run golden</code> and asserted
+by both. Three RNG fixed points are pinned in both languages. Every feature added in this session was
+required to leave that file byte-identical unless it changed behaviour, and each one that did was
+regenerated deterministically rather than patched by hand.</p>
+<div class="note">The contract is also the discipline: a field may be added to a message, a log line or a
+hop record without touching the vectors, because none of them draws randomness. A new <em>behaviour</em>
+moves them, and then the move has to be explained.</div>
+
+<h2>3. Delivery, overhead and the four worlds</h2>
+<table class=""><thead><tr><th>world</th><th>nodes</th><th>delivery</th><th>within 5 hops</th><th>overhead</th><th>flood-all delivery</th><th>evidence</th></tr></thead><tbody><tr><td><code>campus_quad</code></td><td class="num">20</td><td><div class="bar"><div class="fill" style="width:99.70%;background:#b6ff4a"></div><span class="barlabel">99.7%</span></div></td><td><div class="bar"><div class="fill" style="width:99.70%;background:#7fb3ff"></div><span class="barlabel">99.7%</span></div></td><td><div class="bar"><div class="fill" style="width:9.30%;background:#ff9f4d"></div><span class="barlabel">9.3% of flood-all</span></div></td><td class="num">100.0%</td><td><code>§6</code></td></tr><tr><td><code>sparse_village</code></td><td class="num">11</td><td><div class="bar"><div class="fill" style="width:100.00%;background:#b6ff4a"></div><span class="barlabel">100.0%</span></div></td><td><div class="bar"><div class="fill" style="width:100.00%;background:#7fb3ff"></div><span class="barlabel">100.0%</span></div></td><td><div class="bar"><div class="fill" style="width:12.40%;background:#ff9f4d"></div><span class="barlabel">12.4% of flood-all</span></div></td><td class="num">100.0%</td><td><code>§6</code></td></tr><tr><td><code>festival_crowd</code></td><td class="num">60</td><td><div class="bar"><div class="fill" style="width:91.30%;background:#b6ff4a"></div><span class="barlabel">91.3%</span></div></td><td><div class="bar"><div class="fill" style="width:84.40%;background:#7fb3ff"></div><span class="barlabel">84.4%</span></div></td><td><div class="bar"><div class="fill" style="width:13.10%;background:#ff9f4d"></div><span class="barlabel">13.1% of flood-all</span></div></td><td class="num">100.0%</td><td><code>§6, §16</code></td></tr><tr><td><code>partitioned_pair</code></td><td class="num">9</td><td><div class="bar"><div class="fill" style="width:44.00%;background:#b6ff4a"></div><span class="barlabel">44.0%</span></div></td><td><div class="bar"><div class="fill" style="width:44.00%;background:#7fb3ff"></div><span class="barlabel">44.0%</span></div></td><td><div class="bar"><div class="fill" style="width:8.90%;background:#ff9f4d"></div><span class="barlabel">8.9% of flood-all</span></div></td><td class="num">44.0%</td><td><code>§11</code></td></tr></tbody></table>
+<p class="sub">150 messages per world, six seeds for the campus figures. Overhead is relay transmissions
+as a percentage of a genuinely naive flood-all arm running the identical traffic plan; the
+<code>partitioned_pair</code> world is partitioned by design, so its ceiling is topology rather than
+protocol - which is why SOS reach is reported against the sender's radio-connected component.</p>
+
+<h2>4. Battery and the duty cycle</h2>
+<table class=""><thead><tr><th>role and power state</th><th>drain</th><th>%/8 h</th></tr></thead><tbody><tr><td>NORMAL, stationary, always on</td><td><div class="bar"><div class="fill" style="width:25.00%;background:#ffd166"></div><span class="barlabel">15.0% per 8 h</span></div></td><td class="num">15.0%</td></tr><tr><td>NORMAL, mobile campus, always on</td><td><div class="bar"><div class="fill" style="width:32.33%;background:#ffd166"></div><span class="barlabel">19.4% per 8 h</span></div></td><td class="num">19.4%</td></tr><tr><td>NORMAL, mobile crowd, always on</td><td><div class="bar"><div class="fill" style="width:37.50%;background:#ff9f4d"></div><span class="barlabel">22.5% per 8 h</span></div></td><td class="num">22.5%</td></tr><tr><td>NORMAL, campus, duty cycle on</td><td><div class="bar"><div class="fill" style="width:16.67%;background:#b6ff4a"></div><span class="barlabel">10.0% per 8 h</span></div></td><td class="num">10.0%</td></tr><tr><td>NORMAL, crowd, duty cycle on</td><td><div class="bar"><div class="fill" style="width:18.17%;background:#b6ff4a"></div><span class="barlabel">10.9% per 8 h</span></div></td><td class="num">10.9%</td></tr><tr><td>NORMAL, stationary, duty cycle on</td><td><div class="bar"><div class="fill" style="width:11.83%;background:#b6ff4a"></div><span class="barlabel">7.1% per 8 h</span></div></td><td class="num">7.1%</td></tr><tr><td>SUPER, always on</td><td><div class="bar"><div class="fill" style="width:100.00%;background:#ff9f4d"></div><span class="barlabel">60.0% per 8 h</span></div></td><td class="num">60.0%</td></tr></tbody></table>
+<p class="sub">Percentage of battery per eight hours, NORMAL role unless stated. <code>skills/07</code>'s
+budget is 15% per 8 h; the sleep slot is what meets it, and an always-scanning NORMAL node in a mobile
+population does not. That is a finding about the criterion, not a failure of the engine.</p>
+
+<h2>5. Media transport (docs/08)</h2>
+<h3>A 10 MB image, 64 KB slices, Wi-Fi Direct</h3>
+<table class=""><thead><tr><th>hops</th><th>window</th><th>10 MB transfer time</th><th>throughput</th><th>retransmits</th></tr></thead><tbody><tr><td class="num">1</td><td class="num">1</td><td><div class="bar"><div class="fill" style="width:36.26%;background:#4de0ff"></div><span class="barlabel">31.98 s</span></div></td><td class="num">2,623 kbit/s</td><td class="num">0</td></tr><tr><td class="num">1</td><td class="num">4</td><td><div class="bar"><div class="fill" style="width:8.62%;background:#4de0ff"></div><span class="barlabel">7.60 s</span></div></td><td class="num">11,039 kbit/s</td><td class="num">0</td></tr><tr><td class="num">1</td><td class="num">16</td><td><div class="bar"><div class="fill" style="width:2.34%;background:#4de0ff"></div><span class="barlabel">2.06 s</span></div></td><td class="num">40,734 kbit/s</td><td class="num">0</td></tr><tr><td class="num">3</td><td class="num">1</td><td><div class="bar"><div class="fill" style="width:100.00%;background:#4de0ff"></div><span class="barlabel">88.20 s</span></div></td><td class="num">953 kbit/s</td><td class="num">4</td></tr><tr><td class="num">3</td><td class="num">4</td><td><div class="bar"><div class="fill" style="width:37.41%;background:#4de0ff"></div><span class="barlabel">33.00 s</span></div></td><td class="num">2,542 kbit/s</td><td class="num">0</td></tr><tr><td class="num">3</td><td class="num">16</td><td><div class="bar"><div class="fill" style="width:9.78%;background:#4de0ff"></div><span class="barlabel">8.63 s</span></div></td><td class="num">9,725 kbit/s</td><td class="num">0</td></tr></tbody></table>
+<h3>The same file with no Wi-Fi Direct peer: BLE at skills/05's 512 B MTU</h3>
+<table class=""><thead><tr><th>size</th><th>time at one hop over BLE</th></tr></thead><tbody><tr><td>256 KB</td><td><div class="bar"><div class="fill" style="width:3.57%;background:#b6ff4a"></div><span class="barlabel">32.14 s</span></div></td></tr><tr><td>1 MB</td><td><div class="bar"><div class="fill" style="width:14.00%;background:#b6ff4a"></div><span class="barlabel">2.10 min</span></div></td></tr><tr><td>2 MB</td><td><div class="bar"><div class="fill" style="width:27.93%;background:#b6ff4a"></div><span class="barlabel">4.19 min</span></div></td></tr><tr><td>5 MB</td><td><div class="bar"><div class="fill" style="width:33.33%;background:#ff9f4d"></div><span class="barlabel">5.00 min (unfinished)</span></div></td></tr><tr><td>10 MB</td><td><div class="bar"><div class="fill" style="width:100.00%;background:#ff9f4d"></div><span class="barlabel">15.00 min (unfinished)</span></div></td></tr></tbody></table>
+<p class="sub">One hop. This is the measurement behind <code>docs/05</code> &sect;3.2's "auto-reject files
+&gt;5 MB on BLE-only": at this MTU, 5 MB does not finish in five simulated minutes and 10 MB does not
+finish in fifteen, so the specified threshold is generous by roughly five times against any
+"under a couple of minutes" reading.</p>
+
+<h3>Push-to-talk against the budgets</h3>
+<table class=""><thead><tr><th>mode</th><th>hops</th><th>radio</th><th>first audio</th><th>play delay vs budget</th><th>underruns</th><th>verdict</th></tr></thead><tbody><tr><td>streamed</td><td class="num">1</td><td>BLE</td><td class="num">989 ms</td><td><div class="bar"><div class="fill" style="width:13.57%;background:#b6ff4a"></div><span class="barlabel">407 ms of a 3000 ms budget</span></div></td><td class="num">0</td><td class="pass">PASS</td></tr><tr><td>streamed</td><td class="num">2</td><td>BLE</td><td class="num">1.27 s</td><td><div class="bar"><div class="fill" style="width:19.50%;background:#b6ff4a"></div><span class="barlabel">585 ms of a 3000 ms budget</span></div></td><td class="num">1</td><td class="pass">PASS</td></tr><tr><td>streamed</td><td class="num">3</td><td>BLE</td><td class="num">1.74 s</td><td><div class="bar"><div class="fill" style="width:13.75%;background:#b6ff4a"></div><span class="barlabel">1100 ms of a 8000 ms budget</span></div></td><td class="num">0</td><td class="pass">PASS</td></tr><tr><td>blob</td><td class="num">1</td><td>Wi-Fi Direct</td><td class="num">3.43 s</td><td><div class="bar"><div class="fill" style="width:14.23%;background:#b6ff4a"></div><span class="barlabel">427 ms of a 3000 ms budget</span></div></td><td class="num">0</td><td class="pass">PASS</td></tr><tr><td>blob</td><td class="num">3</td><td>Wi-Fi Direct</td><td class="num">3.99 s</td><td><div class="bar"><div class="fill" style="width:12.39%;background:#b6ff4a"></div><span class="barlabel">991 ms of a 8000 ms budget</span></div></td><td class="num">0</td><td class="pass">PASS</td></tr><tr><td>streamed 30 s</td><td class="num">1</td><td>Wi-Fi (GO)</td><td class="num">909 ms</td><td><div class="bar"><div class="fill" style="width:29.20%;background:#b6ff4a"></div><span class="barlabel">292 ms of a 1000 ms budget</span></div></td><td class="num">0</td><td class="pass">PASS</td></tr></tbody></table>
+<p class="sub">Play delay is button release to the whole note being playable, including the 200 ms jitter
+buffer; first audio is button press to the first frame being playable, which is what streaming buys - for
+a 30 s note, 989 ms streamed against 30.32 s as one blob, 31 times sooner.</p>
+
+<h3>Why media cannot use the text plane's retry timer</h3>
+<table class=""><thead><tr><th>ACK timer</th><th>play delay</th><th>worst audio gap</th><th>underruns</th><th>retransmits</th><th>10 MB file</th></tr></thead><tbody><tr><td class="num">4000 ms</td><td class="num">1.32 s</td><td><div class="bar"><div class="fill" style="width:32.51%;background:#ff9f4d"></div><span class="barlabel">8.53 s worst gap</span></div></td><td class="num">16</td><td class="num">11</td><td class="num">44.71 s</td></tr><tr><td class="num">1200 ms</td><td class="num">9.97 s</td><td><div class="bar"><div class="fill" style="width:100.00%;background:#ff9f4d"></div><span class="barlabel">26.24 s worst gap</span></div></td><td class="num">15</td><td class="num">13</td><td class="num">30.15 s</td></tr><tr><td class="num">600 ms <span class="tag">ships</span></td><td class="num">1.06 s</td><td><div class="bar"><div class="fill" style="width:4.61%;background:#ff9f4d"></div><span class="barlabel">1.21 s worst gap</span></div></td><td class="num">7</td><td class="num">5</td><td class="num">24.09 s</td></tr><tr><td class="num">300 ms</td><td class="num">1.03 s</td><td><div class="bar"><div class="fill" style="width:4.54%;background:#ff9f4d"></div><span class="barlabel">1.19 s worst gap</span></div></td><td class="num">12</td><td class="num">9</td><td class="num">45.01 s</td></tr></tbody></table>
+<p class="sub">30 s note at two hops, mean of three seeds; the file column is a 10 MB image at two hops.
+The ordering is not monotonic and the differences at three hops are inside the seed spread, so the claim
+that ships is "well under one second", not "600 ms is optimal". Two adaptive timers were built and
+measured and both lose - see &sect;8.</p>
+
+<h3>What one file does to everybody else &mdash; and a withdrawn claim</h3>
+<div class="note warn">The first version of this table reported that a 10 MB transfer cost the mesh
+1.8 points of delivery and pushed 35 messages into store-carry-forward. <strong>That measurement was
+wrong</strong>: each arm drew its own traffic from the simulation's RNG, so the &quot;quiet&quot; and
+&quot;busy&quot; arms did not send the same messages, and the media run consumed randomness that shifted
+every later loss draw. Two experiments wearing one table. Re-run with one fixed plan replayed
+identically in both arms, mean of three seeds:</div>
+<table><thead><tr><th></th><th>quiet</th><th>with a 10 MB file in flight</th><th>change</th></tr></thead><tbody>
+<tr><td>messages sent</td><td class="num">59.0</td><td class="num">59.0</td><td>&mdash;</td></tr>
+<tr><td>delivery ratio</td><td class="num">0.9944</td><td class="num">0.9944</td><td class="pass">none</td></tr>
+<tr><td>within 5 hops</td><td class="num">0.9944</td><td class="num">0.9944</td><td class="pass">none</td></tr>
+<tr><td>p95 latency</td><td class="num">4,472 ms</td><td class="num">3,275 ms</td><td>sampling</td></tr>
+<tr><td>relay transmissions</td><td class="num">1,728</td><td class="num">5,311</td><td>3.1x</td></tr>
+<tr><td>retries sent</td><td class="num">11</td><td class="num">59</td><td>5.4x</td></tr>
+<tr><td>messages parked</td><td class="num">1.0</td><td class="num">1.0</td><td class="pass">none</td></tr>
+<tr><td>retries exhausted</td><td class="num">1.0</td><td class="num">1.0</td><td class="pass">none</td></tr>
+<tr><td>the transfer itself</td><td>&mdash;</td><td class="num">10.71 s</td><td>&mdash;</td></tr>
+</tbody></table>
+<p class="sub">Per seed, delivery is 0.983 / 1.000 / 1.000 in <em>both</em> arms. The null result is
+structural rather than lucky: <code>packetLossProbability</code> reads the link margin and nothing else,
+and two transmissions at the same instant both succeed because there is no shared medium. A chunk
+occupies the radio in <em>time</em>, and time is not contested &mdash; so a load gate on transfers has
+nothing to protect in this model, and building one would cost users transfer time for a benefit the
+model cannot express.</p>
+
+<h3>Channel access: the same questions on the one radio a phone has</h3>
+<p class="sub">Everything above was measured with <code>channelAccess: &quot;free&quot;</code> &mdash; an
+infinitely wide radio, in which two transmissions at the same instant both succeed and a file costs nobody
+else anything. Two flags now supply the mechanism the model was missing, and both ship off so the golden
+vectors and every acceptance number stay where they were: <code>channelAccess</code> for the transmitter
+(one bounded FIFO, drop-tail when full, plus a carrier-sense arm) and <code>channelCapture</code> for the
+receiver.</p>
+<table><thead><tr><th>measurement</th><th><code>free</code> (ships)</th><th><code>halfDuplex</code></th></tr></thead><tbody>
+<tr><td>10 MB at 1 hop</td><td class="num">7.60 s</td><td><div class="bar"><div class="fill" style="width:12.00%;background:#ff9f4d"></div><span class="barlabel">1.50 min (11.8x slower)</span></div></td></tr>
+<tr><td>10 MB at 2 hops</td><td class="num">17.99 s</td><td><div class="bar"><div class="fill" style="width:18.00%;background:#ff9f4d"></div><span class="barlabel">2.31 min</span></div></td></tr>
+<tr><td>10 MB at 3 hops</td><td class="num">33.00 s</td><td><div class="bar"><div class="fill" style="width:35.00%;background:#ff9f4d"></div><span class="barlabel">4.44 min</span></div></td></tr>
+<tr><td>window 1 &rarr; 16 at 1 hop</td><td class="num">31.98 s &rarr; 2.06 s (15.5x)</td><td class="num">1.53 min &rarr; 1.22 min (1.25x)</td></tr>
+<tr><td>10 s voice note, 1 hop: delay after release</td><td class="num">0.20 s</td><td class="num">0.20 s</td></tr>
+<tr><td>10 s voice note, 3 hops: delay after release</td><td class="num">0.76 s</td><td><div class="bar"><div class="fill" style="width:100.00%;background:#ff6b6b"></div><span class="barlabel">26.8 s &mdash; 35x, and 2.7x the note's own length</span></div></td></tr>
+<tr><td>text delivery, quiet mesh</td><td class="num">0.9944</td><td class="num">0.9831</td></tr>
+<tr><td>text delivery, 10 MB in flight</td><td class="num">0.9944</td><td><div class="bar"><div class="fill" style="width:96.61%;background:#ffd166"></div><span class="barlabel">0.9661 &mdash; media now costs 1.7 points</span></div></td></tr>
+<tr><td>p95 latency, 10 MB in flight</td><td class="num">3,275 ms</td><td class="num">9,079 ms</td></tr>
+<tr><td>queue drops, 10 MB in flight</td><td class="num">0</td><td class="num">2,672</td></tr>
+</tbody></table>
+<p class="sub">Voice is arithmetic before it is measurement: a 500 ms frame is 750 B, one BLE packet, so its
+air time is hop latency plus jitter &mdash; about 245 ms a hop. Three hops need 735 ms of radio for every
+500 ms of recording, so the queue grows for as long as the user keeps talking. Nothing is lost; every frame
+arrives, long after it was worth hearing. The sliding window loses its meaning for the same reason: on one
+radio, four chunks in flight are four chunks in a row.</p>
+
+<h3>So is a load gate motivated? Yes &mdash; and it costs something</h3>
+<table><thead><tr><th>arm (half-duplex, same plan, three seeds)</th><th>delivery</th><th>p95</th><th>parked</th><th>file time</th><th>dropped</th></tr></thead><tbody>
+<tr><td>no file</td><td class="num">0.9831</td><td class="num">4,669 ms</td><td class="num">1.3</td><td>&mdash;</td><td class="num">209</td></tr>
+<tr><td>file, window 4 <span class="tag">ships</span></td><td class="num part">0.9661</td><td class="num">9,079 ms</td><td class="num">5.0</td><td class="num pass">2.12 min</td><td class="num">2,672</td></tr>
+<tr><td>file, window 1</td><td class="num pass">0.9774</td><td class="num pass">6,123 ms</td><td class="num">3.0</td><td class="num part">3.10 min</td><td class="num">1,810</td></tr>
+<tr><td>file, 16 KB chunks instead of 64 KB</td><td class="num">0.9605</td><td class="num">7,514 ms</td><td class="num">4.0</td><td class="num part">9.25 min</td><td class="num">2,949</td></tr>
+<tr><td>file, 4 KB chunks</td><td class="num">0.9605</td><td class="num">7,560 ms</td><td class="num">4.3</td><td class="num part">unfinished</td><td class="num">2,817</td></tr>
+</tbody></table>
+<p class="sub">Committing one chunk at a time instead of four recovers most of the lost delivery (1.1 of the
+1.7 points) and a third of the p95, and charges the sender <strong>46% more transfer time</strong> for it.
+The intuitive alternative is worse in every direction: slicing the file smaller buys p95 and nothing else, at
+4.4x the transfer time, because at 64 KB the fixed part of air time (40 ms hop latency plus ~125 ms jitter) is
+six times the serialization part (26 ms) &mdash; slicing 16x finer multiplies the fixed cost 16x.
+<strong>The unit of politeness is how far ahead you commit, not how big you commit.</strong></p>
+
+<h3>Queue discipline: which packet a busy radio takes next</h3>
+<table><thead><tr><th>load</th><th><code>fifo</code> (ships)</th><th><code>ackFirst</code></th><th><code>class</code> (voice and SOS first)</th></tr></thead><tbody>
+<tr><td>text delivery, with a 10 MB file</td><td class="num">0.9661</td><td class="num pass">0.9774</td><td class="num pass">0.9774</td></tr>
+<tr><td>that file's transfer time</td><td class="num pass">2.12 min</td><td class="num part">2.42 min</td><td class="num part">2.42 min</td></tr>
+<tr><td>30 s note's play delay, with a file</td><td class="num">40.36 s</td><td class="num part">1.33 min</td><td class="num pass">49.26 s</td></tr>
+<tr><td>that file's transfer time</td><td class="num">2.86 min</td><td class="num">2.64 min</td><td class="num pass">2.47 min</td></tr>
+<tr><td>text delivery, with a note in flight</td><td class="num pass">0.9487</td><td class="num pass">0.9487</td><td class="num part">0.9316</td></tr>
+<tr><td>SOS latency, with a file in flight</td><td class="num">8.39 s</td><td class="num">8.37 s</td><td class="num">8.32 s</td></tr>
+</tbody></table>
+<p class="sub">No ordering is free; each trades one flow against another, so this is a product decision rather
+than an optimisation. Promoting acknowledgements buys text 1.1 points and 158 ms of p95 and charges the file
+14%. Promoting voice and SOS on top is the best arm when a note competes with a file &mdash; 49.26 s of play
+delay against <code>ackFirst</code>'s 1.33 min, and the fastest file of the three &mdash; and costs 1.7 points
+of text delivery instead. What none of them do is rescue push-to-talk at three hops: the note's own air time is
+the bottleneck, and no queue order creates air time. An SOS is unaffected in every arm.</p>
+
+<h3>Receiver contention: where the margin in the acceptance gates went</h3>
+<p class="sub">Half-duplex gave a device one transmitter and left its receiver infinitely attentive.
+<code>channelCapture: &quot;first&quot;</code> closes that &mdash; the receiver locks onto whichever packet
+arrived first, and a transmitting node hears nothing &mdash; and because it is independent of the transmitter
+flag, the two mechanisms separate. Three seeds, 20-node campus, 60 messages at 2 s with a 10 MB file in
+flight:</p>
+<table><thead><tr><th>transmitter</th><th>receiver</th><th>delivery</th><th>p95</th><th>parked</th><th>collisions</th><th>queue drops</th><th>file time</th></tr></thead><tbody>
+<tr><td><code>free</code></td><td><code>none</code> <span class="tag">ships</span></td><td class="num pass">0.9944</td><td class="num">3,275 ms</td><td class="num">1.0</td><td class="num">0</td><td class="num">0</td><td class="num">10.71 s</td></tr>
+<tr><td><code>free</code></td><td><code>first</code></td><td class="num part">0.8588</td><td class="num">10,314 ms</td><td class="num">37.3</td><td class="num">3,625 + 1,256 deaf</td><td class="num">0</td><td class="num">1.98 min</td></tr>
+<tr><td><code>halfDuplex</code></td><td><code>none</code></td><td class="num">0.9661</td><td class="num">9,079 ms</td><td class="num">5.0</td><td class="num">0</td><td class="num">2,672</td><td class="num">2.12 min</td></tr>
+<tr><td><code>halfDuplex</code></td><td><code>first</code></td><td class="num part">0.9096</td><td class="num">11,399 ms</td><td class="num">19.7</td><td class="num">511 + 693 deaf</td><td class="num">1,441</td><td class="num">3.28 min</td></tr>
+<tr><td><code>csma</code></td><td><code>none</code></td><td class="num part">0.9096</td><td class="num part">28,740 ms</td><td class="num">16.3</td><td class="num">0</td><td class="num">2,488</td><td class="num">3.80 min</td></tr>
+<tr><td><code>csma</code></td><td><code>first</code></td><td class="num part">0.8757</td><td class="num">16,212 ms</td><td class="num">27.7</td><td class="num">330 + 7 deaf</td><td class="num">2,995</td><td class="num">3.64 min</td></tr>
+</tbody></table>
+<p class="sub">The receiver is where contention lives: a transmit queue alone costs text 2.8 points of
+delivery, receiver collisions alone cost <strong>13.6</strong>. Once collisions exist the queue earns its keep
+and is worth <strong>4.9 points</strong> back, because serialising a node's own transmissions removes the
+overlaps it was causing everybody else &mdash; the closest thing to a CSMA result here. Collisions are paid in
+latency before delivery (quiet-mesh p95 4,472 &rarr; 7,534 ms for 1.1 points), because the ACK timeout re-sends
+into an idle radio: two packets sent to one receiver at the same instant produce one collision and two
+deliveries, which a test pins. And most collisions are a node not hearing itself &mdash; 693 deaf against 511
+captured &mdash; which is exactly what carrier sense removes.</p>
+<table><thead><tr><th>acceptance gate, 20-node campus</th><th><code>free</code>+<code>none</code> (ships)</th><th><code>free</code>+<code>first</code></th><th><code>halfDuplex</code>+<code>none</code></th><th><code>halfDuplex</code>+<code>first</code></th><th><code>csma</code>+<code>none</code></th><th><code>csma</code>+<code>first</code></th><th>required</th></tr></thead><tbody>
+<tr><td>delivery ratio</td><td class="num">0.9889</td><td class="num part">0.9056</td><td class="num">0.9444</td><td class="num part">0.8556</td><td class="num part">0.7944</td><td class="num part">0.7389</td><td class="part">&ge; 0.90</td></tr>
+<tr><td>within 5 hops</td><td class="num">0.9889</td><td class="num">0.9056</td><td class="num">0.9389</td><td class="num">0.8500</td><td class="num">0.7944</td><td class="num">0.7389</td><td class="part">&ge; 0.90</td></tr>
+<tr><td>overhead vs flood-all</td><td class="num">9.3%</td><td class="num">15.8%</td><td class="num">35.5%</td><td class="num">25.5%</td><td class="num part">80.2%</td><td class="num part">78.0%</td><td>&le; 70%</td></tr>
+<tr><td>SUPER ratio</td><td class="num">21.7%</td><td class="num">25.0%</td><td class="num">25.0%</td><td class="num">23.3%</td><td class="num">25.0%</td><td class="num">23.3%</td><td class="pass">15&ndash;25%</td></tr>
+</tbody></table>
+<div class="note warn">This is the most consequential table in the report. The roadmap's acceptance gates were
+calibrated against a radio with no contention, and only two of these six radios meet the delivery gate: the
+shipped one, and <code>free</code>+<code>first</code> with nothing to spare. The two carrier-sense arms fail
+both gates. Overhead keeps its margin everywhere except under carrier sense, and the SUPER ratio holds in all
+six &mdash; so delivery is the binding criterion and contention is what binds it. One caveat on the overhead
+column: its denominator is flood-all's transmissions, and under heavy queue shedding those are dropped at the
+tail before they are ever counted, so the ratio rises for a reason that is a metric artefact rather than a
+routing result. <code>docs/09</code> now asks the field test to measure delivery ratio first, on the first
+walk.</div>
+
+<h3>Carrier sense: the mechanism real radios have, and why it is the pessimistic arm</h3>
+<p class="sub"><code>channelAccess: &quot;csma&quot;</code> is half-duplex plus listen-before-talk over peers
+in range &mdash; what BLE and Wi-Fi both do at the link layer &mdash; with no contention window, no random
+backoff and no RTS/CTS. Three seeds, receiver model on in every row:</p>
+<table><thead><tr><th></th><th>quiet mesh</th><th>with a 10 MB file</th><th>deaf losses</th><th>first-capture losses</th><th>p95 with the file</th><th>queue drops</th></tr></thead><tbody>
+<tr><td><code>halfDuplex</code> (transmits blind)</td><td class="num pass">0.9718</td><td class="num pass">0.9096</td><td class="num">693</td><td class="num">511</td><td class="num">11,399 ms</td><td class="num">1,441</td></tr>
+<tr><td><code>csma</code> (listens first)</td><td class="num part">0.9266</td><td class="num part">0.8757</td><td class="num pass">7</td><td class="num">330</td><td class="num part">16,212 ms</td><td class="num part">2,995</td></tr>
+</tbody></table>
+<p class="sub">It does exactly what it was invented to do &mdash; self-deafness all but disappears (693 &rarr;
+7), and a unit test pins the smallest case: two nodes transmitting at each other produce one deaf loss and one
+retry blind, and zero of each when they listen, paid for with 573 ms of waiting. A second test pins what it
+cannot do: in a three-node line the two ends are out of each other's range but both in range of the middle, and
+the collision survives carrier sense exactly as it survives blind transmission &mdash; the hidden terminal,
+which is what RTS/CTS exists for. And it is still the pessimistic arm, because waiting is not free: the bounded
+queue overflows harder (1,441 &rarr; 2,995 drops) while the layers above keep generating packets.</p>
+<table><thead><tr><th>transmitter</th><th>queue depth</th><th>delivery</th><th>p95</th><th>parked</th><th>deferred air time</th><th>file time</th></tr></thead><tbody>
+<tr><td><code>halfDuplex</code></td><td class="num">8</td><td class="num pass">0.9096</td><td class="num">11,399 ms</td><td class="num">19.7</td><td class="num">26.1 min</td><td class="num">3.28 min</td></tr>
+<tr><td><code>halfDuplex</code></td><td class="num">32</td><td class="num part">0.8588</td><td class="num">14,432 ms</td><td class="num">27.0</td><td class="num">78.6 min</td><td class="num">3.87 min</td></tr>
+<tr><td><code>halfDuplex</code></td><td class="num">128</td><td class="num part">0.8588</td><td class="num part">19,533 ms</td><td class="num">23.3</td><td class="num part">208.7 min</td><td class="num part">8.18 min</td></tr>
+<tr><td><code>csma</code></td><td class="num">8</td><td class="num pass">0.8757</td><td class="num">16,212 ms</td><td class="num">27.7</td><td class="num">67.4 min</td><td class="num">3.64 min</td></tr>
+<tr><td><code>csma</code></td><td class="num">32</td><td class="num part">0.7966</td><td class="num part">38,597 ms</td><td class="num">48.7</td><td class="num part">227.4 min</td><td class="num part">7.12 min</td></tr>
+<tr><td><code>csma</code></td><td class="num">128</td><td class="num part">0.7062</td><td class="num part">55,055 ms</td><td class="num">65.7</td><td class="num part">429.4 min</td><td class="num part">16.96 min</td></tr>
+</tbody></table>
+<p class="sub">The obvious response to &quot;the queue overflows&quot; is a bigger queue, and it is monotonic
+in the wrong direction in both arms: at depth 128 the deferred air time totals seven hours across three 60-node
+runs, and the mesh spends its whole life waiting for a radio horizon that keeps moving. That is bufferbloat with
+a discrete-event clock, and it is the same runaway the first implementation of the channel model hit by accident
+(&sect;5's note below). The mechanism that would change the verdict is <strong>backpressure</strong>: a real
+stack defers <em>and</em> stops generating work, while this engine only defers &mdash; its MPR fan-out, retry
+timers and transfer window keep producing packets whatever the radio is doing.</p>
+
+<h3>Backpressure: the fix that works for a transfer and not for a mesh</h3>
+<table><thead><tr><th>one radio, nobody else on it: 1 MB through a window of 8 into a 4-deep queue</th><th>backpressure off</th><th>backpressure on</th></tr></thead><tbody>
+<tr><td>queue drops</td><td class="num">25</td><td class="num pass">3</td></tr>
+<tr><td>chunks retransmitted</td><td class="num">6</td><td class="num pass">1</td></tr>
+<tr><td>window stalls</td><td class="num">1</td><td class="num pass">0</td></tr>
+<tr><td>file time</td><td class="num">9.4 s</td><td class="num pass">5.2 s</td></tr>
+<tr><td>crowd, 10 MB with text competing: delivery</td><td class="num pass">0.9096</td><td class="num part">0.8983</td></tr>
+<tr><td>crowd: that file's transfer time</td><td class="num pass">3.28 min</td><td class="num part">3.89 min</td></tr>
+</tbody></table>
+<p class="sub">&sect;12.10 ended by naming backpressure as the missing half of the radio model, and
+<code>mediaBackpressure</code> is the smallest form of it: a transfer fills only the queue slots its sender's
+radio has. Where the sender is the only one queueing it is a strict improvement &mdash; fewer drops, fewer
+retransmissions, no stalls, and a <em>faster</em> file, because a chunk that was never dropped never had to be
+sent twice. In a mesh it is not, and the reason is topology: the queue that overflows belongs to a relay, which
+several senders feed at once, so throttling one source leaves that queue exactly as full while extending the
+period everybody is contending. The recommendation is therefore narrower than the flag &mdash; worth building
+for the one-peer case, which is exactly skills/05's &quot;2 phones exchange image &lt;10 MB&quot; box &mdash;
+and the mesh-wide version needs a relay that can tell its upstream to stop.</p>
+
+<h3>The defect the channel model found in the retry timer</h3>
+<div class="note warn">Every radio number above was measured twice. The first pass ran with a retry timer that
+started when a message was <em>handed to the radio</em> rather than when it went on air. Under
+<code>channelAccess: &quot;free&quot;</code> those are the same instant, so nothing in &sect;1&ndash;&sect;11 of
+<code>docs/08</code> and no golden vector was affected &mdash; but under a queued radio a packet can wait
+hundreds of milliseconds, so the timer expired before the packet had been transmitted and retransmitted it into
+the same saturated queue. The retry timer measured the queue instead of measuring the silence.</div>
+<table><thead><tr><th>claim</th><th>before the fix</th><th>after</th></tr></thead><tbody>
+<tr><td>a 10 MB file costs text delivery</td><td class="num">2.8 points</td><td class="num pass">1.7 points</td></tr>
+<tr><td>window 1 instead of 4</td><td class="num">free: 3.33 &rarr; 3.30 min</td><td class="num part">costs 46%: 2.12 &rarr; 3.10 min</td></tr>
+<tr><td>promoting acknowledgements</td><td class="num">paid: 3.33 &rarr; 3.15 min</td><td class="num part">costs: 2.12 &rarr; 2.42 min</td></tr>
+<tr><td><code>halfDuplex</code> delivery gate</td><td class="num">0.9556</td><td class="num">0.9444</td></tr>
+<tr><td><code>halfDuplex</code>+<code>first</code> delivery gate</td><td class="num">0.9000</td><td class="num part">0.8556</td></tr>
+<tr><td>10 MB at three hops, alone</td><td class="num">3.97 min</td><td class="num">4.44 min</td></tr>
+</tbody></table>
+<p class="sub">Two conclusions reversed: the load gate stopped being free, and promoting acknowledgements
+stopped paying for itself. Both had been measured correctly, of the wrong engine. The fix is one rule &mdash; a
+retry timer measures silence after a transmission, so it starts when the packet goes on air &mdash; and a test
+pins it: three messages into one radio with a 600 ms timer wait 888 ms between them and produce zero
+retransmissions, while the same burst at 300 ms, shorter than one round trip, produces four. It is the same
+class of error as the withdrawn contention A/B in the table above: a measurement is only as good as the model's
+bookkeeping.</p>
+
+<h2>6. Group history anti-entropy (docs/06 &sect;17)</h2>
+<table class=""><thead><tr><th>membership</th><th>beacon links</th><th>recovered</th><th>converged</th><th>seconds</th><th>packets</th><th>payload</th></tr></thead><tbody><tr><td>5 members, spread</td><td>6 of 20</td><td class="num">20/20</td><td class="part">no</td><td class="num">&gt;300</td><td class="num">171</td><td class="num">29.8 KB</td></tr><tr><td>5 members, 5 nearest</td><td>20 of 20</td><td class="num">20/20</td><td class="pass">yes</td><td class="num">8.8</td><td class="num">60</td><td class="num">15.7 KB</td></tr><tr><td>either, beacons off</td><td>-</td><td class="num">0/20</td><td class="blocked">no</td><td class="num">-</td><td class="num">0</td><td class="num">0</td></tr></tbody></table>
+<p class="sub">Five members, 20 messages, one member out of range for the whole conversation. A beacon is
+156 characters whatever the group has said - 16 XOR-folded bucket hashes - so one beacon is one 256 B BLE
+packet, and merging is a set union, so beacons may be lost, duplicated or reordered without the protocol
+caring. Idle cost is 31 beacons/min and 81 B/s.</p>
+<div class="note warn">The boundary is the finding: beacons go to co-members <em>in range</em>, so what
+converges is the membership's peer graph. A spread membership recovers the returning member completely and
+still never converges, because two members who cannot hear each other and have no chain between them can
+never compare digests. Reach is the scoped flood's job; repair only fixes the last hop of a loss.</div>
+
+<h2>7. Store-carry-forward: the two defects a test found (docs/06 &sect;20)</h2>
+<p><code>skills/04</code> specifies the DTN layer in four rules and three acceptance boxes. The queue, the
+500-message cap, the seven-day expiry and the spray limit were all implemented as written - and the first
+box, <em>"A enqueues for C (C offline); B meets A then later C &rarr; C receives"</em>, did not pass. Two
+independent defects, both found by writing the test:</p>
+<ul>
+<li><strong>Sprayed copies reused the source retries' attempt numbers.</strong> A bundle is parked after the
+originator's two retries have used attempts 1 and 2; the spray numbered its copies from 1, and since relays
+dedupe on <code>id#attempt</code>, every relay that had heard the retries threw away the first two of three
+copies. The whole spray budget was spent on copies nobody forwarded.</li>
+<li><strong>A carried bundle with no route was deleted by flood suppression.</strong> With the destination
+offline the route lookup fails, the copy falls into the flood branch, and a NORMAL node MPR-suppresses it -
+the log reads "heard relays cover all my neighbours", where the relays it heard were the originator's own
+transmissions. Suppression exists to delete duplicate copies of a flood; a bundle with nowhere to go is not
+a duplicate, it is the message.</li>
+</ul>
+<table class=""><thead><tr><th>world</th><th>delivery before</th><th>after</th><th>change</th><th>DTN deliveries/run</th><th>parked at end</th><th>routed p95</th></tr></thead><tbody><tr><td><code>campus_quad</code></td><td><div class="bar"><div class="fill" style="width:99.33%;background:#7d8ea1"></div><span class="barlabel">0.9933</span></div></td><td><div class="bar"><div class="fill" style="width:99.67%;background:#b6ff4a"></div><span class="barlabel">0.9967</span></div></td><td class="num" style="color:#b6ff4a">+0.0034</td><td class="num">0.2 -&gt; 0</td><td class="num">1.5</td><td class="num">2.3 s</td></tr><tr><td><code>sparse_village</code></td><td><div class="bar"><div class="fill" style="width:27.83%;background:#7d8ea1"></div><span class="barlabel">0.2783</span></div></td><td><div class="bar"><div class="fill" style="width:27.83%;background:#7d8ea1"></div><span class="barlabel">0.2783</span></div></td><td class="num" style="color:#7d8ea1">0</td><td class="num">0</td><td class="num">67.3</td><td class="num">0.3 s</td></tr><tr><td><code>festival_crowd</code></td><td><div class="bar"><div class="fill" style="width:86.67%;background:#7d8ea1"></div><span class="barlabel">0.8667</span></div></td><td><div class="bar"><div class="fill" style="width:94.67%;background:#b6ff4a"></div><span class="barlabel">0.9467</span></div></td><td class="num" style="color:#b6ff4a">+0.0800</td><td class="num">0.5 -&gt; 5.0</td><td class="num">39.3</td><td class="num">6.6 s</td></tr><tr><td><code>partitioned_pair</code></td><td><div class="bar"><div class="fill" style="width:44.83%;background:#7d8ea1"></div><span class="barlabel">0.4483</span></div></td><td><div class="bar"><div class="fill" style="width:44.83%;background:#7d8ea1"></div><span class="barlabel">0.4483</span></div></td><td class="num" style="color:#7d8ea1">0</td><td class="num">0</td><td class="num">50.8</td><td class="num">1.0 s</td></tr></tbody></table>
+<p class="sub">Six seeds per world, 100 messages, an identical traffic plan per arm. The crowd is where the
+fixes land: <strong>+8.0 delivery points</strong>, with five messages in a hundred arriving by
+store-carry-forward that previously did not arrive at all. The two sparse and partitioned worlds do not
+move, because there the destination has no chain of links to the sender at all (&sect;11) and carrying cannot
+substitute for topology. The crowd's routed-only p95 is 6.6 s against 17.8 s over all deliveries - that gap
+is the <code>carried</code> flag keeping opportunistic deliveries out of the latency budget docs/04 &sect;5
+writes for routed traffic. The golden vectors did not move: the fixture parks no bundles.</p>
+
+<h3>The lever the fixes made unnecessary</h3>
+<p><code>skills/04</code> also says <em>"DO prefer SUPER as bundle carrier (more storage/battery)"</em>. It is
+implemented, and off by default:</p>
+<table class=""><thead><tr><th>world</th><th>delivery, lever off</th><th>lever on</th><th>change</th><th>parked off</th><th>parked on</th><th>SUPER carries/run</th></tr></thead><tbody><tr><td><code>campus_quad</code></td><td class="num">0.9967</td><td class="num">0.9967</td><td class="num" style="color:#7d8ea1">0</td><td class="num">1.5</td><td class="num">1.3</td><td class="num">3</td></tr><tr><td><code>sparse_village</code></td><td class="num">0.2783</td><td class="num">0.2783</td><td class="num" style="color:#7d8ea1">0</td><td class="num">67.3</td><td class="num">97.2</td><td class="num">97</td></tr><tr><td><code>festival_crowd</code></td><td class="num">0.9467</td><td class="num">0.9117</td><td class="num" style="color:#ff9f4d">-0.0350</td><td class="num">39.3</td><td class="num">62.5</td><td class="num">155</td></tr><tr><td><code>partitioned_pair</code></td><td class="num">0.4483</td><td class="num">0.4483</td><td class="num" style="color:#7d8ea1">0</td><td class="num">50.8</td><td class="num">90.0</td><td class="num">119</td></tr></tbody></table>
+<p class="sub">Delivery with and without the lever, bundles parked at the end of the run, and SUPER carries
+per run. Read against the table above: this lever measured <strong>+4.5 delivery points in the crowd before
+the two defects were fixed and &minus;3.5 points after them</strong>, because a SUPER relays everything and so
+rescued bundles that suppression was deleting. Once bundles are parked instead of deleted, the routing layer
+delivers them by itself and spraying toward the busiest nodes only fills their queues. The ordering is the
+lesson: <strong>a lever measured against a broken baseline is not a lever.</strong></p>
+<div class="note warn">The third rule that did not survive measurement: <em>"On ackReceived from dest: remove
++ gossip ACK (so relays can prune)"</em> is implemented exactly as written - a bundle is acknowledged to the
+carrier that handed it over, and any node hearing that ACK drops its copy - and it pruned
+<strong>zero</strong> bundles in four worlds over six seeds, because the ACK is a unicast along the reverse
+path and the other holders are not on it. Kept because it is free and correct when it fires; a prune flood is
+not worth adding until a deployment shows cap pressure (worst measured: 97 of 500 slots).</div>
+
+<h2>8. Two elections the roadmap assumed</h2>
+<h3>The atrium becomes a router - if it is charged</h3>
+<table class=""><thead><tr><th>candidate</th><th>coverage score</th><th>score</th></tr></thead><tbody><tr><td>drained, 19 peers</td><td><div class="bar"><div class="fill" style="width:68.29%;background:#ff9f4d"></div><span class="barlabel">0.5122</span></div></td><td class="num">0.5122</td></tr><tr><td>drained, 60 peers</td><td><div class="bar"><div class="fill" style="width:79.64%;background:#ff9f4d"></div><span class="barlabel">0.5973</span></div></td><td class="num">0.5973</td></tr><tr><td>drained, 199 peers</td><td><div class="bar"><div class="fill" style="width:91.72%;background:#ff9f4d"></div><span class="barlabel">0.6879</span></div></td><td class="num">0.6879</td></tr><tr><td>healthy, 9 peers</td><td><div class="bar"><div class="fill" style="width:94.44%;background:#b6ff4a"></div><span class="barlabel">0.7083</span></div></td><td class="num">0.7083</td></tr></tbody></table>
+<p class="sub">Coverage score, peers 12 m away in every direction. Position carries 0.55 of the weight but
+is compressed (the peer term is normalised logarithmically against 50), health carries an uncompressed
+0.45 - so a drained phone at 199 peers, more than any world in the scale sweep has nodes, still loses to a
+healthy phone with nine. The most open node becomes SUPER within two election cycles in all four worlds
+<em>when it is also healthy</em>, and stays NORMAL in three of four when it is not.</p>
+
+<h3>The community relay programme</h3>
+<table class=""><thead><tr><th>arm</th><th>delivery</th><th>relay tx</th><th>SUPER ratio</th><th>tablets elected</th><th>tx by other nodes</th><th>NORMAL %/h</th></tr></thead><tbody><tr><td>no tablets</td><td class="num">0.910</td><td><div class="bar"><div class="fill" style="width:87.10%;background:#4de0ff"></div><span class="barlabel">23,518</span></div></td><td class="num">15.0%</td><td>-</td><td><div class="bar"><div class="fill" style="width:87.10%;background:#7fb3ff"></div><span class="barlabel">23,518</span></div></td><td class="num">2.914</td></tr><tr><td>3 tablets</td><td class="num">0.910</td><td><div class="bar"><div class="fill" style="width:98.30%;background:#4de0ff"></div><span class="barlabel">26,540</span></div></td><td class="num">20.0%</td><td>3 of 3</td><td><div class="bar"><div class="fill" style="width:86.72%;background:#7fb3ff"></div><span class="barlabel">23,414</span></div></td><td class="num">2.822</td></tr><tr><td>6 tablets</td><td class="num">0.980</td><td><div class="bar"><div class="fill" style="width:90.53%;background:#4de0ff"></div><span class="barlabel">24,444</span></div></td><td class="num">21.7%</td><td>4 of 6</td><td><div class="bar"><div class="fill" style="width:70.92%;background:#7fb3ff"></div><span class="barlabel">19,148</span></div></td><td class="num">2.877</td></tr></tbody></table>
+<p class="sub">60-node crowd, 100 messages, identical traffic plan per arm; "tx by others" is transmissions
+by every node that is not a plugged tablet. The election half works - all three tablets become SUPER - but
+at three tablets total relay traffic rises 24.6% and everybody else transmits 9.2% more, because a SUPER
+relays everything by design. The burden only moves at six, where the tablets start displacing
+battery-powered SUPERs and the top-20% cap elects four of the six. The honest claim is the battery
+dividend: 3.005 to 2.877 %/h for NORMAL nodes.</p>
+
+<h2>9. Defects found, and what they cost</h2>
+<table><thead><tr><th>#</th><th>Defect and consequence</th><th>Evidence</th></tr></thead>
+<tbody><tr><td class="num">1</td><td><strong>tq tracked per destination instead of per (originator, via) link</strong><div class="sub">Every route looked as good as the best neighbour advertising it. Direct-neighbour tq 0.107 -&gt; 0.935, usable routes 29.7% -&gt; 86.8%.</div></td><td><code>docs/06 §7</code></td></tr><tr><td class="num">2</td><td><strong>The flood-all baseline was not actually naive</strong><div class="sub">It reused the route table, so the overhead ratio compared two routing policies. Rewritten as epidemic flooding, and a route-flood arm added so suppression can be isolated from routing.</div></td><td><code>docs/06 §6</code></td></tr><tr><td class="num">3</td><td><strong>A node relayed copies of its own message</strong><div class="sub">The originator treated its own broadcast as fresh traffic. Counting it as a duplicate cut relay transmissions 18.3% in a warm campus (3,009 -&gt; 2,458) and moved the golden vectors, which were regenerated.</div></td><td><code>docs/06 §12</code></td></tr><tr><td class="num">4</td><td><strong>The MPR fallback went quadratic at density</strong><div class="sub">At 200 nodes a beacon advertises at most 30 of ~179 heard peers, so coverage becomes unanswerable and the fallback fires for every peer: one 3-hop delivery cost 7,038 transmissions. Bounded to six sector-spread peers: -67% at 50 nodes, -86% at 100, -76% at 200.</div></td><td><code>docs/06 §15</code></td></tr><tr><td class="num">5</td><td><strong>The BLE payload ceiling was assumed at 241 characters</strong><div class="sub">The real packet model is ceil((95 + body)/256) x 256, so the ceiling is 930 characters - 3.9x more text per BLE packet than the engine had been assuming.</div></td><td><code>docs/07 §4</code></td></tr><tr><td class="num">6</td><td><strong>A media transfer could hang forever</strong><div class="sub">A chunk whose retries run out is carried in an OppQueue and its logical id is never seen again, so the sliding window never advances. A stall watchdog re-sends what went on air and never arrived; skills/05&#x27;s &#x27;resume after mid-transfer disconnect&#x27; only passes because of it.</div></td><td><code>docs/08 §6</code></td></tr><tr><td class="num">7</td><td><strong>Media retried on the text plane&#x27;s 4 s timer</strong><div class="sub">Four seconds is eight 500 ms voice frames, so one lost frame left an 8.53 s hole in the audio. A 600 ms media timer cut the worst gap to 1.21 s and underruns from 16 to 7 over three seeds.</div></td><td><code>docs/08 §7</code></td></tr><tr><td class="num">8</td><td><strong>Push-to-talk frames left one frame before they were recorded</strong><div class="sub">The first model scheduled frame i at i x 500 ms, which made a 3 s note fully received 400 ms before release - a negative play delay. Frames cover [i, i+1) x 500 ms, so they leave at the end of that window; the last one departs at release.</div></td><td><code>docs/08 §5.1</code></td></tr><tr><td class="num">9</td><td><strong>A voice blob was transmitted before it existed</strong><div class="sub">The non-streaming arm queued the whole note at capture start, which flattered it against streaming. Both modes now release at now + seconds.</div></td><td><code>docs/08 §5.1</code></td></tr><tr><td class="num">10</td><td><strong>A bounded anti-entropy reply stalled at the cap</strong><div class="sub">Replying with the first 32 entries of the differing buckets re-offered the same head of the same sorted list every round, so a 20-message absence converged to 8 and stopped. The request now lists the ids the requester already holds.</div></td><td><code>docs/06 §17.2</code></td></tr><tr><td class="num">11</td><td><strong>Digest beacons were counted as 1:1 traffic</strong><div class="sub">They inflated sentUnicast and made deliveryRatio a statement about how often a group repaired itself. Counted apart as sentSync and excluded from the ratio, the chat log and the dashboard&#x27;s message list.</div></td><td><code>docs/06 §17.6</code></td></tr><tr><td class="num">12</td><td><strong>A 10 MB file rendered as 160 empty chat bubbles</strong><div class="sub">The chat panel drew one bubble per sent record. Chunks are now filtered out and rendered as one progress row per transfer, with the radio it is riding and the window stalls it has taken.</div></td><td><code>docs/08 §3.1</code></td></tr><tr><td class="num">13</td><td><strong>Sprayed DTN copies reused the source retries&#x27; attempt numbers</strong><div class="sub">A bundle is parked after the originator&#x27;s two retries have used attempts 1 and 2, and the spray numbered its copies from 1 - so every relay that had heard the retries deduped the first two copies on id#attempt and the whole spray budget was spent on copies nobody forwarded. skills/04&#x27;s carry test could not pass.</div></td><td><code>docs/06 §20.1</code></td></tr><tr><td class="num">14</td><td><strong>A carried bundle with no route was deleted by MPR suppression</strong><div class="sub">With the destination offline the carrier&#x27;s route lookup fails, the copy falls into the flood branch, and a NORMAL node suppresses it - the log reads &#x27;heard relays cover all my neighbours&#x27;, where the relays it heard were the originator&#x27;s own transmissions. Suppression deletes duplicate copies of a flood; a bundle with nowhere to go is the message. Both fixes together: crowd delivery 0.867 -&gt; 0.947 over six seeds.</div></td><td><code>docs/06 §20.1</code></td></tr><tr><td class="num">15</td><td><strong>The OppQueue cap evicted by age alone</strong><div class="sub">&#x27;Keep newest 500 (LRU by priority)&#x27; was implemented as &#x27;drop the oldest&#x27;, which could throw away a fresh bundle to keep one that had already sprayed its three copies and been demoted. Priority now ranks before age.</div></td><td><code>docs/06 §20.3</code></td></tr><tr><td class="num">16</td><td><strong>Dart: initialising formals with no field declarations</strong><div class="sub">MeshMessage.transferId/chunkIndex and SentRecord.transferId were accepted by the constructor and unresolved everywhere they were read. Caught by CI, which is the only Dart compiler available in this sandbox.</div></td><td><code>commit cbe8716</code></td></tr><tr><td class="num">17</td><td><strong>A committed build artifact</strong><div class="sub">tsconfig.tsbuildinfo was tracked; it is now ignored and removed.</div></td><td><code>commit 7cdb255</code></td></tr></tbody></table>
+
+<h2>10. Levers measured and deliberately not shipped</h2>
+<table><thead><tr><th>Lever</th><th>Why not</th></tr></thead><tbody><tr><td><strong>Faster OGM beacons in the crowd</strong><div class="sub">1 s intervals looked like +2.6 points of within-5-hop delivery on three seeds and measured -1.1 on six. The sign flipped, not just the magnitude.</div></td><td><code>docs/06 §16.4</code></td></tr><tr><td><strong>More source retries (4 instead of 2)</strong><div class="sub">Delivery 91.7% -&gt; 93.2% in the crowd, at a p95 of 10.9 s - buying 1.5 points with a latency budget the spec does not have.</div></td><td><code>docs/06 §16</code></td></tr><tr><td><strong>Adaptive media retry timers</strong><div class="sub">Both RFC 6298&#x27;s srtt + 4 rttvar and a min-RTT rule were implemented and measured; both lose to a fixed 600 ms (file at 2 hops: 31.96 s and 28.38 s against 24.09 s). For a deadline-driven stream an early duplicate beats a correctly-sized timeout. Left in the code, off by default.</div></td><td><code>docs/08 §7.1</code></td></tr><tr><td><strong>Deeper transfer windows</strong><div class="sub">Window 16 is 15.5x faster than window 1 at one hop &mdash; on an infinitely wide radio. On the one radio a phone has the same sweep is worth 1.25x, and depth starts dropping chunks, because there is one transmitter to fill and the parallelism was never there. Ships at 4 under <code>free</code>; window 1 is the evidence-backed setting under <code>halfDuplex</code>, where it recovers 1.1 of the 1.7 points of delivery a file costs and a third of the p95, for 46% more transfer time.</div></td><td><code>docs/08 §4, §12.2, §12.5</code></td></tr><tr><td><strong>Promoting acknowledgements or voice in the transmit queue</strong><div class="sub">Both implemented (<code>channelPriority</code>) and both off. Neither is a win: promoting ACKs buys text 1.1 points of delivery and 158 ms of p95 and charges the file 14% for it, and promoting voice on top is the best arm for a note competing with a file (49.26 s of play delay against 1.33 min) while costing 1.7 points of text delivery instead. No queue order rescues push-to-talk at three hops, because the limit is the note's own air time and no ordering creates air time.</div></td><td><code>docs/08 §12.8</code></td></tr><tr><td><strong>Carrier sense</strong><div class="sub">Implemented as <code>channelAccess: "csma"</code> and off. It removes almost every collision a node can hear (self-deafness 693 &rarr; 7) and still costs delivery under load (0.9096 &rarr; 0.8757 with a file in flight) and fails both acceptance gates (0.7389-0.7944 delivery, 78-80% overhead), because waiting is not free in an engine whose layers above keep generating packets. Deepening the queue is monotonic in the wrong direction: 0.7062 delivery and 429 minutes of deferred air time at depth 128. The missing mechanism is backpressure.</div></td><td><code>docs/08 §12.10</code></td></tr><tr><td><strong>Assuming coverage from density</strong><div class="sub">A rule that treated &#x27;heard many SUPERs&#x27; as &#x27;covered&#x27; measured 95.0% delivery against 98.3% for the sector-bounded fallback.</div></td><td><code>docs/06 §15</code></td></tr><tr><td><strong>Preferring SUPER as bundle carrier (skills/04)</strong><div class="sub">Implemented and off by default. It measured +4.5 delivery points in the crowd *before* the two DTN defects were fixed and -3.5 points after them, with parked bundles growing 39 -&gt; 63 per run: spraying toward SUPERs duplicates work into the busiest queues. The rule&#x27;s intuition is about who should hold a bundle, not who should be handed extra copies.</div></td><td><code>docs/06 §20.4</code></td></tr><tr><td><strong>Gossiping ACKs so relays can prune bundles (skills/04)</strong><div class="sub">Implemented exactly as written - the bundle is acknowledged to the carrier that handed it over, and any node hearing the ACK drops its copy - and it pruned zero bundles in four worlds over six seeds, because the ACK is a unicast along the reverse path. Kept because it is free; a prune flood is not worth adding until a deployment shows cap pressure (worst measured: 97 of 500 slots).</div></td><td><code>docs/06 §20.5</code></td></tr><tr><td><strong>Relaying history digests across the mesh</strong><div class="sub">It would converge a spread membership and would cost a scoped flood every interval, forever, to repair traffic that mostly arrived. Not built; the peer-graph boundary is documented instead.</div></td><td><code>docs/06 §17.4</code></td></tr><tr><td><strong>Normalising peer count against the observed maximum</strong><div class="sub">Implemented as <code>peerNorm: &quot;observed&quot;</code> and rejected on measurement. The predicted trap was §15&#x27;s density rule from the other side; the real problem is that an election is a ranking and this is a level change. The most open node&#x27;s score rises 0.05-0.19 in all four worlds and its rank inside its own candidacy list does not move once (7 of 13 on campus, 2 of 4 in the village, 12 of 25 in the crowd), so it stays NORMAL in three worlds out of four either way. What it does move is the promote gate and the size of the elected set (village 2 &rarr; 3 SUPERs, crowd 13 &rarr; 11), and it spends skills/02&#x27;s margin: over six campus seeds one lands exactly on the 15% floor, for under half a point of delivery.</div></td><td><code>docs/06 §18.4</code></td></tr><tr><td><strong>Preferring a community relay as MPR or bundle carrier</strong><div class="sub">Both places the protocol chooses who does the work, both measured, both off. As an MPR tie-break it wins the tie it was written for and moves 0.6 of 100 slots in a crowd, with every metric identical to the digit across three seeds &mdash; who transmits is decided per packet from what was heard, not from the MPR label. As a bundle carrier it fires 40-51 times a run and grows parked bundles 27-55% for at most 0.7 extra opportunistic deliveries: a node that does not move is the best place to leave a bundle and the worst place to carry one.</div></td><td><code>docs/06 §19.5</code></td></tr><tr><td><strong>Cap-aware community-relay promotion</strong><div class="sub">Implemented in both proposed forms (<code>communityRelayQuota</code>: reserve part of the cap, or exempt tablets from it) and rejected on three seeds. The diagnosis decides it: a tablet that fails to be elected lost to <em>other tablets</em> &mdash; six better-scoring community relays against zero phones on seed 42 &mdash; so a reservation cannot help it, and the proximity guard that stops the others is docs/03 &sect;5 working as written. Exemption does elect all six and lifts delivery 1.7 points, but it raises everybody else&#x27;s transmissions 12% and puts the SUPER ratio at 25.0%, the ceiling of skills/02&#x27;s band. Reserving half the cap reserves nothing: those slots were already the tablets&#x27;, so what it actually does is hand one to a phone.</div></td><td><code>docs/06 §19.4</code></td></tr><tr><td><strong>Sleeping stabilises routing</strong><div class="sub">Falsified: the duty cycle is delivery-neutral (+0.8/+0.5 points) and its value is battery, not stability.</div></td><td><code>docs/06 §7</code></td></tr><tr><td><strong>Raising data TTL for the crowd&#x27;s 5-hop tail</strong><div class="sub">The tail decomposes into 2.2% of paths that are 6+ hops, 1.8% with no path at all, 5.8% lost or expired, and 5.8% in-flight churn - only one of which a TTL would touch.</div></td><td><code>docs/06 §16</code></td></tr></tbody></table>
+<div class="note">Two methodological rules came out of this and are now written into the evidence document
+rather than remembered: an A/B baseline must not share the mechanism under test, and a parameter change
+proposed on three seeds of a 60-node mobile world needs six before anybody believes it - the OGM-interval
+lever changed sign between the two.</div>
+
+<h2>11. Field-test instrumentation (docs/09)</h2>
+<p>The one acceptance item that needs a building. Everything except the walk is built: a JSONL capture
+schema, an analyzer that turns a capture into the roadmap's three numbers, and an RF calibration fit that
+decides whether the simulator's radio model is <em>this</em> building's model. Validated against a
+synthetic capture whose ground truth is known:</p>
+<table class=""><thead><tr><th>quantity</th><th>analyzer, from the capture log</th><th>engine, from its own state</th></tr></thead><tbody><tr><td>txPower at 1 m</td><td>-55.0 dBm</td><td>-55 dBm</td></tr><tr><td>path-loss slope</td><td>20.0 dB/decade</td><td>20 dB (n = 2)</td></tr><tr><td>fit RMS residual</td><td>0.00 dB</td><td>exact by construction</td></tr><tr><td>implied LOS range</td><td>31.6 m</td><td>31.6 m</td></tr><tr><td>delivery ratio</td><td>0.9867 (from the log)</td><td>0.9833 (engine state)</td></tr><tr><td>overhead vs flood-all</td><td>14.8% (data relays only)</td><td>~9.3% (all relays)</td></tr></tbody></table>
+<p class="sub">The two ratios that differ from the engine's own counters differ definitionally - the
+log-derived form counts every non-control message and excludes OGM relays - and docs/09 &sect;7 writes down
+which is which, because a field report has to say which one it is quoting.</p>
+
+<h2>12. Acceptance criteria</h2>
+<table><thead><tr><th>Source</th><th>Criterion</th><th>Measured</th><th>Status</th></tr></thead>
+<tbody><tr><td><code>skills/02</code></td><td>20 nodes: SUPER ratio 15-25%</td><td>20-25% (six seeds)</td><td class="pass">pass</td></tr><tr><td><code>skills/02</code></td><td>delivery &gt;= 90% at 3 hops</td><td>99.7% campus, avgHops 1.86</td><td class="pass">pass</td></tr><tr><td><code>skills/02</code></td><td>overhead &lt;= 70% of flood-all</td><td>9.3% of naive flood-all; 0.736 of route-flood</td><td class="pass">pass</td></tr><tr><td><code>skills/02</code></td><td>SUPER opt-out respected</td><td>asserted in both engines, advertised in the OGM</td><td class="pass">pass</td></tr><tr><td><code>skills/02</code></td><td>NORMAL never auto-promoted with battery saver on</td><td>asserted in both engines</td><td class="pass">pass</td></tr><tr><td><code>skills/08</code></td><td>CI: 20-node seed, delivery &gt;= 90% &lt; 5 hops</td><td>99.7% of sent within 5 hops</td><td class="pass">pass</td></tr><tr><td><code>skills/08</code></td><td>overhead down 30% vs naive flood</td><td>down 90.7%</td><td class="pass">pass</td></tr><tr><td><code>skills/08</code></td><td>nodeCount 10-200, 100x100 m, walls, the RSSI model, the five metrics</td><td>swept 10-200; rssi = txPower - 20log10(d) - walls x penalty</td><td class="pass">pass</td></tr><tr><td><code>skills/07</code></td><td>telemetry: battery %/h per role, scans/s, relays/s, wake-locks</td><td>on the dashboard; awakeRatio is the wake-lock analogue</td><td class="pass">pass</td></tr><tr><td><code>skills/07</code></td><td>duty cycle NORMAL 3s/7s, SUPER continuous, user-visible toggle</td><td>toggle in the UI and --duty-cycle in both CLIs</td><td class="pass">pass</td></tr><tr><td><code>skills/07</code></td><td>NORMAL &lt; 15% per 8 h</td><td>10.0% campus with the duty cycle on; 19.4% always-on mobile, which is the point of the slot</td><td class="pass">pass (duty-cycled)</td></tr><tr><td><code>roadmap P2</code></td><td>metrics dashboard: delivery, overhead, latency by hop, battery %/h</td><td>shipped, sections appear only when the counter is non-zero</td><td class="pass">pass</td></tr><tr><td><code>roadmap P3</code></td><td>2 phones exchange an image &lt; 10 MB over Wi-Fi Direct</td><td>10 MB, 3 hops, 33.00 s; resumes after a 20 s disconnect in 45.02 s</td><td class="pass">pass in simulation</td></tr><tr><td><code>roadmap P3</code></td><td>PTT Opus note plays in &lt; 3 s 1-hop / &lt; 8 s 3-hop</td><td>407 ms and 1.10 s</td><td class="pass">pass in simulation</td></tr><tr><td><code>roadmap P3</code></td><td>SOS reaches all within TTL</td><td>100% of the sender&#x27;s radio-connected component in all four worlds; raw reach is bounded by topology, not by TTL</td><td class="pass">pass with a denominator</td></tr><tr><td><code>skills/04</code></td><td>A-&gt;C carry test: enqueue while C is offline, B meets A then C, C receives</td><td>delivered, marked carried, and never delivered twice; it did not pass until the two §20.1 defects were fixed</td><td class="pass">pass</td></tr><tr><td><code>skills/04</code></td><td>spray limit: same message not duplicated &gt;3x in network capture</td><td>asserted from the capture log, not from queue state</td><td class="pass">pass</td></tr><tr><td><code>skills/04</code></td><td>expiry: a 7-day-old queued message is dropped</td><td>asserted on the sweeper&#x27;s boundary; seven days of simulated time is 2.4 M physics ticks</td><td class="pass">pass</td></tr><tr><td><code>skills/05</code></td><td>1-hop Wi-Fi PTT round trip &lt; 1 s</td><td>292 ms (92 ms excluding the jitter buffer)</td><td class="pass">pass</td></tr><tr><td><code>skills/05</code></td><td>3-hop BLE voice note arrives intact</td><td>6/6 frames, 0 gaps longer than frame + buffer; &#x27;decode clean&#x27; needs a codec</td><td class="pass">pass on the transport half</td></tr><tr><td><code>skills/05</code></td><td>10 MB image over Wi-Fi Direct with resume after disconnect</td><td>160/160 chunks, 6 window stalls, 45.02 s</td><td class="pass">pass</td></tr><tr><td><code>roadmap P2</code></td><td>field test 1: campus mapping, atrium SUPER, delivery vs flood-all</td><td>capture schema, analyzer and predictions built and validated; the atrium half answered in simulation with a health condition</td><td class="blocked">blocked on hardware</td></tr><tr><td><code>docs/03</code></td><td>coverage weights 0.30/0.25/0.20/0.15/0.10 (+0.1 charging)</td><td>implemented as specified, and §18 measures what they imply</td><td class="pass">pass</td></tr><tr><td><code>docs/03 §7</code></td><td>tq window 32</td><td>per (originator, via), 32 samples</td><td class="pass">pass</td></tr><tr><td><code>docs/03 §8</code></td><td>OppQueue 500 msgs / 7 days / spray L=3</td><td>OPP_QUEUE_MAX 500, OPP_TTL_MS 7 d, SPRAY_LIMIT 3</td><td class="pass">pass</td></tr></tbody></table>
+
+<h2>13. Repository inventory</h2>
+<table class=""><thead><tr><th>area</th><th>added lines</th><th>+</th><th>-</th></tr></thead><tbody><tr><td>src/ (TS engine + React visualiser)</td><td><div class="bar"><div class="fill" style="width:100.00%;background:#4de0ff"></div><span class="barlabel">+10,320</span></div></td><td class="num">+10,320</td><td class="num">-1,062</td></tr><tr><td>sim/mesh_sim/ (authoritative Dart)</td><td><div class="bar"><div class="fill" style="width:88.88%;background:#4de0ff"></div><span class="barlabel">+9,172</span></div></td><td class="num">+9,172</td><td class="num">-</td></tr><tr><td>docs/ (findings, E2EE, media, field test)</td><td><div class="bar"><div class="fill" style="width:25.19%;background:#4de0ff"></div><span class="barlabel">+2,600</span></div></td><td class="num">+2,600</td><td class="num">-</td></tr><tr><td>tool/ (golden, media, history, field probes)</td><td><div class="bar"><div class="fill" style="width:14.45%;background:#4de0ff"></div><span class="barlabel">+1,491</span></div></td><td class="num">+1,491</td><td class="num">-</td></tr><tr><td>roadmap/ + skills/ (annotation pass)</td><td><div class="bar"><div class="fill" style="width:3.00%;background:#4de0ff"></div><span class="barlabel">+310</span></div></td><td class="num">+310</td><td class="num">-23</td></tr><tr><td>.github/ (3 jobs + probes job)</td><td><div class="bar"><div class="fill" style="width:3.12%;background:#4de0ff"></div><span class="barlabel">+322</span></div></td><td class="num">+322</td><td class="num">-</td></tr><tr><td>test-fixtures/ (cross-language goldens)</td><td><div class="bar"><div class="fill" style="width:2.68%;background:#4de0ff"></div><span class="barlabel">+277</span></div></td><td class="num">+277</td><td class="num">-</td></tr><tr><td>reports/</td><td><div class="bar"><div class="fill" style="width:2.15%;background:#4de0ff"></div><span class="barlabel">+222</span></div></td><td class="num">+222</td><td class="num">-</td></tr></tbody></table>
+<h3>Reproducing everything above</h3>
+<pre>npm ci &amp;&amp; npm test                # 265 TypeScript tests
+npm run golden                     # regenerate and diff the cross-language vectors
+npm run media                      # docs/08: files, PTT, retry timer, contention, the radio (§7-§9)
+npm run history                    # docs/06 §17: repair against the same world with it off
+npm run field:capture -- campus_quad 42 /tmp/cap.jsonl [flood-all]
+npm run field:report  -- /tmp/cap.jsonl /tmp/base.jsonl
+ALLOW_ANY_DEV_HOST=1 npm run dev -- --port 5173     # the React visualiser
+
+cd sim/mesh_sim &amp;&amp; dart pub get &amp;&amp; dart test     # 178 Dart cases
+dart run bin/mesh_sim.dart --scenario campus_quad --seed 42          # asserts the criteria
+dart run bin/mesh_sim.dart --sos | --group 10 | --media | --history  # the four probes
+dart run bin/mesh_sim.dart --trace | --capture | --capture-ogm       # hop routes, pcap-like log
+dart run bin/mesh_sim.dart --duty-cycle --json                       # skills/07 arm</pre>
+
+<h2>14. What remains</h2>
+<p>Twenty-nine roadmap items are still open, and every one of them is app or platform work rather than
+protocol work: the BLE GATT hello and iOS beacon, permissions flows, the foreground service, SQLite,
+<code>WifiP2pManager</code> and MultipeerConnectivity, the Opus codec, QR pairing, distribution, legal.
+Two things on the simulation side are named in the evidence documents as the next lever to pull. Four
+others &mdash; a channel-access model, media gating on mesh load, cap-aware community-relay promotion and
+observed-maximum peer normalisation &mdash; were built and measured while writing this report; two ship as
+flags that default to off, and their results are in &sect;5 and &sect;8.</p>
+<ul>
+<li><strong>Preference rather than promotion for community relays</strong> - the cap-aware promotion
+&sect;19.2 asked for is built, measured and rejected (&sect;19.4): a tablet that is not elected lost to other
+tablets, so the useful question is whether a plugged node should be preferred as an MPR and as a bundle
+carrier, where the work actually is.</li>
+<li><strong>Rank, not score, in the field record</strong> - observed-maximum normalisation is built,
+measured and rejected (&sect;18.4): the atrium phone loses on rank among the candidates it can hear, which a
+score threshold hides. <code>docs/09</code> &sect;5 should record that column.</li>
+<li><strong>Hop-by-hop backpressure</strong> - the sender-side version is built and measured
+(<code>mediaBackpressure</code>): on one radio with nobody else on it it cuts a 1 MB transfer's queue drops
+from 25 to 3, its retransmissions from 6 to 1 and its stalls from 1 to 0, and the file arrives in 5.2 s instead
+of 9.4 s. In a mesh it does nothing for delivery and costs the transfer 18%, because the queue that overflows
+in a multi-hop mesh belongs to a relay fed by several senders at once. The version that would fix the mesh is a
+relay that can tell its upstream to stop, which nothing in this stack has (docs/08 &sect;12.12).</li>
+<li><strong>A capture effect that compares signal strengths, a contention window, and RTS/CTS</strong> - the
+receiver model loses the later of two packets whatever their levels, two nodes that defer for each other are
+separated only by event ordering, and the hidden terminal is provably unfixable without RTS/CTS (a test pins
+it). Each omission is named with its direction in docs/08 &sect;12.9-12.10.</li>
+<li><strong>Voice priority in the transmit queue</strong> - at three hops a streamed note cannot keep up
+with its own capture clock on one radio, so either streaming is capped at two hops and longer notes are
+sent as blobs, or voice jumps the queue. Not implemented; it is the next thing to measure (docs/08
+&sect;12.3).</li>
+</ul>
+
+<footer>
+Generated 2026-10-23 from branch <code>arena/acc5e9a6-dumanmessenger</code> at <code>b7a06e3</code>. Evidence:
+<code>docs/06-simulator-findings.md</code> &sect;1-20 (incl. &sect;18.4, &sect;19.4-19.5), <code>docs/07-e2ee-noise-xx.md</code>,
+<code>docs/08-media-transport-ptt.md</code> &sect;1-13, <code>docs/09-field-test-plan.md</code>. Probes:
+<code>tool/media-probe.ts</code>, <code>tool/history-probe.ts</code>, <code>tool/capture-json.ts</code>,
+<code>tool/field-report.ts</code>, <code>tool/generate-golden.ts</code>.
+</footer>
+</div></body></html>

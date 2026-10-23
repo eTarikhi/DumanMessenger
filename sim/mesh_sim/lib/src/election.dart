@@ -1,0 +1,580 @@
+/// Coverage-based super-node election — "Duman Adaptive Routing"
+/// (docs/03-smart-router-algorithm.md, skills/02-super-node.skill.md).
+///
+///     coverageScore = 0.30*norm(peers) + 0.25*normRssi + 0.20*battery
+///                   + 0.15*stability   + 0.10*pdr   (+0.10 charging)
+///
+/// Fully decentralised: no leader, no Raft. Each node self-scores, gossips the
+/// score in its OGM, and self-promotes when it is in the top 20 % of the scores
+/// it has heard from its 1-hop neighbourhood.
+library;
+
+import 'dart:math' as math;
+
+import 'rf.dart';
+import 'types.dart';
+
+class Weights {
+  const Weights();
+
+  final double peers = 0.30;
+  final double rssi = 0.25;
+  final double battery = 0.20;
+  final double stability = 0.15;
+  final double pdr = 0.10;
+}
+
+const Weights weights = Weights();
+
+const double chargingBonus = 0.10;
+const double batteryFloor = 0.25;
+const int minPeers = 3;
+const double superPromoteThreshold = 0.60;
+const double superDemoteThreshold = 0.50;
+const double topPercent = 0.20;
+
+/// docs/03 §5: "at most 1 SUPER per ~30 m radius ... RSSI > -60 (very close)".
+///
+/// Those two numbers only agree for the doc's original tx-power assumption. With
+/// the calibrated radio used here (-55 dBm at 1 m) a hard-coded -60 dBm would
+/// mean "~3 m", silently disabling the guard. The threshold is therefore derived
+/// from the RF parameters so it keeps its documented *physical* meaning.
+const double proximityRadiusM = 30;
+
+double proximityRssiThreshold(RfParams rf) =>
+    rf.txPowerDbm - 20 * (math.log(proximityRadiusM) / 2.302585092994046);
+
+const double proximityScoreMargin = 0.10;
+const int demoteCycles = 2;
+
+/// tq below this makes a route unusable, so the router falls back to flood.
+const double tqUsable = 0.60;
+const int tqWindow = 32;
+
+/// Bound on the number of (originator, neighbour) receipt windows one node
+/// keeps. docs/03 §7 promises O(n) memory with n = nodes known, and per-link
+/// history is O(n x neighbours); this is the hard stop, and [pruneStaleEntries]
+/// evicts in insertion order so both language engines evict identically.
+const int tqPairMax = 2048;
+
+/// Bound on the neighbour list carried in an OGM.
+///
+/// OLSR HELLOs advertise the full 1-hop set. The cap must sit above the peer
+/// count a scenario can actually produce, or the coverage gate can never be
+/// satisfied and nothing is ever suppressed: at 12 entries a 60-node crowd with
+/// 15-18 peers each truncated its advertisement, suppression collapsed from
+/// 1772 to 110 and overhead went *up*. 30 matches the "local sort, k <= 30"
+/// budget docs/03 §3 sets. A real deployment advertises 2-byte aliases, so 30
+/// neighbours cost ~60 B per beacon.
+const int mprNeighborAdvertiseLimit = 30;
+
+/// Fan-out cap for the MPR fallback **at density only** — when a node has more peers
+/// than one beacon can advertise, it cannot know who is covered, so it must forward,
+/// but forwarding to all of them is an epidemic (docs/06 §15: one 3-hop delivery
+/// costing 7,038 transmissions at 200 nodes in a 100×100 m area, where each node
+/// hears ~179 of the other 199). A K-ary fan-out still covers a homogeneous dense
+/// world in log_K(N) hops, because every relay's peers are everyone's peers.
+///
+/// Below the advertise limit the peer list is complete and the coverage answer is
+/// exact, so the cap never applies: campus_quad peaks at 12 peers and
+/// festival_crowd at 24, and neither changes by one transmission.
+const int denseFallbackFanout = 6;
+const double neighborScoreTtlMs = 30000;
+
+/// Entries advertised in an OGM so peers can learn routes to non-neighbours.
+const int _bestHopAdvertiseLimit = 8;
+
+/// Normalise a peer count. [observedMax] is 0 for the shipped fixed denominator of 50; a
+/// positive value switches to the largest peer count this node has heard, which is what
+/// `PeerNorm.observed` asks for (docs/06 §18.4). Clamped so the term can never exceed 1: the
+/// denominator is at least the node's own count.
+double _normPeers(int count, [int observedMax = 0]) {
+  final denom = observedMax > 0 ? math.max(observedMax, count) : 50;
+  return math.log(1 + count) / math.log(1 + denom);
+}
+
+double computeScore(MeshNode node, List<MeshNode> allNodes, RfParams rf,
+    [int observedMax = 0]) {
+  final peers = peersInRange(node, allNodes, rf);
+  final peerCount = peers.length;
+  if (peerCount == 0) return 0;
+  if (node.battery < batteryFloor) return 0;
+
+  var rssiSum = 0.0;
+  for (final p in peers) {
+    rssiSum += rssiModel(node, p, rf);
+  }
+  final r = normRssi(rssiSum / peerCount);
+  final n = _normPeers(peerCount, observedMax);
+  final b = node.battery;
+  final s = math.min(node.uptimeMin / 60, 1.0) * (1 - node.mobility);
+  final q = node.pdr;
+
+  var score = weights.peers * n +
+      weights.rssi * r +
+      weights.battery * b +
+      weights.stability * s +
+      weights.pdr * q;
+
+  if (node.charging) score += chargingBonus;
+  return math.min(1.0, score);
+}
+
+Ogm buildOgm(MeshNode node, [int hopCount = 0]) {
+  final bestHopTo = <NodeId, int>{};
+  // Advertise only routes backed by direct evidence from the destination itself
+  // (lastSeq > 0 means we have heard that originator's own beacon). Advertising
+  // bootstrapped, second-hand entries would let a dead destination stay routable
+  // forever: prune deletes it, a neighbour re-advertises it, it is recreated
+  // with a fresh timestamp, and the 30 s soft-state expiry can never converge.
+  final entries = node.nextHopTable.entries
+      .where((e) => e.value.tq >= tqUsable && e.value.lastSeq > 0)
+      .toList()
+    ..sort((a, b) {
+      final byHop = a.value.hopCount.compareTo(b.value.hopCount);
+      return byHop != 0 ? byHop : a.key.compareTo(b.key);
+    });
+  for (final e in entries.take(_bestHopAdvertiseLimit)) {
+    bestHopTo[e.key] = e.value.hopCount;
+  }
+  return Ogm(
+    nodeId: node.id,
+    seq: node.seq,
+    score: node.score,
+    isSuper: node.role == Role.superNode,
+    peerCount: node.peerCount,
+    batteryBucket: (node.battery * 10).floor(),
+    declinedRouter: node.superOptOut || node.batterySaver,
+    bestHopTo: bestHopTo,
+    hopCount: hopCount,
+    neighborIds: node.peerIds.take(mprNeighborAdvertiseLimit).toList(),
+  );
+}
+
+/// Minimal relay set covering this node's 2-hop neighbourhood — the MPR
+/// selection OLSR defines and docs/03 §1 asks Duman to borrow ("each node picks
+/// minimal relays covering 2-hop neighbors").
+///
+/// Greedy set cover over the advertised neighbour lists: repeatedly take the
+/// neighbour covering the most still-uncovered 2-hop nodes, preferring SUPERs,
+/// then better tq, then id so the result is deterministic. O(k^2) with k <= 30,
+/// the "no Dijkstra on phones, just local sort" budget docs/03 §3 sets.
+/// [allNodes] and [preferCommunity] are optional so every existing call site keeps working.
+/// With `preferCommunity`, a plugged and stationary peer wins an equal-coverage tie against a
+/// phone: the relay work is the same either way, but one of them is running on somebody's
+/// battery (roadmap Phase 5, docs/06 §19.5). A real deployment has to learn those two bits
+/// from the beacon rather than from a node table — `declinedRouter` is already advertised for
+/// exactly this kind of decision.
+List<NodeId> selectMprSet(MeshNode node,
+    [List<MeshNode> allNodes = const <MeshNode>[], bool preferCommunity = false]) {
+  final peers = node.peerIds;
+  final community = <NodeId>{};
+  if (preferCommunity) {
+    for (final n in allNodes) {
+      if (isCommunityRelay(n)) community.add(n.id);
+    }
+  }
+  final direct = peers.toSet();
+  final uncovered = <NodeId>{};
+  for (final p in peers) {
+    for (final q in node.twoHopView[p] ?? const <NodeId>[]) {
+      if (q != node.id && !direct.contains(q)) uncovered.add(q);
+    }
+  }
+
+  final selected = <NodeId>[];
+  while (uncovered.isNotEmpty) {
+    NodeId? best;
+    var bestGain = 0;
+    var bestSuper = false;
+    var bestCommunity = false;
+    var bestTq = -1.0;
+    for (final p in peers) {
+      if (selected.contains(p)) continue;
+      var gain = 0;
+      for (final q in node.twoHopView[p] ?? const <NodeId>[]) {
+        if (uncovered.contains(q)) gain++;
+      }
+      if (gain == 0) continue;
+      final isSuper = node.ogmTable[p]?.isSuper ?? false;
+      final isCommunity = community.contains(p);
+      final tq = node.nextHopTable[p]?.tq ?? 0.0;
+      final better = gain > bestGain ||
+          (gain == bestGain && isCommunity && !bestCommunity) ||
+          (gain == bestGain && isCommunity == bestCommunity && isSuper && !bestSuper) ||
+          (gain == bestGain &&
+              isCommunity == bestCommunity &&
+              isSuper == bestSuper &&
+              tq > bestTq) ||
+          (gain == bestGain &&
+              isCommunity == bestCommunity &&
+              isSuper == bestSuper &&
+              tq == bestTq &&
+              (best == null || p.compareTo(best) < 0));
+      if (better) {
+        best = p;
+        bestGain = gain;
+        bestSuper = isSuper;
+        bestCommunity = isCommunity;
+        bestTq = tq;
+      }
+    }
+    if (best == null) break; // nobody advertises the remainder
+    selected.add(best);
+    for (final q in node.twoHopView[best] ?? const <NodeId>[]) {
+      uncovered.remove(q);
+    }
+  }
+  return selected;
+}
+
+/// Do the neighbours this node heard the message from cover all of its own
+/// 1-hop neighbours? If yes, staying quiet is safe. If no, there is a coverage
+/// hole and this node must forward — the check whose absence made the
+/// doc-literal "heard a SUPER" rule lose 16-29 points of delivery in crowds.
+bool relaysCoverPeers(MeshNode node, String key) {
+  final relays = node.heardRelays[key];
+  if (relays == null || relays.isEmpty) return false;
+  final covered = relays.toSet();
+  for (final r in relays) {
+    covered.addAll(node.twoHopView[r] ?? const <NodeId>[]);
+  }
+  for (final p in node.peerIds) {
+    if (!covered.contains(p)) return false;
+  }
+  return true;
+}
+
+/// Key for one link's receipt history: `'originator|neighbour'`.
+String tqPairKey(NodeId originator, NodeId via) => '$originator|$via';
+
+/// Ratio of received to expected OGMs over the window; 0 when there is none.
+double tqOfWindow(List<int> window) {
+  if (window.isEmpty) return 0.0;
+  return window.fold<int>(0, (s, v) => s + v) / window.length;
+}
+
+/// Records one OGM receipt against the link that delivered it and returns that
+/// link's window.
+///
+/// Missing sequence numbers between two receipts over the *same* neighbour are
+/// the "OGMs expected" half of docs/03 §7, so they are recorded as zeros. A copy
+/// that arrives over a different neighbour is evidence about that other link and
+/// must not disturb this one.
+TqWindow recordTqSample(
+    MeshNode node, NodeId originator, NodeId via, int seq) {
+  final key = tqPairKey(originator, via);
+  final existing = node.tqWindows[key];
+  if (existing == null) {
+    // First copy over this link: there is no way to know how many were missed
+    // before it, so start optimistic and let the gaps pull it down, exactly as
+    // BATMAN's tq does for a newly discovered neighbour.
+    final created = TqWindow(lastSeq: seq, window: <int>[1]);
+    node.tqWindows[key] = created;
+    return created;
+  }
+  if (seq > existing.lastSeq) {
+    final gap = seq - existing.lastSeq;
+    final zeros = math.min(gap, tqWindow);
+    for (var i = 1; i < zeros; i++) {
+      existing.window.add(0);
+    }
+    existing.window.add(1);
+    if (existing.window.length > tqWindow) {
+      existing.window = existing.window.sublist(existing.window.length - tqWindow);
+    }
+    existing.lastSeq = seq;
+  }
+  return existing;
+}
+
+/// The receipt window for one link, or null if that link has no history.
+TqWindow? tqWindowFor(MeshNode node, NodeId originator, NodeId via) =>
+    node.tqWindows[tqPairKey(originator, via)];
+
+/// Consume one OGM copy. [via] is the neighbour that handed it over and [nowMs]
+/// is *simulation* time. Returns true when this node should gossip the beacon
+/// onward (BATMAN re-broadcasts OGMs so every node builds a best-next-hop table
+/// for the whole mesh — without this, routes only ever exist for direct
+/// neighbours and multi-hop unicast is impossible).
+bool receiveOgm(MeshNode node, Ogm ogm, NodeId via, double nowMs) {
+  if (ogm.nodeId == node.id) return false;
+
+  final existing = node.ogmTable[ogm.nodeId];
+  final isNewer = existing == null || ogm.seq > existing.seq;
+  if (isNewer) node.ogmTable[ogm.nodeId] = ogm;
+  node.neighborScores[ogm.nodeId] = ogm.score;
+
+  // A beacon heard straight from its originator (hopCount 0) tells us that
+  // originator's own neighbour list, which is what MPR coverage is computed
+  // from. Gossiped copies describe a node that may be several hops away, so they
+  // must not populate the 2-hop view.
+  if (ogm.hopCount == 0 && via == ogm.nodeId) {
+    node.twoHopView[ogm.nodeId] = List<NodeId>.of(ogm.neighborIds);
+  }
+
+  final prev = node.nextHopTable[ogm.nodeId];
+  final hopCount = ogm.hopCount + 1;
+
+  // Link transmit quality over a sliding window of tqWindow OGM intervals,
+  // tracked per (originator, neighbour) pair rather than per route entry.
+  //
+  // Keying it on the entry instead means a duplicate copy that arrives over a
+  // longer path destroys the history of a perfect direct link: the copy is not
+  // newer, so no sample is recorded, yet the window is thrown away because it
+  // came from a different neighbour and tq collapses to 0. Gossiped duplicates
+  // always land after the direct copy, so the zero was the steady state — the
+  // 20-node quad measured tq 0.11 for direct neighbours whose real receipt rate
+  // was ~0.8, the window never grew past one sample, and getNextHop's
+  // tq > 0.6 gate rejected almost every route (docs/06 §6).
+  final sample = recordTqSample(node, ogm.nodeId, via, ogm.seq);
+  final sampleTq = tqOfWindow(sample.window);
+
+  // Fewest hops wins, ties go to the better link. Whichever copy arrives last,
+  // the entry reports the window of the neighbour it actually routes through.
+  final betterHop = prev == null ||
+      hopCount < prev.hopCount ||
+      (hopCount == prev.hopCount && sampleTq > prev.tq);
+  // lastSeq is the highest sequence number heard from this originator. Entries
+  // bootstrapped second-hand from a neighbour's bestHopTo never see one, which
+  // is how buildOgm tells "I have heard this node's beacon" from "someone
+  // mentioned it" — see the note there on why that keeps dead routes mortal.
+  //
+  // The explicit null check below looks redundant next to `betterHop`, but it is
+  // what promotes `prev` to non-null in the else branch.
+  if (prev == null || betterHop) {
+    node.nextHopTable[ogm.nodeId] = NextHopEntry(
+      bestNeighbor: via,
+      tq: sampleTq,
+      lastSeq: math.max(prev == null ? 0 : prev.lastSeq, ogm.seq),
+      hopCount: hopCount,
+      lastSeen: nowMs,
+      window: List<int>.of(sample.window),
+      windowNeighbor: via,
+    );
+  } else {
+    // Not a better path, so keep routing through the neighbour already chosen —
+    // but re-read that link's own history, which is what keeps the entry's tq
+    // honest while duplicates of the same beacon arrive over other paths.
+    final best = tqWindowFor(node, ogm.nodeId, prev.bestNeighbor) ?? sample;
+    node.nextHopTable[ogm.nodeId] = NextHopEntry(
+      bestNeighbor: prev.bestNeighbor,
+      tq: tqOfWindow(best.window),
+      lastSeq: math.max(prev.lastSeq, ogm.seq),
+      hopCount: prev.hopCount,
+      lastSeen: nowMs,
+      window: List<int>.of(best.window),
+      windowNeighbor: prev.bestNeighbor,
+    );
+  }
+
+  // Bootstrap from routes the originator advertises (second-hand reachability).
+  //
+  // This only ever *creates* an entry — see buildOgm for why refreshing one
+  // here would make stale routes immortal.
+  // The only link this second-hand route can be judged on is the one to the
+  // neighbour that told us about it: nothing about `dest`'s own beacon has been
+  // heard, so lastSeq stays 0 and buildOgm will not pass the rumour on.
+  final linkToVia = tqWindowFor(node, via, via) ?? sample;
+  ogm.bestHopTo.forEach((dest, advertised) {
+    if (dest == node.id) return;
+    if (node.nextHopTable.containsKey(dest)) return;
+    node.nextHopTable[dest] = NextHopEntry(
+      bestNeighbor: via,
+      tq: tqOfWindow(linkToVia.window),
+      lastSeq: 0,
+      hopCount: advertised + hopCount,
+      lastSeen: nowMs,
+      window: List<int>.of(linkToVia.window),
+      windowNeighbor: via,
+    );
+  });
+
+  return isNewer;
+}
+
+/// The OGM payload to gossip onward, or null when the beacon budget is spent.
+Ogm? ogmToGossip(Ogm ogm, int ogmTtl) {
+  if (ogm.hopCount + 1 >= ogmTtl) return null;
+  return ogm.copyWith(hopCount: ogm.hopCount + 1);
+}
+
+class ElectionOutcome {
+  const ElectionOutcome(this.role, this.reason);
+
+  final Role role;
+  final String reason;
+}
+
+String _pct(double v) => (v * 100).toStringAsFixed(0);
+
+/// Role decision with hysteresis and the SUPER proximity guard (docs/03 §3, §5).
+/// Pure apart from the demote counter, which is the hysteresis state itself.
+/// A community relay: plugged in and not moving, which is what "keep Duman running on the
+/// café's tablet" means in the model (roadmap Phase 5, docs/06 §19). Both flags are already
+/// read by the coverage score — `charging` for the +0.10 bonus, `stationary` for the
+/// stability term — so this adds no new state, only a name for the combination.
+bool isCommunityRelay(MeshNode node) => node.charging && node.stationary;
+
+/// [communityRelayQuota] reserves that share of the top-20% cap for community relays; a
+/// value of 1 or more exempts them from the cap altogether. It ships at 0 because the
+/// mechanism it was proposed for is not the one operating: a tablet that fails to be
+/// elected lost to other tablets, not to phones (docs/06 §19.4).
+ElectionOutcome electRole(MeshNode node, List<MeshNode> allNodes, RfParams rf,
+    [double communityRelayQuota = 0]) {
+  // skills/02 acceptance: "SUPER opt-out respected; NORMAL never auto-promoted
+  // if battery saver on". Both are explicit user or OS intent, so they are
+  // checked before any scoring and demote immediately rather than waiting out
+  // the two-cycle hysteresis below — hysteresis exists to damp score noise, and
+  // a toggle is not noise.
+  if (node.superOptOut) {
+    node.demoteCounter = 0;
+    return ElectionOutcome(
+        Role.normal, 'SUPER opt-out: user declined the router role');
+  }
+  if (node.batterySaver) {
+    node.demoteCounter = 0;
+    return ElectionOutcome(
+        Role.normal, 'Battery saver on: never auto-promoted');
+  }
+
+  final peers = peersInRange(node, allNodes, rf);
+  if (peers.length < minPeers) {
+    node.demoteCounter = 0;
+    return ElectionOutcome(
+        Role.normal, 'Too few peers (${peers.length}<$minPeers) for SUPER role');
+  }
+  if (node.battery < batteryFloor) {
+    node.demoteCounter = 0;
+    return ElectionOutcome(
+        Role.normal, 'Battery ${_pct(node.battery)}% below 25% threshold');
+  }
+
+  // Rank against self + the 1-hop neighbourhood scores heard in OGMs. Peers
+  // that have declined the router role are not candidates: counting them would
+  // burn top-20% slots on nodes that can never promote, so a crowd of opt-outs
+  // would leave the mesh with too few SUPERs to cover it (skills/02's 15-25%).
+  final candidates = <({double score, bool community})>[
+    (score: node.score, community: isCommunityRelay(node)),
+  ];
+  for (final p in peers) {
+    final heard = node.ogmTable[p.id];
+    final declined =
+        heard != null ? heard.declinedRouter : (p.superOptOut || p.batterySaver);
+    if (declined) continue;
+    candidates.add(
+        (score: heard != null ? heard.score : p.score, community: isCommunityRelay(p)));
+  }
+  final scores = candidates.map((c) => c.score).toList();
+  final strictlyBetter = scores.where((s) => s > node.score).length;
+  final top20Count = math.max(1, (scores.length * topPercent).ceil());
+  var inTop20 = strictlyBetter < top20Count;
+  if (communityRelayQuota >= 1 && isCommunityRelay(node)) {
+    // A quota of 1 or more means the cap does not bind a community relay: it still has to
+    // clear the promote threshold and the 30 m proximity guard below, but it does not have
+    // to beat its neighbours.
+    inTop20 = true;
+  } else if (communityRelayQuota > 0) {
+    // Split the cap rather than widen it: `reserved` slots are competed for by community
+    // relays only and the rest by everybody, so a plugged tablet displaces a
+    // battery-powered router instead of adding to the elected set. Reserved slots that no
+    // community relay can fill fall back to the open competition, and with no community
+    // relays in range at all the reserved count is zero and this is the unmodified rule.
+    final communityCount = candidates.where((c) => c.community).length;
+    final reserved =
+        math.min((top20Count * communityRelayQuota).floor(), communityCount);
+    final open = top20Count - reserved;
+    final betterCommunity =
+        candidates.where((c) => c.community && c.score > node.score).length;
+    final betterOpen =
+        candidates.where((c) => !c.community && c.score > node.score).length;
+    inTop20 = candidates[0].community
+        ? betterCommunity < reserved || strictlyBetter < top20Count
+        : betterOpen < open;
+  }
+  final rankLabel = '${strictlyBetter + 1}/${scores.length}';
+
+  final shouldBeSuper = node.score > superPromoteThreshold && inTop20;
+  final shouldDemote = node.score < superDemoteThreshold;
+
+  // Proximity guard: at most one SUPER per ~30 m. A clearly better SUPER that is
+  // very close wins, and the lower scorer backs off.
+  MeshNode? blockingSuper;
+  final threshold = proximityRssiThreshold(rf);
+  for (final p in peers) {
+    if (p.role == Role.superNode &&
+        p.score > node.score + proximityScoreMargin &&
+        rssiModel(node, p, rf) > threshold) {
+      blockingSuper = p;
+      break;
+    }
+  }
+
+  if (shouldBeSuper && blockingSuper == null) {
+    node.demoteCounter = 0;
+    if (node.role != Role.superNode) {
+      return ElectionOutcome(
+          Role.superNode,
+          'Promoted: score ${node.score.toStringAsFixed(2)}, rank $rankLabel, '
+              '${peers.length} peers, battery ${_pct(node.battery)}%');
+    }
+    return ElectionOutcome(Role.superNode,
+        'SUPER: score ${node.score.toStringAsFixed(2)}, ${peers.length} peers');
+  }
+
+  if (shouldDemote && node.role == Role.superNode) {
+    node.demoteCounter++;
+    if (node.demoteCounter >= demoteCycles) {
+      node.demoteCounter = 0;
+      return ElectionOutcome(
+          Role.normal,
+          'Demoted: score ${node.score.toStringAsFixed(2)} < '
+              '$superDemoteThreshold for $demoteCycles cycles');
+    }
+    return ElectionOutcome(Role.superNode,
+        'SUPER (pending demote ${node.demoteCounter}/$demoteCycles)');
+  }
+
+  if (blockingSuper != null && node.role == Role.superNode) {
+    node.demoteCounter = 0;
+    return ElectionOutcome(Role.normal,
+        'Backed off: SUPER ${blockingSuper.id} closer and better scored');
+  }
+
+  node.demoteCounter = 0;
+  return ElectionOutcome(Role.normal,
+      'NORMAL: score ${node.score.toStringAsFixed(2)}, rank $rankLabel');
+}
+
+/// Drop routes and scores that have not been refreshed (soft state, docs/05 §1.4).
+void pruneStaleEntries(MeshNode node, double nowMs, double maxAgeMs) {
+  // Drop 2-hop views for nodes that are no longer direct neighbours.
+  final peers = node.peerIds.toSet();
+  node.twoHopView.removeWhere((id, _) => !peers.contains(id));
+  node.nextHopTable.removeWhere((_, e) => nowMs - e.lastSeen > maxAgeMs);
+  // Receipt windows are keyed by the neighbour that delivered them: a neighbour
+  // we can no longer hear is not a candidate next hop, and an originator whose
+  // route entry just expired is not worth measuring either.
+  node.tqWindows.removeWhere((key, _) {
+    final sep = key.lastIndexOf('|');
+    final originator = key.substring(0, sep);
+    final via = key.substring(sep + 1);
+    return !peers.contains(via) || !node.nextHopTable.containsKey(originator);
+  });
+  while (node.tqWindows.length > tqPairMax) {
+    node.tqWindows.remove(node.tqWindows.keys.first);
+  }
+  final orphaned = node.ogmTable.keys
+      .where((id) => !node.nextHopTable.containsKey(id))
+      .toList();
+  for (final id in orphaned) {
+    node.ogmTable.remove(id);
+    node.neighborScores.remove(id);
+  }
+}
+
+NodeId? getNextHop(MeshNode node, NodeId dest) {
+  final entry = node.nextHopTable[dest];
+  if (entry != null && entry.tq >= tqUsable) return entry.bestNeighbor;
+  return null;
+}

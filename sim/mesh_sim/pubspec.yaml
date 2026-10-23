@@ -1,0 +1,15 @@
+name: duman_mesh_sim
+description: >-
+  Duman Messenger mesh simulator — BATMAN-lite super-node election, MPR flood
+  suppression and Spray-and-Wait DTN over a discrete-event radio model. This is
+  the authoritative engine the roadmap calls for (roadmap/roadmap.md W27-28,
+  skills/08-qa-simulator.skill.md); the TypeScript simulator under ../../src is
+  the visual reference and shares its golden vectors.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.4.0
+
+dev_dependencies:
+  test: ^1.25.0

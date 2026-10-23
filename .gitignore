@@ -12,3 +12,13 @@ vitest.config.cjs.timestamp-*.mjs
 vitest.config.ts.timestamp-*.mjs
 vitest.config.mts.timestamp-*.mjs
 vitest.config.cts.timestamp-*.mjs
+
+# build artifacts
+dist/
+*.tsbuildinfo
+tool/.build/
+
+# dart
+sim/mesh_sim/.dart_tool/
+sim/mesh_sim/pubspec.lock
+sim/mesh_sim/build/

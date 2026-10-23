@@ -1,0 +1,322 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  web:
+    name: TypeScript engine + React simulator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit -p tsconfig.json
+
+      # Includes the skills/02 + skills/08 acceptance criteria and the golden
+      # vectors that the Dart job asserts against too.
+      - name: Unit + acceptance tests
+        run: npm test
+
+      - name: Golden vectors are up to date
+        run: |
+          npm run golden
+          if ! git diff --quiet -- test-fixtures/golden-vectors.json; then
+            echo "::error::test-fixtures/golden-vectors.json is stale. Run 'npm run golden' and commit the result."
+            git diff --stat -- test-fixtures/golden-vectors.json
+            exit 1
+          fi
+
+      - name: Production build
+        run: npm run build
+
+  dart:
+    name: Dart mesh_sim (authoritative engine)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sim/mesh_sim
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - run: dart pub get
+
+      # All three steps below run unconditionally and capture their output, so a
+      # single red build reports the analyzer, the test failures *and* the CLI
+      # metrics instead of stopping at the first one. "Publish diagnostics" then
+      # republishes that output as annotations (with real file paths, which the
+      # runner's generic problem matcher loses) and as the job summary, and
+      # "Gate" turns any non-success outcome back into a failed job.
+      #
+      # Errors and warnings fail the build; infos do not. `dart format` is left
+      # to contributors because the sandbox that produced this port has no Dart
+      # SDK, so formatting could not be verified here.
+      - name: Analyze
+        id: analyze
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          dart analyze 2>&1 | tee /tmp/dart-analyze.txt
+
+      # Fails if the Dart engine drifts from the TypeScript reference.
+      - name: Tests (incl. cross-language golden vectors)
+        id: test
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          dart test --reporter expanded 2>&1 | tee /tmp/dart-test.txt
+
+      - name: CLI acceptance run
+        id: cli
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 2>&1 |
+            tee /tmp/dart-cli.txt
+
+      - name: Publish diagnostics
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os, re
+
+          SUMMARY = os.environ.get("GITHUB_STEP_SUMMARY") or os.devnull
+          MAX_ANALYZE_ANNOTATIONS = 20
+          MAX_TEST_ANNOTATIONS = 20
+
+
+          def read(path):
+              try:
+                  with open(path, encoding="utf-8", errors="replace") as handle:
+                      return handle.read().strip()
+              except OSError:
+                  return "(no output captured)"
+
+
+          def escape(text):
+              return (text.replace("%", "%25")
+                          .replace("\r", "%0D")
+                          .replace("\n", "%0A"))
+
+
+          def clip(text, limit=1200):
+              text = text.strip()
+              return text if len(text) <= limit else text[:limit] + " …(clipped)"
+
+
+          def analyze_issues(text):
+              """Parse `dart analyze` lines of the form
+              '<severity> • <field> • <field> • <code>'. Which field holds the location
+              differs between SDK versions, so pick the one that ends in :line:col."""
+              issues = []
+              for line in text.splitlines():
+                  parts = [p.strip() for p in line.split(" • ")]
+                  if len(parts) < 3 or parts[0] not in ("error", "warning", "info"):
+                      continue
+                  loc = next((p for p in parts if re.search(r":\d+:\d+$", p)), None)
+                  if loc is None:
+                      continue
+                  path, line_no, col = loc.rsplit(":", 2)
+                  rest = [p for p in parts[1:] if p != loc]
+                  code = rest[-1] if rest else ""
+                  message = " • ".join(rest[:-1]) if len(rest) > 1 else code
+                  issues.append((parts[0], path, line_no, col, code, message))
+              return issues
+
+
+          def test_failures(text):
+              """Group the expanded reporter's output into one entry per failing test.
+
+              A failure starts at '<mm:ss> +n -m: <name> [E]' and runs until the next
+              timestamped line; the first 'file.dart line:col' frame gives the location.
+              """
+              failures, current = [], None
+              for line in text.splitlines():
+                  header = re.match(r"^\d{2}:\d{2} \+\d+(?: -\d+)?: (.*?) \[E\]\s*$", line)
+                  if header:
+                      if current:
+                          failures.append(current)
+                      current = {"name": header.group(1), "detail": []}
+                      continue
+                  if current is None:
+                      continue
+                  if re.match(r"^\d{2}:\d{2} \+\d+", line):
+                      failures.append(current)
+                      current = None
+                      continue
+                  current["detail"].append(line)
+              if current:
+                  failures.append(current)
+
+              located = []
+              for failure in failures:
+                  detail = failure["detail"]
+                  frame = next((re.match(r"^\s*((?:test|lib|bin)/\S+\.dart) (\d+):(\d+)", l)
+                                for l in detail
+                                if re.match(r"^\s*((?:test|lib|bin)/\S+\.dart) (\d+):(\d+)", l)), None)
+                  body = [l for l in detail if not re.match(r"^\s*\S+\.dart \d+:\d+\s", l)]
+                  located.append({
+                      "name": failure["name"],
+                      "path": frame.group(1) if frame else None,
+                      "line": frame.group(2) if frame else None,
+                      "col": frame.group(3) if frame else None,
+                      "message": clip("\n".join(body).strip() or "(no detail captured)"),
+                  })
+              return located
+
+
+          def failing_test_text(text):
+              failures = test_failures(text)
+              if not failures:
+                  return "(no test failures in the captured output)"
+              out = []
+              for f in failures:
+                  where = "%s:%s:%s" % (f["path"], f["line"], f["col"]) if f["path"] else "location unknown"
+                  out.append("%s\n  at %s\n%s" % (f["name"], where, f["message"]))
+              return "\n\n".join(out)
+
+
+          analyze_out = read("/tmp/dart-analyze.txt")
+          test_out = read("/tmp/dart-test.txt")
+          cli_out = read("/tmp/dart-cli.txt")
+
+          emitted = 0
+          for severity, path, line_no, col, code, message in analyze_issues(analyze_out):
+              if emitted >= MAX_ANALYZE_ANNOTATIONS:
+                  print("::warning::More analyzer issues than fit the annotation budget "
+                        "— see the job summary.")
+                  break
+              level = "notice" if severity == "info" else severity
+              print("::%s file=%s,line=%s,col=%s,title=dart analyze: %s::%s"
+                    % (level, path, line_no, col, code or severity, escape(message)))
+              emitted += 1
+
+          emitted = 0
+          for failure in test_failures(test_out):
+              if emitted >= MAX_TEST_ANNOTATIONS:
+                  print("::warning::More failing tests than fit the annotation budget "
+                        "— see the job summary.")
+                  break
+              location = ""
+              if failure["path"]:
+                  location = " file=%s,line=%s,col=%s" % (failure["path"], failure["line"],
+                                                          failure["col"])
+              print("::error%s,title=dart test: %s::%s"
+                    % (location, escape(clip(failure["name"], 200)), escape(failure["message"])))
+              emitted += 1
+
+          tail = "\n".join(test_out.splitlines()[-25:]) or test_out
+          with open(SUMMARY, "a", encoding="utf-8") as summary:
+              summary.write("### dart analyze\n\n```\n%s\n```\n\n" % analyze_out)
+              summary.write("### dart test — failures\n\n```\n%s\n```\n\n"
+                            % failing_test_text(test_out))
+              summary.write("### dart test — tail\n\n```\n%s\n```\n\n" % tail)
+              summary.write("### CLI acceptance (campus_quad, seed 42)\n\n```\n%s\n```\n"
+                            % cli_out)
+          PY
+
+      - name: Gate
+        if: always()
+        run: |
+          if [ "${{ steps.analyze.outcome }}" != "success" ] ||
+             [ "${{ steps.test.outcome }}" != "success" ] ||
+             [ "${{ steps.cli.outcome }}" != "success" ]; then
+            echo "::error::Dart engine failed (analyze: ${{ steps.analyze.outcome }}, test: ${{ steps.test.outcome }}, CLI: ${{ steps.cli.outcome }}). Captured output is in the job summary."
+            exit 1
+          fi
+
+  cli-matrix:
+    name: CLI acceptance across scenarios
+    runs-on: ubuntu-latest
+    needs: dart
+    defaults:
+      run:
+        working-directory: sim/mesh_sim
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [campus_quad, sparse_village, festival_crowd, partitioned_pair]
+        power: [always-on, duty-cycle]
+        exclude:
+          # Only campus_quad is gated, so only it earns a second power arm: the
+          # other three run --no-check and would report the same numbers twice
+          # without asserting anything new.
+          - scenario: sparse_village
+            power: duty-cycle
+          - scenario: festival_crowd
+            power: duty-cycle
+          - scenario: partitioned_pair
+            power: duty-cycle
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
+      # The DTN scenarios are deliberately partitioned, so they report metrics
+      # without the connected-world delivery gate. The duty-cycle arm is where
+      # skills/07's "<15% per 8 h" budget is asserted: an always-scanning NORMAL
+      # node measures 18-25% per 8 h once mobility is included (docs/06 §7), so
+      # the sleep slot is load-bearing for that criterion, not a refinement.
+      - name: ${{ matrix.scenario }} (${{ matrix.power }})
+        run: >-
+          dart run bin/mesh_sim.dart --scenario ${{ matrix.scenario }} --seed 42
+          ${{ matrix.power == 'duty-cycle' && '--duty-cycle' || '' }}
+          ${{ matrix.scenario == 'campus_quad' && '' || '--no-check' }}
+
+  probes:
+    name: CLI probes (SOS, groups, media)
+    runs-on: ubuntu-latest
+    needs: dart
+    defaults:
+      run:
+        working-directory: sim/mesh_sim
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
+      # Each probe runs in its own world, so what a mechanism costs is reported
+      # without contaminating the acceptance run's overhead ratio. --no-check
+      # because a probe's numbers are about the mechanism under test, not about
+      # the connected-world delivery gate.
+      - name: SOS flood reach (roadmap Phase 3)
+        run: >-
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --sos
+          --no-check
+
+      - name: Group delivery modes (docs/06 §14)
+        run: >-
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --group 5
+          --no-check
+
+      # Roadmap Phase 1's "CRDT for group/broadcast history (hash beacon
+      # anti-entropy)": a member that missed a whole conversation catches up, and
+      # the same world with repair switched off shows it otherwise would not.
+      - name: Group history anti-entropy (docs/06 §17)
+        run: >-
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --history
+          --no-check
+
+      # The roadmap Phase 3 media exit criteria: a <10 MB image across a Wi-Fi
+      # Direct mesh, and a push-to-talk note that plays in <3 s at one hop and
+      # <8 s at three (docs/08).
+      - name: Media transport and push-to-talk (docs/08)
+        run: >-
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media
+          --no-check

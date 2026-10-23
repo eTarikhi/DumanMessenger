@@ -6,91 +6,96 @@ interface Props {
   onToggleRun: () => void;
   onStep: () => void;
   onReset: () => void;
+  onNewSeed: () => void;
   speed: number;
   onSpeedChange: (s: number) => void;
 }
 
-export function StatsBar({ stats, isRunning, onToggleRun, onStep, onReset, speed, onSpeedChange }: Props) {
-  const fmtPct = (v: number) => `${(v * 100).toFixed(0)}%`;
-  const fmtMs = (v: number) => v < 1000 ? `${v.toFixed(0)}ms` : `${(v / 1000).toFixed(1)}s`;
+function fmtClock(ms: number): string {
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h${String(m).padStart(2, "0")}m`;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+export function StatsBar({
+  stats,
+  isRunning,
+  onToggleRun,
+  onStep,
+  onReset,
+  onNewSeed,
+  speed,
+  onSpeedChange,
+}: Props) {
+  const pct = (v: number) => `${(v * 100).toFixed(0)}%`;
+  const ms = (v: number) => (v < 1000 ? `${v.toFixed(0)}ms` : `${(v / 1000).toFixed(2)}s`);
 
   const cards = [
-    { label: "Tick", value: stats.tick.toString(), color: "#eaf2ff" },
+    { label: "Sim clock", value: fmtClock(stats.simTimeMs), color: "#eaf2ff" },
     { label: "Online", value: `${stats.onlineNodes}`, color: "#4de0ff" },
-    { label: "SUPER Nodes", value: `${stats.superNodes}`, color: "#b6ff4a" },
-    { label: "Avg Score", value: stats.avgScore.toFixed(2), color: "#8b7dff" },
-    { label: "Avg Battery", value: fmtPct(stats.avgBattery), color: stats.avgBattery > 0.4 ? "#b6ff4a" : "#ffb84d" },
-    { label: "Delivered", value: `${stats.totalDelivered}`, color: "#4de0ff" },
-    { label: "Delivery Ratio", value: fmtPct(stats.deliveryRatio), color: stats.deliveryRatio > 0.8 ? "#b6ff4a" : "#ffb84d" },
-    { label: "Overhead", value: `${stats.overheadRatio.toFixed(1)}×`, color: "#ffb84d" },
-    { label: "Avg Latency", value: fmtMs(stats.avgLatencyMs), color: "#eaf2ff" },
+    {
+      label: "SUPER nodes",
+      value: `${stats.superNodes} (${pct(stats.superRatio)})`,
+      color: "#b6ff4a",
+    },
+    { label: "Avg score", value: stats.avgScore.toFixed(2), color: "#8b7dff" },
+    {
+      label: "Avg battery",
+      value: pct(stats.avgBattery),
+      color: stats.avgBattery > 0.4 ? "#b6ff4a" : "#ffb84d",
+    },
+    {
+      label: "Delivery (unicast)",
+      value: `${stats.totalDelivered}/${stats.sentUnicast} · ${pct(stats.deliveryRatio)}`,
+      color: stats.deliveryRatio > 0.8 ? "#b6ff4a" : "#ffb84d",
+    },
+    {
+      label: "Broadcast reach",
+      value: pct(stats.broadcastReach),
+      color: stats.broadcastReach > 0.6 ? "#b6ff4a" : "#ffb84d",
+    },
+    { label: "Relay overhead", value: `${stats.overheadRatio.toFixed(2)}×`, color: "#ffb84d" },
+    { label: "Avg latency", value: ms(stats.avgLatencyMs), color: "#eaf2ff" },
+    { label: "p95 latency", value: ms(stats.p95LatencyMs), color: "#eaf2ff" },
+    { label: "Avg hops", value: stats.avgHops.toFixed(2), color: "#4de0ff" },
+    { label: "MPR suppressed", value: `${stats.mprSuppressed}`, color: "#b6ff4a" },
     { label: "Queued (DTN)", value: `${stats.totalQueued}`, color: "#ff4d6d" },
+    {
+      label: "Role changes",
+      value: `${stats.roleChangesPerNodeMin.toFixed(2)}/node·min`,
+      color: stats.roleChangesPerNodeMin < 1 ? "#b6ff4a" : "#ff4d6d",
+    },
   ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <button
-          onClick={onToggleRun}
-          style={{
-            padding: "8px 16px",
-            borderRadius: 8,
-            border: "1px solid #1e2a3a",
-            background: isRunning ? "rgba(255,77,109,0.15)" : "rgba(77,224,255,0.15)",
-            color: isRunning ? "#ff4d6d" : "#4de0ff",
-            fontWeight: 700,
-            fontSize: 13,
-            cursor: "pointer",
-          }}
-        >
+      <div className="duman-stats-row" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <button onClick={onToggleRun} style={btn(isRunning ? "#ff4d6d" : "#4de0ff", isRunning)}>
           {isRunning ? "⏸ Pause" : "▶ Run"}
         </button>
-        <button
-          onClick={onStep}
-          style={{
-            padding: "8px 14px",
-            borderRadius: 8,
-            border: "1px solid #1e2a3a",
-            background: "rgba(255,255,255,0.04)",
-            color: "#eaf2ff",
-            fontWeight: 600,
-            fontSize: 13,
-            cursor: "pointer",
-          }}
-        >
-          ⏭ Step
-        </button>
-        <button
-          onClick={onReset}
-          style={{
-            padding: "8px 14px",
-            borderRadius: 8,
-            border: "1px solid #1e2a3a",
-            background: "rgba(255,255,255,0.04)",
-            color: "#eaf2ff",
-            fontWeight: 600,
-            fontSize: 13,
-            cursor: "pointer",
-          }}
-        >
-          ↺ Reset
-        </button>
+        <button onClick={onStep} style={btn("#eaf2ff")}>⏭ Step</button>
+        <button onClick={onReset} style={btn("#eaf2ff")}>↺ Reset</button>
+        <button onClick={onNewSeed} style={btn("#8b7dff")}>🎲 New world</button>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 8 }}>
-          <span style={{ fontSize: 12, color: "#9fb0c3" }}>Speed</span>
+          <label htmlFor="speed" style={{ fontSize: 12, color: "#9fb0c3" }}>Speed</label>
           <input
+            id="speed"
             type="range"
-            min={100}
+            min={50}
             max={2000}
-            step={100}
+            step={50}
             value={speed}
             onChange={(e) => onSpeedChange(Number(e.target.value))}
-            style={{ width: 100 }}
+            style={{ width: 100, accentColor: "#4de0ff" }}
           />
-          <span style={{ fontSize: 12, color: "#9fb0c3" }}>{(1000 / speed).toFixed(1)}fps</span>
+          <span style={{ fontSize: 12, color: "#9fb0c3" }}>{(1000 / speed).toFixed(1)}×</span>
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div className="duman-stats-cards" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {cards.map((c) => (
           <div
             key={c.label}
@@ -99,14 +104,27 @@ export function StatsBar({ stats, isRunning, onToggleRun, onStep, onReset, speed
               borderRadius: 10,
               border: "1px solid #1e2a3a",
               background: "rgba(255,255,255,0.03)",
-              minWidth: 90,
+              minWidth: 96,
             }}
           >
-            <div style={{ fontSize: 18, fontWeight: 800, color: c.color }}>{c.value}</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: c.color }}>{c.value}</div>
             <div style={{ fontSize: 11, color: "#9fb0c3", marginTop: 2 }}>{c.label}</div>
           </div>
         ))}
       </div>
     </div>
   );
+}
+
+function btn(color: string, active = false): React.CSSProperties {
+  return {
+    padding: "8px 14px",
+    borderRadius: 8,
+    border: "1px solid #1e2a3a",
+    background: active ? "rgba(255,77,109,0.15)" : "rgba(255,255,255,0.04)",
+    color,
+    fontWeight: 650,
+    fontSize: 13,
+    cursor: "pointer",
+  };
 }

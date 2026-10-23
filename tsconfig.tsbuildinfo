@@ -1,1 +1,0 @@
-{"root":["./src/App.tsx","./src/election.ts","./src/main.tsx","./src/rf.ts","./src/routing.ts","./src/simulation.ts","./src/types.ts","./src/components/ChatPanel.tsx","./src/components/ConfigPanel.tsx","./src/components/LatencyChart.tsx","./src/components/MeshCanvas.tsx","./src/components/NodeInspector.tsx","./src/components/StatsBar.tsx"],"version":"5.9.3"}

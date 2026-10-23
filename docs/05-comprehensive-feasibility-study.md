@@ -20,6 +20,17 @@ Phones carry three radios relevant to Duman: BLE, Bluetooth Classic, and Wi-Fi (
 | Wi-Fi Direct (2.4 GHz P2P) | 100–200 m | ~200 m | 50–250 Mbps | −20 to −24 log₁₀(d); 5 GHz variant shorter range, higher throughput |
 | Wi-Fi Aware (NAN, Android 26+) | ~100–150 m | ~150 m | Medium (data-path dependent) | Similar to Wi-Fi Direct; no group-owner negotiation overhead |
 
+> **Implementation note (Oct 2026 — `sim/mesh_sim`, evidence in `docs/06-simulator-findings.md`):** the simulator calibrates the BLE row as
+> `rssi = txPower − 20·log₁₀(d) − wallCrossings·wallPenalty` with `txPower = −55 dBm`
+> at 1 m, `rxSensitivity = −85 dBm` and `wallPenalty = 12 dB` (inside the 8-15 dB
+> range above). That yields a **31.6 m** line-of-sight hop — the top of the
+> documented 10-30 m indoor band — and ~18 m through one interior wall.
+> Do not pair `txPower = −30 dBm` with `−85 dBm` sensitivity: it implies a 562 m
+> radio, which is what made the first prototype's 100×100 m world come up
+> disconnected. Packet loss is margin-driven and raised to `p^(linkRetries+1)`,
+> because BLE GATT and Wi-Fi Direct are reliable bearers that retransmit at the
+> link layer before reporting a failure upwards.
+
 **Key constraints:**
 
 - **Range is density-dependent, not guaranteed.** A single hop covers 10–100 m depending on walls, bodies, and RF interference. In a sparse village (<1 device per 50 m), messages stop. Duman is a *crowd network*, not a cellular replacement.
@@ -153,6 +164,8 @@ Duman needs a routing protocol that works on phones: low memory, low CPU, tolera
 Rationale:
 - BATMAN-lite gives the lowest memory footprint (O(n), capped at 200 nodes) and proven resilience to churn without requiring global topology.
 - MPR flood suppression (SUPER nodes relay; NORMAL nodes wait 300 ms and only relay if no SUPER retransmission heard) reduces redundant transmissions by ~30% vs naive flood.
+  - **Measured: 91-93% reduction on the 20-node case** (7-9% of the naive-flood relay budget), so the ~30% target is met with wide margin. But the rule *as phrased* is unsafe — "no SUPER retransmission heard" does not imply this node's neighbours are covered. On a 60-node crowd it cost 16-29 points of delivery. Gating suppression on **coverage** (the neighbours heard from, plus their advertised neighbour lists, must cover all of this node's 1-hop neighbours) reaches delivery **parity with the same engine without suppression** — and within 0-3 points of naive epidemic flooding on the 20-node case, 5-9 points in the 60-node crowd, where naive flooding buys that margin with 7-9× the relays. See `docs/03` §6.
+  - *Composition of that saving, because the headline number flatters MPR:* most of it is the routing layer, not suppression. Holding routing fixed and switching suppression off (`route-flood`) costs 22-41% more relays in the 20-node quad and 50-58% more in the 60-node crowd. Both arms are reported in `docs/06-simulator-findings.md` §2 and §7. Neither was measurable until the per-link tq fix (`docs/06` §6) — with tq collapsing to 0 on every duplicate beacon, routes were rejected and both arms flooded blindly.
 - Spray-and-Wait DTN handles the partition case that pure MANET protocols don't address — messages survive across disconnections.
 
 **Why not OLSR directly:** OLSR's full link-state database is too memory-heavy for phones (49 nodes = ~6.4 KB/s of control traffic over BLE's ~6 kbit/s budget — the control plane alone would saturate the link). BATMAN's ~675 B/s leaves headroom for data.
@@ -260,6 +273,23 @@ Rationale:
 | Image/file (<10 MB) | Wi-Fi Direct only | 250× faster than BLE; auto-reject over BLE-only with "move closer to SUPER" hint |
 | Broadcast SOS | All transports, flood (TTL=5) | Maximize reach; no ACK needed |
 
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/08-media-transport-ptt.md` §2, §8):** the two media rows are now
+> simulated, and the "250× faster than BLE" figure is what pins the model: the engine charges a payload
+> `max(0, bytes − 1024) × 8 / kbps` per hop at `bleKbps = 80` against `wifiDirectKbps = 20000`, which
+> reproduces 250× exactly (a 64 KB slice is 26 ms of air time on Wi-Fi Direct and **6.45 s** on BLE).
+> Measured with that model, a 10 MB image crosses 1/2/3 hops in **7.60 s / 16.88 s / 33.00 s** over
+> Wi-Fi Direct. The auto-reject threshold deserves a second look: at skills/05's 512 B BLE MTU, 5 MB
+> does not finish in 5 simulated minutes on a *one-hop* link (4896 of 10240 chunks) and 10 MB does not
+> finish in 15 — so 5 MB is generous by roughly 5× against any "under a couple of minutes" reading, and
+> ~1 MB is the size that actually behaves.
+
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §11):** TTL=5 is the engine default (`sosTtl`) and SOS floods to every peer at every
+> hop, bypassing MPR and the route table. Two things the row does not say, both measured: *all
+> transports* is one payload on one radio here (SOS uses Wi-Fi Direct, which in this model buys 40 ms
+> per hop instead of 120, not extra reach), and TTL sets the **radius** an SOS can reach — a 60-node
+> crowd is 6+ hops from an edge sender, so that scenario overrides `sosTtl` to 7. Repeating the flood
+> recovers loss and movement, never radius.
+
 ### 3.3 Phased Development Roadmap
 
 #### Phase 0 — Prototyping & Foundations (Weeks 1–4)
@@ -318,6 +348,33 @@ Rationale:
 | Audio pipeline | Opus encoder/decoder, 500 ms frames, 6–12 kbps; PTT UI (hold to record); jitter buffer 200 ms | Flutter + Android engineers |
 | E2EE media | Per-frame nonce encryption over existing Noise session | Crypto engineer |
 | SOS mode | Repeated flood of GPS + text over all transports (TTL=5) | Protocol engineer |
+
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/08-media-transport-ptt.md`):** the file-protocol row is implemented
+> in both engines and measured — 64 KB slices behind a 4-deep sliding window, each slice an ordinary
+> unicast so it inherits ACKs, retransmission and the OppQueue, and a **stall watchdog** that re-sends
+> the slices a stopped window is missing. "Resume on reconnect" needed that watchdog: a slice whose
+> retries run out is carried in an OppQueue and its logical id is never seen again, so without it the
+> window hangs forever. With it, a 10 MB image whose receiver disappears for 20 s at chunk 49 resumes
+> and completes in 45.02 s. "Max 10 MB" is enforced (an 11 MB send is refused and logged).
+>
+> The audio row is half-simulated, deliberately: Opus *framing* is modelled (500 ms frames at
+> `voiceKbps`, a `jitterBufferMs` playout delay, frames leaving at the end of their capture window) and
+> the codec is not, so intelligibility and MOS are out of scope. Two findings from the framing half:
+> **12 kbps is the fastest documented rate that keeps a frame on BLE** — `frameBytes = 500 × kbps / 8`
+> stays under 1024 B up to 16.4 kbps raw, and under the padding model in `docs/07` §4 up to 14.9 kbps,
+> with 12 kbps padding to exactly one 1024 B packet — and the data plane's 4 s ACK timer is **eight
+> voice frames long**, so one lost frame leaves a hole the 200 ms buffer cannot cover. Media retries on
+> a 600 ms timer instead, which cut the worst audio gap from 8.53 s to 1.21 s and underruns from 16 to 7
+> across three seeds. PTT plays in **407 ms at one hop and 1.10 s at three** against the roadmap's
+> <3 s / <8 s. E2EE media is unchanged: a 750 B frame pads to exactly 1024 B, so there is no slack for
+> a per-frame nonce to grow into without changing transport.
+
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §11.1–§11.2):** implemented and measured. Each flood is a *fresh message id* — the
+> seen-cache is keyed on the id, so a repeat that reused one would be dropped by every node that
+> already heard it — tied together by `sosId` and carrying the sender's position at that moment, so a
+> moving sender stays trackable. At TTL 7 in the 60-node crowd, going from 1 flood to 4 takes reach
+> **89.4% → 100.0%**; with link-layer retries disabled in a degraded world it takes it **40.8% → 55.3%
+> → 64.5%** at 1/4/7 floods. Cost is real and tracked: four floods are 3.9× the transmissions of one.
 | Security audit prep | External audit (Cure53-style); panic wipe (one-tap key zeroization) | Crypto engineer + external |
 
 **Exit criteria:** 2 phones exchange image <10 MB over Wi-Fi Direct; PTT Opus note plays in <3 s 1-hop / <8 s 3-hop; SOS reaches all within TTL.
