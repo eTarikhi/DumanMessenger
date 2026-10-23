@@ -61,14 +61,14 @@ next to the positive ones.</p>
 </header>
 
 <div class="grid">
-  <div class="card"><div class="k">TypeScript tests</div><div class="v">235</div><div class="n">engine, components, acceptance</div></div>
-  <div class="card"><div class="k">Dart test cases</div><div class="v">157</div><div class="n">authoritative engine</div></div>
+  <div class="card"><div class="k">TypeScript tests</div><div class="v">276</div><div class="n">engine, components, acceptance</div></div>
+  <div class="card"><div class="k">Dart test cases</div><div class="v">197</div><div class="n">authoritative engine</div></div>
   <div class="card"><div class="k">Cross-language goldens</div><div class="v">byte-identical</div><div class="n">unchanged by every feature added</div></div>
-  <div class="card"><div class="k">Lines added</div><div class="v">+26,434</div><div class="n">75 files, -1,097</div></div>
-  <div class="card"><div class="k">Defects found and fixed</div><div class="v">17</div><div class="n">5 of them in the specs</div></div>
-  <div class="card"><div class="k">Levers measured and rejected</div><div class="v">12</div><div class="n">documented, not shipped</div></div>
-  <div class="card"><div class="k">Evidence documents</div><div class="v">4</div><div class="n">docs/06 &sect;1-19, 07, 08, 09</div></div>
-  <div class="card"><div class="k">Roadmap items closed</div><div class="v">15</div><div class="n">25 dated notes, 29 remain app-side</div></div>
+  <div class="card"><div class="k">Lines added</div><div class="v">+30,228</div><div class="n">77 files, -1,260</div></div>
+  <div class="card"><div class="k">Defects found and fixed</div><div class="v">18</div><div class="n">5 of them in the specs</div></div>
+  <div class="card"><div class="k">Levers measured and rejected</div><div class="v">17</div><div class="n">documented, not shipped</div></div>
+  <div class="card"><div class="k">Evidence documents</div><div class="v">4</div><div class="n">docs/06 &sect;1-20, 07, 08 &sect;1-13, 09</div></div>
+  <div class="card"><div class="k">Roadmap items closed</div><div class="v">16</div><div class="n">26 dated notes, 28 remain app-side</div></div>
 </div>
 
 <h2>1. What this repository is</h2>
@@ -501,6 +501,24 @@ which is which, because a field report has to say which one it is quoting.</p>
 
 <h2>13. Repository inventory</h2>
 <table class=""><thead><tr><th>area</th><th>added lines</th><th>+</th><th>-</th></tr></thead><tbody><tr><td>src/ (TS engine + React visualiser)</td><td><div class="bar"><div class="fill" style="width:100.00%;background:#4de0ff"></div><span class="barlabel">+10,320</span></div></td><td class="num">+10,320</td><td class="num">-1,062</td></tr><tr><td>sim/mesh_sim/ (authoritative Dart)</td><td><div class="bar"><div class="fill" style="width:88.88%;background:#4de0ff"></div><span class="barlabel">+9,172</span></div></td><td class="num">+9,172</td><td class="num">-</td></tr><tr><td>docs/ (findings, E2EE, media, field test)</td><td><div class="bar"><div class="fill" style="width:25.19%;background:#4de0ff"></div><span class="barlabel">+2,600</span></div></td><td class="num">+2,600</td><td class="num">-</td></tr><tr><td>tool/ (golden, media, history, field probes)</td><td><div class="bar"><div class="fill" style="width:14.45%;background:#4de0ff"></div><span class="barlabel">+1,491</span></div></td><td class="num">+1,491</td><td class="num">-</td></tr><tr><td>roadmap/ + skills/ (annotation pass)</td><td><div class="bar"><div class="fill" style="width:3.00%;background:#4de0ff"></div><span class="barlabel">+310</span></div></td><td class="num">+310</td><td class="num">-23</td></tr><tr><td>.github/ (3 jobs + probes job)</td><td><div class="bar"><div class="fill" style="width:3.12%;background:#4de0ff"></div><span class="barlabel">+322</span></div></td><td class="num">+322</td><td class="num">-</td></tr><tr><td>test-fixtures/ (cross-language goldens)</td><td><div class="bar"><div class="fill" style="width:2.68%;background:#4de0ff"></div><span class="barlabel">+277</span></div></td><td class="num">+277</td><td class="num">-</td></tr><tr><td>reports/</td><td><div class="bar"><div class="fill" style="width:2.15%;background:#4de0ff"></div><span class="barlabel">+222</span></div></td><td class="num">+222</td><td class="num">-</td></tr></tbody></table>
+<p><strong>Verification status, and one thing that is not verified.</strong> Everything TypeScript above was
+run: <code>npm test</code> 276 passing, <code>npx tsc --noEmit</code> clean, and <code>npm run golden</code>
+byte-identical after every change. The Dart engine has no compiler in this workspace &mdash; the SDK is not
+installable from here &mdash; so CI was the only thing that ever compiled it, and <strong>GitHub Actions stopped
+running part-way through this session for a billing reason</strong>: every job since <code>8406717</code> reports
+&ldquo;The job was not started because recent account payments have failed or your spending limit needs to be
+increased.&rdquo; Re-running the workflow returns &ldquo;cannot be rerun&rdquo;. That is not a code failure and it is
+not something this branch can fix.</p>
+<p>What it means concretely: <code>sim/mesh_sim/lib/src/transport.dart</code>, <code>test/transport_test.dart</code>
+and the Dart mirror of the capture effect in <code>lib/src/simulation.dart</code>, <code>lib/src/types.dart</code>
+and <code>test/channel_test.dart</code> have never been compiled. They were written against the engine&rsquo;s API by
+reading it, hand-checked for balance, name collisions in every enclosing scope, exhaustiveness of every
+<code>switch</code>, the single <code>SimulationStats</code> construction site, nullable-assignment promotion and
+the lint set in <code>analysis_options.yaml</code> (<code>strict-casts</code>, <code>strict-raw-types</code>,
+<code>unused_import</code> as an error) &mdash; and the equivalent TypeScript mechanism they mirror is measured and
+tested. Two earlier Dart commits in this session did compile and pass on CI before the billing stop, and the
+transport seam passed <code>dart analyze</code> and all 13 of its tests at <code>3c75d77</code>. The capture-effect
+mirror is the part that needs a green run before it should be trusted.</p>
 <h3>Reproducing everything above</h3>
 <pre>npm ci &amp;&amp; npm test                # 276 TypeScript tests
 npm run golden                     # regenerate and diff the cross-language vectors
