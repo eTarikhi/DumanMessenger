@@ -99,7 +99,7 @@ fi
 # --- 2. run the pipeline ------------------------------------------------------
 
 JSON_RECORD="$(mktemp -t ci-result.XXXXXX.json)"
-trap 'rm -f "$JSON_RECORD"' EXIT
+trap 'rm -f "$JSON_RECORD" "${PUSH_LOG:-}"' EXIT
 
 PIPELINE_ARGS=(--json "$JSON_RECORD" --label push)
 [ -n "$FAST_FLAG" ] && PIPELINE_ARGS+=("$FAST_FLAG")
@@ -185,7 +185,18 @@ fi
 
 echo
 log "pushing to $REMOTE/$BRANCH"
-if git -C "$ROOT" push "$REMOTE" "$BRANCH"; then
+# When this script ran *every* job, its pipeline is strictly broader than the pre-push
+# hook's fast subset, so letting the hook run would repeat the same test suite and roughly
+# double the wait for no additional information. A scoped run (--job web) is narrower than
+# the hook, so there the hook still runs and still gets its say.
+PUSH_ARGS=("$REMOTE" "$BRANCH")
+if [ -z "$JOBS" ]; then
+  log_dim "skipping the pre-push hook: this run already covered every job it would have"
+  PUSH_ARGS+=(--no-verify)
+fi
+
+PUSH_LOG="$(mktemp)"
+if git -C "$ROOT" push "${PUSH_ARGS[@]}" 2>&1 | tee "$PUSH_LOG"; then
   # Rewrite the placeholder line with the real outcome. The log is append-only JSON Lines,
   # so this replaces the last line rather than appending a second record for one push.
   if have python3; then
@@ -212,6 +223,18 @@ PY
   log_dim "record: ${LOG_FILE#$ROOT/}"
   log_dim "remote CI will now run the same pipeline. Watch it with: make watch"
   exit 0
+fi
+
+# A pre-push hook that blocks and a remote that rejects both end up here, but they need
+# opposite advice: one is this machine's own gate doing exactly its job, the other is a
+# network or credential problem. Telling someone to reconnect GitHub when their own hook
+# just failed the build sends them debugging the wrong thing for an hour.
+if grep -q "pre-push gate FAILED" "$PUSH_LOG"; then
+  err "push blocked by the local pre-push hook — not by the remote."
+  err "This script verified $VERIFICATION for the jobs it selected, but the hook re-ran"
+  err "the fast subset over every job and that run failed. Its output is above."
+  err "Fix it, or bypass the hook once with: git push --no-verify"
+  exit 3
 fi
 
 err "push failed. The build was verified locally ($VERIFICATION); the remote rejected it."

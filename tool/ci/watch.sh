@@ -202,7 +202,11 @@ if [ "$DIAGNOSE" = 1 ] || [ -n "$RUN_ID" ]; then
 fi
 
 echo
-log "CI · $REPO${SCOPE_BRANCH:+ · branch $BRANCH}"
+if [ "$SCOPE_BRANCH" = 1 ]; then
+  log "CI · $REPO · branch $BRANCH"
+else
+  log "CI · $REPO · all branches"
+fi
 list_runs
 
 NEWEST="$(gh run list "${GH_SCOPE[@]}" --limit 1 \

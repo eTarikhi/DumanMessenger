@@ -324,9 +324,18 @@ job_dart() {
 job_cli_matrix() {
   job_header "cli-matrix — CLI acceptance across scenarios"
   if [ "${JOB_RESULT[dart]:-}" != success ]; then
-    local why="needs: dart (${JOB_RESULT[dart]:-not run})"
+    local dep="${JOB_RESULT[dart]:-not run}"
+    local why="needs: dart ($dep)"
     skip_step _o "cli-matrix (whole job)" "$why"
-    record_job cli-matrix blocked "$why"
+    # A dependency that is *missing* is a toolchain gap, so this job could not run either
+    # and --allow-missing-dart may accept it as partial. A dependency that *failed* is a
+    # red build, and nothing downstream of it can be trusted — that stays a hard failure.
+    # Conflating the two made a Dart-less machine unpushable even with the flag set.
+    if [ "$dep" = missing ]; then
+      record_job cli-matrix missing "$why"
+    else
+      record_job cli-matrix blocked "$why"
+    fi
     return
   fi
   if [ "$FAST" = 1 ]; then
@@ -362,9 +371,18 @@ job_cli_matrix() {
 job_probes() {
   job_header "probes — CLI probes (SOS, groups, media)"
   if [ "${JOB_RESULT[dart]:-}" != success ]; then
-    local why="needs: dart (${JOB_RESULT[dart]:-not run})"
+    local dep="${JOB_RESULT[dart]:-not run}"
+    local why="needs: dart ($dep)"
     skip_step _o "probes (whole job)" "$why"
-    record_job probes blocked "$why"
+    # A dependency that is *missing* is a toolchain gap, so this job could not run either
+    # and --allow-missing-dart may accept it as partial. A dependency that *failed* is a
+    # red build, and nothing downstream of it can be trusted — that stays a hard failure.
+    # Conflating the two made a Dart-less machine unpushable even with the flag set.
+    if [ "$dep" = missing ]; then
+      record_job probes missing "$why"
+    else
+      record_job probes blocked "$why"
+    fi
     return
   fi
   if [ "$FAST" = 1 ]; then

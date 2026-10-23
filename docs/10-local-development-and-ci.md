@@ -166,8 +166,18 @@ order it runs it — including three behaviours that are easy to drop and expens
 1. **The `dart` job runs all three of its checks unconditionally and gates afterwards**, so a
    single red build reports the analyzer output, the test failures *and* the CLI metrics together
    instead of stopping at the first. `set -e` is deliberately not used.
-2. **`cli-matrix` and `probes` have `needs: dart`**, so when `dart` fails they are reported
-   `BLOCKED` rather than quietly running anyway on a tree that is already known to be broken.
+2. **`cli-matrix` and `probes` have `needs: dart`**, so they never quietly run anyway on a
+   tree that is already known to be broken. Which verdict they get depends on *why* Dart did
+   not run, and that difference is the point:
+
+   | `dart` was | downstream | meaning | `--allow-missing-dart` |
+   | --- | --- | --- | --- |
+   | `MISSING` (no SDK) | `MISSING` | a toolchain gap on this machine | excuses it → exit `2` |
+   | `FAILURE` (ran, red) | `BLOCKED` | a real broken build | **does not** → exit `1` |
+
+   Conflating the two would either make a Dart-less machine unable to push at all, or let a
+   genuinely red engine through because someone had set a flag intended for a missing SDK.
+   The flag excuses an absent toolchain; it never excuses a failing one.
 3. **The golden-vector step fails when regenerating changes the committed file.** That check is
    the cross-language contract, and it is the one most often forgotten locally because it needs
    two commands rather than one.
@@ -194,11 +204,14 @@ reserved for a run that verified everything it claimed to.
 Every step's output is captured, mirroring the workflow's `/tmp/dart-*.txt`:
 
 ```
-artifacts/ci/20261023T191925Z-76a820d-run/
-  web-typecheck.txt          dart-analyze.txt        dart-analyze.exit
-  web-test.txt               dart-test.txt           dart-diagnostics.json
-  web-golden.txt             dart-cli.txt            cli-campus_quad-always-on.txt
-  dart-pub-get.txt           dart-diagnostics.txt    probe-media.txt
+artifacts/ci/20261023T193803Z-ab7e7ff-push/
+  web-npm-ci.txt       dart-pub-get.txt      dart-diagnostics.json
+  web-typecheck.txt    dart-analyze.txt      dart-diagnostics.txt
+  web-test.txt         dart-test.txt         cli-campus_quad-always-on.txt
+  web-golden.txt       dart-cli.txt          cli-festival_crowd-always-on.txt
+  web-build.txt                              probe-sos.txt   probe-history.txt
+  <name>.exit — every step also records its numeric exit status
+                                             probe-group.txt probe-media.txt
 ```
 
 `artifacts/` is git-ignored: these are a local record, not a deliverable, and committing them
@@ -347,7 +360,8 @@ and a bug in a *reporter* should not fail an otherwise green build.
 | --- | --- | --- |
 | `make ci` exits 1 with jobs marked `MISSING` | a required tool is absent | `make doctor`, then install what it names |
 | `make ci` exits 2 | you passed `--allow-missing-dart` | install Dart, or accept that this is a partial run |
-| `cli-matrix` and `probes` say `BLOCKED` | `needs: dart`, and `dart` failed | fix the `dart` job; they will run once it passes |
+| `cli-matrix` and `probes` say `BLOCKED` | `needs: dart`, and `dart` **failed** | fix the `dart` job; they will run once it passes |
+| `cli-matrix` and `probes` say `MISSING` | `needs: dart`, and Dart is **absent** | install Dart (§2); this is partial, not broken |
 | Golden vectors are stale | either engine's RNG, spawn or scheduling order moved | `make golden`, inspect, commit — or revert if unintended |
 | `dart pub get` hangs or fails | `pub.dev` unreachable | `make doctor` probes it; you need network access to pub.dev |
 | `npm ci` fails but `npm install` works | `package-lock.json` out of sync | regenerate and commit the lockfile; CI uses `npm ci` |

@@ -19,7 +19,7 @@ CI    := ./tool/ci
 .PHONY: help doctor install ci ci-fast web dart cli-matrix probes \
         test typecheck build golden dev media history \
         dart-get dart-analyze dart-test dart-cli \
-        push push-dry push-force watch follow diagnose \
+        push push-dry push-force commit-push watch watch-all follow diagnose \
         act install-hooks clean clean-artifacts
 
 ## --- setup -------------------------------------------------------------------
@@ -87,6 +87,9 @@ commit-push: ## Commit everything with MSG="...", validate, then push
 
 watch: ## Recent CI runs on this branch
 	@$(CI)/watch.sh
+
+watch-all: ## Recent CI runs on every branch
+	@$(CI)/watch.sh --all
 
 follow: ## Wait for the newest run to finish, then explain the result
 	@$(CI)/watch.sh --follow
