@@ -189,6 +189,13 @@
   this engine's retry timers convert queueing into load (§12.10). The missing mechanism is backpressure: a real
   stack defers *and* stops generating work, while the simulator only defers. If a real floor delivers nine
   messages in ten, that is the finding to act on, and it is not in the radio model.
+  The radio-layer answer has now been built and measured, and it does not change that conclusion — it sharpens
+  it. `channelBackoff: "binary"` adds the contention window carrier sense was missing (every deferring node is
+  otherwise released at the same instant the medium clears, so listening synchronises the herd instead of
+  dispersing it). It moves delivery ±1.1 points and leaves both csma arms ~14 short of the gate, because under
+  carrier sense the losses are **queue drops, 1994-3466 against 273-394 collisions**: a lever that makes nodes
+  wait longer feeds the queue that is shedding them (§12.13). So the fix is not in front of the queue and has
+  to be above the radio — hop-by-hop flow control, which §12.12 named and this stack still does not have.
 
 ---
 
