@@ -294,6 +294,25 @@ a discrete-event clock, and it is the same runaway the first implementation of t
 stack defers <em>and</em> stops generating work, while this engine only defers &mdash; its MPR fan-out, retry
 timers and transfer window keep producing packets whatever the radio is doing.</p>
 
+<h3>Backpressure: the fix that works for a transfer and not for a mesh</h3>
+<table><thead><tr><th>one radio, nobody else on it: 1 MB through a window of 8 into a 4-deep queue</th><th>backpressure off</th><th>backpressure on</th></tr></thead><tbody>
+<tr><td>queue drops</td><td class="num">25</td><td class="num pass">3</td></tr>
+<tr><td>chunks retransmitted</td><td class="num">6</td><td class="num pass">1</td></tr>
+<tr><td>window stalls</td><td class="num">1</td><td class="num pass">0</td></tr>
+<tr><td>file time</td><td class="num">9.4 s</td><td class="num pass">5.2 s</td></tr>
+<tr><td>crowd, 10 MB with text competing: delivery</td><td class="num pass">0.9096</td><td class="num part">0.8983</td></tr>
+<tr><td>crowd: that file's transfer time</td><td class="num pass">3.28 min</td><td class="num part">3.89 min</td></tr>
+</tbody></table>
+<p class="sub">&sect;12.10 ended by naming backpressure as the missing half of the radio model, and
+<code>mediaBackpressure</code> is the smallest form of it: a transfer fills only the queue slots its sender's
+radio has. Where the sender is the only one queueing it is a strict improvement &mdash; fewer drops, fewer
+retransmissions, no stalls, and a <em>faster</em> file, because a chunk that was never dropped never had to be
+sent twice. In a mesh it is not, and the reason is topology: the queue that overflows belongs to a relay, which
+several senders feed at once, so throttling one source leaves that queue exactly as full while extending the
+period everybody is contending. The recommendation is therefore narrower than the flag &mdash; worth building
+for the one-peer case, which is exactly skills/05's &quot;2 phones exchange image &lt;10 MB&quot; box &mdash;
+and the mesh-wide version needs a relay that can tell its upstream to stop.</p>
+
 <h3>The defect the channel model found in the retry timer</h3>
 <div class="note warn">Every radio number above was measured twice. The first pass ran with a retry timer that
 started when a message was <em>handed to the radio</em> rather than when it went on air. Under
@@ -446,12 +465,12 @@ carrier, where the work actually is.</li>
 <li><strong>Rank, not score, in the field record</strong> - observed-maximum normalisation is built,
 measured and rejected (&sect;18.4): the atrium phone loses on rank among the candidates it can hear, which a
 score threshold hides. <code>docs/09</code> &sect;5 should record that column.</li>
-<li><strong>Backpressure from the radio to the layers above it</strong> - carrier sense is
-modelled and measured, and it loses delivery under load rather than recovering it, because this engine keeps
-generating packets while the queue fills and its retry timers retransmit anything that waits longer than they
-do. A real stack defers <em>and</em> stops producing work; that second half is the missing mechanism, and it is
-why &sect;12.10 ends with a recommendation about the layers above the radio rather than about the radio
-(docs/08 &sect;12.10).</li>
+<li><strong>Hop-by-hop backpressure</strong> - the sender-side version is built and measured
+(<code>mediaBackpressure</code>): on one radio with nobody else on it it cuts a 1 MB transfer's queue drops
+from 25 to 3, its retransmissions from 6 to 1 and its stalls from 1 to 0, and the file arrives in 5.2 s instead
+of 9.4 s. In a mesh it does nothing for delivery and costs the transfer 18%, because the queue that overflows
+in a multi-hop mesh belongs to a relay fed by several senders at once. The version that would fix the mesh is a
+relay that can tell its upstream to stop, which nothing in this stack has (docs/08 &sect;12.12).</li>
 <li><strong>A capture effect that compares signal strengths, a contention window, and RTS/CTS</strong> - the
 receiver model loses the later of two packets whatever their levels, two nodes that defer for each other are
 separated only by event ordering, and the hidden terminal is provably unfixable without RTS/CTS (a test pins
@@ -463,7 +482,7 @@ sent as blobs, or voice jumps the queue. Not implemented; it is the next thing t
 </ul>
 
 <footer>
-Generated 2026-10-23 from branch <code>arena/acc5e9a6-dumanmessenger</code> at <code>b1ddf31</code>. Evidence:
+Generated 2026-10-23 from branch <code>arena/acc5e9a6-dumanmessenger</code> at <code>573cc91</code>. Evidence:
 <code>docs/06-simulator-findings.md</code> &sect;1-20 (incl. &sect;18.4, &sect;19.4-19.5), <code>docs/07-e2ee-noise-xx.md</code>,
 <code>docs/08-media-transport-ptt.md</code> &sect;1-13, <code>docs/09-field-test-plan.md</code>. Probes:
 <code>tool/media-probe.ts</code>, <code>tool/history-probe.ts</code>, <code>tool/capture-json.ts</code>,
