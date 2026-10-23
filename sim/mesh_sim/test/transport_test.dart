@@ -121,7 +121,6 @@ void main() {
       // part an app cannot fake: on hardware the peer is simply not heard any more.
       sim.nodes[1].pos = Vec2(500, 500);
       sim.nodes[1].target = Vec2(500, 500);
-      sim.nodes[1].home = Vec2(500, 500);
       final after = t.advance(20000);
 
       expect(after.where((e) => !e.found).map((e) => e.peer.id), contains(peer));
@@ -184,7 +183,9 @@ void main() {
 
       // And the payload survives the trip exactly: the engine models a body as characters,
       // so the adapter has to hand it something that round-trips byte for byte.
-      expect(runUntil(sim, () => sim.deliveries.length >= 2, 30000), isTrue);
+      expect(
+          runUntil(sim, () => sim.deliveries.any((d) => d.msgId == just.messageId), 30000),
+          isTrue);
       final body = sim.sentRecords.firstWhere((r) => r.msgId == just.messageId).body;
       expect(latin1.encode(body), equals(bytes(929)));
     });
@@ -310,11 +311,17 @@ void main() {
       var sawSleep = false;
       var disagreed = false;
       for (var i = 0; i < 60; i++) {
+        // Halfway through, a peer walks into range. The geometry knows the instant it moves;
+        // the device only knows at its next scan, and if it is asleep that is a whole cycle
+        // later. Three stationary nodes would never produce that gap on their own, so without
+        // this the staleness assertion below could not fail and would prove nothing.
+        if (i == 20) {
+          sim.nodes[2].pos = Vec2(25, 10);
+          sim.nodes[2].target = Vec2(25, 10);
+        }
         t.advance(1000);
         expect(t.heardPeers, equals(me.peerIds.toSet()));
         if (!sim.isAwake(me)) sawSleep = true;
-        // The geometry, which no real device can read. Where the two differ, the scan is
-        // behind the world — and that is the case an app has to survive.
         final truth = peersInRange(me, sim.nodes, sim.rf).map((n) => n.id).toSet();
         if (truth.length != t.heardPeers.length ||
             !truth.every(t.heardPeers.contains)) {
@@ -326,6 +333,9 @@ void main() {
       // things that make it interesting actually happened.
       expect(sawSleep, isTrue);
       expect(disagreed, isTrue);
+      // And the gap closes: the scan is behind, not wrong, so by the end of the run the
+      // device has heard the peer that moved.
+      expect(t.heardPeers, contains(sim.nodes[2].id));
     });
   });
 }
