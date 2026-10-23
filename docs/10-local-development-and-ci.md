@@ -243,21 +243,39 @@ loud — in the run record and in an append-only log:
 
 ```bash
 $ tail -1 artifacts/ci/verification-log.jsonl
-{"timestamp":"2026-10-23T19:40:11Z","branch":"arena/5ce83e54-dumanmessenger",
- "sha":"76a820d","verification":"partial","pipelineExit":2,
- "runId":"20261023T193812Z-76a820d-push","pushed":true}
+{"timestamp":"<UTC>","branch":"<branch>","sha":"<short-sha>","verification":"<see below>",
+ "jobs":"<the jobs that actually ran>","pipelineExit":<0|1|2>,"runId":"<artifact-dir>",
+ "pushed":<true|false|null>}
 ```
 
 So a commit that was never fully verified stays discoverable later instead of looking like one
 that was. If you use it, say so wherever the work is described — a report that claims a build
 passed when a third of it could not run is worse than one that names the gap.
 
-`--json` writes the same verdict per run, including the toolchain versions it was produced with:
+### What `verification` may say
+
+The word "full" is easy to over-claim, so it is narrow by construction: it means *every job in
+the workflow*, not every job you asked for.
+
+| value | means |
+| --- | --- |
+| `full` | every job in the workflow ran and passed |
+| `scoped:web` | everything **selected** ran and passed — and only `web` was selected |
+| `partial` | a job could not run for want of a toolchain (needs `--allow-missing-dart`) |
+| `…(fast)` | the fast subset; the production build, CLI matrix and probes were skipped |
+
+A scoped run that is entirely green still says nothing about the jobs it left out, which is why
+`--job web` records `scoped:web` and not `full`. Pushing that way is legitimate — the Dart engine
+may be untouched by the change — but the record must not imply a Dart job ran when none did.
+`jobs` names what actually ran, so the two fields cannot be read apart from each other.
+
+`--json` writes the same verdict per run, with the toolchain versions it was produced with:
 
 ```json
-{ "runId": "...", "sha": "76a820d", "verification": "full",
-  "toolchain": {"node": "22.22.3", "dart": "3.5.4"},
-  "jobs": {"web": {"result": "success"}, "dart": {"result": "failure", "detail": "test=failure"}} }
+{ "runId": "<artifact-dir>", "sha": "<short-sha>", "verification": "full",
+  "toolchain": {"node": "22.22.3", "npm": "10.9.8", "dart": "3.5.4", "python3": "3.11.2"},
+  "jobs": {"web": {"result": "success", "detail": ""},
+           "dart": {"result": "failure", "detail": "test=failure"}} }
 ```
 
 ---

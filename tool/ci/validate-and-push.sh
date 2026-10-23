@@ -118,17 +118,30 @@ if [ "$PIPE_RC" -eq 1 ]; then
   exit 1
 fi
 
-VERIFICATION="full"
-[ "$PIPE_RC" -eq 2 ] && VERIFICATION="partial"
-case "$FAST_FLAG" in --fast) VERIFICATION="$VERIFICATION+fast" ;; esac
+# Take the verdict from the pipeline's own record rather than re-deriving it here. That
+# record is scope-aware, and this log is the artefact someone reads later to decide what
+# was ever actually verified — a --job web push that logged "full" would claim the Dart
+# engine had been checked when no Dart job ran at all.
+VERIFICATION="$(python3 -c 'import json,sys
+try: print(json.load(open(sys.argv[1])).get("verification") or "")
+except Exception: print("")' "$JSON_RECORD" 2>/dev/null)"
+if [ -z "$VERIFICATION" ]; then
+  # Fall back to deriving it, if the record could not be read.
+  VERIFICATION="full"
+  [ "$PIPE_RC" -eq 2 ] && VERIFICATION="partial"
+  case "$FAST_FLAG" in --fast) VERIFICATION="$VERIFICATION+fast" ;; esac
+fi
+JOBS_VERIFIED="$(python3 -c 'import json,sys
+try: print(",".join(json.load(open(sys.argv[1])).get("jobs") or {}) or "unknown")
+except Exception: print("unknown")' "$JSON_RECORD" 2>/dev/null)"
 
 # --- 3. record what was verified ----------------------------------------------
 
 mkdir -p "$(dirname "$LOG_FILE")"
 RECORD_RUN="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["runId"])' "$JSON_RECORD" 2>/dev/null || echo unknown)"
 {
-  printf '{"timestamp":"%s","branch":"%s","sha":"%s","verification":"%s","pipelineExit":%d,"runId":"%s","pushed":' \
-    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$BRANCH" "$(git_sha)" "$VERIFICATION" "$PIPE_RC" "$RECORD_RUN"
+  printf '{"timestamp":"%s","branch":"%s","sha":"%s","verification":"%s","jobs":"%s","pipelineExit":%d,"runId":"%s","pushed":' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$BRANCH" "$(git_sha)" "$VERIFICATION" "$JOBS_VERIFIED" "$PIPE_RC" "$RECORD_RUN"
   # Filled in below, once the push outcome is known; a placeholder keeps the line valid JSON
   # even if this script is interrupted between here and there.
   printf 'null}\n'
@@ -219,7 +232,7 @@ with open(path, "w", encoding="utf-8") as fh:
 PY
   fi
   echo
-  log "pushed $(git_sha) → $REMOTE/$BRANCH · verification: ${VERIFICATION}"
+  log "pushed $(git_sha) → $REMOTE/$BRANCH · verification: ${VERIFICATION} (jobs: ${JOBS_VERIFIED})"
   log_dim "record: ${LOG_FILE#$ROOT/}"
   log_dim "remote CI will now run the same pipeline. Watch it with: make watch"
   exit 0

@@ -453,7 +453,17 @@ for job in $JOBS_ALL; do
 done
 printf '\n  total %ss · artifacts %s\n' "$((END_ALL - START_ALL))" "${artifact_dir#$ROOT/}"
 
-VERIFIED="full"
+# "full" has to mean every job in the workflow ran and passed. A scoped run can be entirely
+# green *within its scope* and still say nothing about the jobs it left out, and labelling
+# that "full" is exactly how an unverified engine ends up looking verified in a record
+# someone reads months later.
+SCOPED=0
+for job in $JOBS_ALL; do selected "$job" || SCOPED=1; done
+if [ "$SCOPED" = 1 ]; then
+  VERIFIED="scoped:$(printf '%s' "$SELECTED" | tr ' ' ',')"
+else
+  VERIFIED="full"
+fi
 if [ "$ANY_MISSING" = 1 ]; then VERIFIED="partial"; fi
 if [ "$FAST" = 1 ]; then VERIFIED="$VERIFIED(fast)"; fi
 
