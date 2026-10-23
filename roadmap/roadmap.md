@@ -175,6 +175,16 @@
 
 **Exit criteria:** In 10-phone test, SUPERs auto-elect, overhead drops ≥30% vs flood-all with same delivery; no flapping.
 
+> **Calibration note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/08-media-transport-ptt.md` §12.9):** every simulated number behind this exit
+  criterion was measured with a radio that has no contention: no shared medium, and a receiver that takes every
+  packet however busy it is. Both halves now exist as flags (`channelAccess`, `channelCapture`), both ship off,
+  and separating them says which one matters — with a 10 MB file in flight, a transmit queue costs text 4.0 points
+  of delivery and receiver collisions cost **13.6**. On the 20-node campus the same flags put delivery at
+  **0.9056** (collisions only) and **0.9000** (both) against the ≥90% this criterion inherits from skills/02 and
+  skills/08, while overhead stays at 15.8% and 27.1% of flood-all and the SUPER ratio stays inside its band. So the
+  overhead half of this exit criterion has margin and the delivery half has none, and the 10-phone test should
+  measure delivery ratio before it measures anything else.
+
 ---
 
 ### PHASE 3 — WiFi Direct Media + PTT Foundations (Weeks 17-24)

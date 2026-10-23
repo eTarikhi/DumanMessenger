@@ -192,6 +192,35 @@ its air time is hop latency plus jitter &mdash; about 245 ms a hop. Three hops n
 every 500 ms of recording, so the queue grows for as long as the user keeps talking. Nothing is lost;
 every frame arrives, long after it was worth hearing.</p>
 
+<h3>Receiver contention: where the margin in the acceptance gates went</h3>
+<p class="sub">The half-duplex model gave a device one transmitter and left its receiver infinitely attentive.
+<code>channelCapture: &quot;first&quot;</code> closes that &mdash; the receiver locks onto whichever packet arrived
+first, and a transmitting node hears nothing &mdash; and because it is independent of the transmitter flag, the two
+mechanisms separate. Three seeds, 20-node campus, 60 messages at 2 s with a 10 MB file in flight:</p>
+<table><thead><tr><th>transmitter</th><th>receiver</th><th>delivery</th><th>p95</th><th>parked</th><th>collisions</th><th>queue drops</th><th>file time</th></tr></thead><tbody>
+<tr><td><code>free</code></td><td><code>none</code> <span class="tag">ships</span></td><td class="num pass">0.9944</td><td class="num">3,275 ms</td><td class="num">1.0</td><td class="num">0</td><td class="num">0</td><td class="num">10.71 s</td></tr>
+<tr><td><code>free</code></td><td><code>first</code></td><td class="num part">0.8588</td><td class="num">10,314 ms</td><td class="num">37.3</td><td class="num">3,625 + 1,256 deaf</td><td class="num">0</td><td class="num">1.98 min</td></tr>
+<tr><td><code>halfDuplex</code></td><td><code>none</code></td><td class="num">0.9548</td><td class="num">7,954 ms</td><td class="num">12.3</td><td class="num">0</td><td class="num">2,409</td><td class="num">3.33 min</td></tr>
+<tr><td><code>halfDuplex</code></td><td><code>first</code></td><td class="num part">0.8927</td><td class="num">11,681 ms</td><td class="num">21.0</td><td class="num">603 + 808 deaf</td><td class="num">1,744</td><td class="num">3.75 min</td></tr>
+</tbody></table>
+<p class="sub">The receiver is where contention lives: a transmit queue alone costs text 4.0 points of delivery,
+receiver collisions alone cost 13.6. Once collisions exist the queue earns its keep, recovering 3.4 points, because
+serialising a node&#x27;s own transmissions removes the overlaps it was causing everybody else &mdash; the closest thing
+to a CSMA result here. Collisions are paid in latency before delivery (quiet-mesh p95 4,472 &rarr; 7,534 ms for 1.1
+points), because the ACK timeout re-sends into an idle radio: two packets sent to one receiver at the same instant
+produce one collision and two deliveries, which a test pins.</p>
+<table><thead><tr><th>acceptance gate, 20-node campus</th><th><code>free</code> + <code>none</code> (ships)</th><th><code>free</code> + <code>first</code></th><th><code>halfDuplex</code> + <code>none</code></th><th><code>halfDuplex</code> + <code>first</code></th><th>required</th></tr></thead><tbody>
+<tr><td>delivery ratio</td><td class="num">0.9889</td><td class="num part">0.9056</td><td class="num">0.9556</td><td class="num part">0.9000</td><td class="part">&ge; 0.90, no margin</td></tr>
+<tr><td>within 5 hops</td><td class="num">0.9889</td><td class="num">0.9056</td><td class="num">0.9556</td><td class="num">0.9000</td><td class="part">&ge; 0.90</td></tr>
+<tr><td>overhead vs flood-all</td><td class="num">9.3%</td><td class="num">15.8%</td><td class="num">38.6%</td><td class="num">27.1%</td><td class="pass">&le; 70%</td></tr>
+<tr><td>SUPER ratio</td><td class="num">21.7%</td><td class="num">25.0%</td><td class="num">25.0%</td><td class="num">21.7%</td><td class="pass">15&ndash;25%</td></tr>
+</tbody></table>
+<div class="note warn">This is the most consequential number in the report. The roadmap&#x27;s acceptance gates were
+calibrated against a radio with no contention, and the moment a receiver is added the delivery margin is zero:
+0.9056 and 0.9000 against a &ge;0.90 requirement. Overhead and the SUPER ratio keep their margins, so delivery is
+the binding criterion and contention is what binds it. <code>docs/09</code> now asks the field test to measure
+delivery ratio first, on the first walk, before anybody tunes anything else.</div>
+
 <h3>So is a load gate motivated? Yes &mdash; and it is the window, not the chunk size</h3>
 <table><thead><tr><th>arm (half-duplex, same plan, three seeds)</th><th>delivery</th><th>p95</th><th>parked</th><th>file time</th><th>dropped</th></tr></thead><tbody>
 <tr><td>no file</td><td class="num">0.9831</td><td class="num">5,077 ms</td><td class="num">4.0</td><td>&mdash;</td><td class="num">248</td></tr>
@@ -322,7 +351,7 @@ which is which, because a field report has to say which one it is quoting.</p>
 <h3>Reproducing everything above</h3>
 <pre>npm ci &amp;&amp; npm test                # 235 TypeScript tests
 npm run golden                     # regenerate and diff the cross-language vectors
-npm run media                      # docs/08: files, PTT, retry timer, contention, channel access
+npm run media                      # docs/08: files, PTT, retry timer, contention, the radio (§7-§9)
 npm run history                    # docs/06 §17: repair against the same world with it off
 npm run field:capture -- campus_quad 42 /tmp/cap.jsonl [flood-all]
 npm run field:report  -- /tmp/cap.jsonl /tmp/base.jsonl
@@ -350,10 +379,10 @@ carrier, where the work actually is.</li>
 <li><strong>Rank, not score, in the field record</strong> - observed-maximum normalisation is built,
 measured and rejected (&sect;18.4): the atrium phone loses on rank among the candidates it can hear, which a
 score threshold hides. <code>docs/09</code> &sect;5 should record that column.</li>
-<li><strong>Receiver-side capture and collisions</strong> - the half-duplex model
-deferres rather than drops when two packets meet, and lets a busy receiver take a packet. Both omissions
-are optimistic, so every <code>halfDuplex</code> number is the good end of a real radio (docs/08
-&sect;12.7).</li>
+<li><strong>Carrier sense, and a capture effect that compares signal strengths</strong> - the
+receiver model loses the later of two packets whatever their levels, and a transmitting node transmits blind
+instead of deferring. The first omission understates the harm and the second overstates it; they are not
+claimed to cancel (docs/08 &sect;12.9).</li>
 <li><strong>Voice priority in the transmit queue</strong> - at three hops a streamed note cannot keep up
 with its own capture clock on one radio, so either streaming is capped at two hops and longer notes are
 sent as blobs, or voice jumps the queue. Not implemented; it is the next thing to measure (docs/08
@@ -361,9 +390,9 @@ sent as blobs, or voice jumps the queue. Not implemented; it is the next thing t
 </ul>
 
 <footer>
-Generated 2026-10-23 from branch <code>arena/acc5e9a6-dumanmessenger</code> at <code>6f29bf8</code>. Evidence:
-<code>docs/06-simulator-findings.md</code> &sect;1-20, <code>docs/07-e2ee-noise-xx.md</code>,
-<code>docs/08-media-transport-ptt.md</code>, <code>docs/09-field-test-plan.md</code>. Probes:
+Generated 2026-10-23 from branch <code>arena/acc5e9a6-dumanmessenger</code> at <code>b1ddf31</code>. Evidence:
+<code>docs/06-simulator-findings.md</code> &sect;1-20 (incl. &sect;18.4, &sect;19.4-19.5), <code>docs/07-e2ee-noise-xx.md</code>,
+<code>docs/08-media-transport-ptt.md</code> &sect;1-13, <code>docs/09-field-test-plan.md</code>. Probes:
 <code>tool/media-probe.ts</code>, <code>tool/history-probe.ts</code>, <code>tool/capture-json.ts</code>,
 <code>tool/field-report.ts</code>, <code>tool/generate-golden.ts</code>.
 </footer>

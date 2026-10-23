@@ -55,7 +55,7 @@ npm test          # 166 tests: RF, election, routing, DTN, power, SOS, hop trace
 npm run dev       # canvas: watch SUPERs get elected, MPR suppress floods, bundles wait for a contact
                   # click a node to decline its router role or turn on battery saver
 npm run golden    # regenerate test-fixtures/golden-vectors.json after an engine change
-npm run media     # the media transport probe behind docs/08 (files, PTT, retry timer, contention, channel access)
+npm run media     # the media transport probe behind docs/08 (files, PTT, retry timer, contention, the radio)
 npm run history   # group-history anti-entropy, with and without repair (docs/06 §17)
 npm run field:capture -- campus_quad 42 /tmp/cap.jsonl [flood-all]   # a field-test capture, from a run
 npm run field:report  -- /tmp/cap.jsonl /tmp/base.jsonl              # the roadmap's field numbers (docs/09)
