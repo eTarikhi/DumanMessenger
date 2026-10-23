@@ -435,7 +435,7 @@ which is which, because a field report has to say which one it is quoting.</p>
 <h2>13. Repository inventory</h2>
 <table class=""><thead><tr><th>area</th><th>added lines</th><th>+</th><th>-</th></tr></thead><tbody><tr><td>src/ (TS engine + React visualiser)</td><td><div class="bar"><div class="fill" style="width:100.00%;background:#4de0ff"></div><span class="barlabel">+10,320</span></div></td><td class="num">+10,320</td><td class="num">-1,062</td></tr><tr><td>sim/mesh_sim/ (authoritative Dart)</td><td><div class="bar"><div class="fill" style="width:88.88%;background:#4de0ff"></div><span class="barlabel">+9,172</span></div></td><td class="num">+9,172</td><td class="num">-</td></tr><tr><td>docs/ (findings, E2EE, media, field test)</td><td><div class="bar"><div class="fill" style="width:25.19%;background:#4de0ff"></div><span class="barlabel">+2,600</span></div></td><td class="num">+2,600</td><td class="num">-</td></tr><tr><td>tool/ (golden, media, history, field probes)</td><td><div class="bar"><div class="fill" style="width:14.45%;background:#4de0ff"></div><span class="barlabel">+1,491</span></div></td><td class="num">+1,491</td><td class="num">-</td></tr><tr><td>roadmap/ + skills/ (annotation pass)</td><td><div class="bar"><div class="fill" style="width:3.00%;background:#4de0ff"></div><span class="barlabel">+310</span></div></td><td class="num">+310</td><td class="num">-23</td></tr><tr><td>.github/ (3 jobs + probes job)</td><td><div class="bar"><div class="fill" style="width:3.12%;background:#4de0ff"></div><span class="barlabel">+322</span></div></td><td class="num">+322</td><td class="num">-</td></tr><tr><td>test-fixtures/ (cross-language goldens)</td><td><div class="bar"><div class="fill" style="width:2.68%;background:#4de0ff"></div><span class="barlabel">+277</span></div></td><td class="num">+277</td><td class="num">-</td></tr><tr><td>reports/</td><td><div class="bar"><div class="fill" style="width:2.15%;background:#4de0ff"></div><span class="barlabel">+222</span></div></td><td class="num">+222</td><td class="num">-</td></tr></tbody></table>
 <h3>Reproducing everything above</h3>
-<pre>npm ci &amp;&amp; npm test                # 235 TypeScript tests
+<pre>npm ci &amp;&amp; npm test                # 265 TypeScript tests
 npm run golden                     # regenerate and diff the cross-language vectors
 npm run media                      # docs/08: files, PTT, retry timer, contention, the radio (§7-§9)
 npm run history                    # docs/06 §17: repair against the same world with it off
@@ -443,7 +443,7 @@ npm run field:capture -- campus_quad 42 /tmp/cap.jsonl [flood-all]
 npm run field:report  -- /tmp/cap.jsonl /tmp/base.jsonl
 ALLOW_ANY_DEV_HOST=1 npm run dev -- --port 5173     # the React visualiser
 
-cd sim/mesh_sim &amp;&amp; dart pub get &amp;&amp; dart test     # 157 Dart cases
+cd sim/mesh_sim &amp;&amp; dart pub get &amp;&amp; dart test     # 178 Dart cases
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42          # asserts the criteria
 dart run bin/mesh_sim.dart --sos | --group 10 | --media | --history  # the four probes
 dart run bin/mesh_sim.dart --trace | --capture | --capture-ogm       # hop routes, pcap-like log
