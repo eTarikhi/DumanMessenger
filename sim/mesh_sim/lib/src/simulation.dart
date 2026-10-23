@@ -606,6 +606,10 @@ class SimulationStats {
     required this.channelCaptured,
     required this.channelDeafRx,
     required this.channelBackoffs,
+    required this.channelDropsRelayed,
+    required this.channelDropsMedia,
+    required this.channelDropsWithAlternative,
+    required this.transferBlocks,
     required this.batteryPercentPerHourNormal,
     required this.batteryPercentPerHourSuper,
     required this.scansPerSec,
@@ -724,6 +728,21 @@ class SimulationStats {
   /// Contention-window draws: how often a node found the medium free and still had to wait a
   /// random number of slots for it (docs/08 §12.13). Zero unless [ChannelBackoff.binary].
   final int channelBackoffs;
+
+  /// Where the shedding happens, which is what docs/08 §12.14 measures rather than argues.
+  /// [channelDropsRelayed] counts packets shed by a node forwarding somebody else's message, so
+  /// `channelDrops - channelDropsRelayed` were shed by their own originator.
+  /// [channelDropsMedia] counts the shed packets that were file or voice chunks.
+  /// [channelDropsWithAlternative] counts the relay sheds for which a peer in range was at least
+  /// as close to the destination as the next hop chosen — the packets that could have gone round
+  /// the congestion instead of into it.
+  final int channelDropsRelayed;
+  final int channelDropsMedia;
+  final int channelDropsWithAlternative;
+
+  /// Times a transfer was refused air by its own radio and had to wait for a slot to free. This
+  /// is backpressure working, not a failure (docs/08 §12.12).
+  final int transferBlocks;
 
   /// skills/07 telemetry: "Battery %/h per role, scans/sec, relays/sec".
   /// Measured from the battery snapshot taken when metrics were cleared, over
@@ -1322,6 +1341,10 @@ class MeshSimulation {
   int _channelCaptured = 0;
   int _channelDeafRx = 0;
   int _channelBackoffs = 0;
+  int _channelDropsRelayed = 0;
+  int _channelDropsMedia = 0;
+  int _channelDropsWithAlternative = 0;
+  int _transferBlocks = 0;
 
   /// Whether the transmission that just went on air collided at its receiver. Written by
   /// [_onAir], read by the contention window to decide whether to widen.
@@ -1415,6 +1438,10 @@ class MeshSimulation {
     _channelCaptured = 0;
     _channelDeafRx = 0;
     _channelBackoffs = 0;
+    _channelDropsRelayed = 0;
+    _channelDropsMedia = 0;
+    _channelDropsWithAlternative = 0;
+    _transferBlocks = 0;
     _lastTxCollided = false;
     _channel.clear();
     _txUntil.clear();
@@ -1953,20 +1980,45 @@ class MeshSimulation {
   /// `mediaBackpressure`, for as long as the sender's radio has slots to put them in.
   void _pushWindow(Transfer t) {
     final window = _effectiveWindow(t);
+    if (window <= 0) {
+      // Blocked on the sender's own radio. Nothing is sent and nothing is lost: the drain that
+      // frees a slot calls this again, so the transfer resumes without a timer having to notice
+      // (docs/08 §12.12). Counted only when backpressure is what closed the window.
+      if (config.mediaBackpressure) _transferBlocks++;
+      return;
+    }
     while (t.nextToSend < t.chunks && t.nextToSend < t.received + window) {
       _sendChunk(t, t.nextToSend++);
     }
   }
 
-  /// The window the sender may fill right now. Without backpressure it is the configured
-  /// depth. With it, the radio's free slots cap it at a floor of one, so a transfer that is
-  /// already committed as far ahead as the queue allows waits for the medium instead of
-  /// pushing everybody else out of it (docs/08 §12.12).
+  /// Transmit-queue slots [nodeId] has left. Effectively infinite on the shipped radio, where
+  /// nothing queues, so a caller cannot accidentally throttle itself under [ChannelAccess.free].
+  int _radioSlotsFree(NodeId nodeId) {
+    if (config.channelAccess == ChannelAccess.free) return 1 << 30;
+    final queued = _channel[nodeId]?.queue.length ?? 0;
+    return math.max(0, config.channelQueueDepth - queued);
+  }
+
+  /// Resume any transfer this node is the source of. Called when its radio frees a slot, so a
+  /// blocked transfer waits for the medium rather than for a timeout.
+  void _resumeBlockedTransfers(NodeId nodeId) {
+    if (!config.mediaBackpressure) return;
+    for (final t in transfers.values) {
+      if (t.state == TransferState.active && t.from == nodeId) _pushWindow(t);
+    }
+  }
+
+  /// The window the sender may fill right now. Without backpressure it is the configured depth.
+  /// With it, the radio's free slots cap it — and the cap may reach zero, so a transfer that is
+  /// already committed as far ahead as the queue allows blocks and is resumed by the drain
+  /// instead of pushing everybody else out of it. The first implementation floored the cap at one,
+  /// which still hands a packet to a queue that is already full and has it shed at the tail: not
+  /// backpressure, a slower way of dropping, and measured it *raised* the drop count (docs/08
+  /// §12.12).
   int _effectiveWindow(Transfer t) {
     if (!config.mediaBackpressure) return t.window;
-    final queued = _channel[t.from]?.queue.length ?? 0;
-    final free = math.max(1, config.channelQueueDepth - queued);
-    return math.max(1, math.min(t.window, free));
+    return math.min(t.window, _radioSlotsFree(t.from));
   }
 
   void _sendChunk(Transfer t, int index) {
@@ -2006,7 +2058,12 @@ class MeshSimulation {
       // recorded are not missing, they are not due yet.
       final missing = t.onAir.where((i) => !t.receivedChunks.contains(i)).toList()
         ..sort();
-      if (missing.isNotEmpty) {
+      // A sender waiting on its own full radio is doing what backpressure asked it to do, so that
+      // wait is not a stall. Counting it would re-send into the queue that caused it — the stall
+      // path bypasses the window, so it has to consult the same gate.
+      final room =
+          config.mediaBackpressure ? _radioSlotsFree(nodeId) : missing.length;
+      if (missing.isNotEmpty && room > 0) {
         t.stalls++;
         _transferStalls++;
         t.lastProgressAt = now;
@@ -2014,10 +2071,10 @@ class MeshSimulation {
             MeshLogKind.transfer,
             nodeId,
             '${t.id} stalled — nothing arrived for ${stallMs.toStringAsFixed(0)} ms, '
-                're-sending ${math.min(missing.length, t.window)} of ${missing.length} '
+                're-sending ${math.min(missing.length, math.min(t.window, room))} of ${missing.length} '
                 'missing chunk${missing.length == 1 ? '' : 's'} (stall ${t.stalls})',
             msgType: MsgType.file);
-        for (final i in missing.take(t.window)) {
+        for (final i in missing.take(math.min(t.window, room))) {
           _sendChunk(t, i);
         }
       }
@@ -2501,6 +2558,11 @@ class MeshSimulation {
     if (ch.queue.length >= config.channelQueueDepth) {
       // Drop-tail: the radio is committed as far ahead as it is allowed to be.
       _channelDrops++;
+      if (msg.hopCount > 0) {
+        _channelDropsRelayed++;
+        if (_hasAlternativeNextHop(node, msg)) _channelDropsWithAlternative++;
+      }
+      if (msg.type == MsgType.file || msg.type == MsgType.voice) _channelDropsMedia++;
       _pushLog(
           MeshLogKind.loss,
           node.id,
@@ -2517,6 +2579,28 @@ class MeshSimulation {
 
   /// Put the next queued packet on air if the radio is free, and make sure something
   /// wakes it when it is not.
+  /// Whether [node] could have reached [msg]'s destination through a peer other than the one it
+  /// chose, at no cost in hops. A relay's route is one next hop, so "round the congestion" only
+  /// exists if some peer in range is at least as close to the destination as that hop is. Derived
+  /// from the route table and the geometry, so it consumes no random numbers and cannot move a
+  /// golden vector (docs/08 §12.14).
+  bool _hasAlternativeNextHop(MeshNode node, MeshMessage msg) {
+    final dest = msg.to;
+    if (dest == broadcastAddress || dest == groupAddress) return false;
+    final mine = node.nextHopTable[dest];
+    if (mine == null || mine.tq < tqUsable) return false;
+    for (final peer in peersInRange(node, nodes, rf)) {
+      if (peer.id == mine.bestNeighbor) continue;
+      final theirs = peer.nextHopTable[dest];
+      // Forwarding to this peer costs one hop to reach it, so it is no worse than the route
+      // already chosen only if the peer is strictly closer to the destination.
+      if (theirs != null && theirs.tq >= tqUsable && theirs.hopCount <= mine.hopCount - 1) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   void _drainChannel(MeshNode node) {
     final ch = _channel[node.id];
     if (ch == null) return;
@@ -2583,6 +2667,10 @@ class MeshSimulation {
     }
     final airTime = _onAir(node, next.msg, next.targetId);
     ch.busyUntil = now + airTime;
+    // A slot just freed. Anything this node was holding back for want of one goes now, which is
+    // the resume half of blocking — without it a transfer that was refused air waits for a
+    // timeout instead of for the medium.
+    _resumeBlockedTransfers(node.id);
     if (config.channelBackoff != ChannelBackoff.none) {
       // Binary exponential backoff: a radio that just collided draws from a window twice as
       // wide next time, so two radios that keep meeting keep backing off until they stop
@@ -3540,6 +3628,10 @@ class MeshSimulation {
       channelCaptured: _channelCaptured,
       channelDeafRx: _channelDeafRx,
       channelBackoffs: _channelBackoffs,
+      channelDropsRelayed: _channelDropsRelayed,
+      channelDropsMedia: _channelDropsMedia,
+      channelDropsWithAlternative: _channelDropsWithAlternative,
+      transferBlocks: _transferBlocks,
       batteryPercentPerHourNormal: drainPerHour(Role.normal),
       batteryPercentPerHourSuper: drainPerHour(Role.superNode),
       scansPerSec: _scanCount / elapsedSec,

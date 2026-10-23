@@ -556,7 +556,7 @@ void main() {
     /// One megabyte through a window of 8 into a queue 4 deep: the transfer is committed
     /// twice as far ahead as the radio can hold, which is the situation backpressure exists
     /// for.
-    ({double seconds, int drops, int retransmitted, int stalls}) overrun(bool bp) {
+    ({double seconds, int drops, int retransmitted, int stalls, int blocks}) overrun(bool bp) {
       final sim = lineWorld(
           n: 2,
           channelAccess: ChannelAccess.halfDuplex,
@@ -565,11 +565,13 @@ void main() {
       final t =
           sim.sendFile(sim.nodes[0].id, sim.nodes[1].id, 1048576, window: 8)!;
       expect(runUntil(sim, () => t.state == TransferState.complete, 900000), isTrue);
+      final st = sim.refresh();
       return (
         seconds: ((t.completedAt ?? 0) - t.startedAt) / 1000,
-        drops: sim.refresh().channelDrops,
+        drops: st.channelDrops,
         retransmitted: t.retransmitted,
         stalls: t.stalls,
+        blocks: st.transferBlocks,
       );
     }
 
@@ -581,12 +583,19 @@ void main() {
     // retransmitted.
     expect(blind.drops, greaterThan(20));
     expect(blind.stalls, greaterThan(0));
+    expect(blind.blocks, 0); // nothing throttles it, so nothing ever refuses it air
     // With it the sender fills only the slots the radio has, and the same file arrives
     // sooner, because a chunk that was never dropped never had to be sent twice.
     expect(throttled.drops, lessThan(blind.drops ~/ 4));
-    expect(throttled.retransmitted, lessThan(blind.retransmitted));
     expect(throttled.stalls, 0);
     expect(throttled.seconds, lessThan(blind.seconds));
+    // The window has to be allowed to reach zero, and the sender has to be woken when a slot
+    // frees. Floored at one it still hands a packet to a full queue and has it shed at the tail,
+    // which is not backpressure but a slower way of dropping. Blocking shows up in `blocks`, and
+    // resuming on drain is what takes the retransmissions to zero rather than merely down. Both
+    // engines assert the same three numbers (docs/08 §12.12).
+    expect(throttled.blocks, greaterThan(0));
+    expect(throttled.retransmitted, 0);
   });
 
   test('the contention window fires where carrier sense defers, and costs waiting to do it',
