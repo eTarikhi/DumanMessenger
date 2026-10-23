@@ -30,6 +30,7 @@ type Draft = {
   relayPolicy: RelayPolicy;
   channelAccess: ChannelAccess;
   channelCapture: ChannelCapture;
+  channelCaptureRatioDb: number;
   channelQueueDepth: number;
   channelPriority: ChannelPriority;
   channelBackoff: ChannelBackoff;
@@ -57,6 +58,7 @@ function toDraft(c: SimConfig): Draft {
     relayPolicy: c.relayPolicy,
     channelAccess: c.channelAccess,
     channelCapture: c.channelCapture,
+    channelCaptureRatioDb: c.channelCaptureRatioDb,
     channelQueueDepth: c.channelQueueDepth,
     channelPriority: c.channelPriority,
     channelBackoff: c.channelBackoff,
@@ -108,6 +110,7 @@ export function ConfigPanel({
       relayPolicy: draft.relayPolicy,
       channelAccess: draft.channelAccess,
       channelCapture: draft.channelCapture,
+      channelCaptureRatioDb: draft.channelCaptureRatioDb,
       channelQueueDepth: draft.channelQueueDepth,
       channelPriority: draft.channelPriority,
       channelBackoff: draft.channelBackoff,
@@ -266,7 +269,7 @@ export function ConfigPanel({
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <span style={{ fontSize: 11, color: "#9fb0c3" }}>Receiver</span>
         <div style={{ display: "flex", gap: 6 }}>
-          {(["none", "first"] as const).map((p) => (
+          {(["none", "first", "strongest"] as const).map((p) => (
             <button
               key={p}
               aria-pressed={draft.channelCapture === p}
@@ -287,8 +290,24 @@ export function ConfigPanel({
           <b style={{ color: "#9fb0c3" }}>First packet wins</b> loses whatever arrives while the receiver is
           locked onto an earlier packet, and whatever arrives while the receiver is itself transmitting
           (docs/08 §12.9): with a 10 MB file in flight that is 13.6 points of delivery, against a transmit
-          queue's 2.8.
+          queue's 2.8. <b style={{ color: "#9fb0c3" }}>Strongest signal wins</b> adds the
+          capture effect a real receiver has: a newcomer at least the margin below stronger than
+          the packet being held takes the receiver over, and the incumbent is what is lost. That
+          makes <b style={{ color: "#9fb0c3" }}>first packet wins</b> the pessimistic bound and{" "}
+          <b style={{ color: "#9fb0c3" }}>takes everything</b> the optimistic one, with the truth
+          somewhere in between (docs/08 §12.15).
         </span>
+        {draft.channelCapture === "strongest" && (
+          <>
+            <Slider label="Capture margin (dB)" value={draft.channelCaptureRatioDb} min={0} max={20} step={1}
+              onChange={(v) => set("channelCaptureRatioDb", v)} />
+            <span style={{ fontSize: 10, color: "#5a6a7a", lineHeight: 1.5 }}>
+              How much stronger the newcomer has to be. 6 dB is the capture ratio usually quoted
+              for an angle-modulated receiver; 0 dB is loudest-wins with no margin, and a large
+              value collapses the model back onto first-packet-wins.
+            </span>
+          </>
+        )}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -384,6 +403,7 @@ const PRIORITY_LABELS: Record<ChannelPriority, string> = {
 const CAPTURE_LABELS: Record<ChannelCapture, string> = {
   none: "Takes everything (ships)",
   first: "First packet wins",
+  strongest: "Strongest signal wins",
 };
 
 const CHANNEL_LABELS: Record<ChannelAccess, string> = {

@@ -140,12 +140,19 @@ export type PeerNorm = "fixed" | "observed";
  *           (first capture, with no signal-strength comparison), and a packet that arrives
  *           while the receiver is itself transmitting (a half-duplex radio cannot hear
  *           over its own transmitter). Both are modelled as losses rather than deferrals,
- *           which is what a collision is.
+ *           which is what a collision is. This is the *pessimistic* arm: it never lets a
+ *           strong packet survive a weak one, which no real radio behaves like.
+ * - `strongest` the same, plus the capture effect. A newcomer that is at least
+ *           `channelCaptureRatioDb` stronger than the packet the receiver is holding takes
+ *           the receiver over, and the incumbent is the packet that is lost. A real radio
+ *           does this: it demodulates the stronger signal through the weaker one rather than
+ *           losing both, which is why `first` bounds the loss from above and `none` from
+ *           below, and the truth is in between (docs/08 §12.15).
  *
  * Independent of `channelAccess`: `first` under `"free"` is receiver contention with no
  * transmitter queue, which separates the two mechanisms the half-duplex model conflates.
  */
-export type ChannelCapture = "none" | "first";
+export type ChannelCapture = "none" | "first" | "strongest";
 
 export interface Vec2 {
   x: number;

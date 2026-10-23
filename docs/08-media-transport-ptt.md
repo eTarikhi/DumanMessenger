@@ -1204,13 +1204,103 @@ that can say "not now" to the layer above it, and a layer above that holds the p
 counting it lost. Nothing in this stack has that, and it is the one item §12.10, §12.12, §12.13 and
 this section all independently arrive at.
 
+### 12.15 The capture effect: does a realistic receiver lose less than a pessimistic one?
+
+§12.9 gave the receiver two models and neither is a real radio. `none` takes everything however busy
+it is, which is optimistic. `first` locks onto whichever packet arrived first and never lets a strong
+one survive a weak one, which is pessimistic — and it is the arm that produced the 13.6-point figure
+every later section quotes. Real receivers do a third thing: they demodulate the stronger signal
+*through* the weaker one when the margin is enough, which is the capture effect. `channelCapture:
+"strongest"` models it, with `channelCaptureRatioDb` as the margin (6 dB by default, the ratio usually
+quoted for an angle-modulated receiver). A newcomer at least that much stronger than the packet the
+receiver is holding takes the receiver over, and the incumbent is the packet that is lost.
+
+The question is not whether the mechanism works — it does, and a unit test pins it exactly. Three nodes
+in a lopsided line, 10 m and 25 m from a common receiver, 35 m from each other so neither sender hears
+the other: twenty contested pairs, weak sender handed to the engine first each time, produce **exactly
+twenty takeovers** at a 6 dB margin and **zero** at 12 dB, which the 8 dB of geometry cannot reach. All
+forty messages still arrive, because the bookkeeping is per *transmission* rather than per message: the
+incumbent that was overtaken is re-sent by its own retry timer and that retry is a fresh attempt. Keyed
+by message id instead, an overtaken packet would have its retry dropped on arrival too, and modelling a
+collision would have become modelling a blackhole.
+
+The question is whether it recovers the loss. It does not.
+
+**A correction made mid-measurement, because the first answer was an artefact.** The first run of this
+section had `csma` + a 10 MB file at **0.9266** over three seeds — clearing the ≥0.90 gate that no other
+receiver arm has ever cleared. It was wrong, and the reason is worth more than the number. A transmission
+is booked against its link's quality estimate when it goes on air, so under `first` the loser of a
+collision is booked as a *failure*. Under `strongest` the loser is the incumbent, which had already been
+booked as a success before anything was wrong with it, and the first implementation left that success
+standing. So the two arms differed in something other than capture: `strongest` was systematically
+optimistic about link quality, and routing believed it. Booking the outcome at arrival instead — which is
+when a transmission's fate is actually known, and which is more accurate under every mode — removed the
+win outright: 0.8870 on three seeds, and **0.8672 on six, which is `first`'s six-seed mean to four
+decimal places.**
+
+Six seeds, 20-node campus, 10 MB in flight:
+
+| transmitter | receiver | delivery mean | worst seed | takeovers | collisions | queue drops | file |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `halfDuplex` | `none` | **0.9689** | 0.9153 | 0 | 0 | 2258 | **1.95 min** |
+| `halfDuplex` | `first` | 0.9209 | 0.8475 | 0 | 510 | **984** | 3.13 min |
+| `halfDuplex` | `strongest` | 0.8983 | 0.8644 | 90 | 488 | 821 | 3.00 min |
+| `csma` | `none` | 0.9181 | 0.8136 | 0 | 0 | 2075 | **3.52 min** |
+| `csma` | `first` | 0.8672 | **0.8305** | 0 | 352 | 2215 | **3.77 min** |
+| `csma` | `strongest` | 0.8672 | 0.7458 | 58 | 359 | 2075 | 4.41 min |
+
+Under carrier sense the capture effect changes nothing at all: the same delivery to four decimals, a
+worse worst seed, and a slower file. Under plain half-duplex it is **2.3 points worse** than the model it
+was supposed to improve on. Nothing here reaches the gate, and the only arm that clears it remains the
+one with no receiver in it at all.
+
+How much margin the mechanism needs (`csma`, 10 MB in flight, six seeds):
+
+| margin | takeovers | collisions | delivery mean | worst seed | p95 ms | queue drops | file |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 dB | **167** | 391 | 0.8757 | 0.7797 | 17859 | **1782** | 4.01 min |
+| 3 dB | 100 | 392 | 0.8898 | 0.8305 | 17621 | 1807 | 4.06 min |
+| 6 dB | 58 | 359 | 0.8672 | 0.7458 | 18526 | 2075 | 4.41 min |
+| 12 dB | 16 | 373 | 0.8616 | 0.7966 | 18432 | 1981 | 4.23 min |
+| 20 dB | **2** | 355 | 0.8701 | 0.7966 | 18692 | 2012 | **3.83 min** |
+
+The takeover column is exactly monotone in the margin — 167, 100, 58, 16, 2 — so the knob does precisely
+what it says, from loudest-wins at 0 dB to first-packet-wins at 20 dB. The delivery column does not move
+with it: a flat, noisy band from 0.8616 to 0.8898 across an eighty-fold change in how often the mechanism
+fires. On three seeds this table looked monotone in the *other* direction, improving steadily toward 0 dB
+and reaching 0.9209; six seeds flattened it, which is the fourth time in this document that a three-seed
+trend has not survived being given more seeds.
+
+Why a takeover buys nothing is worth stating plainly, because it is not obvious. **A takeover is not a
+rescue; it moves the loss from the newcomer to the incumbent.** One packet is lost either way, so the
+collision count barely changes — and the incumbent's transmitter now has a retry to do, which is more
+load on the same radio, in the same direction §12.10 found that retry timers convert queueing into load.
+Under half-duplex there is a second effect: the takeover extends the period the receiver is locked, so
+more of what arrives next finds it busy or deaf, which is why the `deaf` count rises with the mechanism
+on. The one thing that does improve is the queue — drops fall from `first`'s 2215 to 1782–2075 — and
+delivery does not follow it, which is the same dissociation §12.13 and §12.14 both ran into: relieving
+the buffer is not the same as delivering the packet.
+
+**What this settles.** §12.9's cost for modelling a receiver is *not* an artefact of the pessimistic
+first-capture rule. A receiver with a realistic capture effect loses about the same amount, and under
+half-duplex loses more. So the bracket `docs/09` §5 asks a field test to locate itself in is narrower on
+this axis than §12.9 alone implied: the choice that matters is between modelling a receiver at all
+(0.867 under carrier sense) and not modelling one (0.918), not between two receiver models. A field
+capture that lands near 0.92 is telling you the radios are not contending; one that lands near 0.87 is
+telling you they are, and no assumption about capture ratio will change that reading by more than noise.
+
+Not shipped: `channelCapture` stays `"none"` and `channelCaptureRatioDb` is 6, so nothing above moves and
+the golden vectors are byte-identical. `npm run media -- captureEffect` reproduces both tables and
+`captureMargin` the sweep.
+
+
 ## 13. Reproducing
 
 ```bash
-npm run media                                            # TypeScript probe, every table above (§7-§11 for the radio: channel, priority, capture, carrier sense, the contention window, who sheds)
-npm run media -- backoff                                 # one section; also `shedding`. The whole probe is minutes of simulation
+npm run media                                            # TypeScript probe, every table above (§7-§12 for the radio: channel, priority, capture, carrier sense, the contention window, who sheds, the capture effect)
+npm run media -- backoff                                 # one section; also `shedding`, `captureEffect`, `captureMargin`. The whole probe is minutes of simulation
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media --no-check
-npm test                                                 # 271 TS tests, incl. 18 media and 17 radio cases
+npm test                                                 # 274 TS tests, incl. 18 media and 20 radio cases
 cd sim/mesh_sim && dart test                             # 18 Dart media cases + test/channel_test.dart
 ```
 

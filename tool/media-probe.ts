@@ -34,6 +34,10 @@ const BLE_MTU_BYTES = 512;
 
 const MB = 1048576;
 const SEEDS = [42, 7, 1234];
+/** The six seeds `src/__tests__/acceptance.test.ts` gates on. Used wherever a claim is a few
+ *  points wide on a system that is chaotic in the seed: three of them have already reversed a
+ *  conclusion in this file once. */
+const SIX_SEEDS = [42, 7, 1234, 99, 2026, 555];
 
 /** Shortest hop count from `from` to every online node, over links that can carry
  *  a packet right now. Used to place a sender and receiver an exact distance apart. */
@@ -756,6 +760,16 @@ function gateRow(
 // ---------------------------------------------------------------------------
 
 const CAPTURES: ChannelCapture[] = ["none", "first"];
+/** The three receiver models, from the one that ships to the one that bounds the loss. */
+const RECEIVER_ARMS: ChannelCapture[] = ["none", "first", "strongest"];
+/** Capture margins to sweep, in dB. 6 is the ratio usually quoted for an angle-modulated
+ *  receiver; 0 is loudest-wins with no margin; 20 collapses back onto first-packet-wins. */
+const CAPTURE_MARGINS = [0, 3, 6, 12, 20];
+
+function cellMean(rows: CaptureCell[], f: (r: CaptureCell) => number | null): number {
+  const vals = rows.map(f).filter((v): v is number => v !== null);
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : NaN;
+}
 const ACCESSES: ChannelAccess[] = ["free", "halfDuplex", "csma"];
 
 interface CaptureCell {
@@ -774,6 +788,7 @@ interface CaptureCell {
   dropsMedia: number;
   dropsWithAlternative: number;
   blocks: number;
+  effects: number;
   fileMs: number | null;
 }
 
@@ -785,7 +800,8 @@ function captureCell(
   queueDepth?: number,
   backoff?: ChannelBackoff,
   cwMin?: number,
-  mediaBackpressure?: boolean
+  mediaBackpressure?: boolean,
+  captureRatioDb?: number
 ): CaptureCell {
   const sim = simFor({
     ...campusQuad(seed),
@@ -796,6 +812,7 @@ function captureCell(
     ...(backoff === undefined ? {} : { channelBackoff: backoff }),
     ...(cwMin === undefined ? {} : { channelCwMin: cwMin }),
     ...(mediaBackpressure === undefined ? {} : { mediaBackpressure }),
+    ...(captureRatioDb === undefined ? {} : { channelCaptureRatioDb: captureRatioDb }),
   });
   const plan = contentionPlan(seed, sim.nodes.length, 60);
   const t = withFile ? sim.sendFile(sim.nodes[plan[0][0]].id, sim.nodes[plan[0][1]].id, 10 * MB) : null;
@@ -835,6 +852,7 @@ function captureCell(
     dropsMedia: stats.channelDropsMedia,
     dropsWithAlternative: stats.channelDropsWithAlternative,
     blocks: stats.transferBlocks,
+    effects: stats.channelCaptureEffects,
     fileMs: t && t.completedAt !== null ? t.completedAt - t.startedAt : null,
   };
 }
@@ -1653,6 +1671,93 @@ function sheddingTable(): void {
   );
 }
 
+function captureEffectTable(): void {
+  console.log("\n=== 12. The capture effect: bracketing the receiver instead of guessing it (docs/08 §12.15) ===");
+  console.log(
+    "§12.9 gave the receiver two models and neither is a real radio. `none` takes everything\n" +
+      "however busy it is, which is optimistic; `first` locks onto whichever packet arrived first and\n" +
+      "never lets a strong one survive a weak one, which is pessimistic. Real receivers do the third\n" +
+      "thing: they demodulate the stronger signal *through* the weaker one when the margin is enough.\n" +
+      "`strongest` models that, and the point of measuring it is not to pick a winner but to turn a\n" +
+      "point estimate into a bracket — `first` bounds the loss from above, `none` from below, and a\n" +
+      "field test lands somewhere between."
+  );
+
+  for (const withFile of [false, true]) {
+    console.log(
+      `\n--- ${withFile ? "60 messages at 2 s, with a 10 MB file in flight" : "60 messages at 2 s, nothing else"} (3 seeds) ---`
+    );
+    console.log(
+      "transmitter  receiver     delivery   within5   p95 ms   captured  takeovers  deaf  queue drops  at source  file"
+    );
+    for (const access of ["halfDuplex", "csma"] as ChannelAccess[]) {
+      for (const capture of RECEIVER_ARMS) {
+        const rows = SEEDS.map((seed) => captureCell(access, capture, seed, withFile));
+        const src =
+          cellMean(rows, (r) => r.drops) > 0
+            ? `${((1 - cellMean(rows, (r) => r.dropsRelayed) / cellMean(rows, (r) => r.drops)) * 100).toFixed(0)}%`
+            : "—";
+        console.log(
+          `${access.padEnd(12)} ${capture.padEnd(12)} ${cellMean(rows, (r) => r.ratio).toFixed(4).padEnd(10)} ` +
+            `${cellMean(rows, (r) => r.within5).toFixed(4).padEnd(9)} ${cellMean(rows, (r) => r.p95).toFixed(0).padEnd(8)} ` +
+            `${cellMean(rows, (r) => r.captured).toFixed(0).padEnd(9)} ${cellMean(rows, (r) => r.effects).toFixed(0).padEnd(10)} ` +
+            `${cellMean(rows, (r) => r.deaf).toFixed(0).padEnd(5)} ${cellMean(rows, (r) => r.drops).toFixed(0).padEnd(12)} ` +
+            `${src.padEnd(10)} ${withFile ? fmt(cellMean(rows, (r) => r.fileMs)) : "—"}`
+        );
+      }
+    }
+  }
+
+  console.log(
+    "\nRead `takeovers` against `captured`: a takeover is not a rescue, it moves the loss from the\n" +
+      "newcomer to the incumbent, so `captured` counts both. What the capture effect can actually\n" +
+      "buy back is the part of `first`'s loss that was a strong packet being killed by a weak one."
+  );
+
+  // Three seeds is not enough for a claim of a few points on a chaotic system: at a 20 dB
+  // margin the model takes over almost nothing and still lands a point away from `first`,
+  // which is the size of the perturbation two takeovers make. Six seeds, with the worst one
+  // printed beside the mean, is what separates a mechanism from a lucky draw.
+  console.log("\n--- six seeds, 10 MB in flight: mean and worst ---");
+  console.log("transmitter  receiver     mean      worst     takeovers  captured  queue drops  file");
+  for (const access of ["halfDuplex", "csma"] as ChannelAccess[]) {
+    for (const capture of RECEIVER_ARMS) {
+      const rows = SIX_SEEDS.map((seed) => captureCell(access, capture, seed, true));
+      const worst = Math.min(...rows.map((r) => r.ratio));
+      console.log(
+        `${access.padEnd(12)} ${capture.padEnd(12)} ${cellMean(rows, (r) => r.ratio).toFixed(4).padEnd(9)} ` +
+          `${worst.toFixed(4).padEnd(9)} ${cellMean(rows, (r) => r.effects).toFixed(0).padEnd(10)} ` +
+          `${cellMean(rows, (r) => r.captured).toFixed(0).padEnd(9)} ${cellMean(rows, (r) => r.drops).toFixed(0).padEnd(12)} ` +
+          `${fmt(cellMean(rows, (r) => r.fileMs))}`
+      );
+    }
+  }
+}
+
+function captureMarginTable(): void {
+  console.log("\n=== 12b. How much margin the capture effect needs (csma, 10 MB in flight, six seeds) ===");
+  console.log(
+    "A margin of 0 dB is loudest-wins and should take the most receivers over; a large margin\n" +
+      "should stop taking any over at all and converge on `first`. If the delivery column is not\n" +
+      "monotone in the margin, the mechanism is not doing what it says. Six seeds and the worst\n" +
+      "one beside the mean, because on three this table showed a monotone improvement toward a\n" +
+      "0 dB margin that the six-seed receiver table did not confirm."
+  );
+  console.log("margin dB    takeovers  captured   mean      worst     p95 ms   queue drops  file");
+  for (const margin of CAPTURE_MARGINS) {
+    const rows = SIX_SEEDS.map((seed) =>
+      captureCell("csma", "strongest", seed, true, undefined, undefined, undefined, undefined, margin)
+    );
+    const worst = Math.min(...rows.map((r) => r.ratio));
+    console.log(
+      `${String(margin).padEnd(12)} ${cellMean(rows, (r) => r.effects).toFixed(0).padEnd(10)} ` +
+        `${cellMean(rows, (r) => r.captured).toFixed(0).padEnd(10)} ${cellMean(rows, (r) => r.ratio).toFixed(4).padEnd(9)} ` +
+        `${worst.toFixed(4).padEnd(9)} ${cellMean(rows, (r) => r.p95).toFixed(0).padEnd(8)} ` +
+        `${cellMean(rows, (r) => r.drops).toFixed(0).padEnd(12)} ${fmt(cellMean(rows, (r) => r.fileMs))}`
+    );
+  }
+}
+
 function main(): void {
   console.log("Duman media transport probe — every number below is measured, not assumed.");
   console.log(
@@ -1661,7 +1766,7 @@ function main(): void {
       `Hop latency BLE ${DEFAULT_CONFIG.hopLatencyBleMs} ms / Wi-Fi ${DEFAULT_CONFIG.hopLatencyWifiMs} ms, ` +
       `jitter ${DEFAULT_CONFIG.jitterMinMs}-${DEFAULT_CONFIG.jitterMaxMs} ms.`
   );
-  // `npm run media` runs all ten sections, which is minutes of simulation. A section name as
+  // `npm run media` runs all twelve sections, which is minutes of simulation. A section name as
   // the first argument runs just that one — the whole file is a build, so re-measuring §10
   // should not mean re-measuring §1-§9 to get at it.
   const only = process.argv[2];
@@ -1677,6 +1782,8 @@ function main(): void {
     ["capture", captureTable],
     ["backoff", backoffTable],
     ["shedding", sheddingTable],
+    ["captureEffect", captureEffectTable],
+    ["captureMargin", captureMarginTable],
   ];
   if (only && !sections.some(([name]) => name === only)) {
     console.error(`unknown section "${only}". one of: ${sections.map(([name]) => name).join(", ")}`);

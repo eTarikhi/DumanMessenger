@@ -226,7 +226,8 @@ export function MetricsPanel({ stats, dutyCycleEnabled, nodes, config }: Props) 
         stats.channelDrops > 0 ||
         stats.channelCaptured > 0 ||
         stats.channelDeafRx > 0 ||
-        stats.channelBackoffs > 0) && (
+        stats.channelBackoffs > 0 ||
+        stats.channelCaptureEffects > 0) && (
         <section style={{ marginTop: 14 }}>
           <div style={sectionStyle}>📻 Radio channel (docs/08 §12)</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -252,6 +253,13 @@ export function MetricsPanel({ stats, dutyCycleEnabled, nodes, config }: Props) 
               value={`${stats.channelBackoffs}`}
               accent={stats.channelBackoffs === 0 ? "#b6ff4a" : "#7fb3ff"}
             />
+            {stats.channelCaptureEffects > 0 && (
+              <Counter
+                label="Receivers taken over by a stronger packet"
+                value={`${stats.channelCaptureEffects}`}
+                accent="#4de0ff"
+              />
+            )}
           </div>
           {stats.channelDrops > 0 && (
             <>
@@ -300,12 +308,18 @@ export function MetricsPanel({ stats, dutyCycleEnabled, nodes, config }: Props) 
             each packet until the radio is free and drops it when the {config?.channelQueueDepth ?? 8}-deep queue is
             full, because a real radio sheds load rather than promising air time does not have;{" "}
             <code>channelCapture: "first"</code> adds the receiver, which loses whatever arrives while it is locked
-            onto an earlier packet or while it is itself transmitting. <code>channelBackoff: "binary"</code> adds the
+            onto an earlier packet or while it is itself transmitting. <code>"strongest"</code> adds the capture
+            effect a real receiver has on top of that: a packet enough stronger than the one being held takes the
+            receiver over, and the packet already there is what is lost — so the takeover counter is not a rescue
+            count, it says how many losses moved from one packet to the other (docs/08 §12.15).{" "}
+            <code>channelBackoff: "binary"</code> adds the
             contention window carrier sense was missing — a random wait, doubled after each collision — and counts the
             times a node found the medium free and still had to wait for it. Under the shipped model every counter
             stays at zero by construction: there is no shared medium and no inattentive receiver, so a transmission
             cannot delay or lose another one. That is why a 10 MB file costs nobody else anything there, and costs 1.7 points
-            of delivery with a queue and 13.6 with a receiver (docs/08 §12.9).
+            of delivery with a queue and 13.6 with a receiver (docs/08 §12.9) — a figure a realistic
+            capture-effect receiver does not improve on, because a takeover moves a loss rather than
+            removing one (docs/08 §12.15).
           </div>
         </section>
       )}

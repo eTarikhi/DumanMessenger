@@ -281,6 +281,11 @@ export interface SimConfig {
    *  `"first"` loses the later packet, and loses any packet that arrives while its receiver
    *  is itself transmitting (docs/08 §12.9). */
   channelCapture: ChannelCapture;
+  /** How much stronger a newcomer has to be to take a busy receiver over, in dB. Only
+   *  consulted under `channelCapture: "strongest"`. Six dB is the capture ratio usually
+   *  quoted for an angle-modulated receiver, and 0 dB reduces the model to "loudest wins
+   *  regardless of margin" while a large value reduces it to `first`. */
+  channelCaptureRatioDb: number;
 
   /** Whether a node that has been waiting for the medium waits a *random* number of slots
    *  before taking it, and how wide the window it draws from is. Carrier sense alone wakes
@@ -463,6 +468,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   communityRelayQuota: 0,
   peerNorm: "fixed",
   channelCapture: "none",
+  channelCaptureRatioDb: 6,
   channelBackoff: "none",
   channelCwMin: 4,
   channelCwMax: 64,
@@ -578,6 +584,11 @@ export interface SimulationStats {
   /** Packets lost because the receiver was locked onto a packet that arrived first
    *  (`channelCapture: "first"`, docs/08 §12.9). */
   channelCaptured: number;
+  /** Times a stronger newcomer took a busy receiver over from the packet it was holding,
+   *  under `channelCapture: "strongest"`. Each one is also a collision loss — of the
+   *  incumbent — so it is counted in `channelCaptured` as well. This is the count that says
+   *  how much of `first`'s pessimism the capture effect actually buys back. */
+  channelCaptureEffects: number;
   /** Packets lost because the receiver was itself transmitting: a half-duplex radio cannot
    *  hear over its own transmitter. */
   channelDeafRx: number;
@@ -904,6 +915,12 @@ function percentile(sorted: number[], p: number): number {
 interface MsgPayload {
   msg: MeshMessage;
   via: NodeId;
+  /** Which *transmission* this is, not which message. A message can be on air several times
+   *  over — a retry, or two relays racing with the same copy — and `channelCapture:
+   *  "strongest"` has to be able to say "this one was taken over" without condemning every
+   *  later attempt at the same message. Only assigned under `"strongest"`; undefined
+   *  otherwise, so the other two modes never touch it. */
+  seq?: number;
 }
 
 /** How a forwarding decision shows up in a message's hop trace. `wait-mpr` is
@@ -995,7 +1012,14 @@ export class MeshSimulation {
   private channelDropsMedia = 0;
   private channelDropsWithAlternative = 0;
   private channelCaptured = 0;
+  private channelCaptureEffects = 0;
   private channelDeafRx = 0;
+  /** Per-transmission sequence, for `channelCapture: "strongest"` only. Not a random draw,
+   *  so it cannot move a golden vector. */
+  private txSeq = 0;
+  private rxRssi = new Map<NodeId, number>();
+  private rxSeq = new Map<NodeId, number>();
+  private superseded = new Set<number>();
   private channelBackoffs = 0;
   private transferBlocks = 0;
   /** Whether the transmission that just went on air collided at its receiver. Read by the
@@ -1106,13 +1130,18 @@ export class MeshSimulation {
     this.channelDropsMedia = 0;
     this.channelDropsWithAlternative = 0;
     this.channelCaptured = 0;
+    this.channelCaptureEffects = 0;
     this.channelDeafRx = 0;
+    this.txSeq = 0;
+    this.superseded.clear();
     this.channelBackoffs = 0;
     this.transferBlocks = 0;
     this.lastTxCollided = false;
     this.channel.clear();
     this.txUntil.clear();
     this.rxUntil.clear();
+    this.rxRssi.clear();
+    this.rxSeq.clear();
     this.ogmTx = 0;
     this.lostDataTx = 0;
     this.lostOgmTx = 0;
@@ -1318,6 +1347,8 @@ export class MeshSimulation {
         this.queue.cancel("channel", node.id);
         this.txUntil.delete(node.id);
         this.rxUntil.delete(node.id);
+        this.rxRssi.delete(node.id);
+        this.rxSeq.delete(node.id);
       }
     }
     this.queue.push(this.now + this.config.physicsIntervalMs, "physics", "*");
@@ -2508,12 +2539,20 @@ export class MeshSimulation {
     if (capture) {
       // Two ways a packet that survived the link still does not arrive: its receiver is
       // transmitting, or its receiver is locked onto a packet that got there first. Both
-      // are losses rather than deferrals — that is what a collision is — and neither is
-      // modelled with a signal-strength comparison, so the earlier packet always wins
-      // (docs/08 §12.9).
+      // are losses rather than deferrals — that is what a collision is. Under `first` the
+      // earlier packet always wins and no signal-strength comparison happens, which is the
+      // pessimistic bound (docs/08 §12.9). Under `strongest` a newcomer that is enough
+      // stronger takes the receiver over instead, and the incumbent is what is lost — the
+      // capture effect, and the reason `first` and `none` bracket the truth rather than
+      // either of them being it (docs/08 §12.15).
       const deaf = (this.txUntil.get(target.id) ?? 0) > this.now;
-      const captured = !deaf && (this.rxUntil.get(target.id) ?? 0) > this.now;
-      if (deaf || captured) {
+      const busy = !deaf && (this.rxUntil.get(target.id) ?? 0) > this.now;
+      const held = this.rxRssi.get(target.id) ?? Number.NEGATIVE_INFINITY;
+      const captures =
+        busy &&
+        this.config.channelCapture === "strongest" &&
+        rssi >= held + this.config.channelCaptureRatioDb;
+      if ((deaf || busy) && !captures) {
         this.lastTxCollided = true;
         if (deaf) this.channelDeafRx++;
         else this.channelCaptured++;
@@ -2522,14 +2561,39 @@ export class MeshSimulation {
           "loss",
           node.id,
           `${msg.id} → ${targetId} collided (${
-            deaf ? "receiver was transmitting" : "receiver was locked onto an earlier packet"
+            deaf
+              ? "receiver was transmitting"
+              : this.config.channelCapture === "strongest"
+                ? `receiver held a stronger packet (${held.toFixed(0)} vs ${rssi.toFixed(0)} dBm)`
+                : "receiver was locked onto an earlier packet"
           })`,
           { peerId: targetId, msgId: msg.id, msgType: msg.type, hop: msg.hopCount, rssi }
         );
         return occupied;
       }
+      if (captures) {
+        // The newcomer wins the receiver. The incumbent is condemned by transmission
+        // sequence rather than by message id, so that a retry of the same message — or a
+        // second relay carrying the same copy — is a fresh attempt.
+        const victim = this.rxSeq.get(target.id);
+        if (victim !== undefined) this.superseded.add(victim);
+        this.channelCaptureEffects++;
+        // …and the incumbent is a collision loss, so it is counted as one.
+        this.channelCaptured++;
+        // `lastTxCollided` stays clear for the winner: its own transmission was clean, and
+        // doubling its contention window would punish the packet that survived. The
+        // incumbent's transmitter is not told, which is the honest limit of modelling this
+        // at the receiver — a real radio gets no such notification either, and it is why
+        // `channelBackoff` and `channelCapture: "strongest"` do not compose into anything
+        // better than each alone.
+      }
     }
-    this.recordTxOutcome(node, 1);
+    // Under `strongest` the outcome is booked at arrival instead, because a packet taken over
+    // part-way through was not a success and booking it as one here would leave the link
+    // estimate optimistic about a radio that is losing packets to third parties. That would
+    // also make the arm incomparable with `first`, where the loser of a collision *is* booked
+    // as a failure: the only difference between the two arms should be which packet survives.
+    if (this.config.channelCapture !== "strongest") this.recordTxOutcome(node, 1);
     this.pushLog("tx", node.id, `${msg.id} → ${targetId} (${msg.type}, hop ${msg.hopCount}, ${rssi.toFixed(0)} dBm)`, {
       peerId: targetId,
       msgId: msg.id,
@@ -2547,7 +2611,15 @@ export class MeshSimulation {
       this.serializationMs(msg.sizeBytes, msg.transport) +
       randRange(this.rng, this.config.jitterMinMs, this.config.jitterMaxMs);
     if (capture) this.rxUntil.set(target.id, this.now + airTime);
-    this.queue.push(this.now + airTime, "msg", targetId, { msg, via: node.id } as MsgPayload);
+    let seq: number | undefined;
+    if (this.config.channelCapture === "strongest") {
+      // Only assigned here, so the two shipped modes consume nothing and behave exactly as
+      // every published number in this repository was measured.
+      seq = ++this.txSeq;
+      this.rxRssi.set(target.id, rssi);
+      this.rxSeq.set(target.id, seq);
+    }
+    this.queue.push(this.now + airTime, "msg", targetId, { msg, via: node.id, seq } as MsgPayload);
     return airTime;
   }
 
@@ -2572,6 +2644,28 @@ export class MeshSimulation {
     if (!node || !node.isOnline) return;
     const { msg, via } = payload;
     const sender = this.byId(via);
+
+    // A transmission the receiver gave up on part-way through, because a stronger packet took
+    // it over (`channelCapture: "strongest"`). Checked before anything else: the receiver
+    // never decoded this one, so it is not coverage evidence, not a delivery, and not a
+    // duplicate. Keyed by transmission rather than by message id, so a retry of the same
+    // message is a fresh attempt and not a condemned one. Under every other mode `seq` is
+    // undefined and this cannot fire.
+    const seq = payload.seq;
+    if (seq !== undefined && sender) {
+      if (this.superseded.has(seq)) {
+        this.superseded.delete(seq);
+        this.recordTxOutcome(sender, 0);
+        this.pushLog("loss", nodeId, `${msg.id} lost (receiver was taken over by a stronger packet)`, {
+          peerId: via,
+          msgId: msg.id,
+          msgType: msg.type,
+          hop: msg.hopCount,
+        });
+        return;
+      }
+      this.recordTxOutcome(sender, 1);
+    }
 
     // Coverage evidence for the MPR gate. Any neighbour we receive a copy from
     // already holds the message, so it never needs covering again; and that
@@ -3352,6 +3446,7 @@ export class MeshSimulation {
       channelDropsMedia: this.channelDropsMedia,
       channelDropsWithAlternative: this.channelDropsWithAlternative,
       channelCaptured: this.channelCaptured,
+      channelCaptureEffects: this.channelCaptureEffects,
       channelBackoffs: this.channelBackoffs,
       transferBlocks: this.transferBlocks,
       channelDeafRx: this.channelDeafRx,

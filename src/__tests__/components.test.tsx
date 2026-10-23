@@ -664,4 +664,69 @@ describe("the radio channel in the UI (docs/08 §12)", () => {
     expect(html).toContain("Half-duplex");
     expect(html).toContain("aria-pressed=\"true\"");
   });
+
+  it("adds the capture effect as a third receiver model, with its margin beside it", () => {
+    const panel = (config: ReturnType<typeof world>["config"]) =>
+      renderToStaticMarkup(
+        <ConfigPanel
+          config={config}
+          onChange={() => null}
+          showLinks={false}
+          showRanges={false}
+          onToggleLinks={() => null}
+          onToggleRanges={() => null}
+          autoTraffic={false}
+          onToggleAutoTraffic={() => null}
+        />
+      );
+
+    // §12.9 gave the receiver two models and called the pessimistic one a bound. The third is
+    // what a real receiver does, and the copy has to say which end of the bracket each is —
+    // otherwise the panel offers three radios and no way to choose between them.
+    const pessimistic = panel(world({ channelCapture: "first" }).config);
+    expect(pessimistic).toContain("First packet wins");
+    expect(pessimistic).toContain("Strongest signal wins");
+    expect(pessimistic).toContain("pessimistic bound");
+    // The margin is only meaningful to the model that compares signal strengths, so it is
+    // gated like every other dependent control in this panel.
+    expect(pessimistic).not.toContain("Capture margin");
+
+    const capture = panel(world({ channelCapture: "strongest" }).config);
+    expect(capture).toContain("Capture margin (dB)");
+    expect(capture).toContain('value="6"');
+    // 6 dB is a quoted capture ratio for an angle-modulated receiver, not a guess, and the
+    // copy says what either extreme of the slider degenerates into.
+    expect(capture).toContain("angle-modulated receiver");
+    expect(capture).toContain("collapses the model back onto first-packet-wins");
+  });
+
+  it("counts the receivers a stronger packet took over, and only when there were any", () => {
+    // §12.15's finding is that takeovers are exactly monotone in the margin while delivery does
+    // not move at all, which is only believable if you can watch the two counts separately.
+    const free = world();
+    expect(free.stats.channelCaptureEffects).toBe(0);
+    expect(
+      renderToStaticMarkup(
+        <MetricsPanel stats={free.stats} dutyCycleEnabled={false} nodes={free.nodes} config={free.config} />
+      )
+    ).not.toContain("Receivers taken over");
+
+    const contested = renderToStaticMarkup(
+      <MetricsPanel
+        stats={{ ...free.stats, channelCaptureEffects: 90, channelCaptured: 488 }}
+        dutyCycleEnabled={false}
+        nodes={free.nodes}
+        config={free.config}
+      />
+    );
+    expect(contested).toContain("Receivers taken over by a stronger packet");
+    expect(contested).toContain('monospace">90<');
+    // …and the collisions the takeovers are counted inside stay on screen beside them, because
+    // a takeover moves a loss rather than removing one. Showing 90 without the 488 would read
+    // as ninety rescues.
+    expect(contested).toContain("Collided at the receiver");
+    // And the panel has to say what the third model is, not just count it.
+    expect(contested).toContain("strongest");
+    expect(contested).toContain('monospace">488<');
+  });
 });
