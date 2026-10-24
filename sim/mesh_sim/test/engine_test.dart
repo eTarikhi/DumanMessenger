@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:duman_mesh_sim/mesh_sim.dart';
@@ -1664,6 +1665,68 @@ void main() {
       final longMsg = createMessage('m2', 0.0, 'a', 'b', 'x' * 930);
       expect(longMsg.sizeBytes, equals(1280));
       expect(longMsg.transport, equals(TransportType.wifiDirect));
+    });
+
+    test('counts a body in UTF-8 bytes, not in UTF-16 code units', () {
+      expect(utf8ByteLength(''), equals(0));
+      expect(utf8ByteLength('hey Kemal'), equals(9));
+      expect(utf8ByteLength('isik'), equals(4)); // ASCII: bytes == code units
+      expect(utf8ByteLength('\u0131\u015f\u0131k'), equals(7)); // "isik" in Turkish
+      expect(utf8ByteLength('\u0394'), equals(2)); // GREEK CAPITAL LETTER DELTA
+      expect(utf8ByteLength('\u0927'), equals(3)); // DEVANAGARI DHA
+      expect(utf8ByteLength('\u7159'), equals(3)); // CJK "smoke"
+      expect(utf8ByteLength('\uD83D\uDE00'), equals(4)); // one grinning face
+      expect('\uD83D\uDE00'.length, equals(2)); // but two UTF-16 code units
+      // A lone surrogate encodes as U+FFFD in both engines. `utf8.encode` throws on
+      // these by default, which is why the rule is written out in utf8ByteLength
+      // rather than delegated: the TypeScript TextEncoder replaces, so the two
+      // would otherwise disagree.
+      expect(utf8ByteLength('\uD83D'), equals(3));
+      expect(utf8ByteLength('\uDE00'), equals(3));
+    });
+
+    test('agrees with utf8.encode on every script the app will meet first', () {
+      final samples = <String>[
+        '',
+        'hey Kemal',
+        'ping all',
+        'Duman: \u0131\u015f\u0131k \u00e7\u0131\u011f \u015ei\u015fli',
+        'Marcu \u021aepe\u0219',
+        '\u0394\u03BF\u03C5\u03BC\u03AC\u03BD\u03B9',
+        '\u0414\u0443\u043C\u0430\u043D',
+        '\u062F\u062E\u0627\u0646',
+        '\u0927\u0941\u0906\u0901',
+        '\u0E04\u0E27\u0E31\u0E19',
+        '\u7159',
+        '\uACF0\uAE30',
+        '\u3051\u3080\u308A',
+        '\uD83C\uDD98\uD83D\uDC65\uD83D\uDCE6',
+      ];
+      for (final text in samples) {
+        expect(utf8ByteLength(text), equals(utf8.encode(text).length), reason: text);
+      }
+    });
+
+    test('moves a non-ASCII body to the transport that can actually carry it', () {
+      final emoji = '\uD83D\uDE00' * 300;
+      expect(emoji.length, equals(600)); // code units
+      expect(utf8ByteLength(emoji), equals(1200)); // bytes on air
+      // By code units this is a 768 B packet that rides BLE. By bytes it is 1536 B
+      // and needs Wi-Fi Direct. Only one of those is a packet a radio can send.
+      expect(wireSizeOf(emoji.length), equals(768));
+      expect(selectTransport(wireSizeOf(emoji.length)), equals(TransportType.ble));
+      expect(wireSizeOfBody(emoji), equals(1536));
+      expect(selectTransport(wireSizeOfBody(emoji)), equals(TransportType.wifiDirect));
+    });
+
+    test('leaves every ASCII result exactly where wireSizeOf put it', () {
+      for (final chars in <int>[0, 1, 160, 161, 162, 241, 700, 900, 929, 930, 1200]) {
+        expect(wireSizeOfBody('x' * chars), equals(wireSizeOf(chars)), reason: '$chars');
+      }
+      // Every fixture body is ASCII, so no golden vector moves.
+      expect(createMessage('m3', 0.0, 'a', 'b', 'merhaba \u0131\u015f\u0131k').sizeBytes,
+          equals(256));
+      expect(createMessage('m4', 0.0, 'a', 'b', 'hey Kemal').sizeBytes, equals(256));
     });
   });
 }

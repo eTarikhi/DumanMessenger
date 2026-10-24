@@ -33,7 +33,14 @@ const int padBlockBytes = 256;
 
 /// Everything around the body in one encrypted packet, from `skills/03`'s layout:
 /// `header {msgId16, ttl, type, destHint8, hop}` = 27 B, `aead {nonce12, tag16}` =
-/// 28 B, and inside the ciphertext `from` 32 B + `ts` 8 B. 95 B before the body.
+/// 28 B, and inside the ciphertext `from` 32 B + `ts` 6 B + `len` 2 B. 95 B before
+/// the body.
+///
+/// `ts` is 6 bytes and not the 8 `docs/07` §4 writes, and the 2 that frees up hold
+/// the body length: zero padding is ambiguous for a binary body, and a media chunk
+/// can legitimately end in `0x00`. Six-byte milliseconds run to the year 10889.
+/// The total is unchanged, so every published size survives — see
+/// `src/crypto/packet.ts`, which serialises this packet for real.
 const int packetOverheadBytes = 27 + 12 + 16 + 32 + 8;
 
 /// Wire size of one message, in bytes, as the transport selector sees it.
@@ -49,6 +56,51 @@ int wireSizeOf(int bodyChars) {
   final raw = packetOverheadBytes + (bodyChars < 0 ? 0 : bodyChars);
   return ((raw + padBlockBytes - 1) ~/ padBlockBytes) * padBlockBytes;
 }
+
+/// Length of [text] in UTF-8 bytes, not in UTF-16 code units.
+///
+/// A packet carries bytes and `String.length` counts code units, so the two agree
+/// only for ASCII — which is why this went unnoticed: every name in the spawn
+/// table, every body the traffic generator produces and every fixture body in
+/// `test-fixtures/golden-vectors.json` is ASCII. They disagree the moment a user
+/// types Turkish, Arabic, Devanagari, CJK or an emoji, and the disagreement is
+/// optimistic, which is the dangerous direction: the number picks the transport
+/// and the transport sets the per-hop latency every finding is reported against.
+///
+/// Counted by hand rather than through `utf8.encode` for two reasons. It allocates
+/// nothing, and it writes the lone-surrogate rule down explicitly (U+FFFD, three
+/// bytes) instead of depending on what `utf8.encode` does with malformed input —
+/// it throws by default, and the TypeScript engine's `TextEncoder` replaces. Both
+/// engines implement the replacement, so they agree by construction rather than by
+/// coincidence. Mirror of `utf8ByteLength` in `src/routing.ts`.
+int utf8ByteLength(String text) {
+  var bytes = 0;
+  for (var i = 0; i < text.length; i++) {
+    final unit = text.codeUnitAt(i);
+    if (unit < 0x80) {
+      bytes += 1;
+    } else if (unit < 0x800) {
+      bytes += 2;
+    } else if (unit >= 0xD800 && unit <= 0xDBFF && i + 1 < text.length) {
+      final low = text.codeUnitAt(i + 1);
+      if (low >= 0xDC00 && low <= 0xDFFF) {
+        bytes += 4; // a valid surrogate pair is one 4-byte character
+        i += 1;
+        continue;
+      }
+      bytes += 3; // a lone high surrogate encodes as U+FFFD
+    } else {
+      bytes += 3; // BMP above U+07FF, and any lone surrogate
+    }
+  }
+  return bytes;
+}
+
+/// Wire size of a body given as text. This is what [createMessage] uses.
+///
+/// [wireSizeOf] stays for callers that already hold a byte count — media chunks,
+/// whose payload size is declared rather than padded (docs/08 §8).
+int wireSizeOfBody(String body) => wireSizeOf(utf8ByteLength(body));
 
 /// Same 32-bit string hash as the TypeScript engine, so `destHint` matches
 /// across languages (it appears in golden vectors).
@@ -90,7 +142,8 @@ MeshMessage createMessage(
 }) {
   // A chunk's size is the payload it carries, not the empty body it was built
   // from — and that size is what picks the transport and the air time.
-  final wireBytes = sizeBytes ?? wireSizeOf(body.length);
+  // Bytes, not code units: see [utf8ByteLength].
+  final wireBytes = sizeBytes ?? wireSizeOfBody(body);
   return MeshMessage(
     id: id,
     type: type,

@@ -1487,8 +1487,8 @@ Map<String, Object?> _historyProbe(SimConfig config) {
     'syncPackets': on.packets,
     'bytes': on.bytes,
     'beaconChars': beacon.length,
-    'beaconWire': wireSizeOf(beacon.length),
-    'beaconTransport': selectTransport(wireSizeOf(beacon.length)).name,
+    'beaconWire': wireSizeOfBody(beacon),
+    'beaconTransport': selectTransport(wireSizeOfBody(beacon)).name,
     'verdict': verdict,
   };
 }
