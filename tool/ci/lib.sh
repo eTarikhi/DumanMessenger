@@ -115,3 +115,32 @@ skip_step() {
   warn "$label could not run: $reason"
   printf '%s\n' "missing: $reason" > "${artifact_dir}/${label// /-}.missing"
 }
+
+# dart_sdk_version
+#
+# `dart --version` prints:
+#   Dart SDK version: 3.5.4 (stable) (Thu Oct 17 16:22:05 2024 +0200) on "linux_x64"
+# Taking the last field — which both pipeline scripts used to do — yields the platform, not the
+# version, so every report and JSON record claimed the SDK was called "linux_x64". Pull the
+# semver out by shape instead; the build date contains no X.Y.Z so it cannot be mistaken for it.
+dart_sdk_version() {
+  tool_version dart | grep -oE '[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z+.-]*' | head -1
+}
+
+# version_ge <have> <want>
+#
+# Dotted-numeric comparison. No `sort -V` (GNU-only, absent on BSD/macOS) and no subprocesses.
+# A pre-release suffix is truncated at its first non-digit, which is all the SDK floor needs.
+version_ge() {
+  local IFS=. i x y
+  local -a a b
+  read -ra a <<< "$1"
+  read -ra b <<< "$2"
+  for ((i = 0; i < ${#b[@]}; i++)); do
+    x="${a[i]:-0}"; y="${b[i]:-0}"
+    x="${x%%[!0-9]*}"; y="${y%%[!0-9]*}"
+    [ "${x:-0}" -gt "${y:-0}" ] && return 0
+    [ "${x:-0}" -lt "${y:-0}" ] && return 1
+  done
+  return 0
+}

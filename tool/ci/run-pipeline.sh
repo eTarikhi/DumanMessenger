@@ -152,7 +152,7 @@ if [ "$QUIET" = 0 ]; then
   echo
   log_dim "toolchain   node $(tool_version node | sed 's/^v//')   npm $(tool_version npm)   python3 $(tool_version python3 | awk '{print $2}')"
   if [ "$HAVE_DART" = 1 ]; then
-    log_dim "            dart $(tool_version dart | awk '{print $NF}')"
+    log_dim "            dart $(dart_sdk_version)"
   else
     log_dim "            dart ${C_YELLOW}MISSING${C_RESET} — see docs/10-local-development-and-ci.md §2"
   fi
@@ -478,7 +478,7 @@ if [ -n "$JSON_OUT" ]; then
     printf '  "verification": "%s",\n' "$VERIFIED"
     printf '  "toolchain": {"node": "%s", "npm": "%s", "dart": "%s", "python3": "%s"},\n' \
       "$(tool_version node | sed 's/^v//')" "$(tool_version npm)" \
-      "$([ "$HAVE_DART" = 1 ] && tool_version dart | awk '{print $NF}' || echo missing)" \
+      "$([ "$HAVE_DART" = 1 ] && dart_sdk_version || echo missing)" \
       "$(tool_version python3 | awk '{print $2}')"
     printf '  "jobs": {\n'
     first=1

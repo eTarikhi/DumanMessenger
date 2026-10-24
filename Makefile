@@ -7,6 +7,7 @@
 #
 #   make doctor    is this machine able to verify this repository?
 #   make ci        run the whole CI pipeline locally
+#   make checks    every check at once, one report, and which have never been run
 #   make push      run the pipeline, and push only if it passed
 #   make watch     what did the remote CI do?
 #
@@ -20,6 +21,7 @@ CI    := ./tool/ci
         test typecheck build golden dev media history \
         dart-get dart-analyze dart-test dart-cli \
         push push-dry push-force commit-push watch watch-all follow diagnose \
+        checks checks-list checks-evidence \
         pr pr-dry pr-open pr-local pr-branch pr-squash check-ps1 \
         act install-hooks clean clean-artifacts
 
@@ -70,6 +72,22 @@ cli-matrix: ## CLI acceptance across all four scenarios and both power models
 
 probes: ## CLI probes: SOS, groups, history anti-entropy, media
 	@$(CI)/run-pipeline.sh --job probes
+
+## --- every check at once -----------------------------------------------------
+#
+# `make ci` mirrors .github/workflows/ci.yml one command for one command, and that mapping is
+# its whole value. `make checks` is deliberately a superset: everything CI runs, plus the
+# checks that only make sense locally, plus a column CI cannot give you — which of these have
+# never actually been run against this tree. It never stops at the first failure.
+
+checks: ## Every check at once, one report; nothing stops at the first failure
+	@$(CI)/collect-checks.sh
+
+checks-list: ## What `make checks` would run, and which checks have never been run
+	@$(CI)/collect-checks.sh --list
+
+checks-evidence: ## `make checks` plus the slow probes that reproduce the docs' numbers
+	@$(CI)/collect-checks.sh --with-evidence
 
 ## --- push, gated -------------------------------------------------------------
 
