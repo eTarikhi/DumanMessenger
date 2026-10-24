@@ -175,6 +175,21 @@ const int groupMaxMembers = 10;
 /// geometry-independent flood is the default.
 enum GroupMode { scopedFlood, perMemberUnicast }
 
+/// Who enforces `docs/04` §6's broadcast cap.
+///
+/// [superOnly] is what the document says — "SUPERs drop excess" — and is the default.
+/// It bounds how *far* a flood travels, not whether the flooder's own neighbours see
+/// it. [all] is the reading that closes that, kept as a knob rather than a
+/// replacement because §6 does not contain the rule; the two are measured against
+/// each other in `docs/06` §21.5. Spelled `superOnly` because `super` is a Dart
+/// keyword, the same reason `Role.superNode` is not `Role.super`.
+enum BroadcastCapScope { superOnly, all }
+
+extension BroadcastCapScopeName on BroadcastCapScope {
+  /// CLI and JSON spelling, matching the TypeScript engine's `"super" | "all"`.
+  String get wire => this == BroadcastCapScope.superOnly ? 'super' : 'all';
+}
+
 /// A group channel (docs/04 §4, roadmap Phase 1 and Phase 4 "Group UX").
 class Group {
   Group({

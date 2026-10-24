@@ -1885,6 +1885,81 @@ void main() {
       // copyWith carries every other knob across unchanged.
       expect(on.nodeCount, equals(config.nodeCount));
       expect(on.mediaBackpressure, equals(config.mediaBackpressure));
+      expect(on.broadcastCapScope, equals(config.broadcastCapScope));
+    });
+  });
+
+  group('broadcast cap enforcement scope', () {
+    // Mirrors the TypeScript engine's `broadcastCapScope` knob: docs/04 §6 says
+    // "SUPERs drop excess", which bounds how *far* a flood travels and not whether the
+    // flooder's own one-hop neighbours see it. docs/06 §21.5 measures the two scopes
+    // against each other rather than asserting one is better.
+
+    Map<String, num> flooded(bool rateLimits, BroadcastCapScope scope) {
+      final sim = MeshSimulation(campusQuad(42).copyWith(
+        rateLimits: rateLimits,
+        broadcastCapScope: scope,
+      ));
+      sim.runFor(60000.0); // settle elections, so there are SUPERs either way
+      sim.refresh();
+      final source = sim.nodes.first.id;
+      for (var i = 0; i < 24; i++) {
+        sim.sendMessage(source, 'BROADCAST', 'flood \$i', MsgType.broadcast);
+        sim.runFor(200.0);
+      }
+      sim.runFor(20000.0);
+      sim.refresh();
+      return {
+        'broadcastDrops': sim.stats.rateBroadcastDrops,
+        'relayDrops': sim.stats.rateRelayDrops,
+        'transmissions': sim.nodes.fold<int>(0, (sum, n) => sum + n.txCount),
+      };
+    }
+
+    test('defaults to docs/04 §6 — SUPERs only', () {
+      expect(campusQuad(42).broadcastCapScope, equals(BroadcastCapScope.superOnly));
+      expect(BroadcastCapScope.superOnly.wire, equals('super'));
+      expect(BroadcastCapScope.all.wire, equals('all'));
+    });
+
+    test('suppresses more when every node enforces than when only SUPERs do', () {
+      final superOnly = flooded(true, BroadcastCapScope.superOnly);
+      final everywhere = flooded(true, BroadcastCapScope.all);
+      expect(superOnly['broadcastDrops']!, greaterThan(0));
+      expect(everywhere['broadcastDrops']!,
+          greaterThan(superOnly['broadcastDrops']!));
+    });
+
+    test('cuts the airtime a flood costs, which is what the cap is for', () {
+      final uncapped = flooded(false, BroadcastCapScope.superOnly)['transmissions']!;
+      final superOnly = flooded(true, BroadcastCapScope.superOnly)['transmissions']!;
+      final everywhere = flooded(true, BroadcastCapScope.all)['transmissions']!;
+      expect(uncapped, greaterThan(superOnly));
+      expect(superOnly, greaterThan(everywhere));
+    });
+
+    test('still costs an honest network nothing under either scope', () {
+      for (final scope in <BroadcastCapScope>[
+        BroadcastCapScope.superOnly,
+        BroadcastCapScope.all,
+      ]) {
+        final sim = MeshSimulation(campusQuad(42).copyWith(
+          rateLimits: true,
+          broadcastCapScope: scope,
+        ));
+        sim.runFor(60000.0);
+        sim.refresh();
+        final source = sim.nodes.first.id;
+        // One broadcast every 20 s is 3/min, under the cap of 5 — and a NORMAL node
+        // filtering its own honest neighbour is exactly the risk `all` would introduce.
+        for (var i = 0; i < 6; i++) {
+          sim.sendMessage(source, 'BROADCAST', 'honest \$i', MsgType.broadcast);
+          sim.runFor(20000.0);
+        }
+        sim.refresh();
+        expect(sim.stats.rateBroadcastDrops, equals(0), reason: scope.name);
+        expect(sim.stats.rateRelayDrops, equals(0), reason: scope.name);
+      }
     });
   });
 }

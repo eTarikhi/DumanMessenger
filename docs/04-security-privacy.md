@@ -124,7 +124,10 @@ auth tag: HMAC or AEAD tag (AES-GCM / ChaChaPoly)
 >   `ack` and `sync` are therefore exempt. This corrects the number as written rather than relaxing it — the cap still applies to everything a user sends.
 > - **Only SUPERs enforce the broadcast cap, as this section says, and that bounds distance rather than neighbourhood.** A NORMAL node neither relays far nor filters, so a flooder still reaches
 >   its own one-hop neighbours in full: the flood's reach with the caps on is **76.9 %**, not the 8.3 % that 5-of-60 admitted would imply. For the neighbour-spam case this section is about, one
->   hop is the whole attack. Making every node enforce it is a rule this document does not contain, so it is recorded in `docs/06` §21.5 as the next question instead.
+>   hop is the whole attack. Making every node enforce it is a rule this document does not contain, so it is a **knob rather than a change**: `broadcastCapScope` (`--broadcast-cap-scope
+>   super|all`) defaults to `super`, and `npm run rate flood` measures both. Every node enforcing cuts the flood's reach to **21.2 %** and its airtime to **2 304** of **6 084** transmissions
+>   (−62 %) while costing an honest network nothing. On that evidence `all` is the better default, but switching it is a change to a specified security rule and so is left to whoever owns this
+>   document; the measurement is in `docs/06` §21.5.
 > - **SOS is exempt.** It travels to `BROADCAST` like everything else on the pager channel, so the obvious gate (`to == BROADCAST`) would cap an emergency channel at 5/min. This section already
 >   gives SOS two other mechanisms — opt-in listening and §11's collapsing — and a real emergency is precisely where a rate limit does the most harm.
 >

@@ -321,6 +321,17 @@ export interface SimConfig {
    *  traffic is exempt — see `countsAgainstRelayCap`, and the 2 s OGM beacon that
    *  makes the number as written unusable. */
   relayPerSourcePerMinuteCap: number;
+  /** Who enforces the broadcast cap.
+   *
+   *  `"super"` is what `docs/04` §6 says — "SUPERs drop excess" — and it is the
+   *  default. It bounds how *far* a flood travels, not whether the flooder's own
+   *  neighbours see it: a NORMAL node neither relays far nor filters, so one hop of
+   *  abuse still lands in full, and one hop is the whole attack for the neighbour
+   *  spam §6 is about. `"all"` is the reading that closes that, and it is a knob
+   *  rather than a replacement because §6 does not contain the rule — the two are
+   *  measured against each other in `docs/06` §21.5 instead of one being asserted
+   *  better than the other. */
+  broadcastCapScope: "super" | "all";
 
   /** When two relays cover the same neighbours, pick the plugged one: a community relay's
    *  transmission costs nobody's battery and its position does not change. Off by default,
@@ -491,6 +502,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   rateLimits: false,
   broadcastPerMinuteCap: BROADCAST_PER_MINUTE_CAP,
   relayPerSourcePerMinuteCap: RELAY_PER_SOURCE_PER_MINUTE_CAP,
+  broadcastCapScope: "super",
   communityRelayPreference: false,
   dtnPreferCommunity: false,
 
@@ -2775,7 +2787,11 @@ export class MeshSimulation {
     // §6 gives SOS its own mechanism (opt-in listening, plus the collapsing in §11);
     // rate-limiting an emergency channel at 5/min would be a worse failure than the
     // abuse it prevents.
-    if (this.config.rateLimits && msg.type === "broadcast" && node.role === "SUPER") {
+    if (
+      this.config.rateLimits &&
+      msg.type === "broadcast" &&
+      (this.config.broadcastCapScope === "all" || node.role === "SUPER")
+    ) {
       const gate = admitByRate(
         this.rateBroadcasts,
         `${node.id}|${msg.from}`,
@@ -2791,7 +2807,8 @@ export class MeshSimulation {
         this.pushLog(
           "decision",
           node.id,
-          `${msg.id} broadcast from ${msg.from} suppressed by ${node.name} (SUPER): ${gate.reason}`,
+          `${msg.id} broadcast from ${msg.from} suppressed by ${node.name} ` +
+            `(${node.role === "SUPER" ? "SUPER" : "NORMAL, cap scope all"}): ${gate.reason}`,
           { peerId: via, msgId: msg.id, msgType: msg.type, hop: msg.hopCount }
         );
         return;

@@ -99,6 +99,7 @@ class SimConfig {
     this.rateLimits = false,
     this.broadcastPerMinuteCap = broadcastPerMinuteCapDefault,
     this.relayPerSourcePerMinuteCap = relayPerSourcePerMinuteCapDefault,
+    this.broadcastCapScope = BroadcastCapScope.superOnly,
     this.communityRelayPreference = false,
     this.dtnPreferCommunity = false,
     this.maxRetries = 2,
@@ -340,6 +341,9 @@ class SimConfig {
   /// traffic is exempt — see [countsAgainstRelayCap].
   final int relayPerSourcePerMinuteCap;
 
+  /// Who enforces the broadcast cap: SUPERs only, as docs/04 §6 says, or every node.
+  final BroadcastCapScope broadcastCapScope;
+
   /// When two relays cover the same neighbours, pick the plugged one. Off by default and
   /// measured as a null result: it moves 0.6 of 100 MPR slots in a crowd and nothing
   /// downstream, because who transmits is decided per packet from what was actually heard
@@ -419,6 +423,7 @@ class SimConfig {
     bool? rateLimits,
     int? broadcastPerMinuteCap,
     int? relayPerSourcePerMinuteCap,
+    BroadcastCapScope? broadcastCapScope,
     bool? communityRelayPreference,
     bool? dtnPreferCommunity,
     double? voiceKbps,
@@ -480,6 +485,7 @@ class SimConfig {
             broadcastPerMinuteCap ?? this.broadcastPerMinuteCap,
         relayPerSourcePerMinuteCap:
             relayPerSourcePerMinuteCap ?? this.relayPerSourcePerMinuteCap,
+        broadcastCapScope: broadcastCapScope ?? this.broadcastCapScope,
         communityRelayPreference:
             communityRelayPreference ?? this.communityRelayPreference,
         dtnPreferCommunity: dtnPreferCommunity ?? this.dtnPreferCommunity,
@@ -3114,7 +3120,8 @@ class MeshSimulation {
     // be a worse failure than the abuse it prevents.
     if (config.rateLimits &&
         msg.type == MsgType.broadcast &&
-        node.role == Role.superNode) {
+        (config.broadcastCapScope == BroadcastCapScope.all ||
+            node.role == Role.superNode)) {
       final gate = admitByRate(_rateBroadcasts, '${node.id}|${msg.from}',
           config.broadcastPerMinuteCap, now);
       if (!gate.ok) {
@@ -3127,7 +3134,8 @@ class MeshSimulation {
             MeshLogKind.decision,
             node.id,
             '${msg.id} broadcast from ${msg.from} suppressed by ${node.name} '
-                '(SUPER): ${gate.reason}',
+                '(${node.role == Role.superNode ? 'SUPER' : 'NORMAL, cap scope all'}): '
+                '${gate.reason}',
             peerId: via,
             msgId: msg.id,
             msgType: msg.type,

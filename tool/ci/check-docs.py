@@ -124,7 +124,8 @@ def dart_accepted_values(repo: Repo) -> Dict[str, Set[str]]:
     """The value strings each enum-like flag accepts, read from its switch's case labels."""
     src = repo.read("sim/mesh_sim/bin/mesh_sim.dart")
     out: Dict[str, Set[str]] = {}
-    for var in ["policyName", "accessName", "captureName", "priorityName", "backoffName"]:
+    for var in ["policyName", "accessName", "captureName", "priorityName", "backoffName",
+                "capScopeName"]:
         i = src.find(f"switch ({var})")
         if i < 0:
             continue

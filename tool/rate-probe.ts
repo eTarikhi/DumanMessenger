@@ -48,10 +48,14 @@ const DRAIN_MS = 40_000;
 const FLOOD_COUNT = 60;
 const FLOOD_WINDOW_MS = 60_000;
 
+/** Who enforces the broadcast cap. `"super"` is what docs/04 §6 says. */
+type CapScope = "super" | "all";
+
 interface RunResult {
   seed: number;
   rateLimits: boolean;
   flooded: boolean;
+  scope: CapScope;
   deliveryRatio: number;
   broadcastReach: number;
   overheadRatio: number;
@@ -61,8 +65,13 @@ interface RunResult {
   transmissions: number;
 }
 
-function run(seed: number, rateLimits: boolean, flooded: boolean): RunResult {
-  const config: SimConfig = { ...campusQuad(seed), rateLimits };
+function run(
+  seed: number,
+  rateLimits: boolean,
+  flooded: boolean,
+  scope: CapScope = "super"
+): RunResult {
+  const config: SimConfig = { ...campusQuad(seed), rateLimits, broadcastCapScope: scope };
   const sim = new MeshSimulation(config);
   sim.runFor(SETTLE_MS);
   sim.refresh();
@@ -89,6 +98,7 @@ function run(seed: number, rateLimits: boolean, flooded: boolean): RunResult {
     seed,
     rateLimits,
     flooded,
+    scope,
     deliveryRatio: stats.deliveryRatio,
     broadcastReach: stats.broadcastReach,
     overheadRatio: stats.overheadRatio,
@@ -119,29 +129,34 @@ function honestSection(): boolean {
       `so the limits must be invisible. If they are not, they are not shippable.\n`
   );
   const failures: string[] = [];
-  console.log("  seed   delivery   bcast reach   overhead   SUPER   bcast drops   relay drops");
+  console.log("  seed  scope    delivery   bcast reach   overhead   SUPER   bcast drops   relay drops");
   for (const seed of SEEDS) {
     const off = run(seed, false, false);
-    const on = run(seed, true, false);
+    // Both scopes are checked here. `"all"` is the more aggressive reading — every
+    // node filters — so it is the one that would cost an honest network something if
+    // either did, and it is the scope §21.5 proposes without having measured it.
+    for (const scope of ["super", "all"] as CapScope[]) {
+    const on = run(seed, true, false, scope);
     if (on.rateBroadcastDrops !== 0 || on.rateRelayDrops !== 0) {
       failures.push(
-        `seed ${seed}: an honest network was rate-limited — ${on.rateBroadcastDrops} broadcast ` +
-          `and ${on.rateRelayDrops} relay drops`
+        `seed ${seed}, scope ${scope}: an honest network was rate-limited — ` +
+          `${on.rateBroadcastDrops} broadcast and ${on.rateRelayDrops} relay drops`
       );
     }
     // The honest runs must also agree with each other: if turning the caps on changed
     // delivery, something is being dropped that should not be.
     if (Math.abs(on.deliveryRatio - off.deliveryRatio) > 1e-9) {
       failures.push(
-        `seed ${seed}: delivery moved from ${pct(off.deliveryRatio)} to ${pct(on.deliveryRatio)} ` +
-          `when the caps were switched on with nothing to cap`
+        `seed ${seed}, scope ${scope}: delivery moved from ${pct(off.deliveryRatio)} to ` +
+          `${pct(on.deliveryRatio)} when the caps were switched on with nothing to cap`
       );
     }
     console.log(
-      `  ${String(seed).padEnd(6)} ${pct(on.deliveryRatio).padStart(8)}   ${pct(on.broadcastReach).padStart(11)}   ` +
+      `  ${String(seed).padEnd(5)} ${scope.padEnd(8)} ${pct(on.deliveryRatio).padStart(8)}   ${pct(on.broadcastReach).padStart(11)}   ` +
         `${pct(on.overheadRatio).padStart(8)}   ${pct(on.superRatio).padStart(6)}   ` +
         `${String(on.rateBroadcastDrops).padStart(11)}   ${String(on.rateRelayDrops).padStart(11)}`
     );
+    }
   }
   console.log(
     `\n  OGMs are exempt from the relay cap, and this is where that decision shows: at 2 s a\n` +
@@ -157,8 +172,8 @@ function honestSection(): boolean {
     return false;
   }
   console.log(
-    `  Zero drops on all ${SEEDS.length} seeds, and delivery is identical with the caps on and off.\n` +
-      `  The limits cost a compliant network nothing.`
+    `  Zero drops on all ${SEEDS.length} seeds under both enforcement scopes, and delivery is\n` +
+      `  identical with the caps on and off. The limits cost a compliant network nothing.`
   );
   return true;
 }
@@ -173,26 +188,37 @@ function floodSection(): boolean {
       `Four arms per seed: flood/no-flood × caps off/on. The delivery and overhead columns\n` +
       `are reported rather than asserted, because the answer is a measurement.\n`
   );
+  // An explicit arm table rather than nested loops, because the two enforcement
+  // scopes only differ where there is a flood to enforce against — a fifth arm, not
+  // a doubled fourth.
+  const ARMS: ReadonlyArray<{
+    key: string;
+    label: string;
+    flooded: boolean;
+    rateLimits: boolean;
+    scope: CapScope;
+  }> = [
+    { key: "noflood-off", label: "no flood / caps off", flooded: false, rateLimits: false, scope: "super" },
+    { key: "noflood-on", label: "no flood / caps on", flooded: false, rateLimits: true, scope: "super" },
+    { key: "flood-off", label: "flood / caps off", flooded: true, rateLimits: false, scope: "super" },
+    { key: "flood-on", label: "flood / caps SUPERs", flooded: true, rateLimits: true, scope: "super" },
+    { key: "flood-all", label: "flood / caps all", flooded: true, rateLimits: true, scope: "all" },
+  ];
+
   const failures: string[] = [];
-  console.log("  seed  flood  caps    delivery   bcast reach   overhead   tx      bcast drops  relay drops");
-  const arms: Record<string, RunResult[]> = {
-    "noflood-off": [],
-    "noflood-on": [],
-    "flood-off": [],
-    "flood-on": [],
-  };
+  console.log("  seed  arm                     delivery   bcast reach   overhead   tx      bcast drops  relay drops");
+  const arms: Record<string, RunResult[]> = {};
+  for (const arm of ARMS) arms[arm.key] = [];
   for (const seed of SEEDS) {
-    for (const flooded of [false, true]) {
-      for (const rateLimits of [false, true]) {
-        const r = run(seed, rateLimits, flooded);
-        arms[`${flooded ? "flood" : "noflood"}-${rateLimits ? "on" : "off"}`].push(r);
-        console.log(
-          `  ${String(seed).padEnd(5)} ${(flooded ? "yes" : "no").padEnd(6)} ${(rateLimits ? "on" : "off").padEnd(6)} ` +
-            `${pct(r.deliveryRatio).padStart(8)}   ${pct(r.broadcastReach).padStart(11)}   ` +
-            `${pct(r.overheadRatio).padStart(8)}   ${String(r.transmissions).padStart(6)}   ` +
-            `${String(r.rateBroadcastDrops).padStart(11)}  ${String(r.rateRelayDrops).padStart(11)}`
-        );
-      }
+    for (const arm of ARMS) {
+      const r = run(seed, arm.rateLimits, arm.flooded, arm.scope);
+      arms[arm.key].push(r);
+      console.log(
+        `  ${String(seed).padEnd(5)} ${arm.label.padEnd(23)} ` +
+          `${pct(r.deliveryRatio).padStart(8)}   ${pct(r.broadcastReach).padStart(11)}   ` +
+          `${pct(r.overheadRatio).padStart(8)}   ${String(r.transmissions).padStart(6)}   ` +
+          `${String(r.rateBroadcastDrops).padStart(11)}  ${String(r.rateRelayDrops).padStart(11)}`
+      );
     }
   }
 
@@ -217,17 +243,19 @@ function floodSection(): boolean {
   console.log(
     `\n  mean over ${SEEDS.length} seeds\n` +
       `    honest delivery   no flood ${pct(delivery("noflood-off"))} → ${pct(delivery("noflood-on"))} (caps on)   ` +
-      `flood ${pct(delivery("flood-off"))} → ${pct(delivery("flood-on"))}\n` +
+      `flood ${pct(delivery("flood-off"))} → ${pct(delivery("flood-on"))} → ${pct(delivery("flood-all"))}\n` +
       `    broadcast reach   no flood ${pct(reach("noflood-off"))} → ${pct(reach("noflood-on"))}   ` +
-      `flood ${pct(reach("flood-off"))} → ${pct(reach("flood-on"))}\n` +
+      `flood ${pct(reach("flood-off"))} → ${pct(reach("flood-on"))} → ${pct(reach("flood-all"))}\n` +
       `    overhead          no flood ${pct(overhead("noflood-off"))} → ${pct(overhead("noflood-on"))}   ` +
-      `flood ${pct(overhead("flood-off"))} → ${pct(overhead("flood-on"))}\n` +
-      `    transmissions     flood ${tx("flood-off").toFixed(0)} → ${tx("flood-on").toFixed(0)}   ` +
-      `(${drops("flood-on").toFixed(0)} suppressions summed over every enforcing SUPER)\n`
+      `flood ${pct(overhead("flood-off"))} → ${pct(overhead("flood-on"))} → ${pct(overhead("flood-all"))}\n` +
+      `    transmissions     flood ${tx("flood-off").toFixed(0)} → ${tx("flood-on").toFixed(0)} → ${tx("flood-all").toFixed(0)}   ` +
+      `(the last two columns are caps on, SUPERs only then every node)\n` +
+      `    suppressions      SUPERs ${drops("flood-on").toFixed(0)}   all ${drops("flood-all").toFixed(0)}   ` +
+      `of ${FLOOD_COUNT} messages sent, summed over every enforcing node\n`
   );
 
-  const honestDelta = delivery("flood-on") - delivery("flood-off");
-  const overheadDelta = overhead("flood-on") - overhead("flood-off");
+  const honestDelta = delivery("flood-all") - delivery("flood-off");
+  const overheadDelta = overhead("flood-all") - overhead("flood-off");
   console.log(
     `  The caps move honest delivery under flood by ${(honestDelta * 100 >= 0 ? "+" : "")}${(honestDelta * 100).toFixed(1)} points and\n` +
     `  overhead by ${(overheadDelta * 100 >= 0 ? "+" : "")}${(overheadDelta * 100).toFixed(1)} points. Neither number is asserted, for the reason docs/06\n` +
@@ -242,13 +270,18 @@ function floodSection(): boolean {
     `  can raise the ratio while removing work. The transmissions column is the one that says\n` +
     `  what the radio actually did.\n` +
     `\n` +
-    `  One structural limit the numbers cannot show, because docs/04 §6 specifies it: only\n` +
-    `  SUPERs enforce the broadcast cap. A NORMAL node neither relays far nor filters, so a\n` +
-    `  flooder still reaches its own one-hop neighbourhood in full — the cap bounds how far\n` +
-    `  a flood travels, not whether its neighbours see it. That is why the flood's broadcast\n` +
-    `  reach is ${pct(reach("flood-on"))} with the caps on and not the ${pct(BROADCAST_PER_MINUTE_CAP / (FLOOD_COUNT / (FLOOD_WINDOW_MS / 60_000)))} the cap alone would\n` +
-    `  imply. Closing it would mean inventing a rule the document does not contain, so it is\n` +
-    `  recorded as a finding instead.`
+    `  §21.5's question, answered with a measurement rather than an opinion: docs/04 §6 says\n` +
+    `  "SUPERs drop excess", so only SUPERs enforce, which bounds how *far* a flood travels\n` +
+    `  and not whether the flooder's own neighbours see it — a NORMAL node neither relays far\n` +
+    `  nor filters. Making every node enforce instead is the fifth arm above, and it is not a\n` +
+    `  rule this document contains, so it ships as a knob (\`broadcastCapScope\`,\n` +
+    `  \`--broadcast-cap-scope super|all\`) with the two measured against each other.\n` +
+    `\n` +
+    `    reach    ${pct(reach("flood-off"))} uncapped → ${pct(reach("flood-on"))} SUPERs only → ${pct(reach("flood-all"))} every node\n` +
+    `    airtime  ${tx("flood-off").toFixed(0)} → ${tx("flood-on").toFixed(0)} → ${tx("flood-all").toFixed(0)} transmissions\n` +
+    `\n` +
+    `  The ${pct(BROADCAST_PER_MINUTE_CAP / (FLOOD_COUNT / (FLOOD_WINDOW_MS / 60_000)))} that ${BROADCAST_PER_MINUTE_CAP} admitted of ${FLOOD_COUNT} sent would imply is not reachable by either scope,\n` +
+    `  because the honest broadcasts in the same window are counted in that reach too.`
   );
 
   console.log("\n=== verdict ===");

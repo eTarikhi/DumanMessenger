@@ -1839,19 +1839,40 @@ suppressed flood copy is a transmission that never becomes a delivery, so cappin
 raise the ratio while removing work. And broadcast reach under flood with caps on is
 **76.9 %**, not the 8.3 % that 5-of-60 admitted messages would imply — which is §21.5.
 
-### 21.5 Only SUPERs enforce, and that bounds distance rather than neighbourhood
+### 21.5 Only SUPERs enforce — and the scope is a knob, measured both ways
 
-`docs/04` §6 says *"SUPERs drop excess"*, so that is what is implemented, and the gap it
-leaves is worth more than the cap is. A NORMAL node neither relays far nor filters, so a
-flooder still reaches its own one-hop neighbourhood in full; the cap bounds **how far** a
-flood travels, not **whether its neighbours see it**. Hence 76.9 % reach rather than 8.3 %:
-the honest broadcasts in the same window still get through, and the flood's own copies reach
-everyone within one hop of the source and nobody beyond.
+`docs/04` §6 says *"SUPERs drop excess"*, so that is the default, and the gap it leaves is
+worth more than the cap is. A NORMAL node neither relays far nor filters, so a flooder still
+reaches its own one-hop neighbourhood in full: the cap bounds **how far** a flood travels,
+not **whether its neighbours see it**. For the abuse §6 is actually worried about — a
+neighbour spamming the pager channel — one hop is the whole attack.
 
-For the abuse §6 is actually worried about — a neighbour spamming the pager channel — one
-hop is the whole attack. Closing it would mean every node enforcing the broadcast cap, which
-is a rule `docs/04` does not contain, so it is recorded here as the next question rather than
-implemented as an answer.
+Closing that gap means every node enforcing, which is a rule `docs/04` does not contain. So
+rather than silently replacing §6's rule with a better-sounding one, or merely recording the
+gap, it ships as a knob — `broadcastCapScope: "super" | "all"` in the engine,
+`--broadcast-cap-scope super|all` on the Dart CLI — defaulting to `"super"`, and `npm run
+rate flood` runs both. Three seeds, `campus_quad`, 20 nodes, one node sending 60 broadcasts
+in 60 s against a cap of 5/min:
+
+| arm | flood's broadcast reach | transmissions | suppressions |
+| --- | ---: | ---: | ---: |
+| caps off | 94.9 % | 6 084 | — |
+| caps on, `"super"` (§6's rule) | 76.9 % | 4 929 | 211 |
+| caps on, `"all"` | **21.2 %** | **2 304** | 396 |
+
+Enforcing everywhere removes **62 %** of the airtime the flood caused and drops its reach
+from 94.9 % to 21.2 %, while honest delivery stays at 100 % in all three arms. The residual
+21.2 % is not leakage: the honest broadcasts in the same window are counted in that reach too,
+and the first 5 of the flooder's own 60 are inside its budget — which is also why neither
+scope can reach the 8.3 % that 5 admitted of 60 sent would imply on its own.
+
+The honest section runs both scopes as well, and the cost is nil under each: zero broadcast
+and zero relay drops on all three seeds, delivery and overhead identical to caps-off. So the
+finding is that §6's rule is not wrong, only narrow — it protects the multi-hop mesh from a
+distant flooder and leaves a node's immediate neighbours unprotected, and the fix costs the
+honest network nothing. `"all"` is the better default on this evidence; it is not switched on,
+because §6 says what it says and changing a specified security rule is a spec change, which is
+a decision for whoever owns the document and not for an engine finding.
 
 ### 21.6 SOS is exempt, deliberately
 

@@ -87,6 +87,10 @@ Duman mesh simulator (headless)
   --rate-limits       enforce docs/04 §6's abuse limits: 5 broadcasts/min per node
                       (SUPERs drop excess) and 30 relayed msgs/min per source, with
                       control-plane traffic exempt
+  --broadcast-cap-scope <name>
+                      super | all. Who enforces the broadcast cap. `super` is what
+                      docs/04 §6 says and bounds how far a flood travels; `all` also
+                      stops the flooder's own neighbours hearing it (docs/06 §21.5)
   --trace             print the hop-by-hop route each delivered message took
   --capture           record the pcap-like mesh log and print its tail
   --capture-ogm       also log OGM beacons (they outnumber everything else)
@@ -296,6 +300,24 @@ void main(List<String> args) {
     config = config.copyWith(rateLimits: true);
   }
 
+  final capScopeName = _arg(args, '--broadcast-cap-scope', '');
+  if (capScopeName.isNotEmpty) {
+    switch (capScopeName) {
+      case 'super':
+        config =
+            config.copyWith(broadcastCapScope: BroadcastCapScope.superOnly);
+        break;
+      case 'all':
+        config = config.copyWith(broadcastCapScope: BroadcastCapScope.all);
+        break;
+      default:
+        stderr.writeln('Unknown --broadcast-cap-scope "$capScopeName". '
+            'Try: super | all');
+        exitCode = 64;
+        return;
+    }
+  }
+
   // Built here rather than nested inside the header's own interpolation, which would put a
   // string literal containing an interpolation inside a ternary inside an interpolation.
   final radioArm = radioOverridden
@@ -361,6 +383,7 @@ void main(List<String> args) {
       'rateLimits': config.rateLimits,
       'broadcastPerMinuteCap': config.broadcastPerMinuteCap,
       'relayPerSourcePerMinuteCap': config.relayPerSourcePerMinuteCap,
+      'broadcastCapScope': config.broadcastCapScope.wire,
     },
     'nodes': sim.nodes.length,
     'sent': sent,
