@@ -53,6 +53,7 @@ SELFTEST_PATHS = [
     "Makefile",
     "make.ps1",
     "tool/media-probe.ts",
+    "tool/e2ee-probe.ts",
     "sim/mesh_sim/bin/mesh_sim.dart",
 ]
 
@@ -131,16 +132,25 @@ def dart_accepted_values(repo: Repo) -> Dict[str, Set[str]]:
     return out
 
 
-def media_sections(repo: Repo) -> Set[str]:
-    """Section names in the probe's registry — the list it prints when given an unknown one.
+def probe_sections(repo: Repo, rel: str, decl: str) -> Set[str]:
+    """Section names in a probe's registry — the list it prints when given an unknown one.
 
-    Only the `sections` array. Matching every `["name", fn]` pair in the file also picks up an
-    unrelated one elsewhere and reports sections the probe does not have.
+    Only the one named array. Matching every `["name", fn]` pair in the file also picks up
+    unrelated ones elsewhere: the first version of this reported 15 media sections where the
+    probe has 13, because another array in the file has the same shape.
     """
-    src = repo.read("tool/media-probe.ts")
-    i = src.index("const sections:")
+    src = repo.read(rel)
+    i = src.index(decl)
     j = src.index("];", i)
     return set(re.findall(r'\[\s*"([A-Za-z][A-Za-z0-9]*)"\s*,', src[i:j]))
+
+
+def media_sections(repo: Repo) -> Set[str]:
+    return probe_sections(repo, "tool/media-probe.ts", "const sections:")
+
+
+def e2ee_sections(repo: Repo) -> Set[str]:
+    return probe_sections(repo, "tool/e2ee-probe.ts", "const SECTIONS:")
 
 
 def make_targets(repo: Repo) -> Set[str]:
@@ -309,35 +319,71 @@ def check_dart_cli_flags(repo: Repo) -> Result:
                   f"{len(impl)} CLI flags vs {len(claimed)} documented", problems)
 
 
-def check_media_sections(repo: Repo) -> Result:
-    impl = media_sections(repo)
-    problems: List[str] = []
-    seen: Set[str] = set()
-    invoked = re.compile(r"(?:npm run media|make media SECT=)\s*(?:--\s*)?([A-Za-z][A-Za-z0-9]*)")
+def section_claims(repo: Repo, invokes: Tuple[str, ...]) -> List[Tuple[str, int, str]]:
+    """Section names the docs claim, as (file, line, name).
+
+    Two shapes count: an invocation (`npm run media -- backoff`, `make e2ee SECT=churn`), and a
+    bare backticked identifier on a line that is itself about the probe — which is how a doc lists
+    "also `shedding`, `captureEffect`". Scanning every backticked identifier in the corpus would
+    bury the findings in prose.
+    """
+    out: List[Tuple[str, int, str]] = []
+    invoked = re.compile(
+        r"(?:" + "|".join(re.escape(i) for i in invokes) + r")\s*(?:--\s*)?([A-Za-z][A-Za-z0-9]*)")
     for d in repo.docs:
         text = d.read_text(encoding="utf-8")
         for n, span in code_spans_and_blocks(text):
             for m in invoked.finditer(span):
-                sect = m.group(1)
-                seen.add(sect)
-                if sect in impl or sect in ("run", "media"):  # `npm run media`, no section
-                    continue
-                problems.append(f"{d.name}:{n} names section `{sect}`; the probe has no such section")
-        # "one section; also `shedding`, `captureEffect`" names sections in prose, on a line that
-        # is itself about the command. A reader will act on those, so they are checked too — but
-        # only on such a line, or every backticked identifier in the docs becomes a suspect.
+                out.append((d.name, n, m.group(1)))
         for n, line in enumerate(text.splitlines(), 1):
-            if "npm run media" not in line and "make media" not in line:
+            if not any(i in line for i in invokes):
                 continue
             for span in re.findall(r"`([^`]*)`", line):
-                if not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", span) or span == "media":
-                    continue
-                seen.add(span)
-                if span not in impl:
-                    problems.append(
-                        f"{d.name}:{n} names section `{span}`; the probe has no such section")
-    return Result("media-sections", not problems,
-                  f"{len(impl)} sections in the probe, {len(seen)} named in the docs", problems)
+                if re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", span):
+                    out.append((d.name, n, span))
+    return out
+
+
+def check_sections(name: str, impl: Set[str], claims: List[Tuple[str, int, str]],
+                   noise: Set[str], summary_noun: str) -> Result:
+    """One probe's sections, in the direction that can be checked precisely.
+
+    Invented names are the mistake this repository has actually made — `backpressure` and
+    `retryTimer` were documented for a probe that has `retry` and `capture` — and they are
+    unambiguous, because the probe's registry is a closed list.
+
+    The reverse is not checked, and it is worth saying why rather than quietly omitting it. Nine
+    of the media probe's thirteen sections are named `file`, `voice`, `retry`, `capture`,
+    `channel`, `priority`, `contention`, `acceptance` and `serialization`: ordinary English words.
+    "Does any document mention `capture`" cannot be answered by searching for a backticked word,
+    because the corpus discusses capture the phenomenon at length and the probe's own row in
+    docs/12 lists all thirteen on a table line that never names the command. A first version of
+    this check reported all nine as undocumented. A check with nine false positives trains people
+    to ignore it, which is worse than the gap.
+    """
+    problems: List[str] = []
+    claimed = {c for _, _, c in claims}
+    for f, n, c in claims:
+        if c in impl or c in noise:
+            continue
+        problems.append(f"{f}:{n} names section `{c}`; the {summary_noun} has no such section")
+    return Result(name, not problems,
+                  f"{len(impl)} sections in the probe, {len(claimed & impl)} named in the docs",
+                  problems)
+
+
+def check_media_sections(repo: Repo) -> Result:
+    return check_sections(
+        "media-sections", media_sections(repo),
+        section_claims(repo, ("npm run media", "make media SECT=")),
+        {"run", "media"}, "probe")
+
+
+def check_e2ee_sections(repo: Repo) -> Result:
+    return check_sections(
+        "e2ee-sections", e2ee_sections(repo),
+        section_claims(repo, ("npm run e2ee", "make e2ee SECT=")),
+        {"run", "e2ee"}, "probe")
 
 
 def check_make_targets(repo: Repo) -> Result:
@@ -401,6 +447,7 @@ def check_ci_script_flags(repo: Repo) -> Result:
 CHECKS = [
     check_dart_cli_flags,
     check_media_sections,
+    check_e2ee_sections,
     check_make_targets,
     check_ps1_targets,
     check_ci_script_flags,
@@ -430,6 +477,8 @@ FAULTS = [
     ("media-sections", "docs/08-media-transport-ptt.md", "npm run media -- backoff",
      lambda s: s.replace("npm run media -- backoff", "npm run media -- backpressure", 1),
      "backpressure"),
+    ("e2ee-sections", "docs/12-cli-cheat-sheet.md", "make e2ee SECT=churn",
+     lambda s: s.replace("make e2ee SECT=churn", "make e2ee SECT=churnn", 1), "churnn"),
     ("make-targets", "docs/12-cli-cheat-sheet.md", "make checks-list",
      lambda s: s.replace("make checks-list", "make checks-listt", 1), "checks-listt"),
     ("ps1-targets", "make.ps1", "    'ci'          =",
