@@ -62,6 +62,28 @@ Duman mesh simulator (headless)
   --duty-cycle        NORMAL scans 3 s and sleeps 7 s (skills/07). Gates the
                       15%-per-8h battery budget, which an always-scanning
                       NORMAL node in a mobile population does not meet.
+  --channel-access <name>
+                      free | half-duplex | csma. What the medium does when two
+                      radios talk at once (docs/08 §12.9-§12.10)
+  --channel-capture <name>
+                      none | first | strongest. What a busy *receiver* does:
+                      take everything, lock onto the first packet, or let a
+                      newcomer that is enough stronger take over (docs/08 §12.9,
+                      §12.15)
+  --capture-ratio <dB>
+                      margin a newcomer must clear to take the receiver over
+                      (default: 6; read only under --channel-capture strongest)
+  --channel-queue <int>
+                      transmit queue depth, so a busy radio buffers instead of
+                      dropping (docs/08 §12.7)
+  --channel-priority <name>
+                      fifo | ack-first | by-class. Which queued packet a busy
+                      radio takes next (docs/08 §12.8)
+  --backoff <name>    none | binary. Wait a random number of slots before taking
+                      a medium that has just freed up (docs/08 §12.13)
+  --media-backpressure
+                      stop a transfer pumping chunks into a radio that is full
+                      (docs/08 §12.12)
   --trace             print the hop-by-hop route each delivered message took
   --capture           record the pcap-like mesh log and print its tail
   --capture-ogm       also log OGM beacons (they outnumber everything else)
@@ -144,6 +166,133 @@ void main(List<String> args) {
       return;
   }
 
+  // --- the radio model of docs/08 §12 -----------------------------------------
+  //
+  // The engine has carried every one of these knobs since the measurements in docs/08 §12 were
+  // taken, but the CLI never exposed them — so the six-arm contention table (§12.9-§12.10) and
+  // the capture sweep (§12.15) could only be reproduced from inside a test file. In the one
+  // engine the roadmap calls authoritative, from the one place a reader would not think to look.
+  // Each switch is the --policy idiom above: an unknown name is a usage error that prints the
+  // valid set, never a silent fall back to the default. An absent flag changes nothing at all,
+  // so every published number and the golden vectors stay exactly where they were.
+  var radioOverridden = false;
+
+  final accessName = _arg(args, '--channel-access', '');
+  if (accessName.isNotEmpty) {
+    radioOverridden = true;
+    switch (accessName) {
+      case 'free':
+        config = config.copyWith(channelAccess: ChannelAccess.free);
+        break;
+      case 'half-duplex':
+        config = config.copyWith(channelAccess: ChannelAccess.halfDuplex);
+        break;
+      case 'csma':
+        config = config.copyWith(channelAccess: ChannelAccess.csma);
+        break;
+      default:
+        stderr.writeln('Unknown --channel-access "$accessName". '
+            'Try: free | half-duplex | csma');
+        exitCode = 64;
+        return;
+    }
+  }
+
+  final captureName = _arg(args, '--channel-capture', '');
+  if (captureName.isNotEmpty) {
+    radioOverridden = true;
+    switch (captureName) {
+      case 'none':
+        config = config.copyWith(channelCapture: ChannelCapture.none);
+        break;
+      case 'first':
+        config = config.copyWith(channelCapture: ChannelCapture.first);
+        break;
+      case 'strongest':
+        config = config.copyWith(channelCapture: ChannelCapture.strongest);
+        break;
+      default:
+        stderr.writeln('Unknown --channel-capture "$captureName". '
+            'Try: none | first | strongest');
+        exitCode = 64;
+        return;
+    }
+  }
+
+  final priorityName = _arg(args, '--channel-priority', '');
+  if (priorityName.isNotEmpty) {
+    radioOverridden = true;
+    switch (priorityName) {
+      case 'fifo':
+        config = config.copyWith(channelPriority: ChannelPriority.fifo);
+        break;
+      case 'ack-first':
+        config = config.copyWith(channelPriority: ChannelPriority.ackFirst);
+        break;
+      case 'by-class':
+        config = config.copyWith(channelPriority: ChannelPriority.byClass);
+        break;
+      default:
+        stderr.writeln('Unknown --channel-priority "$priorityName". '
+            'Try: fifo | ack-first | by-class');
+        exitCode = 64;
+        return;
+    }
+  }
+
+  final backoffName = _arg(args, '--backoff', '');
+  if (backoffName.isNotEmpty) {
+    radioOverridden = true;
+    switch (backoffName) {
+      case 'none':
+        config = config.copyWith(channelBackoff: ChannelBackoff.none);
+        break;
+      case 'binary':
+        config = config.copyWith(channelBackoff: ChannelBackoff.binary);
+        break;
+      default:
+        stderr.writeln('Unknown --backoff "$backoffName". Try: none | binary');
+        exitCode = 64;
+        return;
+    }
+  }
+
+  final ratioArg = _arg(args, '--capture-ratio', '');
+  if (ratioArg.isNotEmpty) {
+    // tryParse, not parse: a bad number is a usage error with a message, not a stack trace.
+    final db = double.tryParse(ratioArg);
+    if (db == null) {
+      stderr.writeln('--capture-ratio needs a number in dB, got "$ratioArg"');
+      exitCode = 64;
+      return;
+    }
+    radioOverridden = true;
+    config = config.copyWith(channelCaptureRatioDb: db);
+  }
+
+  final queueArg = _arg(args, '--channel-queue', '');
+  if (queueArg.isNotEmpty) {
+    final depth = int.tryParse(queueArg);
+    if (depth == null || depth < 1) {
+      stderr.writeln('--channel-queue needs a positive integer, got "$queueArg"');
+      exitCode = 64;
+      return;
+    }
+    radioOverridden = true;
+    config = config.copyWith(channelQueueDepth: depth);
+  }
+
+  if (args.contains('--media-backpressure')) {
+    radioOverridden = true;
+    config = config.copyWith(mediaBackpressure: true);
+  }
+
+  // Built here rather than nested inside the header's own interpolation, which would put a
+  // string literal containing an interpolation inside a ternary inside an interpolation.
+  final radioArm = radioOverridden
+      ? ', radio ${config.channelAccess.name}+${config.channelCapture.name}'
+      : '';
+
   final plan = _trafficPlan(config.seed, messages, config.nodeCount);
   final sim = MeshSimulation(config);
   final sent = _replay(sim, plan, gapMs);
@@ -189,6 +338,18 @@ void main(List<String> args) {
     'scenario': scenarioName,
     'seed': seed,
     'policy': policyName,
+    // Which radio model this run used. Present unconditionally, so two arms of one scenario can
+    // be told apart from their JSON alone; the human table below skips it and carries the arm in
+    // the header line instead.
+    'radio': <String, Object?>{
+      'channelAccess': config.channelAccess.name,
+      'channelCapture': config.channelCapture.name,
+      'captureRatioDb': _round(config.channelCaptureRatioDb),
+      'channelQueueDepth': config.channelQueueDepth,
+      'channelPriority': config.channelPriority.name,
+      'channelBackoff': config.channelBackoff.name,
+      'mediaBackpressure': config.mediaBackpressure,
+    },
     'nodes': sim.nodes.length,
     'sent': sent,
     'deliveredUnicast': unicast.length,
@@ -273,10 +434,10 @@ void main(List<String> args) {
   } else {
     stdout.writeln('Duman mesh simulator — $scenarioName '
         '(seed $seed, policy $policyName'
-        '${config.dutyCycleEnabled ? ', duty-cycle' : ''})');
+        '${config.dutyCycleEnabled ? ', duty-cycle' : ''}$radioArm)');
     stdout.writeln('─' * 62);
     report.forEach((k, v) {
-      if (k == 'latencyByHop') return;
+      if (k == 'latencyByHop' || k == 'radio') return;
       stdout.writeln('  ${k.padRight(24)} $v');
     });
     if (group != null) {

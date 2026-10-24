@@ -110,12 +110,28 @@ lever does not mean re-measuring eleven others.
 | `... --help` | The CLI's own usage text, with the current defaults interpolated. |
 | `... --no-check` | Report the numbers without asserting the gate. Every probe uses this. |
 | `... --duty-cycle` | The `skills/07` power arm: NORMAL scans 3 s / sleeps 7 s, SUPER continuous. |
-| `... --json` | Machine-readable output. |
+| `... --channel-access csma` | The medium when two radios talk at once: `free` (default), `half-duplex`, `csma` — carrier sense (`docs/08` §12.9–§12.10). |
+| `... --channel-capture strongest` | A busy **receiver**: `none` (default, takes everything), `first` (pessimistic bound), `strongest` (the capture effect, `docs/08` §12.15). |
+| `... --capture-ratio 12` | dB a newcomer must clear to take the receiver over. Default `6`. Read only under `strongest`. |
+| `... --channel-queue 4` | Transmit queue depth, default `8`, so a busy radio buffers instead of dropping (`docs/08` §12.7). |
+| `... --channel-priority ack-first` | Which queued packet a busy radio takes next: `fifo` (default), `ack-first`, `by-class` (`docs/08` §12.8). |
+| `... --backoff binary` | Wait a random number of slots before taking a medium that just freed up: `none` (default), `binary` (`docs/08` §12.13). |
+| `... --media-backpressure` | Off by default. Stop a transfer pumping chunks into a radio that is already full (`docs/08` §12.12). |
+| `... --json` | Machine-readable output. Names the arm it ran under a `radio` key. |
 | `... --sos` | SOS flood reach (roadmap Phase 3). |
 | `... --group 5` | Group delivery modes (`docs/06` §14). |
 | `... --history` | Group-history anti-entropy (`docs/06` §17). |
 | `... --media` | Media transport and push-to-talk (`docs/08`). |
 | `... --trace` / `--capture` / `--capture-ogm` | Hop routes, pcap-like log, OGM capture. |
+
+> **Reproducing the contention arms.** `docs/08` §12.9's six-arm table is `--channel-access` ×
+> `--channel-capture` over `free`/`half-duplex`/`csma` and `none`/`first`; §12.15 adds `strongest`
+> and sweeps `--capture-ratio` over 0/3/6/12/20 dB. Compare `deliveryRatio` and `overheadRatio`
+> between runs — `--json` carries the `radio` block saying which arm produced them, so six runs
+> cannot be mixed up after the fact. An unknown name is a usage error printing the valid set and
+> exiting `64`, never a silent fall back to the default, and a flag you do not pass changes
+> nothing: the shipped combination is inert by construction (§12.7), which is what keeps the
+> golden vectors where they are.
 
 ---
 
