@@ -26,7 +26,7 @@ import type {
   RelayPolicy,
   Role,
 } from "./types";
-import type { ForwardDecision, ForwardMode } from "./routing";
+import type { ForwardDecision, ForwardMode, RateBucket } from "./routing";
 import type { Rng } from "./rng";
 import { chance, createRng, randInt, randRange } from "./rng";
 import type { RfParams } from "./rf";
@@ -54,7 +54,11 @@ import {
 } from "./election";
 import {
   BLE_MAX_BYTES,
+  BROADCAST_PER_MINUTE_CAP,
   MPR_WAIT_MS,
+  RELAY_PER_SOURCE_PER_MINUTE_CAP,
+  admitByRate,
+  countsAgainstRelayCap,
   createMessage,
   decideForward,
   deliverToInbox,
@@ -308,6 +312,16 @@ export interface SimConfig {
    *  without. Off by default, and inert under `channelAccess: "free"` where nothing queues. */
   mediaBackpressure: boolean;
 
+  /** Whether `docs/04` §6's two abuse limits are enforced. Off by default, so a
+   *  shipped run allocates no buckets and no golden vector moves. */
+  rateLimits: boolean;
+  /** docs/04 §6: "Max 5 broadcasts / minute per node; SUPERs drop excess." */
+  broadcastPerMinuteCap: number;
+  /** docs/04 §6: "Cap relay to 30 msgs/min per source; ignore floods." Control-plane
+   *  traffic is exempt — see `countsAgainstRelayCap`, and the 2 s OGM beacon that
+   *  makes the number as written unusable. */
+  relayPerSourcePerMinuteCap: number;
+
   /** When two relays cover the same neighbours, pick the plugged one: a community relay's
    *  transmission costs nobody's battery and its position does not change. Off by default,
    *  and measured rather than assumed — see docs/06 §19.5. */
@@ -474,6 +488,9 @@ export const DEFAULT_CONFIG: SimConfig = {
   channelCwMax: 64,
   channelSlotMs: 1,
   mediaBackpressure: false,
+  rateLimits: false,
+  broadcastPerMinuteCap: BROADCAST_PER_MINUTE_CAP,
+  relayPerSourcePerMinuteCap: RELAY_PER_SOURCE_PER_MINUTE_CAP,
   communityRelayPreference: false,
   dtnPreferCommunity: false,
 
@@ -598,6 +615,10 @@ export interface SimulationStats {
   /** Times a transfer was refused air by its own radio and had to wait for a slot to free
    *  (`mediaBackpressure`, docs/08 §12.12). This is backpressure working, not a failure. */
   transferBlocks: number;
+  /** Broadcasts a SUPER dropped because the source exceeded docs/04 §6's 5/min. */
+  rateBroadcastDrops: number;
+  /** Relays refused because the source exceeded docs/04 §6's 30/min. */
+  rateRelayDrops: number;
   /** Anti-entropy packets put on air: beacons, bucket requests and replies. */
   sentSync: number;
   bytesDelivered: number;
@@ -1022,6 +1043,14 @@ export class MeshSimulation {
   private superseded = new Set<number>();
   private channelBackoffs = 0;
   private transferBlocks = 0;
+  private rateBroadcastDrops = 0;
+  private rateRelayDrops = 0;
+  /** Token buckets for docs/04 §6's two caps, keyed `"enforcer|source"`. Kept here
+   *  rather than on `MeshNode` so that adding the feature adds no field to the
+   *  cross-language node contract — a node's identity, draw order and golden-vector
+   *  surface are untouched, and the state is per enforcing pair anyway. */
+  private rateBroadcasts = new Map<string, RateBucket>();
+  private rateRelays = new Map<string, RateBucket>();
   /** Whether the transmission that just went on air collided at its receiver. Read by the
    *  contention window to decide whether to widen; written by `onAir`. */
   private lastTxCollided = false;
@@ -1136,6 +1165,10 @@ export class MeshSimulation {
     this.superseded.clear();
     this.channelBackoffs = 0;
     this.transferBlocks = 0;
+    this.rateBroadcastDrops = 0;
+    this.rateRelayDrops = 0;
+    this.rateBroadcasts.clear();
+    this.rateRelays.clear();
     this.lastTxCollided = false;
     this.channel.clear();
     this.txUntil.clear();
@@ -2731,6 +2764,41 @@ export class MeshSimulation {
       trace.hops.push(hopRecord);
     }
 
+    // Placed after the hop record exists so a suppressed broadcast still shows in the
+    // hop trace, which is the artifact an auditor reads (docs/07 §6).
+    //
+    // docs/04 §6: "Max 5 broadcasts / minute per node; SUPERs drop excess." Enforced
+    // by SUPERs only, exactly as written — which is a limitation worth stating rather
+    // than hiding: a NORMAL node neither relays far nor filters, so a flooder still
+    // reaches its own one-hop neighbourhood. The gate is on the `broadcast` type and
+    // not on `to === "BROADCAST"`, because SOS travels to BROADCAST too and docs/04
+    // §6 gives SOS its own mechanism (opt-in listening, plus the collapsing in §11);
+    // rate-limiting an emergency channel at 5/min would be a worse failure than the
+    // abuse it prevents.
+    if (this.config.rateLimits && msg.type === "broadcast" && node.role === "SUPER") {
+      const gate = admitByRate(
+        this.rateBroadcasts,
+        `${node.id}|${msg.from}`,
+        this.config.broadcastPerMinuteCap,
+        this.now
+      );
+      if (!gate.ok) {
+        this.rateBroadcastDrops++;
+        if (hopRecord) {
+          hopRecord.action = "suppressed";
+          hopRecord.reason = gate.reason;
+        }
+        this.pushLog(
+          "decision",
+          node.id,
+          `${msg.id} broadcast from ${msg.from} suppressed by ${node.name} (SUPER): ${gate.reason}`,
+          { peerId: via, msgId: msg.id, msgType: msg.type, hop: msg.hopCount }
+        );
+        return;
+      }
+    }
+
+
     // skills/04: "On ackReceived from dest: remove + gossip ACK (so relays can prune)".
     // The ACK comes back along the reverse path, and the nodes on that path are the ones
     // that were carrying copies, so hearing one is enough to drop the bundle — no extra
@@ -2841,6 +2909,35 @@ export class MeshSimulation {
         hop: msg.hopCount,
       });
       return;
+    }
+
+    // docs/04 §6: "Cap relay to 30 msgs/min per source; ignore floods." Every node
+    // enforces this one, because relaying is what every node does and a flood costs
+    // the relays' queues rather than a SUPER's attention — docs/08 §12.13 measured
+    // queue drops running eight to one against receiver collisions, so the buffer is
+    // where a flood actually lands. Control-plane types are exempt; see
+    // `countsAgainstRelayCap` for the 2 s OGM arithmetic that forces it.
+    if (this.config.rateLimits && countsAgainstRelayCap(msg)) {
+      const gate = admitByRate(
+        this.rateRelays,
+        `${node.id}|${msg.from}`,
+        this.config.relayPerSourcePerMinuteCap,
+        this.now
+      );
+      if (!gate.ok) {
+        this.rateRelayDrops++;
+        if (hopRecord) {
+          hopRecord.action = "suppressed";
+          hopRecord.reason = gate.reason;
+        }
+        this.pushLog(
+          "decision",
+          node.id,
+          `${msg.id} from ${msg.from} not relayed by ${node.name}: ${gate.reason}`,
+          { peerId: via, msgId: msg.id, msgType: msg.type, hop: msg.hopCount }
+        );
+        return;
+      }
     }
 
     const forwarded: MeshMessage = {
@@ -3449,6 +3546,8 @@ export class MeshSimulation {
       channelCaptureEffects: this.channelCaptureEffects,
       channelBackoffs: this.channelBackoffs,
       transferBlocks: this.transferBlocks,
+      rateBroadcastDrops: this.rateBroadcastDrops,
+      rateRelayDrops: this.rateRelayDrops,
       channelDeafRx: this.channelDeafRx,
       sentSync: this.sentSync,
       bytesDelivered: this.bytesDelivered,

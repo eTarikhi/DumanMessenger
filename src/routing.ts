@@ -26,6 +26,15 @@ export const SPRAY_LIMIT = 3;
 export const MPR_WAIT_MS = 300;
 export const INBOX_MAX = 200;
 
+// --- abuse limits (docs/04 §6) -------------------------------------------------
+
+/** docs/04 §6: "Max 5 broadcasts / minute per node; SUPERs drop excess." */
+export const BROADCAST_PER_MINUTE_CAP = 5;
+/** docs/04 §6: "Cap relay to 30 msgs/min per source; ignore floods." */
+export const RELAY_PER_SOURCE_PER_MINUTE_CAP = 30;
+/** Both caps in docs/04 §6 are stated per minute. */
+export const RATE_WINDOW_MS = 60_000;
+
 /** Text < 1 KB rides BLE; larger payloads need Wi-Fi Direct (docs/02 §3.1). */
 export const BLE_MAX_BYTES = 1024;
 
@@ -162,6 +171,102 @@ export function createMessage(
     transport: selectTransport(sizeBytes),
     sizeBytes,
   };
+}
+
+/**
+ * A token bucket, and why the limits are buckets rather than counters.
+ *
+ * `docs/04` §6 states both caps as a rate ("per minute"), which a tumbling counter
+ * satisfies only on average: a source that sends 5 broadcasts in the last second of
+ * one minute and 5 in the first second of the next has sent 10 in two seconds while
+ * never breaking a per-minute count. A bucket refills continuously at `cap` per
+ * [RATE_WINDOW_MS] and bursts up to `cap`, so it enforces the rate the sentence
+ * means and still lets a legitimate sender open with a burst.
+ *
+ * One bucket per (enforcer, source) pair, so memory is bounded by the number of
+ * distinct sources a node has heard — at most `nodeCount`, which `skills/08` caps at
+ * 200. There is no eviction because there is nothing to evict: a bucket that stops
+ * being fed simply sits full, which is the correct state for a source that went
+ * quiet.
+ */
+export interface RateBucket {
+  tokens: number;
+  atMs: number;
+}
+
+export interface RateDecision {
+  ok: boolean;
+  /** Empty when admitted; otherwise the reason, for the capture log. */
+  reason: string;
+  tokensLeft: number;
+  /** Seconds until one token exists. `0` when admitted, `Infinity` when uncapped. */
+  retryInMs: number;
+}
+
+/**
+ * Take one token from `buckets[key]`, creating the bucket full if it is new.
+ *
+ * Pure except for the map it is handed, which is what makes `docs/04` §6's two
+ * limits unit-testable without constructing a mesh: the caller owns the state and
+ * decides which pairs share a bucket.
+ */
+export function admitByRate(
+  buckets: Map<string, RateBucket>,
+  key: string,
+  cap: number,
+  nowMs: number
+): RateDecision {
+  if (cap <= 0) return { ok: true, reason: "", tokensLeft: Number.POSITIVE_INFINITY, retryInMs: 0 };
+  let bucket = buckets.get(key);
+  if (!bucket) {
+    bucket = { tokens: cap, atMs: nowMs };
+    buckets.set(key, bucket);
+  }
+  const elapsed = nowMs - bucket.atMs;
+  if (elapsed > 0) {
+    bucket.tokens = Math.min(cap, bucket.tokens + (elapsed * cap) / RATE_WINDOW_MS);
+    bucket.atMs = nowMs;
+  } else if (elapsed < 0) {
+    // The clock went backwards — a metrics reset, or a caller reusing a map across
+    // runs. Grant no refill and resynchronise rather than subtracting tokens.
+    bucket.atMs = nowMs;
+  }
+  if (bucket.tokens < 1) {
+    const retryInMs = ((1 - bucket.tokens) / cap) * RATE_WINDOW_MS;
+    return {
+      ok: false,
+      reason: `rate limit: ${cap} per minute exceeded, next token in ${(retryInMs / 1000).toFixed(1)} s`,
+      tokensLeft: bucket.tokens,
+      retryInMs,
+    };
+  }
+  bucket.tokens -= 1;
+  return { ok: true, reason: "", tokensLeft: bucket.tokens, retryInMs: 0 };
+}
+
+/**
+ * Whether a message counts against the relay cap.
+ *
+ * It does not, for control-plane traffic, and the arithmetic is why: `docs/03` §1
+ * beacons an OGM every 2 s, which is **30 per minute per source** — exactly the cap
+ * `docs/04` §6 states. Counting beacons does not drop a source's first data message;
+ * it does something slower and worse. A bucket refills one token every 2 s at that
+ * cap, and the beacon spends it every 2 s, so the *sustained* budget for everything
+ * else is zero. Data traffic then runs entirely off the initial burst: 29 messages
+ * in the first minute and roughly nothing after, which `rate-limits.test.ts` measures
+ * as 29 messages admitted in ten minutes instead of 300 — a 90 % cut in a node's
+ * sustained data rate, caused by its own routing protocol.
+ *
+ * `ack` and `sync` are exempt for the same reason `src/crypto/packet.ts`'s
+ * `isSealedType` treats them as control plane: an acknowledgement that is
+ * rate-limited turns one lost packet into a retransmission storm, and anti-entropy
+ * beacons are how `docs/06` §17 repairs group history.
+ *
+ * This is a correction to the number as written, not a relaxation of it: the cap
+ * still applies to everything a user sends, which is what "ignore floods" is about.
+ */
+export function countsAgainstRelayCap(msg: MeshMessage): boolean {
+  return msg.type !== "ogm" && msg.type !== "ack" && msg.type !== "sync";
 }
 
 // --- dedup cache -------------------------------------------------------------
