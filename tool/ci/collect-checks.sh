@@ -641,7 +641,14 @@ if [ "$N_FAIL" -gt 0 ] || [ "$N_NOTRUN" -gt 0 ]; then
   fi
   if [ "$N_NOTRUN" -gt 0 ] && [ "$HAVE_DART" = 0 ]; then
     err "The Dart SDK is missing, so this report cannot answer the one open question:"
-    err "whether the Dart capture-effect mirror compiles. Install it and re-run."
+    err "whether sim/mesh_sim compiles. Three mirrors are unverified for that reason, not one:"
+    err "  - the docs/08 §12 radio model (channel access, capture, backoff, backpressure)"
+    err "  - utf8ByteLength / wireSizeOfBody, the packet byte-counting fix"
+    err "  - admitByRate / countsAgainstRelayCap, docs/04 §6's abuse limits"
+    err "All three are mechanical translations of verified TypeScript and all three pass the two"
+    err "checks that need no SDK (delimiter balance, cross-language constant parity), which is"
+    err "less than compiling. Install it per docs/11 §2 and re-run; if 'dart analyze' is red the"
+    err "paste-back block above carries '--- dart diagnostics ---' with file:line:col locations."
   fi
   err "Report: ${REPORT#$ROOT/}"
   exit 1
