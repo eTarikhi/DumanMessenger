@@ -55,6 +55,7 @@ SELFTEST_PATHS = [
     "tool/media-probe.ts",
     "tool/e2ee-probe.ts",
     "sim/mesh_sim/bin/mesh_sim.dart",
+    "package.json",
 ]
 
 
@@ -214,6 +215,30 @@ def check_doc_section_refs(repo: Repo) -> Result:
                             f"(it has {len(headings[num])})")
     return Result("doc-section-refs", not problems,
                   f"{total} section citations, all resolve", problems)
+
+
+def check_npm_scripts(repo: Repo) -> Result:
+    """Every `npm run X` in the docs must be a script package.json actually has.
+
+    Only the forward direction. `test` and `typecheck` are never written as `npm run test` — the
+    docs say `npm test` and `make typecheck` — so "unreferenced" here would be a claim about
+    phrasing rather than a broken command.
+    """
+    scripts = set(json.loads(repo.read("package.json")).get("scripts", {}))
+    pat = re.compile(r"npm run ([a-zA-Z0-9:_-]+)")
+    problems: List[str] = []
+    seen: Set[str] = set()
+    for d in repo.corpus:
+        for n, line in enumerate(d.read_text(encoding="utf-8").splitlines(), 1):
+            for m in pat.finditer(line):
+                nm = m.group(1)
+                seen.add(nm)
+                if nm not in scripts:
+                    problems.append(
+                        f"{d.name}:{n} tells the reader to run `npm run {nm}`; package.json has "
+                        f"no such script")
+    return Result("npm-scripts", not problems,
+                  f"{len(scripts)} scripts, {len(seen)} referenced in the docs", problems)
 
 
 def check_help_covers_targets(repo: Repo) -> Result:
@@ -453,6 +478,7 @@ CHECKS = [
     check_ci_script_flags,
     check_help_covers_targets,
     check_doc_section_refs,
+    check_npm_scripts,
 ]
 
 
@@ -489,6 +515,8 @@ FAULTS = [
     # the real regression: a pattern that cannot see a digit hides check-ps1 from help
     ("help-covers-targets", "Makefile", "^[a-zA-Z0-9_-]+:",
      lambda s: s.replace("^[a-zA-Z0-9_-]+:", "^[a-zA-Z_-]+:", 1), "check-ps1"),
+    ("npm-scripts", "docs/12-cli-cheat-sheet.md", "npm run e2ee",
+     lambda s: s.replace("npm run e2ee", "npm run e2ee2", 1), "e2ee2"),
     # a citation to a section that does not exist: the renumbering case
     ("doc-section-refs", "docs/07-e2ee-noise-xx.md", "`docs/02` §6",
      lambda s: s.replace("`docs/02` §6", "`docs/02` §96", 1), "§96"),
