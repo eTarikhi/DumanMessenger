@@ -27,6 +27,7 @@
   ],
   "exclude": [
     "../src/**/*.tsx",
-    "../src/__tests__/**"
+    "../src/__tests__/**",
+    "../src/crypto/__tests__/**"
   ]
 }
