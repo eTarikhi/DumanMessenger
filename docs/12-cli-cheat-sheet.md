@@ -162,6 +162,30 @@ Unit testing, linting, debugging tools, and error logging.
 A job that cannot run is a **failure**, not a silent skip: without a Dart SDK, `make ci` exits `1`
 with three of four jobs `MISSING`.
 
+### Every check at once
+
+`make ci` mirrors the workflow job for job, and that mapping is its whole value. `make checks` is
+a deliberate **superset** of it: everything CI runs, plus the checks that only make sense locally,
+plus one thing CI cannot tell you — which checks have never actually been run against this tree.
+
+| Command | Runs | Notes |
+| --- | --- | --- |
+| `make checks` | `tool/ci/collect-checks.sh` | Every check, one pass, one report. **Never stops at the first failure.** |
+| `make checks-list` | `… --list` | What it would run, tagged `verified before` / `NEVER RUN` per check. Runs nothing. |
+| `make checks-evidence` | `… --with-evidence` | Also re-runs the probes behind the published numbers in `docs/06`–`docs/09`. Minutes, not seconds. |
+| `./tool/ci/collect-checks.sh --only dart` | one group | Groups: `ts`, `dart`, `cli`, `probes`, `evidence`. Comma-separated: `--only ts,dart`. |
+| `./tool/ci/collect-checks.sh --report out.md --json out.json` | choose the outputs | The default report is `artifacts/ci/<run>/REPORT.md`. |
+
+It produces three things: a console table; a Markdown report carrying the tail of every failing
+capture plus parsed Dart diagnostics as `file:line:col`; and a **paste-back block** — the whole
+result compacted into a few lines starting `DUMAN-CHECKS <sha> <date> node=… dart=…`, meant to be
+copied into a message from a machine nobody else can inspect.
+
+Exit `0` only when every check passed. A check that **could not run** exits `1`, because it did
+not pass. There is deliberately no `partial` exit here, which is the real difference from
+`run-pipeline.sh`: that script grades the machine as well as the code, this one only grades the
+code and says plainly what it could not grade.
+
 ### Debugging a failure
 
 | Command | Notes |

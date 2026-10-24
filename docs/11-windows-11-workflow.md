@@ -128,6 +128,8 @@ the Linux instructions in `docs/10` §2.
 .\make.ps1 doctor                     # is this machine able to verify this repository?
 .\make.ps1 ci                         # every CI job, locally
 .\make.ps1 ci --job web --fast        # one job's quick subset
+.\make.ps1 checks                     # every check at once, one report — see docs/10 §5
+.\make.ps1 checks-list                # what that would run, and what has never been run
 .\make.ps1 push                       # validate, then push — refuses on red or partial
 .\make.ps1 pr-dry                     # the whole PR flow, no side effects
 .\make.ps1 install-hooks              # the pre-push gate
@@ -151,6 +153,14 @@ the exact command it hands to the shell, which is the first thing to look at whe
 run · `2` partial · `64` bad usage. Anything else means the *runtime* failed — a bad path, a missing
 distro — and `make.ps1` says so explicitly instead of letting a shell error masquerade as a build
 verdict.
+
+**Run `.\make.ps1 checks` once the Dart SDK from §2 is installed.** It is the single command that
+exercises everything in the repository — TypeScript, Dart, the CLI acceptance matrix and the
+probes — in one pass without stopping at the first failure, and writes one report plus a compact
+block you can paste back. It is also the only tool here that will tell you which checks have
+*never* been run. Until a Dart SDK exists on this machine it reports the whole Dart half as
+`not-run` and exits `1`, which is the correct answer rather than a broken one: those checks did
+not pass, and saying so is the point.
 
 ### If PowerShell refuses to run it
 
@@ -346,7 +356,9 @@ its limits.
 **Verified by execution:** everything in `tool/ci/`, the `Makefile` targets, the pre-push hook, the
 pipeline exit codes, the PR flow including its refusal to merge when CI is billing-blocked, and
 `watch.sh --classify-run`. Those were run against this repository and against stubs that simulate a
-failing build and a billing refusal.
+failing build and a billing refusal. `collect-checks.sh` is in that group — run on Linux, against a
+deliberately failing Dart stub as well as against a missing SDK, so both of its exit paths are
+exercised. What is *not* verified is reaching it through `make.ps1`, which is the paragraph below.
 
 **Not verified by execution:** `make.ps1`. The sandbox this was written in has no PowerShell and
 cannot install one — the release asset host is not reachable from it. So `make.ps1` was **statically

@@ -221,6 +221,67 @@ artifacts/ci/20261023T193803Z-ab7e7ff-push/
 `artifacts/` is git-ignored: these are a local record, not a deliverable, and committing them
 would mean every push carried the previous push's logs.
 
+### Every check at once: `make checks`
+
+`run-pipeline.sh` is a mirror of the workflow, and the mirror is the point: §10 maps each of its
+steps onto the workflow step it copies, so a green local run is evidence about the remote one.
+Adding checks to it would break that claim. So the superset lives in its own script.
+
+```bash
+make checks            # every check, one pass, one report
+make checks-list       # what it would run — runs nothing
+make checks-evidence   # also reproduce the numbers published in docs/06–docs/09 (slow)
+```
+
+Three differences from `make ci` matter:
+
+**1. It records which checks have never been run.** Every check has a registry row —
+`name | label | verified-before? | what it catches` — and `make checks-list` prints it:
+
+```
+── dart — Dart authoritative engine — NEVER COMPILED on the current tree
+  pub-get                  NEVER RUN      dart pub get
+                           catches: the package resolving at all — this has never been run on this tree
+  analyze                  NEVER RUN      dart analyze (errors and warnings fail)
+                           catches: whether the capture-effect mirror COMPILES
+```
+
+This is the reason the script exists. Remote CI has been refused for billing since `8406717`, and
+the workspace that produced the Dart capture-effect mirror had no Dart SDK. An entire half of the
+repository reached `main` without ever being compiled. A wall of green means very little when some
+of the checks behind it have never executed anywhere, so the report separates
+`success` / `failure` / `not-run` in the console table, in a `verified before?` column, and in the
+JSON — and `(first ever run)` is printed next to a check that passes for the first time.
+
+**2. It never stops early.** A failure in check 3 does not hide check 4; everything is collected
+and reported together, which is what you want when a run costs minutes and you cannot watch it.
+
+**3. It writes something you can send back.** After the console table it prints a paste-back block:
+
+```
+DUMAN-CHECKS 82d967a 2026-10-24T02:29:05Z node=22.22.3 dart=MISSING
+ts.npm-ci=success
+ts.test=success(Tests  276 passed)
+dart.analyze=not-run(no Dart SDK)
+--- why nothing could run ---
+no check failed; 4 could not run for want of a toolchain:
+missing: the Dart SDK is not installed
+```
+
+When something *did* fail, that trailer becomes `--- first failure detail ---` with the tail of the
+capture, and `--- dart diagnostics ---` with `file:line:col` locations from `diagnostics.py` — the
+same parser CI publishes as annotations. The block prefers a real failure over a whole-group skip,
+so a missing toolchain earlier in the list cannot bury the output that explains the break.
+
+The Markdown report goes to `artifacts/ci/<run>/REPORT.md` (`--report` to choose), the JSON to
+`--json`. Groups are `ts`, `dart`, `cli`, `probes`, `evidence`; the first four run by default and
+`evidence` is opt-in because it re-runs every published measurement, minutes each.
+
+Exit codes: `0` everything passed · `1` something failed **or could not run** · `64` bad usage.
+There is no `2` here. `run-pipeline.sh` grades the machine as well as the code, which is why it has
+a `partial` verdict and `--allow-missing-dart`; this script grades the code only, and a check it
+could not run is a check that did not pass.
+
 ---
 
 ## 6. Validating and pushing
