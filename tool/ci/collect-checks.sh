@@ -109,9 +109,16 @@ REGISTRY_PROBES=(
   "history|group history anti-entropy (docs/06 §17)|no|digest repair after a member goes dark"
   "media|media transport and PTT (docs/08)|no|10 MB at 1/2/3 hops, PTT play delay"
 )
+# All three rows read `yes` because all three were run against this tree, in one pass, in 517 s:
+# the media probe's capture-margin sweep came back at 100/58/16/2 takeovers for margins 3/6/12/20
+# and its §12.15 arms at 0.9689/0.9209/0.8983/0.9181/0.8672, §12.13 at 0.9040/0.8955, and the
+# history probe closed 20/20 in 8.8 s — the published figures, not merely a zero exit code. The
+# first two were `partial` until that run; the column means "has this ever been verified", and
+# moving it is the point of having it.
 REGISTRY_EVIDENCE=(
-  "media-probe|npm run media — all thirteen sections|partial|the docs/08 numbers, reproduced"
-  "history-probe|npm run history|partial|the docs/06 §17 numbers, reproduced"
+  "media-probe|npm run media — all thirteen sections|yes|the docs/08 numbers, reproduced"
+  "history-probe|npm run history|yes|the docs/06 §17 numbers, reproduced"
+  "e2ee-probe|npm run e2ee — handshake latency, session churn, packet sizing|yes|the docs/07 §2-§4 numbers, reproduced"
 )
 
 describe_group() {
@@ -374,6 +381,7 @@ if selected evidence; then
     skip_step o "evidence (whole group)" "npm is not installed"
     add_row evidence media-probe not-run 0 "npm missing"
     add_row evidence history-probe not-run 0 "npm missing"
+    add_row evidence e2ee-probe not-run 0 "npm missing"
     add_fail evidence "(whole group)" "-"
   else
     run_step o "npm run media (thirteen sections)" "evidence-media.txt" "$ROOT" npm run media
@@ -383,6 +391,11 @@ if selected evidence; then
     run_step o "npm run history" "evidence-history.txt" "$ROOT" npm run history
     add_row evidence history-probe "$o" "$SECONDS" ""
     [ "$o" = success ] || add_fail evidence history-probe evidence-history.txt
+
+    # The three sections are one run: latency is the expensive one, churn and packet are seconds.
+    run_step o "npm run e2ee (latency, churn, packet)" "evidence-e2ee.txt" "$ROOT" npm run e2ee
+    add_row evidence e2ee-probe "$o" "$SECONDS" ""
+    [ "$o" = success ] || add_fail evidence e2ee-probe evidence-e2ee.txt
   fi
   echo
 fi

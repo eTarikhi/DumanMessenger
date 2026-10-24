@@ -12,7 +12,10 @@
 > crypto produces, which is the part a protocol simulator can honestly answer.
 
 **Status:** design and cost model. Handshake latency, session-churn rate and packet
-sizing are measured; the handshake itself is not implemented here.
+sizing are measured; the handshake itself is not implemented here. Everything numeric in §2–§4 is
+re-runnable with **`npm run e2ee`** (`tool/e2ee-probe.ts`, sections `latency`, `churn`, `packet`),
+which did not exist when this document was written — the harness that produced the original figures
+was never committed, so they were citations rather than results.
 **Date:** Oct 2026
 
 ---
@@ -58,10 +61,15 @@ message:
 | festival_crowd | 3 hops | 992 ms | 944 ms | 874 ms | **2 810 ms** |
 | festival_crowd | 4 hops | 1 691 ms | **lost** | 5 555 ms | **never established** |
 
-`docs/04` §5 budgets **< 2 s for one hop and < 5 s for three**, per message. Every leg
-above is inside its own budget except the 4 954 ms leg at three hops in the campus,
-which sits right on the 5 s line — and that is the *point*: the budget was written for
-a message, but a session is three of them in series.
+`docs/02` §6 *Key Metrics to Hit* budgets **< 2 s for one hop and < 5 s for three**, per
+message, and the roadmap's Phase 1 exit criteria say the same. (This paragraph used to cite
+`docs/04` §5, which is *Relay Privacy* and contains no latency figure.)
+
+Every leg at one hop and every leg at three is inside the budget for its distance, including the
+4 954 ms leg at three hops in the campus, which sits right on the 5 s line. The four-hop legs are
+**not judged**, because no budget is published for that distance — the crowd's 5 555 ms leg is over
+the three-hop figure and that is a gap in the budget, not a failure against it. And that is the
+*point*: the budget was written for a message, but a session is three of them in series.
 
 Three consequences for the app, each of which is a decision rather than a detail:
 
@@ -80,6 +88,8 @@ Three consequences for the app, each of which is a decision rather than a detail
 ### 2.2 A leg can be lost, and at four hops in a crowd it was
 
 The `festival_crowd` 4-hop row never established: leg 2 did not arrive inside 8 s.
+`npm run e2ee latency` reproduces this and finds it is not seed-luck — at four hops in the crowd a
+leg was lost on *both* seeds it runs, leg 1 at seed 42 and leg 2 at seed 7.
 That is not a cryptographic failure and it is not rare enough to ignore — the crowd's
 overall delivery is 91-95 % (§2 of `docs/06`), so a three-leg handshake inherits
 roughly `1 − 0.95³ ≈ 14 %` failure before any retry. Session establishment therefore
@@ -98,14 +108,23 @@ distinct pairs that came into range:
 
 | world | nodes | distinct pairs met in 10 min | of all possible pairs | new peers per node per hour |
 | --- | --- | --- | --- | --- |
-| campus_quad | 20 | 102 | 54 % of 190 | 30.6 |
-| festival_crowd | 60 | 702 | 40 % of 1 770 | 70.2 |
-| sparse_village | 12 | 18 | 27 % of 66 | 9.0 |
+| campus_quad | 20 | 102 | 54 % of 190 | **61.2** |
+| festival_crowd | 60 | 702 | 40 % of 1 770 | **140.4** |
+| sparse_village | 12 | 18 | 27 % of 66 | **18.0** |
+
+> **Corrected (Oct 2026).** The last column originally read 30.6 / 70.2 / 9.0 — exactly half these
+> figures. It was computed as `pairs ÷ nodes × 6`, which counts each meeting once for the pair; but
+> a pair coming into range is a new peer for *both* of its members, so the per-node rate is
+> `2 × pairs ÷ nodes × 6`. `npm run e2ee churn` now measures it directly, by counting the distinct
+> peers each node came into range with, which needs no formula to get wrong: it reports 61.8 /
+> 142.2 / 18.0 per hour from 103 / 711 / 18 pairs, agreeing with the pair counts above to within
+> 1 %. The conclusion this section draws was not weakened by the error — it argues against
+> handshaking on discovery, and twice the churn argues harder.
 
 A handshake on every first contact would therefore put, in a festival crowd,
-**~70 XX exchanges per node per hour** on the radio — about 210 mesh messages per node
+**~140 XX exchanges per node per hour** on the radio — about 420 mesh messages per node
 per hour of pure key agreement, each needing an ACK and eligible for two retries,
-before a single user message is sent. In the campus it is ~30/hour (~90 messages).
+before a single user message is sent. In the campus it is ~61/hour (~184 messages).
 Against `skills/07`'s battery budget (NORMAL under 15 % per 8 h, met only with the
 duty cycle on — `docs/06` §10) that is not a rounding error, and 99 % of those peers
 are strangers the user will never message.

@@ -18,7 +18,7 @@ CI    := ./tool/ci
 
 .DEFAULT_GOAL := help
 .PHONY: help doctor install ci ci-fast web dart cli-matrix probes \
-        test typecheck build golden dev media history \
+        test typecheck build golden dev media history e2ee \
         dart-get dart-analyze dart-test dart-cli \
         push push-dry push-force commit-push watch watch-all follow diagnose \
         checks checks-list checks-evidence \
@@ -32,6 +32,8 @@ help: ## Show this help
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) \
 	  | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 	@printf '\n%s\n' "Pipeline exit codes: 0 verified · 1 failed or incomplete · 2 partial"
+	@printf '%s\n'   "  Through make, 1 and 2 both arrive as 2 — that is make's own code for any"
+	@printf '%s\n'   "  recipe failure. Call tool/ci/*.sh directly to tell them apart."
 	@printf '%s\n'   "Docs: docs/10-local-development-and-ci.md  (pipeline, exit codes, monitoring)"
 	@printf '%s\n'   "      docs/11-windows-11-workflow.md       (WSL2, Git Bash, make.ps1)"
 	@printf '%s\n\n' "      docs/12-cli-cheat-sheet.md           (every command, by task)"
@@ -176,6 +178,9 @@ media: ## The media/radio probe. SECT=captureEffect to run one section
 
 history: ## Group-history anti-entropy probe (docs/06 §17)
 	@npm run history
+
+e2ee: ## What E2EE costs on this mesh (docs/07 §2-§4). SECT=latency|churn|packet
+	@npm run e2ee $(if $(SECT),-- $(SECT),)
 
 dart-get: ## dart pub get
 	@cd sim/mesh_sim && dart pub get

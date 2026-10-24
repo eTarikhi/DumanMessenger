@@ -195,8 +195,19 @@ order it runs it — including three behaviours that are easy to drop and expens
 | `2` | partial — only with `--allow-missing-dart` |
 | `64` | bad usage |
 
+> **Through `make`, codes `1` and `2` are both reported as `2`.** GNU make exits `2` for any recipe
+> failure and has no way to hand a recipe's own status back, so the `1`-versus-`2` distinction —
+> failed versus partial, which is the whole point of having two codes — does not survive the `make`
+> front door. Measured rather than inferred: `./tool/ci/run-pipeline.sh --job dart` exits `1`,
+> `make dart` exits `2`, and `run-pipeline.sh --job dart --allow-missing-dart` exits `2`, so on a
+> machine with no Dart SDK the two verdicts are indistinguishable through `make` alone. It survives
+> when you call the script directly, and on Windows through `.\make.ps1`, which runs the script
+> rather than `make` for every target in its script table. If you are scripting against a verdict,
+> call the script; if you are reading a report, the verdict is printed in it either way.
+
 **A job that could not run is a failure, never a silent skip.** On a machine without the Dart
-SDK, `make ci` exits `1` and marks three of four jobs `MISSING`. That is the single most
+SDK, `make ci` fails and marks three of four jobs `MISSING` — the pipeline exits `1` and make
+reports `2`, for the reason above. That is the single most
 important design decision in `tool/ci/`: a green local run that quietly omitted the authoritative
 engine would be worse than no local run at all, because it is the kind of thing you stop checking.
 

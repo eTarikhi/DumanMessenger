@@ -4,12 +4,14 @@ Every command this repository uses, by task. Each entry gives the `make` target 
 front end), what it actually runs, and when you would reach for it.
 
 Conventions:
-- `make X` on Linux/macOS/WSL/Git Bash · `.\make.ps1 X` on Windows PowerShell — same target, same
-  exit codes. See `docs/11-windows-11-workflow.md`.
+- `make X` on Linux/macOS/WSL/Git Bash · `.\make.ps1 X` on Windows PowerShell — same target, and
+  the same *verdict*, but not always the same exit code: `make` reports `2` for any failure because
+  that is GNU make's own code, while `make.ps1` runs the underlying script directly and so passes
+  `1` through. See the note in `docs/10` §5 and `docs/11-windows-11-workflow.md`.
 - The **runs** column is the real command. `make` targets are thin front ends onto `tool/ci/`, which
   copies its commands from `.github/workflows/ci.yml`. Nothing here is a paraphrase.
 - Exit codes across the pipeline: `0` verified · `1` failed or could not run · `2` partial · `64` bad
-  usage.
+  usage. Those are the *scripts'* codes; through `make`, `1` and `2` both arrive as `2`.
 
 ---
 
@@ -94,6 +96,8 @@ lever does not mean re-measuring eleven others.
 | `make media` | `npm run media` | All of `docs/08` §7–§12: file transfer, PTT, the retry timer, contention, backpressure, shedding, the capture effect. |
 | `make media SECT=captureEffect` | `npm run media captureEffect` | One section only. An unknown name exits `2` and lists the valid ones. |
 | the thirteen sections | | `serialization`, `file`, `voice`, `retry`, `acceptance`, `contention`, `channel`, `priority`, `capture`, `backoff`, `shedding`, `captureEffect`, `captureMargin` |
+| `make e2ee` | `npm run e2ee` | `docs/07` §2–§4 — what a Noise_XX handshake costs on this mesh: per-leg establishment latency, the leg lost at four hops in a crowd, how often a device meets a new peer, and the padded packet sizing. **No cryptography is implemented**; these are crypto-shaped messages through the real engine, which is the part a protocol simulator can honestly answer. |
+| `make e2ee SECT=churn` | `npm run e2ee churn` | One section: `latency` (§2.1, §2.2), `churn` (§3), `packet` (§4). An unknown name exits `2` and lists them. |
 | `make history` | `npm run history` | `docs/06` §17 — group-history anti-entropy against the same world with it off. |
 | `npm run field:capture -- campus_quad 42 /tmp/cap.jsonl` | capture run | The field-test capture schema. Add `flood-all` as a 4th argument for the naive baseline. |
 | `npm run field:report -- /tmp/cap.jsonl /tmp/base.jsonl` | compare two captures | Delivery, overhead and latency against the baseline. |

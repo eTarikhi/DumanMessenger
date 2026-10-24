@@ -58,7 +58,7 @@
 - [x] Store-and-forward OppQueue (7-day expiry, 500 msgs cap)
 > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §8, §17, `docs/08-media-transport-ptt.md` §6`):** implemented in both engines at the specified constants — `OPP_QUEUE_MAX = 500`, `OPP_TTL_MS = 7 days`, Spray-and-Wait
   with `SPRAY_LIMIT = 3` copies — and exercised by the partitioned worlds, where it is the only thing that delivers at
-  all. Opportunistic deliveries are marked `carried` so they stay out of the latency budget that docs/04 §5 writes for
+  all. Opportunistic deliveries are marked `carried` so they stay out of the latency budget that `docs/02` §6 writes for
   routed traffic. Two interactions were measured rather than assumed: a media chunk whose retries run out lands here and
   stalls its sliding window forever unless a watchdog re-sends it (`docs/08` §6), and a heavy file transfer pushed 35
   ordinary messages into store-carry-forward in 300 s (`docs/08` §9).

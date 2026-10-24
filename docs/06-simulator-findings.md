@@ -39,7 +39,9 @@ reproduces a run exactly — which is what makes the numbers below meaningful.
 
 - `skills/02` — *"Simulator 20 nodes: SUPER ratio 15-25%, delivery ≥90% at 3 hops, overhead ≤70% of flood-all."*
 - `skills/08` — *"CI simulator: 20-node seed → delivery ≥90% <5 hops, overhead ↓30% vs naive flood."*
-- `docs/04` §5 — latency budget *"1 hop < 2 s; 3 hops < 5 s"*.
+- `docs/02` §6 *Key Metrics to Hit* — latency budget *"Text delivery < 2s (1 hop), < 5s (3 hops)"*,
+  restated as the roadmap's Phase 1 exit criteria. (This line used to cite `docs/04` §5, which is
+  *Relay Privacy* and contains no latency figure; the budget is not published for 2 hops or 4.)
 - `docs/03` §5 — *"hysteresis: prevent SUPER flapping."*
 
 `delivery ≥90% <5 hops` is read as: **at least 90% of sent messages arrive
@@ -525,7 +527,7 @@ stay where they are.
 showing a net gain), `scansPerSec`, `relaysPerSec`, `scansSkippedAsleep`,
 `awakeRatio`, `electionEvents` (`skills/02`: *"DO log `electionEvents` for
 tuner"*), and `latencyByHop` — count/avg/p95 per hop bucket for first-attempt
-non-DTN unicast, the same scope as the docs/04 §5 budget, so a retry (a whole ACK
+non-DTN unicast, the same scope as the `docs/02` §6 latency budget, so a retry (a whole ACK
 timeout) or a DTN bundle (a meeting time, not a transport time) cannot smear the
 distribution. The React visualiser renders these in a metrics dashboard panel;
 `dart run bin/mesh_sim.dart --json` emits them, including the hop table.
@@ -1654,7 +1656,7 @@ sender (§11) and carrying cannot substitute for topology.
 
 Note the two p95 columns' worth of difference in the crowd: **6.6 s over routed deliveries
 against 17.8 s over all of them**. That gap is the `carried` flag doing its job — keeping
-opportunistic deliveries out of the latency budget `docs/04` §5 writes for routed traffic —
+opportunistic deliveries out of the latency budget `docs/02` §6 writes for routed traffic —
 and this is the measurement that shows why the separation has to exist rather than being a
 bookkeeping preference.
 
