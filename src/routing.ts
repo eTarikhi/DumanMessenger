@@ -55,6 +55,62 @@ export function wireSizeOf(bodyChars: number): number {
   return Math.ceil(raw / PAD_BLOCK_BYTES) * PAD_BLOCK_BYTES;
 }
 
+/**
+ * Length of `text` in UTF-8 bytes, not in UTF-16 code units.
+ *
+ * `String.length` counts code units, and a packet carries bytes. For ASCII they
+ * agree, which is why this went unnoticed: every name in `NAMES`, every fixture
+ * body in `test-fixtures/golden-vectors.json` and every body the traffic generator
+ * produces (`"hey " + name`) is ASCII, so no golden vector changes. The moment a
+ * user types Turkish, Arabic, Devanagari, CJK or an emoji, they disagree — by 2×
+ * for most of the Latin supplements, 3× for the scripts this app is likeliest to
+ * meet first, and 4× per astral character (which `.length` also counts as 2).
+ *
+ * Getting this wrong is optimistic in exactly the direction `docs/07` §4 calls
+ * dangerous: a 300-emoji body is `.length` 600 (1 024 B on the wire, BLE) but
+ * 1 200 UTF-8 bytes (1 280 B, Wi-Fi Direct). The engine would put a payload on a
+ * transport that cannot carry it, then report the BLE latency for it.
+ *
+ * Counted by hand rather than through `TextEncoder` for two reasons: it allocates
+ * nothing, and it makes the lone-surrogate rule explicit — `TextEncoder` replaces
+ * an unpaired surrogate with U+FFFD (3 bytes), and the Dart port has to agree, so
+ * the rule is written down here instead of being whatever two standard libraries
+ * happen to do.
+ */
+export function utf8ByteLength(text: string): number {
+  let bytes = 0;
+  for (let i = 0; i < text.length; i++) {
+    const unit = text.charCodeAt(i);
+    if (unit < 0x80) {
+      bytes += 1;
+    } else if (unit < 0x800) {
+      bytes += 2;
+    } else if (unit >= 0xd800 && unit <= 0xdbff && i + 1 < text.length) {
+      const low = text.charCodeAt(i + 1);
+      if (low >= 0xdc00 && low <= 0xdfff) {
+        bytes += 4; // a valid surrogate pair is one 4-byte character
+        i += 1;
+        continue;
+      }
+      bytes += 3; // a lone high surrogate encodes as U+FFFD
+    } else {
+      bytes += 3; // BMP above U+07FF, and any lone surrogate
+    }
+  }
+  return bytes;
+}
+
+/**
+ * Wire size of a body given as text. This is what [createMessage] uses.
+ *
+ * [wireSizeOf] stays exported and unchanged because callers that already hold a
+ * byte count — media chunks, whose payload size is declared rather than padded
+ * (`docs/08` §8) — must not have their number run through a text encoding.
+ */
+export function wireSizeOfBody(body: string): number {
+  return wireSizeOf(utf8ByteLength(body));
+}
+
 export function selectTransport(sizeBytes: number): TransportType {
   return sizeBytes > BLE_MAX_BYTES ? "wifiDirect" : "ble";
 }
@@ -87,7 +143,8 @@ export function createMessage(
   ttl = 5,
   priority: MeshMessage["priority"] = "normal"
 ): MeshMessage {
-  const sizeBytes = wireSizeOf(body.length);
+  // Bytes, not code units: see `utf8ByteLength`.
+  const sizeBytes = wireSizeOfBody(body);
   return {
     id,
     type,
