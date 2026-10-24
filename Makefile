@@ -18,7 +18,7 @@ CI    := ./tool/ci
 
 .DEFAULT_GOAL := help
 .PHONY: help doctor install ci ci-fast web dart cli-matrix probes \
-        test typecheck build golden dev media history \
+        test typecheck build golden dev media history e2ee \
         dart-get dart-analyze dart-test dart-cli \
         push push-dry push-force commit-push watch watch-all follow diagnose \
         checks checks-list checks-evidence \
@@ -176,6 +176,9 @@ media: ## The media/radio probe. SECT=captureEffect to run one section
 
 history: ## Group-history anti-entropy probe (docs/06 §17)
 	@npm run history
+
+e2ee: ## What E2EE costs on this mesh (docs/07 §2-§4). SECT=latency|churn|packet
+	@npm run e2ee $(if $(SECT),-- $(SECT),)
 
 dart-get: ## dart pub get
 	@cd sim/mesh_sim && dart pub get

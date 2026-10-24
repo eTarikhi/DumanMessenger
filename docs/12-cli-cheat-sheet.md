@@ -94,6 +94,8 @@ lever does not mean re-measuring eleven others.
 | `make media` | `npm run media` | All of `docs/08` §7–§12: file transfer, PTT, the retry timer, contention, backpressure, shedding, the capture effect. |
 | `make media SECT=captureEffect` | `npm run media captureEffect` | One section only. An unknown name exits `2` and lists the valid ones. |
 | the thirteen sections | | `serialization`, `file`, `voice`, `retry`, `acceptance`, `contention`, `channel`, `priority`, `capture`, `backoff`, `shedding`, `captureEffect`, `captureMargin` |
+| `make e2ee` | `npm run e2ee` | `docs/07` §2–§4 — what a Noise_XX handshake costs on this mesh: per-leg establishment latency, the leg lost at four hops in a crowd, how often a device meets a new peer, and the padded packet sizing. **No cryptography is implemented**; these are crypto-shaped messages through the real engine, which is the part a protocol simulator can honestly answer. |
+| `make e2ee SECT=churn` | `npm run e2ee churn` | One section: `latency` (§2.1, §2.2), `churn` (§3), `packet` (§4). An unknown name exits `2` and lists them. |
 | `make history` | `npm run history` | `docs/06` §17 — group-history anti-entropy against the same world with it off. |
 | `npm run field:capture -- campus_quad 42 /tmp/cap.jsonl` | capture run | The field-test capture schema. Add `flood-all` as a 4th argument for the naive baseline. |
 | `npm run field:report -- /tmp/cap.jsonl /tmp/base.jsonl` | compare two captures | Delivery, overhead and latency against the baseline. |

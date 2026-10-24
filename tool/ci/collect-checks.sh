@@ -112,6 +112,7 @@ REGISTRY_PROBES=(
 REGISTRY_EVIDENCE=(
   "media-probe|npm run media — all thirteen sections|partial|the docs/08 numbers, reproduced"
   "history-probe|npm run history|partial|the docs/06 §17 numbers, reproduced"
+  "e2ee-probe|npm run e2ee — handshake latency, session churn, packet sizing|yes|the docs/07 §2-§4 numbers, reproduced"
 )
 
 describe_group() {
@@ -374,6 +375,7 @@ if selected evidence; then
     skip_step o "evidence (whole group)" "npm is not installed"
     add_row evidence media-probe not-run 0 "npm missing"
     add_row evidence history-probe not-run 0 "npm missing"
+    add_row evidence e2ee-probe not-run 0 "npm missing"
     add_fail evidence "(whole group)" "-"
   else
     run_step o "npm run media (thirteen sections)" "evidence-media.txt" "$ROOT" npm run media
@@ -383,6 +385,11 @@ if selected evidence; then
     run_step o "npm run history" "evidence-history.txt" "$ROOT" npm run history
     add_row evidence history-probe "$o" "$SECONDS" ""
     [ "$o" = success ] || add_fail evidence history-probe evidence-history.txt
+
+    # The three sections are one run: latency is the expensive one, churn and packet are seconds.
+    run_step o "npm run e2ee (latency, churn, packet)" "evidence-e2ee.txt" "$ROOT" npm run e2ee
+    add_row evidence e2ee-probe "$o" "$SECONDS" ""
+    [ "$o" = success ] || add_fail evidence e2ee-probe evidence-e2ee.txt
   fi
   echo
 fi
