@@ -81,7 +81,8 @@ selected() { case " $SELECTED " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 REGISTRY_DOCS=(
   "drift|does every documented command actually exist?|yes|a doc naming a flag, target or probe section that is not there"
   "dart-balance|Dart delimiter balance, with no Dart SDK present|yes|an unclosed brace, string or interpolation in sim/mesh_sim"
-  "checker-self-test|do the two checkers still catch what they claim?|yes|a checker that always passes, which is indistinguishable from a broken one"
+  "parity|do the two engines agree on their constants?|yes|a protocol constant changed in src/ or sim/mesh_sim only"
+  "checker-self-test|do the three checkers still catch what they claim?|yes|a checker that always passes, which is indistinguishable from a broken one"
 )
 
 REGISTRY_TS=(
@@ -232,8 +233,17 @@ if selected docs; then
     add_row docs dart-balance "$o" "$SECONDS" ""
     [ "$o" = success ] || add_fail docs dart-balance docs-dart-balance.txt
 
+    # Cross-language constant parity. `golden-diff` catches a changed constant on the
+    # TypeScript side and `dart test` on the Dart side, and neither can run where no
+    # Dart SDK exists — so without this, a one-sided edit to a protocol constant is
+    # invisible everywhere in the current pipeline.
+    run_step o "Cross-language parity (check-parity.py)" "docs-parity.txt" "$ROOT" \
+             python3 "$HERE/check-parity.py"
+    add_row docs parity "$o" "$SECONDS" ""
+    [ "$o" = success ] || add_fail docs parity docs-parity.txt
+
     run_step o "Checker self-tests (do they still fail when they should?)" "docs-checker-self-test.txt" \
-             "$ROOT" bash -c 'python3 "$1/check-docs.py" --self-test && python3 "$1/check-dart-balance.py" --self-test' \
+             "$ROOT" bash -c 'python3 "$1/check-docs.py" --self-test && python3 "$1/check-dart-balance.py" --self-test && python3 "$1/check-parity.py" --self-test' \
              _ "$HERE"
     add_row docs checker-self-test "$o" "$SECONDS" ""
     [ "$o" = success ] || add_fail docs checker-self-test docs-checker-self-test.txt

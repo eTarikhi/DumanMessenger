@@ -23,7 +23,7 @@ CI    := ./tool/ci
         push push-dry push-force commit-push watch watch-all follow diagnose \
         checks checks-list checks-evidence \
         pr pr-dry pr-open pr-local pr-branch pr-squash check-ps1 check-docs \
-        dart-balance act install-hooks clean clean-artifacts
+        dart-balance parity act install-hooks clean clean-artifacts
 
 ## --- setup -------------------------------------------------------------------
 
@@ -213,6 +213,14 @@ check-docs: ## Does every command the docs tell you to run actually exist?
 # machine. `--self-test` runs its own 19 cases, 12 of which must NOT alarm.
 dart-balance: ## Do the Dart sources balance? Needs no Dart SDK
 	@python3 $(CI)/check-dart-balance.py
+
+# The two engines are a contract: same protocol constants, same golden vectors.
+# `make golden` polices the TypeScript side and `dart test` the Dart one, and
+# neither runs where there is no Dart SDK — which is everywhere in this pipeline
+# right now. This compares the constants directly, in both directions of value, and
+# needs nothing but python3.
+parity: ## Do the two engines agree on their constants? Needs no toolchain
+	@python3 $(CI)/check-parity.py
 
 clean-artifacts: ## Remove captured CI run artifacts
 	@rm -rf artifacts/ci

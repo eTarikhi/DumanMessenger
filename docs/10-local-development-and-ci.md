@@ -288,7 +288,7 @@ The Markdown report goes to `artifacts/ci/<run>/REPORT.md` (`--report` to choose
 `--json`. Groups are `docs`, `ts`, `dart`, `cli`, `probes`, `evidence`; the first five run by default and
 `evidence` is opt-in because it re-runs every published measurement, minutes each.
 
-`docs` runs first and needs no toolchain at all, which is why it carries three checks rather than
+`docs` runs first and needs no toolchain at all, which is why it carries four checks rather than
 one — on a machine where nothing else can run, this group still gives an answer.
 
 1. **`drift`** — `tool/ci/check-docs.py`, asking whether every command these documents tell you to
@@ -301,10 +301,24 @@ one — on a machine where nothing else can run, this group still gives an answe
    `dart analyze` and does not claim to be; it exists for exactly the situation this repository is
    in, where the authoritative engine is written in a language no machine in the pipeline can
    compile.
-3. **`checker-self-test`** — both checkers' own `--self-test` modes. `check-docs.py` injects one
+3. **`parity`** — `tool/ci/check-parity.py`, asking whether the two engines still agree on their
+   protocol constants. `make parity` runs it alone. This is the check the current pipeline most
+   needs and least expects: `make golden` catches a changed constant on the TypeScript side
+   and `dart test` on the Dart side, and **neither can run where there is no Dart SDK**, which is
+   everywhere in this pipeline right now. It pairs 46 constants by name across `src/*.ts` and
+   `sim/mesh_sim/lib/src/*.dart` — including module-private ones, since Dart's `_pdrWindow` and
+   TypeScript's `PDR_WINDOW` are the same contract — and separately reads `docs/03` §3's
+   coverage-score weight vector out of both engines, requiring the five weights to match each other
+   and sum to 1. It does **not** require the two inventories to match, because they are not
+   supposed to: `broadcastAddress`, `defaultConfig` and `ln10` have no TypeScript counterpart by
+   design, and a check demanding symmetry would need an exception list long enough to hide what it
+   was for. One-sided names are listed rather than failed, which is how the checker found
+   `MPR_WAIT_MS` / `mprWaitDefaultMs` — a synonym pair it had been silently skipping.
+4. **`checker-self-test`** — all three checkers' own `--self-test` modes. `check-docs.py` injects one
    fault per check into a copy of the tree and requires each to be caught *and named*;
-   `check-dart-balance.py` runs 19 snippets, 12 of which are clean and must not alarm. This row
-   exists because both checkers have found bugs in themselves: `check-docs.py` caught its own
+   `check-dart-balance.py` runs 19 snippets, 12 of which are clean and must not alarm, and
+   `check-parity.py` breaks a synthetic two-engine fixture in 8 ways. This row exists because all
+   three checkers have found bugs in themselves: `check-docs.py` caught its own
    `.sh`-stem regex and `make help`'s digit-blind grep, and `check-dart-balance.py` caught itself
    holding a string delimiter beside the stack instead of in the frame, which made it report
    `mesh_sim.dart`'s usage text as an unterminated string. A check that always passes is
