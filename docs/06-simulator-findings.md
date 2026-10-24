@@ -1741,3 +1741,124 @@ Two new counters, `bundlesPruned` and `dtnSuperCarries`, so both of the above ca
 without re-deriving them from logs. Queue events are attributed per node, and a test asserts
 that the originator's own queue matches its own queue events — which is how the
 multi-carrier case became visible in the first place.
+
+## 21. Abuse limits: `docs/04` §6's two caps, and the number in it that cannot be used as written
+
+`docs/04` §6 answers a battery-drain attack and a spam channel with two numbers: *"Max 5
+broadcasts / minute per node; SUPERs drop excess"* and *"Cap relay to 30 msgs/min per
+source; ignore floods"*. Neither engine enforced either. Both do now — `admitByRate` in
+`src/routing.ts` and its Dart mirror, off by default, three `SimConfig` knobs
+(`rateLimits`, `broadcastPerMinuteCap`, `relayPerSourcePerMinuteCap`), two counters
+(`rateBroadcastDrops`, `rateRelayDrops`) and `--rate-limits` on the CLI. Everything below
+is re-runnable with **`npm run rate`** (`tool/rate-probe.ts`, sections `honest` and
+`flood`); the unit behaviour is pinned by 14 TypeScript tests and 10 Dart ones.
+
+### 21.1 A token bucket, because §6 states a rate and a tally does not enforce one
+
+Both caps are token buckets — one per (enforcer, source) pair, refilling continuously at
+`cap` per minute and bursting up to `cap`. A per-minute counter would satisfy the sentence
+and not the intent: 5 broadcasts in the last second of one minute and 5 in the first second
+of the next is ten in two milliseconds while never breaking a per-minute count. The bucket
+holds one entry per source, so memory is bounded by `nodeCount`, which `skills/08` caps at
+200, and a source that goes quiet simply sits with a full bucket — the correct state.
+
+The state lives on the simulation, not on `MeshNode`, which is why the golden vectors are
+byte-identical: no field is added to the cross-language node contract, so no draw order and
+no fixture moves.
+
+### 21.2 The relay cap as written would be switched off by the routing protocol
+
+This is the finding. `docs/03` §1 beacons an OGM every 2 s, which is **30 per minute per
+source** — exactly the cap `docs/04` §6 states. Counting beacons does not drop a node's
+first data message, which is what it looks like it would do; it does something slower and
+worse. The bucket refills one token every 2 s and the beacon spends it every 2 s, so the
+*sustained* budget for everything else is zero and data traffic runs off the initial burst
+alone.
+
+Simulated over ten minutes, one beacon and one attempted data message per 2 s slot:
+
+| beacons count against the cap | data messages admitted in 10 min |
+| --- | --- |
+| yes | **29** |
+| no | **300** |
+
+A 90 % cut in a node's sustained data rate, caused by its own routing protocol, on a
+network where nobody is abusing anything. So `ogm`, `ack` and `sync` are exempt — the same
+three types `src/crypto/packet.ts`'s `isSealedType` treats as control plane, and for the
+same reason in the `ack` case: an acknowledgement that is rate-limited turns one lost packet
+into a retransmission storm. This is a correction to the number as written, not a relaxation
+of it. The cap still applies to everything a user sends, which is what "ignore floods" means,
+and the probe checks that a 100-message burst is still refused at 30.
+
+### 21.3 A compliant network loses nothing
+
+Three seeds, `campus_quad` (20 nodes), 30 honest unicasts over two minutes, caps on:
+
+| seed | delivery | broadcast reach | overhead | transmissions | broadcast drops | relay drops |
+| --- | --- | --- | --- | --- | --- | --- |
+| 42 | 100.0 % | 95.0 % | 952.9 % | 1 315 | **0** | **0** |
+| 7 | 100.0 % | 95.0 % | 566.3 % | 1 495 | **0** | **0** |
+| 11 | 100.0 % | 95.0 % | 647.7 % | 1 127 | **0** | **0** |
+
+Identical to the caps-off arm in every column, which the probe asserts rather than prints.
+That is the property the design rests on: a limit that costs honest traffic is not shippable.
+The engine's own generator sends 15 unicasts/min network-wide and each node beacons 30
+OGM/min — the first is half the relay cap and the second is exempt, so neither binds.
+
+### 21.4 What a 12× flooder costs, and what the caps are worth
+
+One node sends 60 broadcasts in 60 s — twelve times the documented cap — while the same 30
+honest unicasts are in flight. Mean of three seeds:
+
+| arm | honest delivery | broadcast reach | overhead | transmissions |
+| --- | --- | --- | --- | --- |
+| no flood, caps off | 100.0 % | 95.0 % | 722.3 % | 1 312 |
+| no flood, caps on | 100.0 % | 95.0 % | 722.3 % | 1 312 |
+| flood, caps off | 100.0 % | 94.9 % | 468.5 % | **6 084** |
+| flood, caps on | 100.0 % | 76.9 % | 482.3 % | **4 929** |
+
+Three results, and only the first two are what the section is for:
+
+- **The caps fire.** 211 suppressions summed over the enforcing SUPERs (one flood broadcast
+  heard by four SUPERs over cap is four suppressions, which is why the sum exceeds the 60
+  messages sent), plus 4–23 relay-cap refusals per seed. Zero in every unflooded arm.
+- **They cost airtime.** Transmissions under flood fall 6 084 → 4 929, **−19 %**, and the
+  flood's own broadcast reach falls 94.9 % → 76.9 %. On a device whose battery budget
+  `skills/07` sets at under 15 % per 8 h, a fifth of the radio's work disappearing is the
+  whole point of the mechanism.
+- **They do not improve honest delivery, and in this world they cannot.** Honest unicast
+  delivery is **100 % in all four arms**. A 20-node campus mesh absorbs one 12× flooder
+  without dropping a single unicast, so there is nothing for the caps to rescue. This is a
+  null result and it is reported as one: the caps are a battery and airtime control, not a
+  delivery control, and `docs/04` §6 lists them under *Abuse & Safety* rather than under
+  routing for what turns out to be a good reason.
+
+Two columns need their denominators stated, because both mislead on their own. `overhead`
+*rises* 13.8 points with the caps on: it is transmissions per delivered message, and a
+suppressed flood copy is a transmission that never becomes a delivery, so capping a flood can
+raise the ratio while removing work. And broadcast reach under flood with caps on is
+**76.9 %**, not the 8.3 % that 5-of-60 admitted messages would imply — which is §21.5.
+
+### 21.5 Only SUPERs enforce, and that bounds distance rather than neighbourhood
+
+`docs/04` §6 says *"SUPERs drop excess"*, so that is what is implemented, and the gap it
+leaves is worth more than the cap is. A NORMAL node neither relays far nor filters, so a
+flooder still reaches its own one-hop neighbourhood in full; the cap bounds **how far** a
+flood travels, not **whether its neighbours see it**. Hence 76.9 % reach rather than 8.3 %:
+the honest broadcasts in the same window still get through, and the flood's own copies reach
+everyone within one hop of the source and nobody beyond.
+
+For the abuse §6 is actually worried about — a neighbour spamming the pager channel — one
+hop is the whole attack. Closing it would mean every node enforcing the broadcast cap, which
+is a rule `docs/04` does not contain, so it is recorded here as the next question rather than
+implemented as an answer.
+
+### 21.6 SOS is exempt, deliberately
+
+SOS travels to `BROADCAST` like everything else on the pager channel, so the obvious
+implementation — gate on `to === "BROADCAST"` — would cap an emergency channel at 5/min.
+`docs/04` §6 already gives SOS its own two mechanisms (opt-in listening, and §11's collapsing
+of a repeated flood into one alert that only moves forward in time), and a real emergency is
+exactly the case where a rate limit does the most harm. The gate therefore keys on
+`type === "broadcast"`, and a test pins that twelve SOS messages in a second produce zero
+suppressions.

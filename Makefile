@@ -23,7 +23,7 @@ CI    := ./tool/ci
         push push-dry push-force commit-push watch watch-all follow diagnose \
         checks checks-list checks-evidence \
         pr pr-dry pr-open pr-local pr-branch pr-squash check-ps1 check-docs \
-        dart-balance parity act install-hooks clean clean-artifacts
+        dart-balance parity rate act install-hooks clean clean-artifacts
 
 ## --- setup -------------------------------------------------------------------
 
@@ -181,6 +181,9 @@ history: ## Group-history anti-entropy probe (docs/06 §17)
 
 e2ee: ## What E2EE costs on this mesh (docs/07 §2-§4, §7). SECT=latency|churn|packet|crypto
 	@npm run e2ee $(if $(SECT),-- $(SECT),)
+
+rate: ## What docs/04 §6's abuse limits cost and buy (docs/06 §21). SECT=honest|flood
+	@npm run rate $(if $(SECT),-- $(SECT),)
 
 dart-get: ## dart pub get
 	@cd sim/mesh_sim && dart pub get

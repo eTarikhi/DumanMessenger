@@ -122,6 +122,7 @@ REGISTRY_EVIDENCE=(
   "media-probe|npm run media — all thirteen sections|yes|the docs/08 numbers, reproduced"
   "history-probe|npm run history|yes|the docs/06 §17 numbers, reproduced"
   "e2ee-probe|npm run e2ee — handshake latency, session churn, packet sizing, real crypto cost|yes|the docs/07 §2-§4 and §7 numbers, reproduced"
+  "rate-probe|npm run rate — docs/04 §6's abuse limits, honest and flooded|yes|the docs/06 §21 numbers, reproduced"
 )
 
 describe_group() {
@@ -418,6 +419,7 @@ if selected evidence; then
     add_row evidence media-probe not-run 0 "npm missing"
     add_row evidence history-probe not-run 0 "npm missing"
     add_row evidence e2ee-probe not-run 0 "npm missing"
+    add_row evidence rate-probe not-run 0 "npm missing"
     add_fail evidence "(whole group)" "-"
   else
     run_step o "npm run media (thirteen sections)" "evidence-media.txt" "$ROOT" npm run media
@@ -428,10 +430,15 @@ if selected evidence; then
     add_row evidence history-probe "$o" "$SECONDS" ""
     [ "$o" = success ] || add_fail evidence history-probe evidence-history.txt
 
-    # The three sections are one run: latency is the expensive one, churn and packet are seconds.
-    run_step o "npm run e2ee (latency, churn, packet)" "evidence-e2ee.txt" "$ROOT" npm run e2ee
+    # The four sections are one run: latency is the expensive one, churn, packet and
+    # crypto are seconds each.
+    run_step o "npm run e2ee (latency, churn, packet, crypto)" "evidence-e2ee.txt" "$ROOT" npm run e2ee
     add_row evidence e2ee-probe "$o" "$SECONDS" ""
     [ "$o" = success ] || add_fail evidence e2ee-probe evidence-e2ee.txt
+
+    run_step o "npm run rate (honest, flood)" "evidence-rate.txt" "$ROOT" npm run rate
+    add_row evidence rate-probe "$o" "$SECONDS" ""
+    [ "$o" = success ] || add_fail evidence rate-probe evidence-rate.txt
   fi
   echo
 fi

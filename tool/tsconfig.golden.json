@@ -22,6 +22,7 @@
     "media-probe.ts",
     "history-probe.ts",
     "e2ee-probe.ts",
+    "rate-probe.ts",
     "capture-json.ts",
     "field-report.ts"
   ],

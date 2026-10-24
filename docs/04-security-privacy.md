@@ -112,6 +112,24 @@ auth tag: HMAC or AEAD tag (AES-GCM / ChaChaPoly)
 - **Block/mute peer** locally (ignore msgs from pubKey).
 - **Rate limit:** Max 5 broadcasts / minute per node; SUPERs drop excess.
 - **Battery drain attack:** Cap relay to 30 msgs/min per source; ignore floods.
+> **Implementation note (Oct 2026 — `src/routing.ts` `admitByRate` + `sim/mesh_sim/lib/src/routing.dart`; evidence in `docs/06-simulator-findings.md` §21):** both limits above are
+  built in both engines, off by default, as token buckets rather than per-minute tallies — a tally would admit 5 broadcasts in the last second of one minute and 5 in the first second of the
+  next, which is ten in two milliseconds without breaking a per-minute count. Measured on `campus_quad` over three seeds: a compliant network loses **nothing** (zero drops, identical delivery
+  and transmissions with the caps on and off), and one node flooding at 12× the cap loses **19 %** of the network's transmissions (6 084 → 4 929) and 18 points of its own broadcast reach.
+>
+> Three things the implementation had to decide that this section does not:
+>
+> - **The relay cap of 30/min cannot be applied to control-plane traffic.** `docs/03` §1 beacons an OGM every 2 s, which is exactly 30/min per source, so counting beacons leaves the routing
+>   protocol holding the entire sustained budget: 29 data messages admitted in ten minutes instead of 300, a 90 % cut caused by the node's own beacons and with nobody abusing anything. `ogm`,
+>   `ack` and `sync` are therefore exempt. This corrects the number as written rather than relaxing it — the cap still applies to everything a user sends.
+> - **Only SUPERs enforce the broadcast cap, as this section says, and that bounds distance rather than neighbourhood.** A NORMAL node neither relays far nor filters, so a flooder still reaches
+>   its own one-hop neighbours in full: the flood's reach with the caps on is **76.9 %**, not the 8.3 % that 5-of-60 admitted would imply. For the neighbour-spam case this section is about, one
+>   hop is the whole attack. Making every node enforce it is a rule this document does not contain, so it is recorded in `docs/06` §21.5 as the next question instead.
+> - **SOS is exempt.** It travels to `BROADCAST` like everything else on the pager channel, so the obvious gate (`to == BROADCAST`) would cap an emergency channel at 5/min. This section already
+>   gives SOS two other mechanisms — opt-in listening and §11's collapsing — and a real emergency is precisely where a rate limit does the most harm.
+>
+> The caps are a battery and airtime control, not a delivery control, and `docs/06` §21.4 reports the null result plainly: honest unicast delivery is **100 % in all four arms**, flooded or not,
+> caps on or off. A 20-node campus mesh absorbs one 12× flooder without dropping a unicast, so there was nothing here for the caps to rescue.
 - **SOS misuse:** SOS channel is opt-in; user must toggle to listen (avoid spam).
   > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §11):** the anti-spam half is implemented as *collapsing*: a repeated SOS flood is a
   new radio event but the same emergency, so it replaces the receiver's existing alert with its fresher
