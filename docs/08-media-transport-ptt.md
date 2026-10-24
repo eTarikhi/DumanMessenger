@@ -725,17 +725,26 @@ would silently redefine every acceptance number in the roadmap.
   note cannot keep up with its own capture clock on one radio (§12.3). Either the path is
   capped at two hops for streaming and longer notes are sent as blobs, or voice gets
   priority in the transmit queue — which §12.8 measures, and which does not rescue it.
-* The receiver is modelled by `channelCapture` (§12.9) and it is where most of the contention
-  lives. Carrier sense is modelled too (§12.10) and is the pessimistic arm.
+* The receiver is modelled by `channelCapture`, and it is where most of the contention lives.
+  §12.9 gave it two arms — `none`, which takes everything however busy it is, and `first`, which
+  locks onto whichever packet arrived first and is the pessimistic bound that produced the
+  13.6-point figure every later section quotes. §12.15 added the third, `strongest`, which lets a
+  newcomer that is enough stronger take the receiver over. Carrier sense is modelled too (§12.10)
+  and is the pessimistic arm on the transmitter side.
 * Backpressure is modelled at the sender only (§12.12), where it halves a one-peer
   transfer's drops and its time, and does nothing for a mesh — because the queue that
   overflows in a mesh belongs to a relay.
-* Still unmodelled, with the direction of each error named: a capture effect that compares
-  signal strengths rather than arrival order (optimistic), a contention window with random
-  backoff (pessimistic — two nodes that defer for each other are separated only by event
-  ordering), RTS/CTS for the hidden terminal (optimistic, and a test pins that carrier sense
-  cannot fix it), and backpressure from the radio to the layers above it (§12.10's verdict:
-  the missing half).
+* Modelled after this list was first written, each with a measurement behind it and neither of
+  them a rescue: the capture effect that compares signal strengths rather than arrival order
+  (`channelCapture: "strongest"` with `channelCaptureRatioDb`, §12.15 — it moves the loss from the
+  newcomer to the incumbent instead of removing it, and one packet is lost either way); and the
+  contention window with random backoff (`channelBackoff: "binary"`, §12.13 — queue drops run
+  1 994–3 466 against 273–394 receiver collisions, roughly eight packets shed at the buffer for
+  every one the window prevents, so the binding loss is buffering and not collision).
+* Still unmodelled, with the direction of each error named: RTS/CTS for the hidden terminal
+  (optimistic, and a test pins that carrier sense cannot fix it), and backpressure from a *relay's*
+  radio up to the layers above it — the half of §12.10's verdict that §12.12 deliberately did not
+  build, because a sender can throttle itself and a relay has no way to tell the sender to.
 
 ### 12.8 Which packet a busy radio takes next
 
