@@ -85,6 +85,12 @@ This is the step that gets skipped, because the TypeScript half works perfectly 
 would normally catch the gap. **CI on this repository is currently refused for billing reasons**, so
 nothing will catch it. Without Dart, `make ci` exits 1 with three of four jobs `MISSING`.
 
+Before installing it — or if you cannot — `make dart-balance` and `make checks` still tell you
+something about `sim/mesh_sim`. `tool/ci/check-dart-balance.py` checks delimiter balance across all
+22 Dart sources with no SDK at all, so a brace or string mistake costs one line here instead of a
+hundred unrelated analyzer errors after you install it. It is not a compiler and does not catch
+type errors, exhaustiveness or a wrong argument order; for those, install the SDK.
+
 **Option A — Chocolatey**
 
 ```powershell
@@ -358,7 +364,21 @@ pipeline exit codes, the PR flow including its refusal to merge when CI is billi
 `watch.sh --classify-run`. Those were run against this repository and against stubs that simulate a
 failing build and a billing refusal. `collect-checks.sh` is in that group — run on Linux, against a
 deliberately failing Dart stub as well as against a missing SDK, so both of its exit paths are
-exercised. What is *not* verified is reaching it through `make.ps1`, which is the paragraph below.
+exercised. `check-dart-balance.py` is in it too: 22/22 files balanced and 19/19 self-test cases
+behaving, including the 12 clean snippets that must not alarm. What is *not* verified is reaching
+any of it through `make.ps1`, which is the paragraph below.
+
+**Not verified at all: the Dart engine.** `sim/mesh_sim` has never been compiled on the current
+tree — no SDK here, and `storage.googleapis.com` is not reachable from this sandbox, so none could
+be installed. `make checks` reports the whole `dart` group as `not-run`, which is the honest label
+and not a pass. Two specific things are therefore unverified and are the first to look at if
+`dart analyze` is red: the radio-model mirror added for `docs/08` §12.9–§12.15 (audited line by line
+against `src/simulation.ts`, with its three capture-effect tests realigned to the assertions the
+TypeScript side actually makes) and the `utf8ByteLength` / `wireSizeOfBody` mirror of the packet
+byte-counting fix, plus the five tests that go with it. Both are mechanical translations rather
+than re-implementations, which is the most that can be said for code nobody has compiled. If
+`dart analyze` fails, the collector's paste-back block carries `--- dart diagnostics ---` with
+`file:line:col` locations from `diagnostics.py` — enough to fix it blind, which is why it is there.
 
 **Not verified by execution:** `make.ps1`. The sandbox this was written in has no PowerShell and
 cannot install one — the release asset host is not reachable from it. So `make.ps1` was **statically

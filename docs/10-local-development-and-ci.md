@@ -288,12 +288,27 @@ The Markdown report goes to `artifacts/ci/<run>/REPORT.md` (`--report` to choose
 `--json`. Groups are `docs`, `ts`, `dart`, `cli`, `probes`, `evidence`; the first five run by default and
 `evidence` is opt-in because it re-runs every published measurement, minutes each.
 
-`docs` runs first and needs no toolchain at all — it is `tool/ci/check-docs.py`, which asks whether
-every command these documents tell you to run actually exists, reading the answer out of the
-programs rather than out of the prose. It is in the collector because this repository keeps making
-that mistake: two probe section names were once documented that `tool/media-probe.ts` does not
-have, and four real Dart CLI flags were missing from the cheat sheet. `make check-docs` runs it on
-its own, and `--self-test` breaks a copy of the tree on purpose to prove each check can fail.
+`docs` runs first and needs no toolchain at all, which is why it carries three checks rather than
+one — on a machine where nothing else can run, this group still gives an answer.
+
+1. **`drift`** — `tool/ci/check-docs.py`, asking whether every command these documents tell you to
+   run actually exists, reading the answer out of the programs rather than out of the prose. It is
+   here because this repository keeps making that mistake: two probe section names were once
+   documented that `tool/media-probe.ts` does not have, and four real Dart CLI flags were missing
+   from the cheat sheet. `make check-docs` runs it alone.
+2. **`dart-balance`** — `tool/ci/check-dart-balance.py`, delimiter balance across all 22 Dart
+   sources in `sim/mesh_sim`, needing no Dart SDK. `make dart-balance` runs it alone. It is not
+   `dart analyze` and does not claim to be; it exists for exactly the situation this repository is
+   in, where the authoritative engine is written in a language no machine in the pipeline can
+   compile.
+3. **`checker-self-test`** — both checkers' own `--self-test` modes. `check-docs.py` injects one
+   fault per check into a copy of the tree and requires each to be caught *and named*;
+   `check-dart-balance.py` runs 19 snippets, 12 of which are clean and must not alarm. This row
+   exists because both checkers have found bugs in themselves: `check-docs.py` caught its own
+   `.sh`-stem regex and `make help`'s digit-blind grep, and `check-dart-balance.py` caught itself
+   holding a string delimiter beside the stack instead of in the frame, which made it report
+   `mesh_sim.dart`'s usage text as an unterminated string. A check that always passes is
+   indistinguishable from a broken one, and nothing else in the pipeline would notice.
 
 Exit codes: `0` everything passed · `1` something failed **or could not run** · `64` bad usage.
 There is no `2` here. `run-pipeline.sh` grades the machine as well as the code, which is why it has

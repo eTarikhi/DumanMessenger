@@ -351,6 +351,15 @@ def section_claims(repo: Repo, invokes: Tuple[str, ...]) -> List[Tuple[str, int,
     bare backticked identifier on a line that is itself about the probe — which is how a doc lists
     "also `shedding`, `captureEffect`". Scanning every backticked identifier in the corpus would
     bury the findings in prose.
+
+    The second shape has a known cost, hit twice now. Any backticked identifier sharing a line with
+    a command name is read as a section claim, so a `docs/12` table row that says "measured against
+    `wireSizeOf`" on the same line as `npm run e2ee crypto` claims a section called `wireSizeOf`.
+    That is a false positive in the doc's favour — it fires, it is one line, and the fix is to not
+    name an unrelated symbol on a line about the command. The alternative would be to decide which
+    identifiers "look like" section names, and `captureEffect` and `wireSizeOf` look exactly alike.
+    A check that occasionally says "this line is doing two things" is worth more than one that
+    guesses.
     """
     out: List[Tuple[str, int, str]] = []
     invoked = re.compile(

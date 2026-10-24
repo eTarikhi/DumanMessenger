@@ -23,7 +23,7 @@ CI    := ./tool/ci
         push push-dry push-force commit-push watch watch-all follow diagnose \
         checks checks-list checks-evidence \
         pr pr-dry pr-open pr-local pr-branch pr-squash check-ps1 check-docs \
-        act install-hooks clean clean-artifacts
+        dart-balance act install-hooks clean clean-artifacts
 
 ## --- setup -------------------------------------------------------------------
 
@@ -179,7 +179,7 @@ media: ## The media/radio probe. SECT=captureEffect to run one section
 history: ## Group-history anti-entropy probe (docs/06 §17)
 	@npm run history
 
-e2ee: ## What E2EE costs on this mesh (docs/07 §2-§4). SECT=latency|churn|packet
+e2ee: ## What E2EE costs on this mesh (docs/07 §2-§4, §7). SECT=latency|churn|packet|crypto
 	@npm run e2ee $(if $(SECT),-- $(SECT),)
 
 dart-get: ## dart pub get
@@ -205,6 +205,14 @@ check-ps1: ## Static check of make.ps1, for machines that cannot run PowerShell
 
 check-docs: ## Does every command the docs tell you to run actually exist?
 	@python3 $(CI)/check-docs.py
+
+# Not a substitute for `dart analyze`, which needs the SDK this target exists to
+# work without. It answers one question about sim/mesh_sim — does every delimiter
+# opened outside a comment or a string get closed — so that a brace mistake shows
+# up here in one line instead of as a hundred analyzer errors on somebody else's
+# machine. `--self-test` runs its own 19 cases, 12 of which must NOT alarm.
+dart-balance: ## Do the Dart sources balance? Needs no Dart SDK
+	@python3 $(CI)/check-dart-balance.py
 
 clean-artifacts: ## Remove captured CI run artifacts
 	@rm -rf artifacts/ci

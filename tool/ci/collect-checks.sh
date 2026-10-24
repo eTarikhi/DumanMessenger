@@ -80,6 +80,8 @@ selected() { case " $SELECTED " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 # of those checks have never been executed anywhere.
 REGISTRY_DOCS=(
   "drift|does every documented command actually exist?|yes|a doc naming a flag, target or probe section that is not there"
+  "dart-balance|Dart delimiter balance, with no Dart SDK present|yes|an unclosed brace, string or interpolation in sim/mesh_sim"
+  "checker-self-test|do the two checkers still catch what they claim?|yes|a checker that always passes, which is indistinguishable from a broken one"
 )
 
 REGISTRY_TS=(
@@ -92,7 +94,7 @@ REGISTRY_TS=(
 )
 REGISTRY_DART=(
   "pub-get|dart pub get|no|the package resolving at all — this has never been run on this tree"
-  "analyze|dart analyze (errors and warnings fail)|no|whether the capture-effect mirror COMPILES"
+  "analyze|dart analyze (errors and warnings fail)|no|whether the radio-model and byte-counting mirrors COMPILE at all"
   "test|dart test --reporter expanded|no|the 197 Dart cases, including 3 that have never run"
   "cli|CLI acceptance: campus_quad, seed 42, gated|no|the skills/02 and skills/08 criteria"
 )
@@ -118,12 +120,12 @@ REGISTRY_PROBES=(
 REGISTRY_EVIDENCE=(
   "media-probe|npm run media — all thirteen sections|yes|the docs/08 numbers, reproduced"
   "history-probe|npm run history|yes|the docs/06 §17 numbers, reproduced"
-  "e2ee-probe|npm run e2ee — handshake latency, session churn, packet sizing|yes|the docs/07 §2-§4 numbers, reproduced"
+  "e2ee-probe|npm run e2ee — handshake latency, session churn, packet sizing, real crypto cost|yes|the docs/07 §2-§4 and §7 numbers, reproduced"
 )
 
 describe_group() {
   case "$1" in
-    docs)     printf 'Documentation drift — needs no toolchain, so it always runs' ;;
+    docs)     printf 'Toolchain-free static checks — documentation drift, Dart balance, checker self-tests' ;;
     ts)       printf 'TypeScript engine + React visualiser — verified locally many times' ;;
     dart)     printf 'Dart authoritative engine — NEVER COMPILED on the current tree' ;;
     cli)      printf 'CLI acceptance across scenarios — never run on the current tree' ;;
@@ -203,8 +205,15 @@ echo
 #
 # First because it is the only group that needs no toolchain at all: pure Python over files that
 # are already here. It runs in well under a second, so it gives an answer even on a machine where
-# nothing else can, and it catches the failure mode this repository keeps hitting — a command
-# written into the docs from memory that the program does not have.
+# nothing else can, and it catches the two failure modes this repository keeps hitting — a command
+# written into the docs from memory that the program does not have, and Dart that cannot be
+# compiled here at all.
+#
+# The third row runs the checkers' own self-tests. A check that always passes is
+# indistinguishable from a broken one, and both checkers here have found bugs in themselves:
+# check-docs.py caught its own `.sh`-stem regex and make help's digit-blind grep, and
+# check-dart-balance.py caught itself holding a string delimiter beside the stack instead of in
+# the frame. Running the self-tests is what stops the next such bug shipping silently.
 
 if selected docs; then
   log "docs — $(describe_group docs)"
@@ -213,9 +222,26 @@ if selected docs; then
              python3 "$HERE/check-docs.py"
     add_row docs drift "$o" "$SECONDS" ""
     [ "$o" = success ] || add_fail docs drift docs-drift.txt
+
+    # Dart delimiter balance. Not a substitute for `dart analyze` — it is a net for the
+    # case where no Dart SDK exists anywhere in the pipeline, which is the case here,
+    # so without it a brace mistake in sim/mesh_sim is invisible until somebody's
+    # Windows machine drowns in unrelated analyzer errors.
+    run_step o "Dart delimiter balance (check-dart-balance.py)" "docs-dart-balance.txt" "$ROOT" \
+             python3 "$HERE/check-dart-balance.py"
+    add_row docs dart-balance "$o" "$SECONDS" ""
+    [ "$o" = success ] || add_fail docs dart-balance docs-dart-balance.txt
+
+    run_step o "Checker self-tests (do they still fail when they should?)" "docs-checker-self-test.txt" \
+             "$ROOT" bash -c 'python3 "$1/check-docs.py" --self-test && python3 "$1/check-dart-balance.py" --self-test' \
+             _ "$HERE"
+    add_row docs checker-self-test "$o" "$SECONDS" ""
+    [ "$o" = success ] || add_fail docs checker-self-test docs-checker-self-test.txt
   else
     skip_step o "docs (whole group)" "python3 is not installed"
-    add_row docs drift not-run 0 "no python3"
+    for row in "${REGISTRY_DOCS[@]}"; do
+      IFS='|' read -r name _ _ _ <<< "$row"; add_row docs "$name" not-run 0 "no python3"
+    done
     add_fail docs "(whole group)" "-"
   fi
   echo
