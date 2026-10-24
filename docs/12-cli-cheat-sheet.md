@@ -4,12 +4,14 @@ Every command this repository uses, by task. Each entry gives the `make` target 
 front end), what it actually runs, and when you would reach for it.
 
 Conventions:
-- `make X` on Linux/macOS/WSL/Git Bash · `.\make.ps1 X` on Windows PowerShell — same target, same
-  exit codes. See `docs/11-windows-11-workflow.md`.
+- `make X` on Linux/macOS/WSL/Git Bash · `.\make.ps1 X` on Windows PowerShell — same target, and
+  the same *verdict*, but not always the same exit code: `make` reports `2` for any failure because
+  that is GNU make's own code, while `make.ps1` runs the underlying script directly and so passes
+  `1` through. See the note in `docs/10` §5 and `docs/11-windows-11-workflow.md`.
 - The **runs** column is the real command. `make` targets are thin front ends onto `tool/ci/`, which
   copies its commands from `.github/workflows/ci.yml`. Nothing here is a paraphrase.
 - Exit codes across the pipeline: `0` verified · `1` failed or could not run · `2` partial · `64` bad
-  usage.
+  usage. Those are the *scripts'* codes; through `make`, `1` and `2` both arrive as `2`.
 
 ---
 
