@@ -7,12 +7,20 @@
  * repository could reproduce any of them — the harness that produced them was never committed, so
  * the figures were citations rather than results. This is that harness.
  *
- * No cryptography is implemented here, and per docs/07 none should be: `skills/03` says "use
- * libsodium via FFI; never custom crypto". What a protocol simulator can honestly answer is what
- * the *mesh* does to messages of the size and shape the crypto produces. So each Noise_XX leg is
- * sent as an ordinary unicast through the real engine — routing, MPR wait, link loss, ACKs and
- * retries all active — and the latency reported is the engine's own end-to-end figure for that
- * message, not a model of a handshake.
+ * The `latency`, `churn` and `packet` sections implement no cryptography, which was the whole
+ * point when this probe was written: `skills/03` says "use libsodium via FFI; never custom crypto",
+ * and what a protocol simulator can honestly answer is what the *mesh* does to messages of the size
+ * and shape the crypto produces. So each Noise_XX leg is sent as an ordinary unicast through the
+ * real engine — routing, MPR wait, link loss, ACKs and retries all active — and the latency
+ * reported is the engine's own end-to-end figure for that message, not a model of a handshake.
+ *
+ * The `crypto` section is different and says so. It runs the reference protocol layer in
+ * `src/crypto/` — Noise_XX, the per-message ratchet, the packet — over OpenSSL primitives from
+ * `node:crypto`, which is not custom crypto and does not contradict `skills/03`. It exists because
+ * three of docs/07's claims were arithmetic on constants rather than measurements, and a
+ * serialiser settles them: the real size of a sealed packet against §4's table, the real size of
+ * each handshake leg against §7.2's MTU question, and the real CPU cost of a handshake against
+ * §2.1's radio figures.
  *
  * Where this probe's numbers differ from the published table, the difference is printed rather
  * than tuned away: the original pair selection and seed are not recorded in docs/07, so exact
@@ -23,7 +31,7 @@
  *   npm run e2ee                 every section
  *   npm run e2ee latency         one section
  *
- * Sections: latency (§2.1, §2.2) · churn (§3) · packet (§4)
+ * Sections: latency (§2.1, §2.2) · churn (§3) · packet (§4) · crypto (§2.1 note 3, §4, §7.2)
  */
 import { MeshSimulation, type DeliveryRecord, type SimConfig } from "../src/simulation";
 import { campusQuad, festivalCrowd, sparseVillage } from "../src/scenarios";
@@ -36,6 +44,20 @@ import {
   wireSizeOf,
 } from "../src/routing";
 import type { MeshNode, NodeId } from "../src/types";
+import { utf8ByteLength, wireSizeOfBody } from "../src/routing";
+import {
+  DumanSession,
+  LEG_SIZES,
+  SymmetricRatchet,
+  decodeNonce,
+  generateIdentity,
+  handshakeInProcess,
+  nodePrimitives as crypto,
+  openPacket,
+  relayVisible,
+  sessionPrologueFromQr,
+} from "../src/crypto";
+import { HEADER_BYTES, NONCE_BYTES } from "../src/crypto/packet";
 
 /** docs/07 §2.2: the crowd's 4-hop leg 2 "did not arrive inside 8 s", so 8 s is the leg budget. */
 const LEG_TIMEOUT_MS = 8000;
@@ -437,12 +459,239 @@ function packetSection(): boolean {
   return true;
 }
 
+// --- the crypto itself: sizes that used to be arithmetic, and costs that were guesses ---
+
+/**
+ * docs/07 §2.1's measured one-hop establishment total for `campus_quad`: 675 ms of
+ * radio for three legs. Used below as the denominator for "what fraction of a
+ * handshake is the CPU" — which §2.1 note 3 asserts qualitatively ("SAS
+ * verification is not the slow part") and never measured.
+ */
+const ONE_HOP_RADIO_TOTAL_MS = 675;
+/** A negotiated GATT MTU, the ceiling §7.2 asks about. */
+const GATT_MTU_BYTES = 247;
+
+function cryptoSection(): boolean {
+  console.log("\n=== the crypto itself: real sizes and real costs (docs/07 §2.1 note 3, §4, §7.2) ===");
+  console.log(
+    `Everything below is measured from src/crypto/, the reference protocol layer over OpenSSL.\n` +
+      `It is not custom crypto — skills/03 forbids that and this probe does not do it — but it is\n` +
+      `real code producing real bytes, so the sizes it reports are not arithmetic on constants.\n`
+  );
+  const failures: string[] = [];
+
+  // --- §7.2: does a handshake leg fit a GATT MTU? ---
+  const pair = handshakeInProcess(crypto, crypto.generateX25519(), crypto.generateX25519());
+  const legLengths = pair.legs.map((leg) => leg.length);
+  console.log(`  §7.2  leg sizes on air                ${legLengths.join(" / ")} B`);
+  console.log(
+    `        largest leg vs a ${GATT_MTU_BYTES} B MTU          ${Math.max(...legLengths)} B, ` +
+      `${GATT_MTU_BYTES - Math.max(...legLengths)} B to spare`
+  );
+  if (legLengths.join(",") !== LEG_SIZES.join(",")) {
+    failures.push(
+      `measured leg sizes ${legLengths.join("/")} disagree with LEG_SIZES ${LEG_SIZES.join("/")}`
+    );
+  }
+  for (const [index, size] of legLengths.entries()) {
+    if (size > GATT_MTU_BYTES) {
+      failures.push(`leg ${index + 1} is ${size} B and does not fit a ${GATT_MTU_BYTES} B MTU`);
+    }
+  }
+
+  // --- §4: does a sealed packet measure what the model says? ---
+  const alice = generateIdentity(crypto);
+  const bob = generateIdentity(crypto);
+  const aliceSession = new DumanSession(
+    crypto,
+    alice,
+    "initiator",
+    sessionPrologueFromQr(crypto, alice, bob.signing.publicKey)
+  );
+  const bobSession = new DumanSession(
+    crypto,
+    bob,
+    "responder",
+    sessionPrologueFromQr(crypto, bob, alice.signing.publicKey)
+  );
+  bobSession.readLeg(aliceSession.writeLeg()!);
+  aliceSession.readLeg(bobSession.writeLeg()!);
+  bobSession.readLeg(aliceSession.writeLeg()!);
+  if (aliceSession.currentPhase !== "unverified" || bobSession.currentPhase !== "unverified") {
+    failures.push(
+      `the handshake did not come up: ${aliceSession.currentPhase} / ${bobSession.currentPhase}`
+    );
+  }
+
+  console.log("\n  §4    body                                    sealed packet   engine model   agrees");
+  const emoji = "\u{1F600}".repeat(300);
+  const bodies: ReadonlyArray<[string, string]> = [
+    ["0 chars", ""],
+    ["241 chars", "x".repeat(241)],
+    ["700 chars", "x".repeat(700)],
+    ["900 chars", "x".repeat(900)],
+    ["929 chars (docs/08 §5.3 BLE ceiling)", "x".repeat(929)],
+    ["930 chars", "x".repeat(930)],
+    [`300 emoji (${emoji.length} code units, ${utf8ByteLength(emoji)} bytes)`, emoji],
+  ];
+  for (const [label, body] of bodies) {
+    const sealed = aliceSession.send(
+      {
+        msgId: `m${label.length}`,
+        type: "text",
+        ttl: 5,
+        hop: 0,
+        nowMs: 1_760_000_000_000,
+        body: new TextEncoder().encode(body),
+      },
+      bob.signing.publicKey
+    );
+    const measured = sealed ? sealed.length : -1;
+    const model = wireSizeOfBody(body);
+    const agrees = measured === model;
+    if (!agrees) {
+      failures.push(`"${label}": sealed to ${measured} B but the engine model says ${model} B`);
+    }
+    const received = sealed ? bobSession.receive(sealed) : null;
+    if (!received || !received.ok) failures.push(`"${label}": Bob could not open what Alice sealed`);
+    console.log(
+      `        ${label.padEnd(42)} ${String(measured).padStart(7)} B   ${String(model).padStart(7)} B   ` +
+        `${agrees ? "yes" : "NO"}`
+    );
+  }
+  // The last row is why the engine counts bytes: sizing that body by `.length`
+  // would have put 1 200 bytes on a transport that carries 1 024.
+  console.log(
+    `        (sized by .length the emoji body would be ${wireSizeOf(emoji.length)} B -> ` +
+      `${selectTransport(wireSizeOf(emoji.length))}, and it does not fit)`
+  );
+
+  // --- §2.1 note 3: how much of a handshake is the CPU? ---
+  for (let i = 0; i < 20; i++) {
+    handshakeInProcess(crypto, crypto.generateX25519(), crypto.generateX25519());
+  }
+  const handshakes = 200;
+  const startedHandshake = performance.now();
+  for (let i = 0; i < handshakes; i++) {
+    handshakeInProcess(crypto, crypto.generateX25519(), crypto.generateX25519());
+  }
+  const handshakeMs = (performance.now() - startedHandshake) / handshakes;
+
+  const payload = new TextEncoder().encode("x".repeat(160));
+  const chain = new SymmetricRatchet(crypto, crypto.randomBytes(32));
+  const drain = SymmetricRatchet.restore(crypto, chain.compromise());
+  for (let i = 0; i < 200; i++) {
+    const sealed = chain.seal(payload);
+    drain.open(sealed.num, sealed.sealed);
+  }
+  const sealRounds = 2000;
+  const startedSeal = performance.now();
+  for (let i = 0; i < sealRounds; i++) chain.seal(payload);
+  const sealMs = (performance.now() - startedSeal) / sealRounds;
+
+  const share = (handshakeMs / ONE_HOP_RADIO_TOTAL_MS) * 100;
+  console.log(
+    `\n  §2.1  one handshake (2 keygen, 3 DH, 4 AEAD)   ${(handshakeMs * 1000).toFixed(0)} µs`
+  );
+  console.log(`        one-hop radio total from §2.1's table   ${ONE_HOP_RADIO_TOTAL_MS} ms`);
+  console.log(`        the CPU is ${share.toFixed(3)} % of a one-hop handshake`);
+  // sealMs is milliseconds, so a rate per second needs the 1000 — the first
+  // version of this line printed "63 msg/s" for 63 000 and "9 876 MB/s" for 9.6.
+  const sealsPerSecond = 1000 / sealMs;
+  const megabytesPerSecond = payload.length / (sealMs / 1000) / (1024 * 1024);
+  console.log(
+    `        one message sealed (160 B + ratchet)    ${(sealMs * 1000).toFixed(1)} µs  ` +
+      `→ ${sealsPerSecond.toFixed(0)} msg/s, ${megabytesPerSecond.toFixed(1)} MiB/s`
+  );
+  // §2.1 note 3 says the SAS comparison is instant and the 0.5-6.7 s is the radio.
+  // That is now a measured statement with a threshold attached rather than an
+  // intuition: if the CPU ever became a visible share of a handshake, the note
+  // would be wrong and this would say so.
+  if (share > 5) {
+    failures.push(
+      `the handshake CPU is ${share.toFixed(2)} % of the one-hop radio total; §2.1 note 3's ` +
+        `"the 0.5-6.7 s is the radio" assumes it is negligible`
+    );
+  }
+
+  // --- §6 row 1: the capture test, with a relay that holds real keys ---
+  const relayId = generateIdentity(crypto);
+  const aliceToRelay = new DumanSession(
+    crypto,
+    alice,
+    "initiator",
+    sessionPrologueFromQr(crypto, alice, relayId.signing.publicKey)
+  );
+  const relay = new DumanSession(
+    crypto,
+    relayId,
+    "responder",
+    sessionPrologueFromQr(crypto, relayId, alice.signing.publicKey)
+  );
+  relay.readLeg(aliceToRelay.writeLeg()!);
+  aliceToRelay.readLeg(relay.writeLeg()!);
+  relay.readLeg(aliceToRelay.writeLeg()!);
+
+  const packet = aliceSession.send(
+    {
+      msgId: "capture",
+      type: "text",
+      ttl: 5,
+      hop: 1,
+      nowMs: 1_760_000_000_000,
+      body: new TextEncoder().encode("the atrium at 14:00, bring the battery pack"),
+    },
+    bob.signing.publicKey
+  )!;
+  const visible = relayVisible(packet);
+  const stolen = relay.compromise()!;
+  const attacker = SymmetricRatchet.restore(crypto, stolen.recv);
+  const num = decodeNonce(packet.subarray(HEADER_BYTES, HEADER_BYTES + NONCE_BYTES))!;
+  const derived = attacker.keyFor(num);
+  const attempt = derived.ok ? openPacket(crypto, derived.key, packet) : null;
+  const onAir = Buffer.from(packet).toString("latin1");
+
+  console.log("\n  §6    what a SUPER relay that is also a legitimate peer of Alice can read:");
+  console.log(
+    `        header   ttl ${visible?.ttl}, type ${visible?.type}, hop ${visible?.hop}, ` +
+      `destHint ${visible?.destHint}`
+  );
+  console.log(`        body     ${visible?.bodyReadable ? "READABLE — bug" : "not readable"}`);
+  console.log(
+    `        opened with its own legitimate message key   ` +
+      `${attempt && attempt.ok ? "SUCCEEDED — bug" : `fails (${attempt && !attempt.ok ? attempt.reason : "no key"})`}`
+  );
+  console.log(`        plaintext visible in the bytes on air        ${onAir.includes("atrium") ? "YES — bug" : "no"}`);
+  if (!visible || visible.bodyReadable) failures.push("a relay could read the body of a sealed packet");
+  if (attempt && attempt.ok) {
+    failures.push("a relay opened a packet addressed to someone else with its own legitimate key");
+  }
+  if (onAir.includes("atrium")) failures.push("the body appeared in plaintext in the sealed packet");
+
+  console.log("\n=== verdict ===");
+  if (failures.length > 0) {
+    for (const f of failures) console.log(`  · ${f}`);
+    return false;
+  }
+  console.log(
+    `  Legs are ${legLengths.join("/")} B and each fits one unfragmented ${GATT_MTU_BYTES} B GATT write (§7.2).\n` +
+      `  Every sealed packet measures what the engine's wireSizeOf predicts, including a body whose\n` +
+      `  code-unit count and byte count disagree (§4).\n` +
+      `  A handshake is ${share.toFixed(3)} % CPU and ${(100 - share).toFixed(3)} % radio at one hop, so §2.1\n` +
+      `  note 3 holds with a number attached: the seconds are the mesh, not the crypto.\n` +
+      `  A relay holding a legitimate key from its own session with the sender reads the header and\n` +
+      `  nothing else (§6 row 1).`
+  );
+  return true;
+}
+
 // --- section dispatch ---------------------------------------------------------
 
 const SECTIONS: ReadonlyArray<[string, () => boolean | void]> = [
   ["latency", latencySection],
   ["churn", churnSection],
   ["packet", packetSection],
+  ["crypto", cryptoSection],
 ];
 
 function main(): void {
@@ -453,9 +702,10 @@ function main(): void {
   }
 
   console.log(
-    "Duman Messenger — what E2EE costs on this mesh (docs/07 §2–§4)\n" +
-      "No cryptography is implemented or implied: these are mesh measurements of crypto-shaped\n" +
-      "messages, which is the part a protocol simulator can honestly answer."
+    "Duman Messenger — what E2EE costs on this mesh (docs/07 §2–§4, §7)\n" +
+      "Three sections measure the mesh carrying crypto-shaped messages, which is the part a\n" +
+      "protocol simulator can honestly answer. The fourth runs the reference protocol layer in\n" +
+      "src/crypto/ over OpenSSL and measures the crypto itself."
   );
 
   let failed = false;
