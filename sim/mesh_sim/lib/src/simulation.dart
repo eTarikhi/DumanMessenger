@@ -96,6 +96,9 @@ class SimConfig {
     this.channelCwMax = 64,
     this.channelSlotMs = 1.0,
     this.mediaBackpressure = false,
+    this.rateLimits = false,
+    this.broadcastPerMinuteCap = broadcastPerMinuteCapDefault,
+    this.relayPerSourcePerMinuteCap = relayPerSourcePerMinuteCapDefault,
     this.communityRelayPreference = false,
     this.dtnPreferCommunity = false,
     this.maxRetries = 2,
@@ -326,6 +329,17 @@ class SimConfig {
   /// [ChannelAccess.free] where nothing queues.
   final bool mediaBackpressure;
 
+  /// Whether docs/04 §6's two abuse limits are enforced. Off by default, so a
+  /// shipped run allocates no buckets and no golden vector moves.
+  final bool rateLimits;
+
+  /// docs/04 §6: "Max 5 broadcasts / minute per node; SUPERs drop excess."
+  final int broadcastPerMinuteCap;
+
+  /// docs/04 §6: "Cap relay to 30 msgs/min per source; ignore floods." Control-plane
+  /// traffic is exempt — see [countsAgainstRelayCap].
+  final int relayPerSourcePerMinuteCap;
+
   /// When two relays cover the same neighbours, pick the plugged one. Off by default and
   /// measured as a null result: it moves 0.6 of 100 MPR slots in a crowd and nothing
   /// downstream, because who transmits is decided per packet from what was actually heard
@@ -402,6 +416,9 @@ class SimConfig {
     int? channelCwMax,
     double? channelSlotMs,
     bool? mediaBackpressure,
+    bool? rateLimits,
+    int? broadcastPerMinuteCap,
+    int? relayPerSourcePerMinuteCap,
     bool? communityRelayPreference,
     bool? dtnPreferCommunity,
     double? voiceKbps,
@@ -458,6 +475,11 @@ class SimConfig {
         channelCwMax: channelCwMax ?? this.channelCwMax,
         channelSlotMs: channelSlotMs ?? this.channelSlotMs,
         mediaBackpressure: mediaBackpressure ?? this.mediaBackpressure,
+        rateLimits: rateLimits ?? this.rateLimits,
+        broadcastPerMinuteCap:
+            broadcastPerMinuteCap ?? this.broadcastPerMinuteCap,
+        relayPerSourcePerMinuteCap:
+            relayPerSourcePerMinuteCap ?? this.relayPerSourcePerMinuteCap,
         communityRelayPreference:
             communityRelayPreference ?? this.communityRelayPreference,
         dtnPreferCommunity: dtnPreferCommunity ?? this.dtnPreferCommunity,
@@ -620,6 +642,8 @@ class SimulationStats {
     required this.channelDropsMedia,
     required this.channelDropsWithAlternative,
     required this.transferBlocks,
+    required this.rateBroadcastDrops,
+    required this.rateRelayDrops,
     required this.batteryPercentPerHourNormal,
     required this.batteryPercentPerHourSuper,
     required this.scansPerSec,
@@ -761,6 +785,12 @@ class SimulationStats {
   /// is backpressure working, not a failure (docs/08 §12.12).
   final int transferBlocks;
 
+  /// Broadcasts a SUPER dropped because the source exceeded docs/04 §6's 5/min.
+  final int rateBroadcastDrops;
+
+  /// Relays refused because the source exceeded docs/04 §6's 30/min.
+  final int rateRelayDrops;
+
   /// skills/07 telemetry: "Battery %/h per role, scans/sec, relays/sec".
   /// Measured from the battery snapshot taken when metrics were cleared, over
   /// nodes that are online, in that role and not charging.
@@ -866,6 +896,8 @@ class SimulationStats {
         'channelDropsMedia': channelDropsMedia,
         'channelDropsWithAlternative': channelDropsWithAlternative,
         'transferBlocks': transferBlocks,
+        'rateBroadcastDrops': rateBroadcastDrops,
+        'rateRelayDrops': rateRelayDrops,
         'latencyByHop': latencyByHop.map((b) => b.toJson()).toList(),
       };
 }
@@ -1418,6 +1450,15 @@ class MeshSimulation {
   int _channelDropsMedia = 0;
   int _channelDropsWithAlternative = 0;
   int _transferBlocks = 0;
+  int _rateBroadcastDrops = 0;
+  int _rateRelayDrops = 0;
+
+  /// Token buckets for docs/04 §6's two caps, keyed `"enforcer|source"`. Held here
+  /// rather than on `MeshNode` so the feature adds no field to the cross-language
+  /// node contract: a node's identity, RNG draw order and golden-vector surface are
+  /// untouched, and the state is per enforcing pair anyway.
+  final Map<String, RateBucket> _rateBroadcasts = {};
+  final Map<String, RateBucket> _rateRelays = {};
 
   /// Whether the transmission that just went on air collided at its receiver. Written by
   /// [_onAir], read by the contention window to decide whether to widen.
@@ -1521,6 +1562,10 @@ class MeshSimulation {
     _channelDropsMedia = 0;
     _channelDropsWithAlternative = 0;
     _transferBlocks = 0;
+    _rateBroadcastDrops = 0;
+    _rateRelayDrops = 0;
+    _rateBroadcasts.clear();
+    _rateRelays.clear();
     _lastTxCollided = false;
     _channel.clear();
     _txUntil.clear();
@@ -3056,6 +3101,41 @@ class MeshSimulation {
       trace.hops.add(hopRecord);
     }
 
+    // Placed after the hop record exists so a suppressed broadcast still shows in
+    // the hop trace, which is the artifact an auditor reads (docs/07 §6).
+    //
+    // docs/04 §6: "Max 5 broadcasts / minute per node; SUPERs drop excess."
+    // Enforced by SUPERs only, exactly as written — a limitation worth stating
+    // rather than hiding, since a NORMAL node neither relays far nor filters, so a
+    // flooder still reaches its own one-hop neighbourhood. The gate is on the
+    // `broadcast` type and not on `to == broadcastAddress`, because SOS travels to
+    // BROADCAST too and docs/04 §6 gives SOS its own mechanism (opt-in listening,
+    // plus the collapsing in §11); rate-limiting an emergency channel at 5/min would
+    // be a worse failure than the abuse it prevents.
+    if (config.rateLimits &&
+        msg.type == MsgType.broadcast &&
+        node.role == Role.superNode) {
+      final gate = admitByRate(_rateBroadcasts, '${node.id}|${msg.from}',
+          config.broadcastPerMinuteCap, now);
+      if (!gate.ok) {
+        _rateBroadcastDrops++;
+        if (hopRecord != null) {
+          hopRecord.action = HopAction.suppressed;
+          hopRecord.reason = gate.reason;
+        }
+        _pushLog(
+            MeshLogKind.decision,
+            node.id,
+            '${msg.id} broadcast from ${msg.from} suppressed by ${node.name} '
+                '(SUPER): ${gate.reason}',
+            peerId: via,
+            msgId: msg.id,
+            msgType: msg.type,
+            hop: msg.hopCount);
+        return;
+      }
+    }
+
     // skills/04: "On ackReceived from dest: remove + gossip ACK (so relays can prune)".
     // The ACK comes back along the reverse path, and the nodes on that path are the ones
     // that were carrying copies, so hearing one is enough to drop the bundle — no extra
@@ -3175,6 +3255,33 @@ class MeshSimulation {
           msgType: msg.type,
           hop: msg.hopCount);
       return;
+    }
+
+    // docs/04 §6: "Cap relay to 30 msgs/min per source; ignore floods." Every node
+    // enforces this one, because relaying is what every node does and a flood costs
+    // the relays' queues rather than a SUPER's attention — docs/08 §12.13 measured
+    // queue drops running eight to one against receiver collisions, so the buffer is
+    // where a flood actually lands.
+    if (config.rateLimits && countsAgainstRelayCap(msg)) {
+      final gate = admitByRate(_rateRelays, '${node.id}|${msg.from}',
+          config.relayPerSourcePerMinuteCap, now);
+      if (!gate.ok) {
+        _rateRelayDrops++;
+        if (hopRecord != null) {
+          hopRecord.action = HopAction.suppressed;
+          hopRecord.reason = gate.reason;
+        }
+        _pushLog(
+            MeshLogKind.decision,
+            node.id,
+            '${msg.id} from ${msg.from} not relayed by ${node.name}: '
+                '${gate.reason}',
+            peerId: via,
+            msgId: msg.id,
+            msgType: msg.type,
+            hop: msg.hopCount);
+        return;
+      }
     }
 
     final forwarded = msg.copyWith(ttl: msg.ttl - 1, hopCount: msg.hopCount + 1);
@@ -3787,6 +3894,8 @@ class MeshSimulation {
       channelDropsMedia: _channelDropsMedia,
       channelDropsWithAlternative: _channelDropsWithAlternative,
       transferBlocks: _transferBlocks,
+      rateBroadcastDrops: _rateBroadcastDrops,
+      rateRelayDrops: _rateRelayDrops,
       batteryPercentPerHourNormal: drainPerHour(Role.normal),
       batteryPercentPerHourSuper: drainPerHour(Role.superNode),
       scansPerSec: _scanCount / elapsedSec,

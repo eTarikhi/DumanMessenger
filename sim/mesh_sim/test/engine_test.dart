@@ -1729,6 +1729,164 @@ void main() {
       expect(createMessage('m4', 0.0, 'a', 'b', 'hey Kemal').sizeBytes, equals(256));
     });
   });
+
+  group('abuse limits (docs/04 §6)', () {
+    test('the caps are the numbers docs/04 §6 states', () {
+      expect(broadcastPerMinuteCapDefault, equals(5));
+      expect(relayPerSourcePerMinuteCapDefault, equals(30));
+      expect(rateWindowMs, equals(60000));
+    });
+
+    test('admits exactly cap messages, then refuses', () {
+      final buckets = <String, RateBucket>{};
+      for (var i = 0; i < broadcastPerMinuteCapDefault; i++) {
+        expect(admitByRate(buckets, 'a|src', broadcastPerMinuteCapDefault, 0.0).ok,
+            isTrue,
+            reason: 'message $i');
+      }
+      final refused =
+          admitByRate(buckets, 'a|src', broadcastPerMinuteCapDefault, 0.0);
+      expect(refused.ok, isFalse);
+      expect(refused.reason, contains('rate limit'));
+      expect(refused.reason, contains('5 per minute'));
+      expect(refused.retryInMs, greaterThan(0));
+    });
+
+    test('refills continuously, so a rate is enforced rather than a tally', () {
+      // A tumbling counter would admit 5 at t=59 999 and 5 more at t=60 001: ten
+      // broadcasts in two milliseconds while never breaking a per-minute count.
+      final buckets = <String, RateBucket>{};
+      for (var i = 0; i < 5; i++) {
+        admitByRate(buckets, 'k', 5, 0.0);
+      }
+      expect(admitByRate(buckets, 'k', 5, 1000.0).ok, isFalse);
+      // One token per rateWindowMs / cap = 12 s at cap 5.
+      expect(admitByRate(buckets, 'k', 5, 11999.0).ok, isFalse);
+      expect(admitByRate(buckets, 'k', 5, 12001.0).ok, isTrue);
+      expect(admitByRate(buckets, 'k', 5, 12002.0).ok, isFalse);
+    });
+
+    test('never refills above the cap, so silence does not bank a burst', () {
+      final buckets = <String, RateBucket>{};
+      admitByRate(buckets, 'k', 5, 0.0);
+      final after = admitByRate(buckets, 'k', 5, 600000.0);
+      expect(after.ok, isTrue);
+      expect(after.tokensLeft, lessThanOrEqualTo(5.0));
+      var admitted = 1;
+      while (admitByRate(buckets, 'k', 5, 600000.0).ok) {
+        admitted++;
+      }
+      expect(admitted, equals(5));
+    });
+
+    test('keeps sources and enforcers apart', () {
+      final buckets = <String, RateBucket>{};
+      for (var i = 0; i < 5; i++) {
+        admitByRate(buckets, 'a|src1', 5, 0.0);
+      }
+      expect(admitByRate(buckets, 'a|src1', 5, 0.0).ok, isFalse);
+      expect(admitByRate(buckets, 'a|src2', 5, 0.0).ok, isTrue);
+      expect(admitByRate(buckets, 'b|src1', 5, 0.0).ok, isTrue);
+    });
+
+    test('treats a non-positive cap as no cap', () {
+      final buckets = <String, RateBucket>{};
+      for (var i = 0; i < 500; i++) {
+        expect(admitByRate(buckets, 'k', 0, i.toDouble()).ok, isTrue);
+      }
+      expect(buckets.length, equals(0));
+      expect(admitByRate(buckets, 'k', -1, 0.0).ok, isTrue);
+    });
+
+    test('grants no refill when the clock goes backwards', () {
+      final buckets = <String, RateBucket>{};
+      for (var i = 0; i < 5; i++) {
+        admitByRate(buckets, 'k', 5, 10000.0);
+      }
+      expect(admitByRate(buckets, 'k', 5, 0.0).ok, isFalse);
+      expect(buckets['k']!.atMs, equals(0.0));
+    });
+
+    test('reports one token every 2 s at the relay cap', () {
+      final buckets = <String, RateBucket>{};
+      for (var i = 0; i < 30; i++) {
+        admitByRate(buckets, 'k', 30, 0.0);
+      }
+      final refused = admitByRate(buckets, 'k', 30, 0.0);
+      expect(refused.ok, isFalse);
+      expect(refused.retryInMs.round(), equals(2000));
+      expect(refused.reason, contains('2.0 s'));
+    });
+
+    test('exempts control-plane traffic from the relay cap', () {
+      expect(countsAgainstRelayCap(createMessage('m', 0.0, 'a', 'b', '', type: MsgType.ogm)),
+          isFalse);
+      expect(countsAgainstRelayCap(createMessage('m', 0.0, 'a', 'b', '', type: MsgType.ack)),
+          isFalse);
+      expect(countsAgainstRelayCap(createMessage('m', 0.0, 'a', 'b', '', type: MsgType.sync)),
+          isFalse);
+      for (final type in <MsgType>[
+        MsgType.text,
+        MsgType.broadcast,
+        MsgType.voice,
+        MsgType.file,
+        MsgType.sos,
+      ]) {
+        expect(countsAgainstRelayCap(createMessage('m', 0.0, 'a', 'b', '', type: type)),
+            isTrue,
+            reason: type.name);
+      }
+    });
+
+    test('counting beacons would cost a node 90% of its sustained data rate', () {
+      // docs/03 §1: an OGM every 2 s. docs/04 §6: cap relay at 30/min per source.
+      // 60 000 / 2 000 = 30 — a source's own beacons arrive at exactly the cap rate.
+      const ogmIntervalMs = 2000.0;
+      expect(rateWindowMs / ogmIntervalMs, equals(relayPerSourcePerMinuteCapDefault));
+
+      int sustained(bool countOgms) {
+        final buckets = <String, RateBucket>{};
+        var admitted = 0;
+        for (var t = 0.0; t < 10 * rateWindowMs; t += ogmIntervalMs) {
+          if (countOgms) {
+            admitByRate(buckets, 'relay|src', relayPerSourcePerMinuteCapDefault, t);
+          }
+          if (admitByRate(buckets, 'relay|src', relayPerSourcePerMinuteCapDefault, t).ok) {
+            admitted++;
+          }
+        }
+        return admitted;
+      }
+
+      // Counting beacons: the bucket refills one token per slot and the beacon spends
+      // it, so data runs off the initial burst alone and then starves.
+      expect(sustained(true), equals(29));
+      // Exempting them: the full 30/min is available to user traffic.
+      expect(sustained(false), equals(300));
+      // And the exemption does not disable the cap: a burst is still refused.
+      final flooding = <String, RateBucket>{};
+      var refused = 0;
+      for (var i = 0; i < 100; i++) {
+        if (!admitByRate(flooding, 'relay|src', relayPerSourcePerMinuteCapDefault, 0.0).ok) {
+          refused++;
+        }
+      }
+      expect(refused, equals(100 - relayPerSourcePerMinuteCapDefault));
+    });
+
+    test('is off by default, so nothing a shipped run does changes', () {
+      final config = campusQuad(42);
+      expect(config.rateLimits, isFalse);
+      expect(config.broadcastPerMinuteCap, equals(broadcastPerMinuteCapDefault));
+      expect(config.relayPerSourcePerMinuteCap,
+          equals(relayPerSourcePerMinuteCapDefault));
+      final on = config.copyWith(rateLimits: true);
+      expect(on.rateLimits, isTrue);
+      // copyWith carries every other knob across unchanged.
+      expect(on.nodeCount, equals(config.nodeCount));
+      expect(on.mediaBackpressure, equals(config.mediaBackpressure));
+    });
+  });
 }
 
 double _ln(num x) => math.log(x.toDouble());

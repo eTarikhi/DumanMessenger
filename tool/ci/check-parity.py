@@ -48,12 +48,21 @@ DART_GLOB = "sim/mesh_sim/lib/src/*.dart"
 # thing to hide behind fuzzy matching.
 #
 #   MPR_WAIT_MS (src/routing.ts)  vs  mprWaitDefaultMs (lib/src/routing.dart)
+#   BROADCAST_PER_MINUTE_CAP      vs  broadcastPerMinuteCapDefault
+#   RELAY_PER_SOURCE_PER_MINUTE_CAP vs relayPerSourcePerMinuteCapDefault
 #
-# Dart needs the word "default" because `mprWaitMs` is already the SimConfig field
-# name; TypeScript does not, because its config field is `config.mprWaitMs` and the
-# constant lives in another module. Same 300 ms either way, which is the only thing
-# this check cares about.
-ALIASES: Dict[str, str] = {"mprWaitMs": "mprWaitDefaultMs"}
+# Dart needs the word "Default" because those are also SimConfig field names, and a
+# constructor default of `this.x = x` would be self-referential. TypeScript has no
+# collision, because its constants are SCREAMING_CASE and its config fields are not.
+# Same values either way, which is the only thing this check cares about.
+ALIASES: Dict[str, str] = {
+    "mprWaitMs": "mprWaitDefaultMs",
+    # Dart spells these with a `Default` suffix because SimConfig has a field of the
+    # plain name, and a constructor default of `this.x = x` would be self-referential.
+    # TypeScript has no such collision: its constants are SCREAMING_CASE.
+    "broadcastPerMinuteCap": "broadcastPerMinuteCapDefault",
+    "relayPerSourcePerMinuteCap": "relayPerSourcePerMinuteCapDefault",
+}
 
 
 class Decl(NamedTuple):

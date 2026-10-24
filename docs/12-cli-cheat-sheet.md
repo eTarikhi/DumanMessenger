@@ -122,6 +122,7 @@ lever does not mean re-measuring eleven others.
 | `... --channel-priority ack-first` | Which queued packet a busy radio takes next: `fifo` (default), `ack-first`, `by-class` (`docs/08` §12.8). |
 | `... --backoff binary` | Wait a random number of slots before taking a medium that just freed up: `none` (default), `binary` (`docs/08` §12.13). |
 | `... --media-backpressure` | Off by default. Stop a transfer pumping chunks into a radio that is already full (`docs/08` §12.12). |
+| `... --rate-limits` | Off by default. Enforce `docs/04` §6's abuse limits: 5 broadcasts/min per node, dropped by **SUPERs only** as the document specifies, and 30 relayed messages/min per source, enforced by every node. Control-plane traffic (`ogm`, `ack`, `sync`) is exempt — `docs/03` §1 beacons an OGM every 2 s, which is exactly 30/min, so counting beacons would leave a node's own routing protocol holding the entire budget and cut its sustained data rate from 300 messages per ten minutes to 29. SOS is exempt too: `docs/04` §6 gives it opt-in listening and §11's collapsing instead, and capping an emergency channel at 5/min would be a worse failure than the abuse it prevents. Reports `rateBroadcastDrops` and `rateRelayDrops`. |
 | `... --json` | Machine-readable output. Names the arm it ran under a `radio` key. |
 | `... --sos` | SOS flood reach (roadmap Phase 3). |
 | `... --group 5` | Group delivery modes (`docs/06` §14). |

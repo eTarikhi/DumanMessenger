@@ -84,6 +84,9 @@ Duman mesh simulator (headless)
   --media-backpressure
                       stop a transfer pumping chunks into a radio that is full
                       (docs/08 §12.12)
+  --rate-limits       enforce docs/04 §6's abuse limits: 5 broadcasts/min per node
+                      (SUPERs drop excess) and 30 relayed msgs/min per source, with
+                      control-plane traffic exempt
   --trace             print the hop-by-hop route each delivered message took
   --capture           record the pcap-like mesh log and print its tail
   --capture-ogm       also log OGM beacons (they outnumber everything else)
@@ -287,6 +290,12 @@ void main(List<String> args) {
     config = config.copyWith(mediaBackpressure: true);
   }
 
+  // Not part of the radio model, so it does not set `radioOverridden`: the shipped
+  // combination is inert by construction and this one is a policy switch.
+  if (args.contains('--rate-limits')) {
+    config = config.copyWith(rateLimits: true);
+  }
+
   // Built here rather than nested inside the header's own interpolation, which would put a
   // string literal containing an interpolation inside a ternary inside an interpolation.
   final radioArm = radioOverridden
@@ -349,6 +358,9 @@ void main(List<String> args) {
       'channelPriority': config.channelPriority.name,
       'channelBackoff': config.channelBackoff.name,
       'mediaBackpressure': config.mediaBackpressure,
+      'rateLimits': config.rateLimits,
+      'broadcastPerMinuteCap': config.broadcastPerMinuteCap,
+      'relayPerSourcePerMinuteCap': config.relayPerSourcePerMinuteCap,
     },
     'nodes': sim.nodes.length,
     'sent': sent,

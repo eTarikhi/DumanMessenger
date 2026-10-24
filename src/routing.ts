@@ -32,8 +32,10 @@ export const INBOX_MAX = 200;
 export const BROADCAST_PER_MINUTE_CAP = 5;
 /** docs/04 §6: "Cap relay to 30 msgs/min per source; ignore floods." */
 export const RELAY_PER_SOURCE_PER_MINUTE_CAP = 30;
-/** Both caps in docs/04 §6 are stated per minute. */
-export const RATE_WINDOW_MS = 60_000;
+/** Both caps in docs/04 §6 are stated per minute. Written as an expression rather
+ *  than `60_000` because Dart has no digit separators, and `check-parity.py` compares
+ *  the two engines' non-scalar initialisers as text. */
+export const RATE_WINDOW_MS = 60 * 1000;
 
 /** Text < 1 KB rides BLE; larger payloads need Wi-Fi Direct (docs/02 §3.1). */
 export const BLE_MAX_BYTES = 1024;

@@ -20,6 +20,102 @@ const int sprayLimit = 3;
 const double mprWaitDefaultMs = 300;
 const int inboxMax = 200;
 
+// --- abuse limits (docs/04 §6), mirroring `src/routing.ts` ---------------------
+
+/// docs/04 §6: "Max 5 broadcasts / minute per node; SUPERs drop excess."
+///
+/// Named with a `Default` suffix because `SimConfig` has a field of the plain name,
+/// and `this.broadcastPerMinuteCap = broadcastPerMinuteCap` in a constructor default
+/// would be self-referential. Same reason `mprWaitDefaultMs` is spelled that way.
+const int broadcastPerMinuteCapDefault = 5;
+
+/// docs/04 §6: "Cap relay to 30 msgs/min per source; ignore floods."
+const int relayPerSourcePerMinuteCapDefault = 30;
+
+/// Both caps in docs/04 §6 are stated per minute. Written as the same expression as
+/// the TypeScript engine so `check-parity.py` compares them textually.
+const double rateWindowMs = 60 * 1000;
+
+/// One token bucket, per (enforcer, source) pair.
+class RateBucket {
+  RateBucket(this.tokens, this.atMs);
+
+  double tokens;
+  double atMs;
+}
+
+/// Outcome of one [admitByRate] call.
+class RateDecision {
+  const RateDecision(this.ok, this.reason, this.tokensLeft, this.retryInMs);
+
+  final bool ok;
+
+  /// Empty when admitted; otherwise the reason, for the capture log.
+  final String reason;
+  final double tokensLeft;
+  final double retryInMs;
+}
+
+/// Take one token from `buckets[key]`, creating the bucket full if it is new.
+///
+/// A token bucket rather than a per-minute tally because docs/04 §6 states a *rate*:
+/// a tumbling counter admits 5 broadcasts in the last second of one minute and 5 in
+/// the first second of the next, which is ten in two milliseconds without ever
+/// breaking a per-minute count. The bucket refills continuously at [cap] per
+/// [rateWindowMs] and bursts up to [cap].
+///
+/// Pure except for the map it is handed, which is what makes the two limits
+/// unit-testable without constructing a mesh. Mirror of `admitByRate` in
+/// `src/routing.ts`.
+RateDecision admitByRate(
+    Map<String, RateBucket> buckets, String key, int cap, double nowMs) {
+  if (cap <= 0) {
+    return const RateDecision(true, '', double.infinity, 0);
+  }
+  var bucket = buckets[key];
+  if (bucket == null) {
+    bucket = RateBucket(cap.toDouble(), nowMs);
+    buckets[key] = bucket;
+  }
+  final elapsed = nowMs - bucket.atMs;
+  if (elapsed > 0) {
+    bucket.tokens =
+        math.min(cap.toDouble(), bucket.tokens + elapsed * cap / rateWindowMs);
+    bucket.atMs = nowMs;
+  } else if (elapsed < 0) {
+    // The clock went backwards — a metrics reset, or a map reused across runs.
+    // Grant no refill and resynchronise rather than subtracting tokens.
+    bucket.atMs = nowMs;
+  }
+  if (bucket.tokens < 1) {
+    final retry = (1 - bucket.tokens) / cap * rateWindowMs;
+    return RateDecision(
+        false,
+        'rate limit: $cap per minute exceeded, next token in '
+            '${(retry / 1000).toStringAsFixed(1)} s',
+        bucket.tokens,
+        retry);
+  }
+  bucket.tokens -= 1;
+  return RateDecision(true, '', bucket.tokens, 0);
+}
+
+/// Whether a message counts against the relay cap.
+///
+/// Control-plane traffic does not, and the arithmetic is why: docs/03 §1 beacons an
+/// OGM every 2 s, which is exactly 30 per minute per source — the cap docs/04 §6
+/// states. Counting beacons does not drop a source's first data message; it does
+/// something slower and worse. The bucket refills one token per 2 s and the beacon
+/// spends it, so the sustained budget for everything else is zero and data traffic
+/// runs off the initial burst alone: 29 messages in ten minutes instead of 300, a
+/// 90 % cut caused by the node's own routing protocol. `ack` and `sync` are exempt
+/// for the same reason — a rate-limited acknowledgement turns one lost packet into a
+/// retransmission storm. Mirror of `countsAgainstRelayCap` in `src/routing.ts`.
+bool countsAgainstRelayCap(MeshMessage msg) =>
+    msg.type != MsgType.ogm &&
+    msg.type != MsgType.ack &&
+    msg.type != MsgType.sync;
+
 /// Text < 1 KB rides BLE; larger payloads need Wi-Fi Direct (docs/02 §3.1).
 const int bleMaxBytes = 1024;
 
