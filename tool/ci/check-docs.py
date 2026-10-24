@@ -72,6 +72,10 @@ class Repo:
         self.docs = sorted((root / "docs").glob("*.md"))
         if (root / "README.md").exists():
             self.docs.append(root / "README.md")
+        # Everything that cites a section of something else, not only docs/.
+        self.corpus = list(self.docs)
+        self.corpus += sorted((root / "skills").glob("*.md"))
+        self.corpus += sorted((root / "roadmap").glob("*.md"))
 
     def read(self, rel: str) -> str:
         return (self.root / rel).read_text(encoding="utf-8")
@@ -155,6 +159,51 @@ def ps1_script_targets(repo: Repo) -> Dict[str, str]:
     j = src.index("}", src.index("@{", i))
     block = src[i:j]
     return {k: v for k, v in re.findall(r"'([a-zA-Z][a-zA-Z0-9_-]*)'\s*=\s*'([^']*)'", block)}
+
+
+def check_doc_section_refs(repo: Repo) -> Result:
+    """Every `docs/NN §M` citation must point at a section that document actually has.
+
+    192 such citations exist across docs/, skills/ and the roadmap, and nothing guarded any of
+    them. This cannot catch a citation to a section that exists but says something else — that is
+    how the latency budget came to be attributed to `docs/04` §5, which is Relay Privacy — but it
+    does catch renumbering, which is the more common way a reference rots.
+    """
+    by_num = {}
+    for d in repo.docs:
+        m = re.match(r"^(\d{2})-", d.name)
+        if m:
+            by_num[m.group(1)] = d
+    headings = {}
+    for num, path in by_num.items():
+        nums = set()
+        for line in path.read_text(encoding="utf-8").splitlines():
+            h = re.match(r"^#{2,4}\s+(\d+(?:\.\d+)*)\.?\s+\S", line)
+            if h:
+                nums.add(h.group(1))
+        headings[num] = nums
+
+    pat = re.compile(
+        r"docs/(\d{2})(?:[a-z0-9-]*\.md)?`?\s*"
+        r"(?:§+\s*(\d+(?:\.\d+)*)(?:\s*[-–]\s*§?\s*(\d+(?:\.\d+)*))?)?")
+    problems: List[str] = []
+    total = 0
+    for f in repo.corpus:
+        for n, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            for m in pat.finditer(line):
+                num = m.group(1)
+                if num not in headings or not headings[num]:
+                    continue  # unknown document, or one with no numbered headings to check against
+                for sec in (m.group(2), m.group(3)):
+                    if not sec:
+                        continue
+                    total += 1
+                    if sec not in headings[num]:
+                        problems.append(
+                            f"{f.name}:{n} cites docs/{num} §{sec}, which has no such section "
+                            f"(it has {len(headings[num])})")
+    return Result("doc-section-refs", not problems,
+                  f"{total} section citations, all resolve", problems)
 
 
 def check_help_covers_targets(repo: Repo) -> Result:
@@ -356,6 +405,7 @@ CHECKS = [
     check_ps1_targets,
     check_ci_script_flags,
     check_help_covers_targets,
+    check_doc_section_refs,
 ]
 
 
@@ -390,6 +440,9 @@ FAULTS = [
     # the real regression: a pattern that cannot see a digit hides check-ps1 from help
     ("help-covers-targets", "Makefile", "^[a-zA-Z0-9_-]+:",
      lambda s: s.replace("^[a-zA-Z0-9_-]+:", "^[a-zA-Z_-]+:", 1), "check-ps1"),
+    # a citation to a section that does not exist: the renumbering case
+    ("doc-section-refs", "docs/07-e2ee-noise-xx.md", "`docs/02` §6",
+     lambda s: s.replace("`docs/02` §6", "`docs/02` §96", 1), "§96"),
 ]
 
 
@@ -404,6 +457,12 @@ def self_test() -> int:
             shutil.copy2(ROOT / rel, tmp / rel)
         for d in sorted((ROOT / "docs").glob("*.md")):
             shutil.copy2(d, tmp / "docs" / d.name)
+        (tmp / "skills").mkdir(parents=True, exist_ok=True)
+        (tmp / "roadmap").mkdir(parents=True, exist_ok=True)
+        for d in sorted((ROOT / "skills").glob("*.md")):
+            shutil.copy2(d, tmp / "skills" / d.name)
+        for d in sorted((ROOT / "roadmap").glob("*.md")):
+            shutil.copy2(d, tmp / "roadmap" / d.name)
         if (ROOT / "README.md").exists():
             shutil.copy2(ROOT / "README.md", tmp / "README.md")
         for sh in sorted((ROOT / "tool/ci").glob("*.sh")):
