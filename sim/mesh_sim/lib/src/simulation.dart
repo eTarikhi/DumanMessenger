@@ -821,6 +821,51 @@ class SimulationStats {
         'scansSkippedAsleep': scansSkippedAsleep,
         'awakeRatio': awakeRatio,
         'electionEvents': electionEvents,
+        // Everything above is the basic mesh readout. What follows is the rest of the
+        // instrumentation this repository measures with: group traffic, transfers, history
+        // anti-entropy, the DTN carry path, and the radio model of docs/08 §12. All of it was
+        // declared as a field and none of it was emitted, so this serializer reported 38 of the
+        // class's 70 fields.
+        //
+        // The CLI's `--json` is NOT what this fixes: bin/mesh_sim.dart builds its own report map,
+        // rounded to 4 dp and carrying the scenario and probe sections, and it does not call
+        // toJson(). This matters to a consumer that embeds the library instead — which is what
+        // the Flutter app in the roadmap does, and telemetry is the first thing it will want to
+        // persist. Raw values here, rounded ones there; the two are for different readers.
+        //
+        // All scalars, so they encode as they stand. Ordered to match the class above.
+        'sosFloods': sosFloods,
+        'sentGroup': sentGroup,
+        'groupReceipts': groupReceipts,
+        'groupExpected': groupExpected,
+        'groupDeliveryRatio': groupDeliveryRatio,
+        'groupEpochRejected': groupEpochRejected,
+        'transfersStarted': transfersStarted,
+        'transfersCompleted': transfersCompleted,
+        'transferStalls': transferStalls,
+        'sentChunks': sentChunks,
+        'bytesDelivered': bytesDelivered,
+        'sentSync': sentSync,
+        'historyBeacons': historyBeacons,
+        'historyRequests': historyRequests,
+        'historyReplies': historyReplies,
+        'historyEntriesSynced': historyEntriesSynced,
+        'historyEpochDropped': historyEpochDropped,
+        'historyBytes': historyBytes,
+        'bundlesPruned': bundlesPruned,
+        'dtnSuperCarries': dtnSuperCarries,
+        'dtnCommunityCarries': dtnCommunityCarries,
+        'channelDeferrals': channelDeferrals,
+        'channelDeferMs': channelDeferMs,
+        'channelDrops': channelDrops,
+        'channelCaptured': channelCaptured,
+        'channelDeafRx': channelDeafRx,
+        'channelCaptureEffects': channelCaptureEffects,
+        'channelBackoffs': channelBackoffs,
+        'channelDropsRelayed': channelDropsRelayed,
+        'channelDropsMedia': channelDropsMedia,
+        'channelDropsWithAlternative': channelDropsWithAlternative,
+        'transferBlocks': transferBlocks,
         'latencyByHop': latencyByHop.map((b) => b.toJson()).toList(),
       };
 }
