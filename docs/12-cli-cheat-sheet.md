@@ -160,6 +160,7 @@ Unit testing, linting, debugging tools, and error logging.
 | --- | --- | --- |
 | `make typecheck` | `tsc --noEmit` | TypeScript. |
 | `make dart-analyze` | `dart analyze` | Governed by `sim/mesh_sim/analysis_options.yaml`: `strict-casts`, `strict-raw-types`, `unused_import: error`, `dead_code: warning`, lint `avoid_print`. |
+| `make check-docs` | `python3 tool/ci/check-docs.py` | Asks whether every command in `docs/` exists: CLI flags both directions, probe section names, `make` targets, `make.ps1`'s script table, and the flags passed to `tool/ci/*.sh`. `--self-test` injects one fault per check into a temporary copy and proves each is caught — a drift checker that always passes is indistinguishable from one that is broken. |
 | `make check-ps1` | `python3 tool/ci/check-ps1.py make.ps1` | Static check of the PowerShell front end: delimiter balance and PowerShell-7-only syntax, for machines that cannot run `pwsh`. |
 | `python3 tool/ci/check-ps1.py --ps7-ok <file>` | same, allowing PS7 syntax | For scripts that are deliberately pwsh-only. |
 
@@ -189,7 +190,7 @@ plus one thing CI cannot tell you — which checks have never actually been run 
 | `make checks` | `tool/ci/collect-checks.sh` | Every check, one pass, one report. **Never stops at the first failure.** |
 | `make checks-list` | `… --list` | What it would run, tagged `verified before` / `NEVER RUN` per check. Runs nothing. |
 | `make checks-evidence` | `… --with-evidence` | Also re-runs the probes behind the published numbers in `docs/06`–`docs/09`. Minutes, not seconds. |
-| `./tool/ci/collect-checks.sh --only dart` | one group | Groups: `ts`, `dart`, `cli`, `probes`, `evidence`. Comma-separated: `--only ts,dart`. |
+| `./tool/ci/collect-checks.sh --only dart` | one group | Groups: `docs`, `ts`, `dart`, `cli`, `probes`, `evidence`. Comma-separated: `--only ts,dart`. |
 | `./tool/ci/collect-checks.sh --report out.md --json out.json` | choose the outputs | The default report is `artifacts/ci/<run>/REPORT.md`. |
 
 It produces three things: a console table; a Markdown report carrying the tail of every failing

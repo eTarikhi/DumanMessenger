@@ -22,14 +22,14 @@ CI    := ./tool/ci
         dart-get dart-analyze dart-test dart-cli \
         push push-dry push-force commit-push watch watch-all follow diagnose \
         checks checks-list checks-evidence \
-        pr pr-dry pr-open pr-local pr-branch pr-squash check-ps1 \
+        pr pr-dry pr-open pr-local pr-branch pr-squash check-ps1 check-docs \
         act install-hooks clean clean-artifacts
 
 ## --- setup -------------------------------------------------------------------
 
 help: ## Show this help
 	@printf '\n%s\n\n' "Duman Messenger — local development and CI"
-	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
+	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) \
 	  | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 	@printf '\n%s\n' "Pipeline exit codes: 0 verified · 1 failed or incomplete · 2 partial"
 	@printf '%s\n'   "Docs: docs/10-local-development-and-ci.md  (pipeline, exit codes, monitoring)"
@@ -197,6 +197,9 @@ clean: clean-artifacts ## Remove build output and CI artifacts
 
 check-ps1: ## Static check of make.ps1, for machines that cannot run PowerShell
 	@python3 $(CI)/check-ps1.py make.ps1
+
+check-docs: ## Does every command the docs tell you to run actually exist?
+	@python3 $(CI)/check-docs.py
 
 clean-artifacts: ## Remove captured CI run artifacts
 	@rm -rf artifacts/ci

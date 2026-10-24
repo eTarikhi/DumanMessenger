@@ -274,8 +274,15 @@ same parser CI publishes as annotations. The block prefers a real failure over a
 so a missing toolchain earlier in the list cannot bury the output that explains the break.
 
 The Markdown report goes to `artifacts/ci/<run>/REPORT.md` (`--report` to choose), the JSON to
-`--json`. Groups are `ts`, `dart`, `cli`, `probes`, `evidence`; the first four run by default and
+`--json`. Groups are `docs`, `ts`, `dart`, `cli`, `probes`, `evidence`; the first five run by default and
 `evidence` is opt-in because it re-runs every published measurement, minutes each.
+
+`docs` runs first and needs no toolchain at all — it is `tool/ci/check-docs.py`, which asks whether
+every command these documents tell you to run actually exists, reading the answer out of the
+programs rather than out of the prose. It is in the collector because this repository keeps making
+that mistake: two probe section names were once documented that `tool/media-probe.ts` does not
+have, and four real Dart CLI flags were missing from the cheat sheet. `make check-docs` runs it on
+its own, and `--self-test` breaks a copy of the tree on purpose to prove each check can fail.
 
 Exit codes: `0` everything passed · `1` something failed **or could not run** · `64` bad usage.
 There is no `2` here. `run-pipeline.sh` grades the machine as well as the code, which is why it has

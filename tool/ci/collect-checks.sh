@@ -23,7 +23,7 @@
 #   tool/ci/collect-checks.sh                  # ts + dart + cli + probes
 #   tool/ci/collect-checks.sh --list           # what it would run, and what is already verified
 #   tool/ci/collect-checks.sh --with-evidence  # also reproduce the docs' probe numbers (slow)
-#   tool/ci/collect-checks.sh --only dart      # one group: ts | dart | cli | probes | evidence
+#   tool/ci/collect-checks.sh --only dart      # one group: docs | ts | dart | cli | probes | evidence
 #   tool/ci/collect-checks.sh --report out.md  # where to write the Markdown report
 #
 # Exit codes: 0 everything passed · 1 something failed or could not run · 64 bad usage.
@@ -39,8 +39,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(repo_root)"
 DART_DIR="$ROOT/sim/mesh_sim"
 
-GROUPS_ALL="ts dart cli probes evidence"
-SELECTED="ts dart cli probes"
+GROUPS_ALL="docs ts dart cli probes evidence"
+SELECTED="docs ts dart cli probes"
+SCOPED=0
 WITH_EVIDENCE=0
 LIST_ONLY=0
 REPORT=""
@@ -54,8 +55,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --list|-l)      LIST_ONLY=1; shift ;;
     --with-evidence) WITH_EVIDENCE=1; SELECTED="$SELECTED evidence"; shift ;;
-    --only)         require_value "$1" "${2-}"; SELECTED="${2//,/ }"; shift 2 ;;
-    --only=*)       SELECTED="${1#*=}"; SELECTED="${SELECTED//,/ }"; shift ;;
+    --only)         require_value "$1" "${2-}"; SELECTED="${2//,/ }"; SCOPED=1; shift 2 ;;
+    --only=*)       SELECTED="${1#*=}"; SELECTED="${SELECTED//,/ }"; SCOPED=1; shift ;;
     --report)       require_value "$1" "${2-}"; REPORT="$2"; shift 2 ;;
     --report=*)     REPORT="${1#*=}"; shift ;;
     --json)         require_value "$1" "${2-}"; JSON_OUT="$2"; shift 2 ;;
@@ -77,6 +78,10 @@ selected() { case " $SELECTED " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 # "verified-before" is the honest answer as of the tree this script was written against, and it
 # is the column that makes the report worth reading: a wall of green means very little if some
 # of those checks have never been executed anywhere.
+REGISTRY_DOCS=(
+  "drift|does every documented command actually exist?|yes|a doc naming a flag, target or probe section that is not there"
+)
+
 REGISTRY_TS=(
   "npm-ci|npm ci (reproducible install)|yes|lockfile drift, a missing or corrupt dependency"
   "typecheck|tsc --noEmit on the app config|yes|any type error in src/ or tool/"
@@ -111,6 +116,7 @@ REGISTRY_EVIDENCE=(
 
 describe_group() {
   case "$1" in
+    docs)     printf 'Documentation drift — needs no toolchain, so it always runs' ;;
     ts)       printf 'TypeScript engine + React visualiser — verified locally many times' ;;
     dart)     printf 'Dart authoritative engine — NEVER COMPILED on the current tree' ;;
     cli)      printf 'CLI acceptance across scenarios — never run on the current tree' ;;
@@ -185,6 +191,28 @@ else
   log_dim "            and re-run. Until then this report cannot answer the one open question."
 fi
 echo
+
+# --- group: docs ---------------------------------------------------------------
+#
+# First because it is the only group that needs no toolchain at all: pure Python over files that
+# are already here. It runs in well under a second, so it gives an answer even on a machine where
+# nothing else can, and it catches the failure mode this repository keeps hitting — a command
+# written into the docs from memory that the program does not have.
+
+if selected docs; then
+  log "docs — $(describe_group docs)"
+  if have python3; then
+    run_step o "documentation drift (check-docs.py)" "docs-drift.txt" "$ROOT" \
+             python3 "$HERE/check-docs.py"
+    add_row docs drift "$o" "$SECONDS" ""
+    [ "$o" = success ] || add_fail docs drift docs-drift.txt
+  else
+    skip_step o "docs (whole group)" "python3 is not installed"
+    add_row docs drift not-run 0 "no python3"
+    add_fail docs "(whole group)" "-"
+  fi
+  echo
+fi
 
 # --- group: ts -----------------------------------------------------------------
 
@@ -409,6 +437,7 @@ done
   printf '| | |\n| --- | --- |\n'
   printf '| Commit | `%s` |\n' "$(git_sha)"
   printf '| Branch | `%s` |\n' "$(git_branch)"
+  printf '| Groups | `%s` |\n' "$SELECTED"
   printf '| Date | %s |\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   printf '| Host | `%s` |\n' "$(uname -srm 2>/dev/null || echo unknown)"
   printf '| node | %s |\n' "$(tool_version node | sed 's/^v//')"
@@ -477,9 +506,11 @@ log_dim "report written: ${REPORT#$ROOT/}"
 
 PASTE="$(mktemp)"
 {
-  printf 'DUMAN-CHECKS %s %s node=%s dart=%s\n' \
-    "$(git_sha)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    "$(tool_version node | sed 's/^v//')" \
+  # `groups=` is in the header on purpose: a paste-back listing one check is otherwise
+  # indistinguishable from a full run in which only one check exists.
+  printf 'DUMAN-CHECKS %s %s groups=%s node=%s dart=%s\n' \
+    "$(git_sha)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${SELECTED// /,}" \
+    "$NODE_VER" \
     "$([ "$HAVE_DART" = 1 ] && dart_sdk_version || echo MISSING)"
   for row in "${ROWS[@]}"; do
     IFS='|' read -r g name outcome secs detail <<< "$row"
@@ -524,11 +555,11 @@ rm -f "$PASTE"
 
 if [ -n "$JSON_OUT" ] && have python3; then
   python3 - "$JSON_OUT" "$(git_sha)" "$(git_branch)" "$N_PASS" "$N_FAIL" "$N_NOTRUN" \
-            "$((END_ALL - START_ALL))" "$RUN_ID" "$REPORT" ${ROWS[@]+"${ROWS[@]}"} <<'PY'
+            "$((END_ALL - START_ALL))" "$RUN_ID" "$REPORT" "${SELECTED// /,}" ${ROWS[@]+"${ROWS[@]}"} <<'PY'
 import json, sys
 from datetime import datetime, timezone
 
-(out, sha, branch, npass, nfail, nnotrun, secs, run_id, report, *rows) = sys.argv[1:]
+(out, sha, branch, npass, nfail, nnotrun, secs, run_id, report, groups, *rows) = sys.argv[1:]
 checks = []
 for r in rows:
     parts = r.split("|")
@@ -536,7 +567,7 @@ for r in rows:
         checks.append({"group": parts[0], "name": parts[1], "result": parts[2],
                        "detail": parts[4]})
 json.dump({
-    "runId": run_id, "sha": sha, "branch": branch,
+    "runId": run_id, "sha": sha, "branch": branch, "groups": groups.split(","),
     "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "seconds": int(secs), "passed": int(npass), "failed": int(nfail),
     "notRun": int(nnotrun), "report": report, "checks": checks,
@@ -560,5 +591,12 @@ if [ "$N_FAIL" -gt 0 ] || [ "$N_NOTRUN" -gt 0 ]; then
   exit 1
 fi
 
-log "every check passed — including the ones that had never been run before."
+if [ "$SCOPED" = 1 ]; then
+  not_selected=""
+  for g in $GROUPS_ALL; do selected "$g" || not_selected="$not_selected $g"; done
+  log "every selected check passed (groups: $SELECTED)."
+  log_dim "not selected:${not_selected} — this was not a full run and says nothing about them."
+else
+  log "every check passed — including the ones that had never been run before."
+fi
 exit 0
