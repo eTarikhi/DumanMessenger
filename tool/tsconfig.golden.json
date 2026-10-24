@@ -21,6 +21,7 @@
     "generate-golden.ts",
     "media-probe.ts",
     "history-probe.ts",
+    "e2ee-probe.ts",
     "capture-json.ts",
     "field-report.ts"
   ],
