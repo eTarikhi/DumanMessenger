@@ -29,6 +29,12 @@
 ### 3. Encryption
 
 - **1:1 DM:** **Noise_XX** (or X3DH + Double Ratchet light) with forward secrecy. Initiated via BLE handshake when peers first meet; session keys ratchet per message. Libsodium / Dart `cryptography`.
+> **Implementation note (Oct 2026 — `src/crypto/`, 87 tests, `npm run e2ee crypto`; evidence in `docs/07-e2ee-noise-xx.md` §6–§7):** the protocol layer this
+  describes is built as a reference implementation over OpenSSL primitives — XX, a per-message ratchet for the forward secrecy, both SAS values, and the
+  packet serialised for real. No primitive is hand-written, so "Libsodium / Dart `cryptography`" is still what ships; `src/crypto/primitives.ts` is the
+  seam they go behind. Three numbers it produced: handshake legs are **32 / 96 / 64 B** and fit one unfragmented 247 B GATT write each, a full handshake
+  is **1 062 µs of CPU against 675 ms of radio** at one hop, and a relay holding a legitimate key from its own session with the sender reads the header and
+  nothing else.
 > **Implementation note (Oct 2026 — evidence in `docs/07-e2ee-noise-xx.md` §2):** the handshake is three mesh messages, so the §5 budget below applies
 > per *leg* and establishment needs roughly three times it — measured 675 ms at one hop, 6.7 s at three,
 > and one leg lost outright at four hops in a 60-node crowd. Establishment also has to be **on demand**:
@@ -68,6 +74,28 @@ auth tag: HMAC or AEAD tag (AES-GCM / ChaChaPoly)
 ```
 - `destHint` = truncated hash of dest pubKey (8 bytes) so relays can route without learning full identity; only intended dest can fully verify.
 - Padding to 256-byte blocks to hide length.
+
+> **Corrected (Oct 2026 — `src/crypto/packet.ts`, `src/crypto/identity.ts`; evidence in `docs/07-e2ee-noise-xx.md` §6).** Two things this
+> section states do not survive being implemented.
+>
+> **`destHint` does not hide an identity, and cannot.** Against `docs/05`'s `nodeId = SHA-256(pubKey)`, a truncated hash of the destination
+> public key is `nodeId[0:8]` — a *prefix of the nodeId*, which §2 of `docs/02` puts in an OGM the destination itself broadcasts every
+> 2 seconds and `docs/03` §2 floods into the routing table of every node in range. A relay that can route the packet at all has already heard
+> the destination's nodeId and can match the prefix against it. What the hint buys is a **shorter label** (8 bytes per header instead of 32,
+> which is 9 % of a 256-byte padded block) and a little friction for a passive sniffer that never collected OGMs. Both are worth having. The
+> sentence above should read: *"so the header carries an 8-byte routing label instead of a 32-byte one"* — and §5's claim that SUPER nodes
+> "see only header" stays exactly true, because the header still has no `from`, no `to` and no body in it. `destHintBytesOpaque` in
+> `src/crypto/identity.ts` is the variant for a deployment that would rather pay a lookup than publish the prefix relationship.
+>
+> Separately, the **simulator's** `destHint` is not this field at all: both engines compute a 32-bit string hash of the node id (`docs/06`
+> §9), up to 8 hex characters, and `src/types.ts` documented it as a truncated hash of the destination pubkey. That comment is now corrected.
+> The engine also carries a cleartext `to`, which the header above does not list — a routing simulator has to route, so the leak is inherent
+> to the model and not to the design; `relayVisible()` returns the documented header and is asserted to have neither field.
+>
+> **The header is the AEAD's associated data.** `msgId16` is `SHA-256(msgId)[0:16]`, not the id: the engine's ids are short and sequential,
+> and a plaintext id would leak the sender's counter and send rate to every relay. Because the header is authenticated rather than merely
+> plaintext, a relay can read `ttl` and `hopCount` but cannot lower a ttl or advance a hop count without the tag failing — §1's "active relay
+> attacker who forwards/modifies msgs" is answered by the AEAD, not by hoping.
 
 ---
 

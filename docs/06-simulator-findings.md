@@ -418,6 +418,14 @@ means real drift:
   float aggregates use a tolerance; spawn geometry uses 1e-6.
 - **`destHint`.** Both engines use the same 32-bit string hash
   (`h = h*31 + charCode`, truncated to 8 hex chars) so routing hints agree.
+  This is **not** the `destHint8` of `docs/04` §4 and `skills/03` — that one is the
+  first 8 bytes of `SHA-256(destPubKey)`, implemented as `destHintBytes` in
+  `src/crypto/identity.ts`. The engine's field is a routing decoration that appears in
+  golden vectors, so it cannot be changed to match the spec without moving every
+  vector in both languages; what changed instead is the comment on `MeshMessage`,
+  which described it as a truncated hash of the destination pubkey and was wrong twice
+  over. Neither field hides an identity, and `docs/07` §6 says why: a truncated hash of
+  a public key is a prefix of the `nodeId` that `docs/02` §2 broadcasts every 2 s.
 
 ## 10. Power policy: the sleep slot is what makes the battery budget work
 

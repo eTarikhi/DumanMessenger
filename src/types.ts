@@ -174,8 +174,21 @@ export interface MeshMessage {
   type: MsgType;
   from: NodeId;
   to: NodeId | "BROADCAST";
-  /** Truncated hash of the destination pubkey so relays can route without
-   *  learning the identity (docs/04 §4). */
+  /**
+   * A 32-bit routing hint derived from the destination's node id — up to 8 hex
+   * characters, and **not** the 8-byte truncated hash of the destination public key
+   * that `docs/04` §4 specifies. That field is `destHintBytes` in
+   * `src/crypto/identity.ts`; this one is `hashHint` in `src/routing.ts`, mirrored in
+   * `sim/mesh_sim/lib/src/routing.dart` because it appears in golden vectors
+   * (`docs/06` §9).
+   *
+   * It also does not do what `docs/04` §4 claims a hint does. A truncated hash of a
+   * public key is a prefix of `nodeId = SHA-256(pubKey)` (`docs/05`), which `docs/02`
+   * §2 broadcasts in an OGM every 2 seconds — so no hint hides an identity from a
+   * relay that can route the packet at all. What it buys is a shorter label. The
+   * engine carries a cleartext `to` beside it anyway, because a routing simulator has
+   * to route; the documented packet does not.
+   */
   destHint: string;
   body: string;
   ttl: number;
