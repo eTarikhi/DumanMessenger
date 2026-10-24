@@ -26,6 +26,11 @@ sim/mesh_sim/build/
 # local CI run artifacts (tool/ci/): captures, not deliverables
 artifacts/
 
+
+package-lock.json
+package.json
+wget-log
+
 # Python bytecode (created by py_compile / imports; never a deliverable)
 __pycache__/
 *.py[cod]
