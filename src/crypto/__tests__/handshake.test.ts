@@ -214,6 +214,9 @@ describe("Noise_XX", () => {
     const [a, b] = twoKeys();
     const loser = new HandshakeState(p, true, { s: a });
     const leg1 = loser.writeMessage();
+    // A second device's ephemeral is different, so what gets destroyed below is
+    // this handshake's key and not some value any session would produce.
+    expect(new HandshakeState(p, true, { s: b }).writeMessage()).not.toEqual(leg1);
     // The reference, not a copy: zeroization has to be observed on the buffer the
     // state machine actually held, or the test proves nothing.
     const held = loser.ephemeralPublic!;

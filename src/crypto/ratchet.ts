@@ -232,11 +232,12 @@ export class SymmetricRatchet {
 }
 
 /**
- * Seed material for the two directions from Noise's `Split()`.
+ * Seed material for the two directions from Noise's `Split()`, for the side that
+ * sends on `c1`. The peer calls it with the arguments swapped.
  *
- * Each direction gets its own ratchet, so a compromise of the receiving chain
- * does not expose the sending chain — the property that makes "compromise after
- * ≠ can decrypt prior" hold per direction rather than only per session.
+ * Each chain gets its own ratchet, so compromising the receiving chain does not
+ * expose the sending one — the property that makes "compromise after ≠ can decrypt
+ * prior" hold per direction rather than only per session.
  */
 export function ratchetPair(
   p: CryptoPrimitives,
@@ -264,12 +265,22 @@ export function decodeNonce(nonce: Uint8Array): number | null {
   return Number(value);
 }
 
-/** Domain-separate a ratchet seed from the raw Noise transport key, so the same
- *  32 bytes are never used as both a Noise `CipherState` key and a ratchet seed. */
+/**
+ * Domain-separate a ratchet seed from the raw Noise transport key, so the same 32
+ * bytes are never used as both a Noise `CipherState` key and a ratchet seed.
+ *
+ * The label names the **chain**, not the local direction. Labelling it `"send"`
+ * and `"recv"` looks natural and is wrong: `Split()` gives the initiator `c1` to
+ * send on and the responder `c1` to receive on, so a per-direction label makes the
+ * two sides derive different seeds from the same key and no message ever decrypts.
+ * Naming the chain is symmetric by construction — `c1` is `c1` for both — and still
+ * keeps the two chains independent, which is the property that stops a stolen
+ * receive chain from being used to send.
+ */
 export function deriveRatchetSeed(
   p: CryptoPrimitives,
   transportKey: Uint8Array,
-  direction: "send" | "recv"
+  chain: "c1" | "c2"
 ): Uint8Array {
-  return p.hmac(transportKey, new TextEncoder().encode(`DumanRatchet-v1:${direction}`));
+  return p.hmac(transportKey, new TextEncoder().encode(`DumanRatchet-v1:${chain}`));
 }

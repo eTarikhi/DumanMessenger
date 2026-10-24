@@ -12,7 +12,7 @@
  * what makes that loop safe.
  */
 import { concat, toHex, zeroize, type CryptoPrimitives } from "./primitives";
-import { HandshakeState, NoiseError, resolveSimultaneousOpen, type HandshakeResult } from "./noise-xx";
+import { HandshakeState, LEG_SIZES, NoiseError, resolveSimultaneousOpen, type HandshakeResult } from "./noise-xx";
 import { SymmetricRatchet, deriveRatchetSeed, decodeNonce, type CompromisedState, type OpenFailure } from "./ratchet";
 import { handshakeSas, sasMatches, type HandshakeSas } from "./sas";
 import { destHintBytes, panicWipeIdentity, type Identity, type WipeResult } from "./identity";
@@ -128,6 +128,9 @@ export class DumanSession {
   private phase: SessionPhase = "handshaking";
   /** The leg this side last wrote, kept so a lost leg can be re-sent verbatim. */
   private lastWritten: { index: number; bytes: Uint8Array } | null = null;
+  /** Set when an arriving frame turned out to be a leg *this* side writes, which
+   *  is what a simultaneous open looks like on the radio (docs/07 §7.1). */
+  private collision = false;
 
   constructor(
     private readonly p: CryptoPrimitives,
@@ -213,17 +216,74 @@ export class DumanSession {
    *
    * Safe for every leg, including the two that carry ephemeral keys: an ephemeral
    * is generated once, on the first `writeLeg`, and held by the state machine, so
-   * the retransmission is the same frame with the same key in it. Leg 3 is the case
-   * `docs/07` §2.1 calls out — by then XX's transcript is fixed, so a lost leg 3
-   * costs one retransmission rather than a 0.5-6.7 s restart.
+   * the retransmission is the same frame with the same key in it.
+   *
+   * Deliberately still available **after** this side has completed. Leg 3 is the
+   * case `docs/07` §2.1 note 2 calls out: the initiator finishes the moment it
+   * writes leg 3, so if leg 3 is lost the initiator is `unverified` while the
+   * responder is still waiting — and the transcript is already fixed, so the
+   * correct recovery is one retransmission, not a 0.5-6.7 s restart. Gating this on
+   * `phase === "handshaking"` would make the retry impossible in exactly the case
+   * it exists for. A caller stops retrying when the peer's first data message
+   * arrives; nothing here can know that sooner, because XX has no acknowledgements.
    */
   retryLeg(): Uint8Array | null {
-    if (this.phase !== "handshaking" || !this.lastWritten) return null;
+    if (this.phase === "failed" || this.phase === "wiped" || !this.lastWritten) return null;
     return Uint8Array.from(this.lastWritten.bytes);
+  }
+
+  /**
+   * True when an arriving frame was a leg this side writes rather than reads.
+   *
+   * That is a simultaneous open (`docs/07` §7.1), not a malformed frame, and the
+   * distinction is worth keeping because the recovery is different: nobody's
+   * session is broken, [whoInitiates] picks a loser, and only the loser restarts.
+   */
+  get simultaneousOpen(): boolean {
+    return this.collision;
+  }
+
+  /**
+   * Give up a half-finished handshake and destroy its ephemeral key.
+   *
+   * This is `docs/07` §7.1's answer in code: the loser of a simultaneous open does
+   * not reuse the ephemeral it already put on air, because a key that appears in
+   * two transcripts is not ephemeral and the abandoned half-session's forward
+   * secrecy rests on it being dead. Returns `true` when an ephemeral existed to
+   * destroy, so a caller can tell "aborted a real attempt" from "had not started".
+   */
+  abandon(): boolean {
+    // Asked of the handshake, not inferred from whether a leg was written: a
+    // responder that abandoned before leg 2 holds no ephemeral, and reporting one
+    // would make the caller think a key had been destroyed when none existed.
+    const hadEphemeral = this.handshake.ephemeralPublic !== null;
+    this.phase = "failed";
+    this.wipeKeyMaterial();
+    return hadEphemeral;
   }
 
   readLeg(leg: Uint8Array, expectPayload = 0): Uint8Array | null {
     if (this.phase !== "handshaking" || this.legIsMine()) return null;
+    // Simultaneous open. Both devices wrote leg 0, so what arrived is the peer's
+    // leg 0 — a bare 32-byte ephemeral — and not the 96-byte leg 1 this side is
+    // waiting for. Feeding it to the state machine would fail *both* sessions, and
+    // then the tie-break that is supposed to resolve the collision would have
+    // nothing left to resolve it with.
+    //
+    // A truncated leg 1 of exactly 32 bytes is indistinguishable from this by
+    // length alone. Treating it as a collision is still the right call: a truncated
+    // leg is a link failure the mesh retries, and the retry delivers a full frame,
+    // whereas a collision is the common case (two people tapping "add" together)
+    // and mishandling it costs the winner its session.
+    if (
+      this.lastWritten !== null &&
+      this.handshake.nextLeg === 1 &&
+      this.lastWritten.index === 0 &&
+      leg.length === LEG_SIZES[0]
+    ) {
+      this.collision = true;
+      return null;
+    }
     try {
       const payload = this.handshake.readMessage(leg, expectPayload);
       this.finishIfComplete();
@@ -242,14 +302,25 @@ export class DumanSession {
   private finishIfComplete(): void {
     if (!this.handshake.isComplete || this.result) return;
     this.result = this.handshake.result();
-    const mine = this.role === "initiator" ? this.result.c1 : this.result.c2;
-    const theirs = this.role === "initiator" ? this.result.c2 : this.result.c1;
+    const initiator = this.role === "initiator";
+    const mine = initiator ? this.result.c1 : this.result.c2;
+    const theirs = initiator ? this.result.c2 : this.result.c1;
     if (!mine.key || !theirs.key) throw new NoiseError("out-of-order", "Split() produced no keys");
-    // Noise's transport key becomes a ratchet *seed*, domain-separated per
-    // direction so the two chains cannot be substituted for one another, and then
-    // erased: nothing holds the Noise transport key once the session is up.
-    this.sendRatchet = new SymmetricRatchet(this.p, deriveRatchetSeed(this.p, mine.key, "send"));
-    this.recvRatchet = new SymmetricRatchet(this.p, deriveRatchetSeed(this.p, theirs.key, "recv"));
+    // Noise's transport key becomes a ratchet *seed*, domain-separated per chain so
+    // the two chains cannot be substituted for one another, and then erased: once
+    // the session is up nothing holds the Noise transport key any more. The label
+    // names the chain (c1/c2), not this side's direction, because c1 is the
+    // initiator's send chain and the responder's receive chain — labelling it
+    // "send"/"recv" would give the two sides different seeds and nothing would ever
+    // decrypt.
+    this.sendRatchet = new SymmetricRatchet(
+      this.p,
+      deriveRatchetSeed(this.p, mine.key, initiator ? "c1" : "c2")
+    );
+    this.recvRatchet = new SymmetricRatchet(
+      this.p,
+      deriveRatchetSeed(this.p, theirs.key, initiator ? "c2" : "c1")
+    );
     zeroize(mine.key, theirs.key);
     this.sasValue = handshakeSas(
       this.p,
@@ -389,6 +460,7 @@ export class DumanSession {
     order.push("handshake");
     if (this.lastWritten) zeroize(this.lastWritten.bytes);
     this.lastWritten = null;
+    this.collision = false;
     order.push("lastLeg");
     if (this.result) {
       zeroize(this.result.c1.key, this.result.c2.key, this.result.handshakeHash);
@@ -407,6 +479,7 @@ export class DumanSession {
     this.handshake.wipe();
     if (this.lastWritten) zeroize(this.lastWritten.bytes);
     this.lastWritten = null;
+    this.collision = false;
     this.sendRatchet?.wipe();
     this.recvRatchet?.wipe();
     this.sendRatchet = null;

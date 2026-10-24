@@ -231,8 +231,14 @@ export function verifyHandleClaim(
 
 /** 48-bit big-endian milliseconds — the width the packet's `ts` field uses, so
  *  the two encodings cannot drift apart. Valid to year 10889. */
+export const TIMESTAMP_MAX_MS = 2 ** 48 - 1;
+
 export function timestampBytes(nowMs: number): Uint8Array {
-  if (!Number.isSafeInteger(nowMs) || nowMs < 0) throw new RangeError(`bad timestamp ${nowMs}`);
+  // The ceiling is enforced rather than left to `setUint16`, which would mask a
+  // value past 2^48 to its low 16 bits and silently put the packet in 1970.
+  if (!Number.isSafeInteger(nowMs) || nowMs < 0 || nowMs > TIMESTAMP_MAX_MS) {
+    throw new RangeError(`timestamp ${nowMs} is outside 0..${TIMESTAMP_MAX_MS}`);
+  }
   const out = new Uint8Array(6);
   const view = new DataView(out.buffer);
   // 48-bit BE = the low 16 bits first, then the high 32.
