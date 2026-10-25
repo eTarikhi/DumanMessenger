@@ -2431,7 +2431,7 @@ transmits one differently, so the two runs are the same world read with differen
 is what makes this the clean lever of the two — it cannot perturb routing, and
 `radio-occupancy.test.ts` asserts the identity rather than assuming it.
 
-**The encoding is the bigger lever, and it is free.** Aliases cut the beacon, not the number of
+**The encoding is the bigger lever, and it is very nearly free.** Aliases cut the beacon, not the number of
 beacons — `OGMs sent` is identical in both rows, so nothing about route freshness, election
 convergence or MPR coverage changes — and demanded radio time falls 5.8× in the crowd and on
 campus alike. At the *specified* 2 s interval, with the encoding the specification itself
@@ -2444,6 +2444,39 @@ shortens every beacon in a dense world and costs nothing measurable. A longer in
 them and trades freshness for airtime — visibly, at 60 nodes, where 12 s costs 9 points of
 broadcast reach. A deployment should pull the encoding first and treat the interval as a
 second-order control, which is the opposite of what §24.6's finding 1 implied.
+
+#### What the aliases themselves cost, which the table above does not charge
+
+Calling the encoding free was the first draft's word and it is not quite right: a 2-byte alias is
+only readable by a node that already knows the binding, so the bindings have to be distributed,
+and that is airtime the table above does not account for. It can be bounded from numbers already
+measured here rather than guessed.
+
+One binding is an alias plus the key it stands for, so 2 + 32 = **34 B**, and it has to reach
+every node that will read a beacon containing it — the owner's 1-hop neighbours, the same audience
+as the beacon itself. Bindings are needed once per *new* neighbour relationship, and §24.7's route
+expiry column measures how often those turn over in the crowd: **1 149 expiries per 60 s across 60
+nodes**, about 19 per node per minute. So the mapping traffic is
+
+    19 bindings/min × 34 B = 646 B/min per node, heard by ~15 neighbours ≈ 9 700 B/min
+
+against the saving, which accrues on every beacon rather than every new neighbour:
+
+    30 beacons/min × (630 − 90) B = 16 200 B/min per node, heard by ~15 ≈ 243 000 B/min
+
+The binding distribution costs roughly **4 %** of what the aliases save, at the crowd's measured
+churn rate — about 25:1 — so the 5.66× → 0.78× above becomes roughly 5.66× → 0.81× once charged.
+The lever survives its own overhead with most of a factor of seven to spare, and it survives it
+*because* bindings are rare relative to beacons even in a world where neighbours turn over every
+three seconds. What would break the argument is a network whose neighbour set churns faster than
+its beacon rate, and no scenario in this repository has one.
+
+Two things this arithmetic is not. It is first-order: it prices bytes on air and not the state a
+node must keep, the lookup on receipt, or the window in which a freshly-met neighbour is
+advertised by key because its binding has not propagated yet. And it is a bound derived from this
+engine's own counters, not a measurement of an implemented alias protocol — implementing one is
+still the state-sync change §24.7 describes, and this paragraph only says the change is worth
+making rather than that it has been made.
 
 **What ships.** `ogmAliasBytes` defaults to 32 — what the engine actually transmits — so no
 published number moves and the golden vectors are byte-identical. The 2 B arm is a measurement
