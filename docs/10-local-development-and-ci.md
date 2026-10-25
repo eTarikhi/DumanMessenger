@@ -301,15 +301,20 @@ one — on a machine where nothing else can run, this group still gives an answe
    `dart analyze` and does not claim to be; it exists for exactly the situation this repository is
    in, where the authoritative engine is written in a language no machine in the pipeline can
    compile.
-3. **`parity`** — `tool/ci/check-parity.py`, asking whether the two engines still agree on their
-   protocol constants. `make parity` runs it alone. This is the check the current pipeline most
+3. **`parity`** — `tool/ci/check-parity.py`, asking whether the two engines still agree.
+   `make parity` runs it alone. This is the check the current pipeline most
    needs and least expects: `make golden` catches a changed constant on the TypeScript side
    and `dart test` on the Dart side, and **neither can run where there is no Dart SDK**, which is
-   everywhere in this pipeline right now. It pairs 46 constants by name across `src/*.ts` and
-   `sim/mesh_sim/lib/src/*.dart` — including module-private ones, since Dart's `_pdrWindow` and
-   TypeScript's `PDR_WINDOW` are the same contract — and separately reads `docs/03` §3's
+   everywhere in this pipeline right now. It asks three questions. It pairs 57 constants by name
+   across `src/*.ts` and `sim/mesh_sim/lib/src/*.dart` — including module-private ones, since
+   Dart's `_pdrWindow` and TypeScript's `PDR_WINDOW` are the same contract. It reads `docs/03` §3's
    coverage-score weight vector out of both engines, requiring the five weights to match each other
-   and sum to 1. It does **not** require the two inventories to match, because they are not
+   and sum to 1. And it requires the two `SimConfig` inventories to be **identical** — 83 knobs
+   each, none one-sided — which is a stricter rule than the constants get, and deliberately so:
+   the constant inventories legitimately differ (`broadcastAddress`, `defaultConfig` and `ln10`
+   have no counterpart by design), but a configuration knob one engine has and the other ignores
+   means an experiment that set it silently configured half the contract, and nothing else in the
+   pipeline would notice. It does **not** require the two inventories to match, because they are not
    supposed to: `broadcastAddress`, `defaultConfig` and `ln10` have no TypeScript counterpart by
    design, and a check demanding symmetry would need an exception list long enough to hide what it
    was for. One-sided names are listed rather than failed, which is how the checker found

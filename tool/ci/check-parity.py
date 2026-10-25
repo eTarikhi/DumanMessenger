@@ -218,6 +218,69 @@ def check_weights(root: pathlib.Path) -> Tuple[List[str], Dict[str, object]]:
     return problems, {"ts_weights": ts, "dart_weights": dart}
 
 
+def sim_config_fields(root: pathlib.Path) -> Tuple[Optional[List[str]], Optional[List[str]]]:
+    """The `SimConfig` field names in each engine, or None where the file is absent.
+
+    Absent is a real case and not an error: the self-test builds a four-file fixture
+    tree, and a check that failed on a tree it was never asked about would be a check
+    that could not be self-tested.
+    """
+    ts_path = root / "src" / "simulation.ts"
+    dart_path = root / "sim" / "mesh_sim" / "lib" / "src" / "simulation.dart"
+    if not ts_path.exists() or not dart_path.exists():
+        return None, None
+    ts_text = ts_path.read_text(encoding="utf-8")
+    dart_text = dart_path.read_text(encoding="utf-8")
+    m = re.search(r"export interface SimConfig \{(.*?)\n\}", ts_text, re.S)
+    if not m:
+        return None, None
+    ts_fields = re.findall(r"^  (\w+)\??\s*:", m.group(1), re.M)
+    lo = re.search(r"^class SimConfig \{", dart_text, re.M)
+    if not lo:
+        return None, None
+    start = lo.end()
+    end = re.search(r"^\}", dart_text[start:], re.M)
+    if not end:
+        return None, None
+    dart_fields = re.findall(
+        r"^  final [\w<>?, .]+ (\w+);", dart_text[start : start + end.start()], re.M
+    )
+    return ts_fields, dart_fields
+
+
+def check_config_inventory(root: pathlib.Path) -> Tuple[List[str], Dict[str, object]]:
+    """Do the two engines have the same configuration knobs?
+
+    Unlike the constant inventories, which legitimately differ — `broadcastAddress`,
+    `defaultConfig` and `ln10` have no counterpart on the other side by design — the
+    two `SimConfig` field lists are supposed to be *identical*, and today they are:
+    83 fields each, none one-sided. So this one fails rather than reports, and the
+    failure it exists for is the easiest mistake to make in a two-engine repository
+    and the hardest to see without a compiler: a knob added to one engine and not the
+    other, so an experiment that sets it silently configures half the contract.
+    """
+    ts_fields, dart_fields = sim_config_fields(root)
+    if ts_fields is None or dart_fields is None:
+        return [], {"config_fields": None}
+    problems: List[str] = []
+    for f in sorted(set(ts_fields) - set(dart_fields)):
+        problems.append(
+            f"SimConfig.{f}: a knob in src/simulation.ts with no field in the Dart "
+            f"SimConfig, so the two engines do not accept the same configuration"
+        )
+    for f in sorted(set(dart_fields) - set(ts_fields)):
+        problems.append(
+            f"SimConfig.{f}: a field in the Dart SimConfig with no knob in "
+            f"src/simulation.ts, so the two engines do not accept the same configuration"
+        )
+    counts = {
+        "config_ts": len(ts_fields),
+        "config_dart": len(dart_fields),
+        "config_shared": len(set(ts_fields) & set(dart_fields)),
+    }
+    return problems, counts
+
+
 def check(root: pathlib.Path) -> Tuple[List[str], Dict[str, object]]:
     ts, dart = collect(root)
     # Apply the alias table before intersecting, so a renamed constant is compared
@@ -266,8 +329,10 @@ def check(root: pathlib.Path) -> Tuple[List[str], Dict[str, object]]:
         "dart_only": sorted(set(dart) - set(ts) - covered_elsewhere),
     }
     weight_problems, weights = check_weights(root)
+    config_problems, config_counts = check_config_inventory(root)
+    counts.update({k: v for k, v in config_counts.items()})
     return (
-        problems + weight_problems,
+        problems + weight_problems + config_problems,
         {"counts": counts, "one_sided": one_sided, "weights": weights},
     )
 
@@ -295,6 +360,22 @@ const packetOverheadBytes = 27 + 12 + 16 + 32 + 8;
 const groupAddress = 'GROUP';
 const double normalDrainPerHour = 0.15 / 8;
 int wireSizeOf(int n) => n;
+"""
+
+# The SimConfig fixtures carry no `export const` and no Dart `const x = ...`, so they add
+# nothing to the constant inventory the clean-fixture assertion counts. A constructor is left
+# out of the Dart one for the same reason: the inventory check reads `final` fields only.
+FIXTURE_TS_SIM = """\
+export interface SimConfig {
+  alpha: number;
+  beta: boolean;
+}
+"""
+FIXTURE_DART_SIM = """\
+class SimConfig {
+  final double alpha;
+  final bool beta;
+}
 """
 
 # (name, side, find, replace, expectation). "problem" must be reported as a
@@ -330,6 +411,10 @@ SELFTEST_FAULTS: List[Tuple[str, str, str, str, str]] = [
     ("a coverage weight changed on one side only", "ts-election", "rssi: 0.25", "rssi: 0.30", "problem"),
     ("a coverage weight renamed on one side only", "dart-election",
      "final double stability", "final double steadiness", "problem"),
+    ("a config knob present only in the Dart engine", "ts-sim",
+     "  beta: boolean;\n", "", "problem"),
+    ("a config knob present only in the TypeScript engine", "dart-sim",
+     "  final bool beta;\n", "", "problem"),
 ]
 
 
@@ -350,15 +435,25 @@ def selftest() -> int:
         dart_path.write_text(FIXTURE_DART, encoding="utf-8")
         ts_election.write_text(FIXTURE_TS_ELECTION, encoding="utf-8")
         dart_election.write_text(FIXTURE_DART_ELECTION, encoding="utf-8")
+        ts_sim = root / "src" / "simulation.ts"
+        dart_sim = root / "sim" / "mesh_sim" / "lib" / "src" / "simulation.dart"
+        ts_sim.write_text(FIXTURE_TS_SIM, encoding="utf-8")
+        dart_sim.write_text(FIXTURE_DART_SIM, encoding="utf-8")
         paths = {"ts": ts_path, "dart": dart_path,
-                 "ts-election": ts_election, "dart-election": dart_election}
+                 "ts-election": ts_election, "dart-election": dart_election,
+                 "ts-sim": ts_sim, "dart-sim": dart_sim}
         problems, result = check(root)
         counts = result["counts"]
-        if problems or counts["shared"] != 6:
+        # The config inventory is asserted too, and not only for its own sake: a check
+        # that never finds its input reports nothing and looks exactly like a pass.
+        if problems or counts["shared"] != 6 or counts.get("config_shared") != 2:
             print(f"  FAIL the clean fixture does not pass: {problems} {counts}")
             failed += 1
         else:
-            print(f"  ok   clean fixture: {counts['shared']} shared constants agree")
+            print(
+                f"  ok   clean fixture: {counts['shared']} shared constants agree, "
+                f"{counts['config_shared']} SimConfig knobs identical"
+            )
 
         # A fault the checker cannot see, and must say so rather than imply it looked:
         # deleting a constant from *both* sides leaves them agreeing.
@@ -435,6 +530,11 @@ def main(argv: List[str]) -> int:
         return 1
 
     if not args.quiet:
+        if counts.get("config_shared") is not None:
+            print(
+                f"  ok    config-inventory   {counts['config_shared']} SimConfig knobs, "
+                f"identical in both engines ({counts['config_ts']} TS, {counts['config_dart']} Dart)"
+            )
         print(
             f"  ok    engine-constants   {counts['shared']} shared constants agree "
             f"({counts['numeric']} numeric, {counts['textual']} by expression)"
