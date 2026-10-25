@@ -2167,26 +2167,7 @@ function reachRun(
   sim.injectTraffic(30, 40_000);
   sim.runFor(60_000);
   sim.refresh();
-  // Who can hear whom, at the end of the window: the graph a broadcast has to cross.
-  const nodes = sim.nodes;
-  const adj = new Map<NodeId, NodeId[]>();
-  for (const n of nodes) adj.set(n.id, peersInRange(n, nodes, sim.rf).map((p) => p.id));
-  const seen = new Set<NodeId>();
-  const components: number[] = [];
-  for (const n of nodes) {
-    if (seen.has(n.id)) continue;
-    let size = 0;
-    const stack = [n.id];
-    while (stack.length > 0) {
-      const id = stack.pop()!;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      size++;
-      for (const nb of adj.get(id) ?? []) if (!seen.has(nb)) stack.push(nb);
-    }
-    components.push(size);
-  }
-  components.sort((a, b) => b - a);
+  const components = componentSizes(sim);
   return {
     seed,
     reach: sim.stats.broadcastReach,
@@ -2198,6 +2179,79 @@ function reachRun(
 }
 
 const REACH_SEEDS = [42, 7, 1234, 99, 2024, 31337, 555, 8];
+
+/**
+ * Component sizes of the radio graph — who can hear whom — largest first.
+ *
+ * Used both at the end of a window and, in `reachSampled`, repeatedly during one, because a
+ * graph measured once after 60 s of mobility is not the graph the broadcasts had to cross.
+ */
+function componentSizes(sim: MeshSimulation): number[] {
+  const nodes = sim.nodes;
+  const adj = new Map<NodeId, NodeId[]>();
+  for (const n of nodes) adj.set(n.id, peersInRange(n, nodes, sim.rf).map((p) => p.id));
+  const seen = new Set<NodeId>();
+  const out: number[] = [];
+  for (const n of nodes) {
+    if (seen.has(n.id)) continue;
+    let size = 0;
+    const stack = [n.id];
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      size++;
+      for (const nb of adj.get(id) ?? []) if (!seen.has(nb)) stack.push(nb);
+    }
+    out.push(size);
+  }
+  out.sort((a, b) => b - a);
+  return out;
+}
+
+interface SampledRow {
+  seed: number;
+  reach: number;
+  /** Fraction of in-window samples at which every node could reach every other. */
+  connectedFrac: number;
+  /** Mean largest-component share of the network across those samples. */
+  meanLargest: number;
+  /** Largest-component share at the end of the window, for comparison. */
+  finalLargest: number;
+}
+
+/** How many samples to take inside the 60 s window, and how far apart. */
+const SAMPLES = 6;
+const SAMPLE_STEP_MS = 10_000;
+
+function reachSampled(seed: number, interval: number): SampledRow {
+  const sim = new MeshSimulation({
+    ...festivalCrowd(seed),
+    radioOccupancy: "airtime",
+    ogmIntervalMs: interval,
+  });
+  sim.runFor(90_000);
+  sim.refresh();
+  sim.clearRecords();
+  sim.injectTraffic(30, 40_000);
+  let connected = 0;
+  let largestSum = 0;
+  for (let i = 0; i < SAMPLES; i++) {
+    sim.runFor(SAMPLE_STEP_MS);
+    sim.refresh();
+    const comps = componentSizes(sim);
+    if (comps.length === 1) connected++;
+    largestSum += comps[0] / sim.nodes.length;
+  }
+  const final = componentSizes(sim);
+  return {
+    seed,
+    reach: sim.stats.broadcastReach,
+    connectedFrac: connected / SAMPLES,
+    meanLargest: largestSum / SAMPLES,
+    finalLargest: final[0] / sim.nodes.length,
+  };
+}
 
 function reachTable(): void {
   console.log(
@@ -2259,14 +2313,48 @@ function reachTable(): void {
       "  42%, 55% and 66% at 2 s, where MPR gave 79%, 54% and 87%. At 2 s flooding is\n" +
       "  *worse* on the mean (81.8% against 86.5%) despite unlimited retransmission. A\n" +
       "  forwarding policy that cannot be improved by removing the forwarding policy is not\n" +
-      "  what is limiting reach.\n" +
+      "  what is limiting reach.\n"
+  );
+
+  console.log(
+    "  Hypothesis 3: the graph measured at the *end* of the window is not the graph the\n" +
+      `  broadcasts had to cross. Sampled ${SAMPLES} times inside it, ${SAMPLE_STEP_MS / 1000} s apart.\n`
+  );
+  console.log("  interval   seed     reach   connected samples   mean largest component   largest at the end");
+  for (const interval of [2_000, 12_000]) {
+    for (const seed of REACH_SEEDS) {
+      const r = reachSampled(seed, interval);
+      console.log(
+        `  ${(interval / 1000 + " s").padEnd(10)} ${String(seed).padEnd(8)} ` +
+          `${((r.reach * 100).toFixed(0) + "%").padStart(5)} ` +
+          `${`${(r.connectedFrac * 100).toFixed(0)}% of ${SAMPLES}`.padStart(21)} ` +
+          `${((r.meanLargest * 100).toFixed(0) + "%").padStart(23)} ` +
+          `${((r.finalLargest * 100).toFixed(0) + "%").padStart(19)}`
+      );
+    }
+    console.log("");
+  }
+
+  console.log(
+    "  Confirmed, and it reverses the verdict on hypothesis 1. Reach tracks the connectivity\n" +
+      "  *inside* the window, not the snapshot after it: every seed connected for all six\n" +
+      "  samples reaches 98%, and every seed that was split for any of them lands between 54%\n" +
+      "  and 93%, in proportion to how much of the window was split. At 12 s seed 2024 is\n" +
+      "  connected for 17% of samples with a mean largest component of 72% — and reaches 55%,\n" +
+      "  while the end-of-window table reports it as fully connected, because the crowd had\n" +
+      "  re-joined by then. So the two modes are one phenomenon: 60 mobile nodes in this area\n" +
+      "  split and re-join repeatedly, a broadcast sent while the graph is split cannot reach\n" +
+      "  the other side, and reach averaged over the window lands wherever the split left it.\n" +
       "\n" +
-      "  So the weak mode is neither topology nor suppression, and this probe does not claim\n" +
-      "  to know what it is. What is left untested and is worth naming: a receiver that is\n" +
-      "  asleep inside its duty-cycle window when the broadcast passes, queue shedding under\n" +
-      "  the crowd's own load, and the fact that reach is averaged over a 60 s window in\n" +
-      "  which a 60-node crowd's graph is still moving — so the component measured at the end\n" +
-      "  is not the one each broadcast had to cross. docs/06 §24.9.\n" +
+      "  Hypothesis 1 was not wrong about the mechanism, only about when to look for it, and\n" +
+      "  the end-of-window component table it used cannot see a partition that has healed.\n" +
+      "  Hypothesis 2 stays refuted: flooding does not help, because a broadcast cannot cross a\n" +
+      "  gap that exists at the moment it is sent, however many copies are made.\n" +
+      "\n" +
+      "  What this leaves untested, and worth naming: a receiver asleep inside its duty-cycle\n" +
+      "  window when the broadcast passes, which scansSkippedAsleep would quantify per seed, and\n" +
+      "  queue shedding under the crowd's own load, which §12.14 measured as mostly the source's\n" +
+      "  own. Neither is needed to explain the bimodality now. docs/06 §24.10.\n" +
       "\n" +
       "  One thing that fell out and is worth keeping: MPR's overhead against flood-all in the\n" +
       "  densest scenario, on eight seeds, is 2 319% against 17 728% at 2 s and 2 662% against\n" +

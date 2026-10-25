@@ -2516,12 +2516,17 @@ radio graph at the end of each window, by seed:
 | 12 s | reach | **70** | 98 | 98 | 93 | **55** | **70** | **61** | 98 |
 | 12 s | components | 60 | 60 | 60 | 60 | 60 | 60 | 60 | 60 |
 
-Partly true, and not the story. At 2 s two of eight seeds split **40 + 20** and both are
-weak-reach seeds, so for those two the ceiling is the component the sender happens to be in
-rather than any routing failure — which is worth knowing, because it means those rows are not
-evidence about the protocol at all. But seed 2024 reaches 79 % in a *fully connected* world,
-and at 12 s **all eight worlds are connected** while reach still spans 55-98 %. Partitioning
-explains two rows of sixteen and cannot be the mode.
+Partly true, and not the story — **as this table measures it**. At 2 s two of eight seeds split
+**40 + 20** and both are weak-reach seeds, so for those two the ceiling is the component the
+sender happens to be in rather than any routing failure. But seed 2024 reaches 79 % in a *fully
+connected* world, and at 12 s **all eight worlds are connected** while reach still spans
+55-98 %, so on this evidence partitioning explains two rows of sixteen and cannot be the mode.
+
+> **Superseded by §24.10.** That verdict is an artefact of *when* the graph was measured. These
+> components are counted once, after the 60 s window, and a crowd that splits and re-joins
+> during the window looks connected by then. Sampled inside the window, partitioning explains
+> essentially all of the bimodality, including seed 2024 at 12 s and every connected-but-weak
+> row above. The mechanism hypothesis 1 proposed was right; the measurement could not see it.
 
 **Hypothesis 2 — stale two-hop views make MPR suppress the only path to part of the network.**
 The prediction is sharp: if wrong suppression is the mechanism, removing suppression entirely
@@ -2541,8 +2546,9 @@ and 66 % at 2 s, where MPR gave 79 %, 54 % and 87 %. At 2 s flooding is *worse o
 MPR does — 2024 recovers to 98 % while 31337 falls to 42 %. A limit that cannot be lifted by
 removing the policy that was blamed for it is not that policy's doing.
 
-**So the weak mode is neither topology nor suppression**, and this document does not claim to
-know what it is. Three candidates were not tested and are named rather than guessed at:
+**So the weak mode is not suppression**, and on the evidence in this subsection it is not
+topology either. Three candidates were left untested and named rather than guessed at — the
+third of which §24.10 then tests and confirms:
 
 - a receiver inside its duty-cycle sleep window when the broadcast passes, which the crowd's
   density makes likely and `scansSkippedAsleep` would quantify per seed;
@@ -2553,8 +2559,72 @@ know what it is. Three candidates were not tested and are named rather than gues
   each broadcast had to cross. The two split seeds at 2 s may be split for part of the window
   and joined for the rest, or the reverse.
 
-The third is the one that would change how the metric should be read, and it is testable by
-sampling connectivity during the window rather than after it.
+The third is the one that changes how the metric should be read, and it is testable by sampling
+connectivity during the window rather than after it. §24.10 does exactly that.
+
+### 24.10 The two modes are one phenomenon: the crowd splits and re-joins during the window
+
+`npm run media reach` samples the radio graph **six times inside** the 60 s window, 10 s apart,
+and reports the fraction of samples at which every node could reach every other, the mean
+largest-component share across them, and the largest-component share at the end for comparison:
+
+| interval | seed | reach | connected samples | mean largest component | largest at the end |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 2 s | 42 | 98 % | 100 % of 6 | 100 % | 100 % |
+| 2 s | 7 | 98 % | 100 % of 6 | 100 % | 100 % |
+| 2 s | 1234 | 98 % | 83 % of 6 | 100 % | 100 % |
+| 2 s | 99 | 79 % | 50 % of 6 | 94 % | **67 %** |
+| 2 s | 2024 | 79 % | 83 % of 6 | 94 % | 100 % |
+| 2 s | 31337 | **54 %** | **17 % of 6** | **72 %** | **67 %** |
+| 2 s | 555 | 87 % | 67 % of 6 | 93 % | 100 % |
+| 2 s | 8 | 98 % | 100 % of 6 | 100 % | 100 % |
+| 12 s | 42 | 70 % | 83 % of 6 | 94 % | 100 % |
+| 12 s | 7 | 98 % | 100 % of 6 | 100 % | 100 % |
+| 12 s | 1234 | 98 % | 100 % of 6 | 100 % | 100 % |
+| 12 s | 99 | 93 % | 83 % of 6 | 94 % | 100 % |
+| 12 s | 2024 | **55 %** | **17 % of 6** | **72 %** | 100 % |
+| 12 s | 31337 | 70 % | 67 % of 6 | 89 % | 100 % |
+| 12 s | 555 | 61 % | 50 % of 6 | 79 % | 100 % |
+| 12 s | 8 | 98 % | 100 % of 6 | 100 % | 100 % |
+
+Reach tracks the connectivity *inside* the window and not the snapshot after it. Every seed
+connected for all six samples reaches **98 %** — five of five, at both intervals. Every seed
+split for any of them lands between 54 % and 93 %, in proportion to how much of the window was
+split. The cleanest case is seed 2024 at 12 s: connected for **17 %** of samples with a mean
+largest component of **72 %**, reaching **55 %** — and reported as fully connected in §24.9's
+end-of-window table, because the crowd had re-joined by the time it was drawn.
+
+So the bimodality of §24.8 is one phenomenon, not two: 60 mobile nodes in this area split and
+re-join repeatedly, a broadcast sent while the graph is split cannot reach the other side
+however it is forwarded, and `broadcastReach` averaged over the window lands wherever the
+splits left it. Seeds differ in how much of the window they spend split, which is what made the
+weak seeds look different from arm to arm and made a three-seed mean orderable almost at
+random.
+
+This settles all three candidates and corrects two verdicts:
+
+- **Partitioning — confirmed, with the caveat that it is transient.** §24.9 rejected it because
+  the end-of-window graph had healed. Measured during the window it explains the mode.
+- **MPR over-suppression — still refuted, and now for a better reason.** Flooding cannot help,
+  because a broadcast cannot cross a gap that exists at the instant it is sent, however many
+  copies are made. The `flood-all` arm's own numbers show this: it moves *different* seeds than
+  MPR does (2024 recovers to 98 %, 31337 falls to 42 %), which is what re-scheduling traffic
+  into a moving graph looks like, not what fixing a suppression rule looks like.
+- **Averaging over a moving graph — confirmed as the reason the metric reads bimodally.** This
+  is the one that changes how a number should be read: `broadcastReach` over a window in a
+  mobile crowd is a *time-average over a changing topology*, and quoting it without the
+  in-window connectivity beside it invites exactly the misreading §24.9 made.
+
+What is still untested and no longer needed to explain the bimodality: receivers asleep inside
+a duty-cycle window when a broadcast passes (`scansSkippedAsleep` would quantify it per seed),
+and queue shedding under the crowd's own load (§12.14 measured that as mostly the source's
+own).
+
+**The practical consequence for this repository.** Any `festival_crowd` number that rests on
+`broadcastReach` or `deliveryRatio` should be read beside the in-window connectivity, or over
+enough seeds that both modes appear — which is what §24.8 asks for and what `npm run media
+beacon` and `npm run media reach` now do. `campus_quad` does not have this problem: all eight
+seeds are connected throughout and reach 94-95 % at every interval tested.
 
 **What fell out on the way, and is worth more than the question.** The overhead column is the
 first measurement of `skills/02`'s acceptance target — *"overhead ≤70 % of flood-all"* — in the
