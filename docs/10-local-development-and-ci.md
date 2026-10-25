@@ -305,20 +305,36 @@ one — on a machine where nothing else can run, this group still gives an answe
    `make parity` runs it alone. This is the check the current pipeline most
    needs and least expects: `make golden` catches a changed constant on the TypeScript side
    and `dart test` on the Dart side, and **neither can run where there is no Dart SDK**, which is
-   everywhere in this pipeline right now. It asks three questions. It pairs 57 constants by name
-   across `src/*.ts` and `sim/mesh_sim/lib/src/*.dart` — including module-private ones, since
-   Dart's `_pdrWindow` and TypeScript's `PDR_WINDOW` are the same contract. It reads `docs/03` §3's
-   coverage-score weight vector out of both engines, requiring the five weights to match each other
-   and sum to 1. And it requires the two `SimConfig` inventories to be **identical** — 83 knobs
-   each, none one-sided — which is a stricter rule than the constants get, and deliberately so:
-   the constant inventories legitimately differ (`broadcastAddress`, `defaultConfig` and `ln10`
-   have no counterpart by design), but a configuration knob one engine has and the other ignores
-   means an experiment that set it silently configured half the contract, and nothing else in the
-   pipeline would notice. It does **not** require the two inventories to match, because they are not
-   supposed to: `broadcastAddress`, `defaultConfig` and `ln10` have no TypeScript counterpart by
-   design, and a check demanding symmetry would need an exception list long enough to hide what it
-   was for. One-sided names are listed rather than failed, which is how the checker found
+   everywhere in this pipeline right now. It asks three questions, and the third is stricter than
+   the first two on purpose.
+
+   It pairs **57 constants** by name across `src/*.ts` and `sim/mesh_sim/lib/src/*.dart` —
+   including module-private ones, since Dart's `_pdrWindow` and TypeScript's `PDR_WINDOW` are the
+   same contract. It does **not** require the two constant inventories to match, because they are
+   not supposed to: `broadcastAddress`, `defaultConfig` and `ln10` have no TypeScript counterpart
+   by design, and a check demanding symmetry would need an exception list long enough to hide what
+   it was for. One-sided names are listed rather than failed, which is how the checker found
    `MPR_WAIT_MS` / `mprWaitDefaultMs` — a synonym pair it had been silently skipping.
+
+   It reads `docs/03` §3's coverage-score weight vector out of both engines, requiring the five
+   weights to match each other and sum to 1 — if they do not, the 0.60 promote and 0.50 demote
+   thresholds mean something other than what §3 says.
+
+   And it requires two *type* inventories to be **identical**: `SimConfig`, 83 fields each, and
+   `SimulationStats`, 80 fields each, with none one-sided. Both were verified to match exactly
+   before the rule was written, which is what makes it safe for the rule to fail rather than
+   report. The mistake it exists for is the easiest to make in a two-engine repository and the
+   hardest to see without a compiler: a knob added to one engine and not the other, so an
+   experiment that set it silently configured half the contract; or a statistic only one engine
+   reports, so `--json` and the React dashboard are not the same contract on both sides and a
+   consumer reads `undefined` from one of them. Nothing else in the pipeline would notice either.
+
+   The rule does **not** extend to the shared enums, and the reason is worth recording because it
+   is a limit of the checker rather than an oversight. Parsing a Dart `enum` body reliably means
+   knowing where it ends and the neighbouring `extension` begins, and a first attempt at exactly
+   that read `HopAction`'s Dart values as `class`, `final` and `required`, and `MsgType`'s
+   TypeScript union as three of its eight members. A parity check that invents disagreements is
+   worse than no parity check, so enums stay out until that parse is right.
 4. **`dart-sites`** — `tool/ci/check-dart-sites.py`, asking whether the Dart engine's *repeated*
    declarations are all present. `make dart-sites` runs it alone. The Dart engine repeats every
    `SimConfig` field at up to five places (declaration, constructor parameter, `copyWith`

@@ -218,12 +218,45 @@ def check_weights(root: pathlib.Path) -> Tuple[List[str], Dict[str, object]]:
     return problems, {"ts_weights": ts, "dart_weights": dart}
 
 
+def ts_interface_fields(text: str, name: str) -> Optional[List[str]]:
+    """Field names of a TypeScript `export interface`, or None if it is not there."""
+    m = re.search(rf"export interface {re.escape(name)} \{{(.*?)\n\}}", text, re.S)
+    if not m:
+        return None
+    return re.findall(r"^  (\w+)\??\s*:", m.group(1), re.M)
+
+
+def dart_class_fields(text: str, name: str) -> Optional[List[str]]:
+    """`final` field names of a Dart class, or None if it is not there."""
+    lo = re.search(rf"^class {re.escape(name)} \{{", text, re.M)
+    if not lo:
+        return None
+    start = lo.end()
+    end = re.search(r"^\}", text[start:], re.M)
+    if not end:
+        return None
+    return re.findall(r"^  final [\w<>?, .]+ (\w+);", text[start : start + end.start()], re.M)
+
+
+# The two type inventories that are contracts rather than conveniences. `SimConfig` is what a
+# caller may set and `SimulationStats` is what every consumer reads — the React dashboard,
+# `--json`, and every number published in docs/06 and docs/08. Both were verified to match
+# exactly (83 fields and 80 fields, none one-sided) before the rule was written, which is what
+# makes it safe for the rule to fail rather than report.
+#
+# Enums are deliberately absent from this list. Extracting them reliably means knowing where a
+# Dart `enum` body ends and the neighbouring `extension` begins, and a first attempt at exactly
+# that read `HopAction`'s Dart values as `class`, `final` and `required`, and `MsgType`'s
+# TypeScript union as three of its eight members. A parity check that invents disagreements is
+# worse than no parity check, so until that parse is right, it is not here.
+INVENTORY_TYPES = ("SimConfig", "SimulationStats")
+
+
 def sim_config_fields(root: pathlib.Path) -> Tuple[Optional[List[str]], Optional[List[str]]]:
     """The `SimConfig` field names in each engine, or None where the file is absent.
 
-    Absent is a real case and not an error: the self-test builds a four-file fixture
-    tree, and a check that failed on a tree it was never asked about would be a check
-    that could not be self-tested.
+    Absent is a real case and not an error: the self-test builds a fixture tree, and a
+    check that failed on a tree it was never asked about could not be self-tested.
     """
     ts_path = root / "src" / "simulation.ts"
     dart_path = root / "sim" / "mesh_sim" / "lib" / "src" / "simulation.dart"
@@ -231,53 +264,61 @@ def sim_config_fields(root: pathlib.Path) -> Tuple[Optional[List[str]], Optional
         return None, None
     ts_text = ts_path.read_text(encoding="utf-8")
     dart_text = dart_path.read_text(encoding="utf-8")
-    m = re.search(r"export interface SimConfig \{(.*?)\n\}", ts_text, re.S)
-    if not m:
-        return None, None
-    ts_fields = re.findall(r"^  (\w+)\??\s*:", m.group(1), re.M)
-    lo = re.search(r"^class SimConfig \{", dart_text, re.M)
-    if not lo:
-        return None, None
-    start = lo.end()
-    end = re.search(r"^\}", dart_text[start:], re.M)
-    if not end:
-        return None, None
-    dart_fields = re.findall(
-        r"^  final [\w<>?, .]+ (\w+);", dart_text[start : start + end.start()], re.M
-    )
-    return ts_fields, dart_fields
+    return ts_interface_fields(ts_text, "SimConfig"), dart_class_fields(dart_text, "SimConfig")
+
+
+INVENTORY_WORDING = {
+    "SimConfig": (
+        "a knob in src/simulation.ts with no field in the Dart SimConfig, so the two "
+        "engines do not accept the same configuration",
+        "a field in the Dart SimConfig with no knob in src/simulation.ts, so the two "
+        "engines do not accept the same configuration",
+    ),
+    "SimulationStats": (
+        "a statistic the TypeScript engine reports and the Dart one does not, so --json "
+        "and the two engines' outputs are not the same contract",
+        "a statistic the Dart engine reports and the TypeScript one does not, so --json "
+        "and the two engines' outputs are not the same contract",
+    ),
+}
 
 
 def check_config_inventory(root: pathlib.Path) -> Tuple[List[str], Dict[str, object]]:
-    """Do the two engines have the same configuration knobs?
+    """Do the two engines expose the same configuration knobs and statistics?
 
     Unlike the constant inventories, which legitimately differ — `broadcastAddress`,
-    `defaultConfig` and `ln10` have no counterpart on the other side by design — the
-    two `SimConfig` field lists are supposed to be *identical*, and today they are:
-    83 fields each, none one-sided. So this one fails rather than reports, and the
-    failure it exists for is the easiest mistake to make in a two-engine repository
-    and the hardest to see without a compiler: a knob added to one engine and not the
-    other, so an experiment that sets it silently configures half the contract.
+    `defaultConfig` and `ln10` have no counterpart on the other side by design — these
+    two type inventories are supposed to be *identical*, and both were verified to be
+    before the rule was written: 83 `SimConfig` fields and 80 `SimulationStats` fields,
+    none one-sided. So this fails rather than reports, and the mistake it exists for is
+    the easiest to make in a two-engine repository and the hardest to see without a
+    compiler: a field added to one engine and not the other, so an experiment that sets
+    a knob silently configures half the contract, or a consumer that reads a statistic
+    gets it from one engine and `undefined` from the other.
     """
-    ts_fields, dart_fields = sim_config_fields(root)
-    if ts_fields is None or dart_fields is None:
-        return [], {"config_fields": None}
+    ts_path = root / "src" / "simulation.ts"
+    dart_path = root / "sim" / "mesh_sim" / "lib" / "src" / "simulation.dart"
+    if not ts_path.exists() or not dart_path.exists():
+        return {}, {}  # type: ignore[return-value]
+    ts_text = ts_path.read_text(encoding="utf-8")
+    dart_text = dart_path.read_text(encoding="utf-8")
     problems: List[str] = []
-    for f in sorted(set(ts_fields) - set(dart_fields)):
-        problems.append(
-            f"SimConfig.{f}: a knob in src/simulation.ts with no field in the Dart "
-            f"SimConfig, so the two engines do not accept the same configuration"
-        )
-    for f in sorted(set(dart_fields) - set(ts_fields)):
-        problems.append(
-            f"SimConfig.{f}: a field in the Dart SimConfig with no knob in "
-            f"src/simulation.ts, so the two engines do not accept the same configuration"
-        )
-    counts = {
-        "config_ts": len(ts_fields),
-        "config_dart": len(dart_fields),
-        "config_shared": len(set(ts_fields) & set(dart_fields)),
-    }
+    counts: Dict[str, object] = {}
+    for name in INVENTORY_TYPES:
+        prefix = "config" if name == "SimConfig" else "stats"
+        ts_fields = ts_interface_fields(ts_text, name)
+        dart_fields = dart_class_fields(dart_text, name)
+        if ts_fields is None or dart_fields is None:
+            counts[f"{prefix}_shared"] = None
+            continue
+        ts_wording, dart_wording = INVENTORY_WORDING[name]
+        for f in sorted(set(ts_fields) - set(dart_fields)):
+            problems.append(f"{name}.{f}: {ts_wording}")
+        for f in sorted(set(dart_fields) - set(ts_fields)):
+            problems.append(f"{name}.{f}: {dart_wording}")
+        counts[f"{prefix}_ts"] = len(ts_fields)
+        counts[f"{prefix}_dart"] = len(dart_fields)
+        counts[f"{prefix}_shared"] = len(set(ts_fields) & set(dart_fields))
     return problems, counts
 
 
@@ -370,11 +411,19 @@ export interface SimConfig {
   alpha: number;
   beta: boolean;
 }
+
+export interface SimulationStats {
+  gamma: number;
+}
 """
 FIXTURE_DART_SIM = """\
 class SimConfig {
   final double alpha;
   final bool beta;
+}
+
+class SimulationStats {
+  final double gamma;
 }
 """
 
@@ -415,6 +464,8 @@ SELFTEST_FAULTS: List[Tuple[str, str, str, str, str]] = [
      "  beta: boolean;\n", "", "problem"),
     ("a config knob present only in the TypeScript engine", "dart-sim",
      "  final bool beta;\n", "", "problem"),
+    ("a statistic reported by only one engine", "dart-sim",
+     "  final double gamma;\n", "", "problem"),
 ]
 
 
@@ -446,13 +497,19 @@ def selftest() -> int:
         counts = result["counts"]
         # The config inventory is asserted too, and not only for its own sake: a check
         # that never finds its input reports nothing and looks exactly like a pass.
-        if problems or counts["shared"] != 6 or counts.get("config_shared") != 2:
+        if (
+            problems
+            or counts["shared"] != 6
+            or counts.get("config_shared") != 2
+            or counts.get("stats_shared") != 1
+        ):
             print(f"  FAIL the clean fixture does not pass: {problems} {counts}")
             failed += 1
         else:
             print(
                 f"  ok   clean fixture: {counts['shared']} shared constants agree, "
-                f"{counts['config_shared']} SimConfig knobs identical"
+                f"{counts['config_shared']} SimConfig knobs and {counts['stats_shared']} "
+                f"SimulationStats field identical"
             )
 
         # A fault the checker cannot see, and must say so rather than imply it looked:
@@ -534,6 +591,11 @@ def main(argv: List[str]) -> int:
             print(
                 f"  ok    config-inventory   {counts['config_shared']} SimConfig knobs, "
                 f"identical in both engines ({counts['config_ts']} TS, {counts['config_dart']} Dart)"
+            )
+        if counts.get("stats_shared") is not None:
+            print(
+                f"  ok    stats-inventory    {counts['stats_shared']} SimulationStats fields, "
+                f"identical in both engines ({counts['stats_ts']} TS, {counts['stats_dart']} Dart)"
             )
         print(
             f"  ok    engine-constants   {counts['shared']} shared constants agree "
