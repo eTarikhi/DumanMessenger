@@ -369,6 +369,19 @@ export function App() {
               const n = sim.nodes.find((x) => x.id === id);
               if (n) sim.setBatterySaver(id, !n.batterySaver);
             }}
+            blockedPeers={selectedNode ? sim.blockedPeers(selectedNode.id) : []}
+            onToggleBlock={(peerId) => {
+              // docs/04 §6's local block, from the inspector. One-way and local: this node
+              // stops accepting that peer's messages and nothing else changes — the peer
+              // keeps hearing this one, and SOS, beacons and ACKs still get through, because
+              // blocking those would make the blocked peer retransmit forever (docs/06 §22).
+              if (!selectedNode) return;
+              if (sim.isBlocked(selectedNode.id, peerId)) {
+                sim.unblockPeer(selectedNode.id, peerId);
+              } else {
+                sim.blockPeer(selectedNode.id, peerId);
+              }
+            }}
             groups={[...sim.groups.values()]}
             onCreateGroup={handleCreateGroup}
             onInviteNearest={handleInviteNearest}
