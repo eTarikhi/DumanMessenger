@@ -116,6 +116,18 @@ bool countsAgainstRelayCap(MeshMessage msg) =>
     msg.type != MsgType.ack &&
     msg.type != MsgType.sync;
 
+/// Whether a local block (`docs/04` §6: "Block/mute peer locally (ignore msgs from
+/// pubKey)") applies to this message. Mirror of `isBlockableTraffic` in `src/routing.ts`.
+///
+/// Control plane is excluded because blocking an ACK makes the blocked peer retransmit —
+/// more airtime, the opposite of the point — and blocking an OGM removes the peer from the
+/// blocker's routing table, which is a routing change disguised as a privacy setting. SOS
+/// is excluded because §6 gives it opt-in listening and §11's collapsing instead, and the
+/// asymmetry is not close: showing one SOS from a blocked peer costs a notification, and
+/// suppressing a real one costs a life.
+bool isBlockableTraffic(MeshMessage msg) =>
+    countsAgainstRelayCap(msg) && msg.type != MsgType.sos;
+
 /// Text < 1 KB rides BLE; larger payloads need Wi-Fi Direct (docs/02 §3.1).
 const int bleMaxBytes = 1024;
 

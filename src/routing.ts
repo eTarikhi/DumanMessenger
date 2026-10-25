@@ -271,6 +271,31 @@ export function countsAgainstRelayCap(msg: MeshMessage): boolean {
   return msg.type !== "ogm" && msg.type !== "ack" && msg.type !== "sync";
 }
 
+/**
+ * Whether a local block (`docs/04` §6: *"Block/mute peer locally (ignore msgs from
+ * pubKey)"*) applies to this message.
+ *
+ * Two exclusions, for two different reasons:
+ *
+ * - **Control plane** (`ogm`, `ack`, `sync`) is excluded for the same reason
+ *   `countsAgainstRelayCap` excludes it. Blocking an `ack` does not silence the peer, it
+ *   makes them retransmit: the blocked node never learns its message was received, so it
+ *   burns *more* of the airtime the block was meant to save. Blocking an `ogm` is worse
+ *   still — it removes the peer from the blocker's routing table, which changes MPR
+ *   selection and can cost other nodes a route through a node that merely dislikes one of
+ *   its neighbours. A block is a local filter on what a user sees, not a routing change.
+ * - **SOS** is excluded because `docs/04` §6 already gives it its own two mechanisms
+ *   (opt-in listening, and §11's collapsing of a repeated flood into one alert), and the
+ *   asymmetry is not close: the cost of showing one SOS from a blocked peer is a
+ *   notification the user opted into, and the cost of suppressing a real one is a life.
+ *
+ * What is left is exactly the traffic a user would call harassment — text, broadcast,
+ * voice and file — which is what §6's bullet is about.
+ */
+export function isBlockableTraffic(msg: MeshMessage): boolean {
+  return countsAgainstRelayCap(msg) && msg.type !== "sos";
+}
+
 // --- dedup cache -------------------------------------------------------------
 
 export function isSeen(node: MeshNode, msgId: string): boolean {

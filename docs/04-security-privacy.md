@@ -110,6 +110,19 @@ auth tag: HMAC or AEAD tag (AES-GCM / ChaChaPoly)
 ### 6. Abuse & Safety (No Moderation Server)
 
 - **Block/mute peer** locally (ignore msgs from pubKey).
+  > **Implementation note (Oct 2026 — `src/simulation.ts` `blockPeer`/`isBlocked` + `sim/mesh_sim`; evidence in `docs/06-simulator-findings.md` §22):** built in both engines as a
+  > per-device list keyed on the sender's node id — which is what *"from pubKey"* means on air, since §4 of `docs/07` derives `destHint8 = SHA-256(pubKey)[0:8]` and a node id carries that
+  > hint. It is inert while empty, so no shipped run and no golden vector changes. Three things this bullet does not say, which the implementation had to decide:
+  >
+  > - **Control plane is not blockable.** Blocking an ACK makes the blocked peer retransmit forever, because it never learns its message arrived — more airtime, the opposite of the point.
+  >   Blocking an OGM removes the peer from the blocker's routing table, which changes MPR selection and can cost a third party a route through a node that merely dislikes one of its
+  >   neighbours. A block filters what a user sees; it is not a routing change.
+  > - **SOS is not blockable,** for the same reason it is exempt from the rate cap below: the asymmetry is not close. A blocked peer's SOS costs one notification the user opted into; a
+  >   suppressed real one costs a life. Measured, a blocked sender's SOS reaches all 10 blockers in every arm, including under the aggressive scope.
+  > - **"Locally" has two possible reaches, and both ship.** `blockScope: "delivery"` (the default, and the literal reading of *"ignore msgs"*) filters the blocker's inbox and leaves the
+  >   mesh carrying the copy for everyone else. `blockScope: "relay"` also refuses to forward, which is what the battery-drain bullet below means by *"ignore floods"*: it saves **9.7 %** of
+  >   the network's airtime in a world where half the nodes have blocked a spammer, and costs that sender 17 of its copies per seed at nodes that never blocked it, because a blocker that
+  >   will not forward is a hole in its routes. `delivery` is the default because it cannot censor anybody; `relay` is a knob because §6's own two bullets point in different directions.
 - **Rate limit:** Max 5 broadcasts / minute per node; SUPERs drop excess.
 - **Battery drain attack:** Cap relay to 30 msgs/min per source; ignore floods.
 > **Implementation note (Oct 2026 — `src/routing.ts` `admitByRate` + `sim/mesh_sim/lib/src/routing.dart`; evidence in `docs/06-simulator-findings.md` §21):** both limits above are

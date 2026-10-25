@@ -91,6 +91,12 @@ Duman mesh simulator (headless)
                       super | all. Who enforces the broadcast cap. `super` is what
                       docs/04 §6 says and bounds how far a flood travels; `all` also
                       stops the flooder's own neighbours hearing it (docs/06 §21.5)
+  --block-scope <name>
+                      delivery | relay. How far a local block reaches (docs/04 §6,
+                      "Block/mute peer locally"). `delivery` — the default — means the
+                      blocking node ignores the message and the mesh still carries it;
+                      `relay` also refuses to forward, which is §6's "ignore floods"
+                      (docs/06 §22). Inert until something calls blockPeer()
   --trace             print the hop-by-hop route each delivered message took
   --capture           record the pcap-like mesh log and print its tail
   --capture-ogm       also log OGM beacons (they outnumber everything else)
@@ -300,6 +306,23 @@ void main(List<String> args) {
     config = config.copyWith(rateLimits: true);
   }
 
+  final blockScopeName = _arg(args, '--block-scope', '');
+  if (blockScopeName.isNotEmpty) {
+    switch (blockScopeName) {
+      case 'delivery':
+        config = config.copyWith(blockScope: BlockScope.delivery);
+        break;
+      case 'relay':
+        config = config.copyWith(blockScope: BlockScope.relay);
+        break;
+      default:
+        stderr.writeln('Unknown --block-scope "$blockScopeName". '
+            'Try: delivery | relay');
+        exitCode = 64;
+        return;
+    }
+  }
+
   final capScopeName = _arg(args, '--broadcast-cap-scope', '');
   if (capScopeName.isNotEmpty) {
     switch (capScopeName) {
@@ -384,6 +407,7 @@ void main(List<String> args) {
       'broadcastPerMinuteCap': config.broadcastPerMinuteCap,
       'relayPerSourcePerMinuteCap': config.relayPerSourcePerMinuteCap,
       'broadcastCapScope': config.broadcastCapScope.wire,
+      'blockScope': config.blockScope.wire,
     },
     'nodes': sim.nodes.length,
     'sent': sent,

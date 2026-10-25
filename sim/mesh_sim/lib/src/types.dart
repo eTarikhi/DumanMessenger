@@ -185,6 +185,20 @@ enum GroupMode { scopedFlood, perMemberUnicast }
 /// keyword, the same reason `Role.superNode` is not `Role.super`.
 enum BroadcastCapScope { superOnly, all }
 
+/// How far a local block reaches (`docs/04` §6: "Block/mute peer locally").
+///
+/// [delivery] is the literal reading and the default: the blocking node ignores the
+/// message and the mesh still carries it for everyone else, so blocking never costs a
+/// third party a delivery. [relay] also refuses to forward, which is what §6's
+/// battery-drain bullet means by "ignore floods", at the cost of a hole in that source's
+/// routes wherever the blocker was a relay. Measured against each other in `docs/06` §22.
+enum BlockScope { delivery, relay }
+
+extension BlockScopeName on BlockScope {
+  /// CLI and JSON spelling, matching the TypeScript engine's `"delivery" | "relay"`.
+  String get wire => this == BlockScope.delivery ? 'delivery' : 'relay';
+}
+
 extension BroadcastCapScopeName on BroadcastCapScope {
   /// CLI and JSON spelling, matching the TypeScript engine's `"super" | "all"`.
   String get wire => this == BroadcastCapScope.superOnly ? 'super' : 'all';
@@ -420,7 +434,7 @@ class Ogm {
 }
 
 /// What a node did with a copy it accepted.
-enum HopAction { received, delivered, relayed, suppressed, queued, expired }
+enum HopAction { received, delivered, relayed, suppressed, blocked, queued, expired }
 
 /// One hop of a message's journey, recorded as a *fresh* copy arrives.
 ///

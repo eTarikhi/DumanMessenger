@@ -25,8 +25,13 @@
  *   npm run rate              every section
  *   npm run rate flood        one section
  *
+ * Since §6's first bullet landed — *"Block/mute peer locally (ignore msgs from pubKey)"*
+ * — the probe covers that too, because it is the same section of the same threat model
+ * and the same question: what does the control cost, and who pays? `block` measures
+ * blocking a flooder at half the network under both readings of the bullet.
+ *
  * Sections: honest (a compliant network loses nothing) · flood (what a 12× flooder
- * costs, with and without the caps)
+ * costs, with and without the caps) · block (what a local block costs, and who pays)
  */
 import { MeshSimulation, type SimConfig } from "../src/simulation";
 import { campusQuad } from "../src/scenarios";
@@ -298,9 +303,285 @@ function floodSection(): boolean {
 
 // --- section dispatch ----------------------------------------------------------
 
+
+// --- section: a local block, and who pays for it --------------------------------
+
+/** `none` is the control arm: the same world with an empty blocklist. */
+type BlockArm = "none" | "delivery" | "relay";
+
+interface BlockRun {
+  seed: number;
+  arm: BlockArm;
+  /** Spam from the blocked source that reached a node which blocked it. Must be 0. */
+  blockerReceipts: number;
+  /** Spam from the blocked source that reached a node which did not. Locality lives here. */
+  bystanderReceipts: number;
+  /** The SOS the same blocked source sent, counted at every node that blocked it. */
+  sosAtBlockers: number;
+  /** A text unicast from the blocked source to one specific blocker. Must be 0. */
+  unicastAtBlocker: number;
+  /** Everything a bystander received from *anybody else*. Not the locality claim — see
+   *  the section — but the second-order effect a block has on unrelated traffic. */
+  bystanderOtherReceipts: number;
+  /** ACKs and gossip-pruned bundles: the mechanism behind the line above. A blocker that
+   *  ignores a message sends no ACK for it, and an ACK is what prunes a bundle out of
+   *  every carrier that overheard it (`skills/04`). */
+  acksReceived: number;
+  bundlesPruned: number;
+  blockedDrops: number;
+  deliveryRatio: number;
+  transmissions: number;
+}
+
+/** How many broadcasts the blocked source sends, and over what window. */
+const SPAM_COUNT = 24;
+const SPAM_WINDOW_MS = 24_000;
+const SOS_BODY = "sos from a blocked sender";
+const UNICAST_BODY = "unicast from a blocked sender";
+
+function blockRun(seed: number, arm: BlockArm): BlockRun {
+  const scope = arm === "relay" ? "relay" : "delivery";
+  const sim = new MeshSimulation({ ...campusQuad(seed), blockScope: scope });
+  sim.runFor(SETTLE_MS);
+  sim.refresh();
+  sim.clearRecords();
+
+  const source = sim.nodes[0];
+  // Half the network blocks the source, so the other half is there to be measured: the
+  // whole question is whether one device's blocklist changes what anybody else receives.
+  const blockers = sim.nodes.filter((_, i) => i > 0 && i % 2 === 1);
+  const bystanders = sim.nodes.filter((n) => n.id !== source.id && !blockers.includes(n));
+  if (arm !== "none") {
+    for (const b of blockers) sim.blockPeer(b.id, source.id);
+  }
+
+  sim.injectTraffic(HONEST_MESSAGES, HONEST_WINDOW_MS);
+  const step = SPAM_WINDOW_MS / SPAM_COUNT;
+  for (let i = 0; i < SPAM_COUNT; i++) {
+    sim.sendMessage(source.id, "BROADCAST", `spam ${i}`, "broadcast");
+    sim.runFor(step);
+  }
+  // The two exemptions, sent after the spam so nothing about their arrival can be
+  // confused with it: an SOS on the pager channel, and a unicast in the other direction
+  // — blocking filters what a user sees, not what a user may send.
+  sim.sendMessage(source.id, "BROADCAST", SOS_BODY, "sos");
+  sim.sendMessage(source.id, blockers[0].id, UNICAST_BODY, "text");
+  sim.runFor(HONEST_WINDOW_MS + DRAIN_MS - SPAM_WINDOW_MS);
+  sim.refresh();
+
+  const held = (n: { inbox: { from: string; body: string }[] }) =>
+    n.inbox.filter((m) => m.from === source.id && m.body.startsWith("spam")).length;
+  const fromOthers = (n: { inbox: { from: string }[] }) =>
+    n.inbox.filter((m) => m.from !== source.id).length;
+
+  return {
+    seed,
+    arm,
+    blockerReceipts: blockers.reduce((sum, b) => sum + held(b), 0),
+    bystanderReceipts: bystanders.reduce((sum, b) => sum + held(b), 0),
+    sosAtBlockers: blockers.filter((b) =>
+      b.inbox.some((m) => m.body === SOS_BODY && m.type === "sos")
+    ).length,
+    unicastAtBlocker: blockers[0].inbox.filter((m) => m.body === UNICAST_BODY).length,
+    bystanderOtherReceipts: bystanders.reduce((sum, b) => sum + fromOthers(b), 0),
+    acksReceived: sim.stats.acksReceived,
+    bundlesPruned: sim.stats.bundlesPruned,
+    blockedDrops: sim.stats.blockedDrops,
+    deliveryRatio: sim.stats.deliveryRatio,
+    transmissions: sim.nodes.reduce((sum, n) => sum + n.txCount, 0),
+  };
+}
+
+function blockSection(): boolean {
+  console.log("\n=== a local block, and who pays for it (docs/04 §6, bullet 1) ===");
+  console.log(
+    `docs/04 §6 says "Block/mute peer locally (ignore msgs from pubKey)" and, in the same\n` +
+      `section, "ignore floods". Those are two different reach: the first is about what a\n` +
+      `user sees, the second about what a relay pays for. \`blockScope\` is the seam between\n` +
+      `them — \`delivery\` (the default) filters the inbox only, \`relay\` refuses to forward\n` +
+      `as well — and one node spamming ${SPAM_COUNT} broadcasts is blocked at half the network\n` +
+      `so the other half can show whether a block stays local.\n`
+  );
+
+  const failures: string[] = [];
+  console.log("  seed  arm       spam@blockers  spam@others  others@bystanders  SOS@blockers  unicast  delivery   tx      blocked");
+  const arms: Record<BlockArm, BlockRun[]> = { none: [], delivery: [], relay: [] };
+  for (const seed of SEEDS) {
+    for (const arm of ["none", "delivery", "relay"] as BlockArm[]) {
+      const r = blockRun(seed, arm);
+      arms[arm].push(r);
+      console.log(
+        `  ${String(seed).padEnd(5)} ${arm.padEnd(9)} ${String(r.blockerReceipts).padStart(13)}  ` +
+          `${String(r.bystanderReceipts).padStart(12)}  ${String(r.bystanderOtherReceipts).padStart(17)}  ` +
+          `${String(r.sosAtBlockers).padStart(12)}  ` +
+          `${String(r.unicastAtBlocker).padStart(7)}  ${pct(r.deliveryRatio).padStart(8)}   ` +
+          `${String(r.transmissions).padStart(6)}  ${String(r.blockedDrops).padStart(8)}`
+      );
+    }
+  }
+
+  const sum = (arm: BlockArm, key: keyof BlockRun) =>
+    arms[arm].reduce((a, r) => a + (r[key] as number), 0);
+  const meanOf = (arm: BlockArm, key: keyof BlockRun) => sum(arm, key) / SEEDS.length;
+
+  // Asserted, because these are the properties that make the feature correct rather than
+  // merely effective.
+  for (const arm of ["delivery", "relay"] as BlockArm[]) {
+    if (sum(arm, "blockerReceipts") !== 0) {
+      failures.push(
+        `arm ${arm}: a blocked sender's spam reached the nodes that blocked it ` +
+          `(${sum(arm, "blockerReceipts")} receipts over ${SEEDS.length} seeds)`
+      );
+    }
+    if (sum(arm, "unicastAtBlocker") !== 0) {
+      failures.push(`arm ${arm}: a blocked sender's unicast reached the node that blocked it`);
+    }
+    if (sum(arm, "blockedDrops") === 0) {
+      failures.push(`arm ${arm}: nothing was ever blocked, so the arm measured nothing`);
+    }
+  }
+  // SOS is exempt, and the exemption has to survive the aggressive scope too: `relay`
+  // refuses to forward blockable traffic, and an SOS is not blockable.
+  for (const arm of ["none", "delivery", "relay"] as BlockArm[]) {
+    if (sum(arm, "sosAtBlockers") === 0) {
+      failures.push(
+        `arm ${arm}: a blocked sender's SOS reached nobody who blocked it — docs/04 §6 ` +
+          `exempts SOS, and suppressing an emergency is the failure the exemption exists for`
+      );
+    }
+    if (sum(arm, "sosAtBlockers") !== sum("none", "sosAtBlockers")) {
+      failures.push(
+        `arm ${arm}: SOS reached ${sum(arm, "sosAtBlockers")} blockers where the control arm ` +
+          `reached ${sum("none", "sosAtBlockers")} — blocking must not move an exempt message`
+      );
+    }
+  }
+  // Locality: under `delivery`, a block changes one inbox and nothing else. The bystanders
+  // must receive exactly what they received with no blocklist at all, and honest delivery
+  // must not move either. This is asserted as an equality because it is an equality —
+  // neither gate consumes RNG, so the two worlds run the same random sequence.
+  if (sum("delivery", "bystanderReceipts") !== sum("none", "bystanderReceipts")) {
+    failures.push(
+      `arm delivery: bystanders received ${sum("delivery", "bystanderReceipts")} of the blocked ` +
+        `sender's spam where the control arm delivered ${sum("none", "bystanderReceipts")} — a ` +
+        `local blocklist changed what another device receives, which is what "locally" forbids`
+    );
+  }
+  // Locality, measured on the traffic that has nothing to do with the block: what the
+  // bystanders received from everybody except the blocked source. `deliveryRatio` is the
+  // wrong instrument here and the first version of this section asserted on it — it is a
+  // whole-network ratio whose numerator includes the blocked sender's own messages to the
+  // nodes that blocked it, so it *must* move when a block works, and it moved by up to 60
+  // points across seeds while nothing except the blocklist had changed. Excluding the
+  // blocked pair leaves a number that has no business moving, and an exact equality is the
+  // assertion because neither gate consumes RNG: the two worlds run the same sequence.
+  // What *is* asserted is the direction that matters for censorship: the blocked sender's
+  // own copies reach at least as many bystanders when somebody blocks it as when nobody
+  // does (`spam@others` above). Unrelated traffic is reported and not asserted, because a
+  // block does move it — and the first version of this section asserted an exact equality
+  // there and was wrong twice over, once on `deliveryRatio` (whose numerator counts the
+  // blocked pair's own messages, so a working block must reduce it) and once on this
+  // column. The mechanism it guessed — fewer ACKs, so fewer gossip-pruned bundles, so
+  // carriers hold copies longer — is printed two lines below and is *not* what happens:
+  // `bundlesPruned` is zero in every arm, which is what `docs/06` §20.5 already measured.
+  // ACKs do fall, and that is enough on its own: a transmission this node no longer makes
+  // is an RNG draw this world no longer spends, and jitter, the MPR wait and backoff are
+  // all drawn per transmission, so the two worlds diverge from the first ignored message
+  // and unrelated counts differ the way any two different sequences differ.
+  if (sum("delivery", "acksReceived") > sum("none", "acksReceived")) {
+    failures.push(
+      `arm delivery: blocking produced more ACKs (${sum("delivery", "acksReceived")}) than not ` +
+        `blocking (${sum("none", "acksReceived")}) — an ignored message must not be acknowledged`
+    );
+  }
+  if (sum("delivery", "bundlesPruned") > sum("none", "bundlesPruned")) {
+    failures.push(
+      `arm delivery: blocking pruned more bundles (${sum("delivery", "bundlesPruned")}) than not ` +
+        `blocking (${sum("none", "bundlesPruned")}) — the ACK that prunes is the one never sent`
+    );
+  }
+  // And the sharp form of locality, as an inequality rather than an equality: a block may
+  // not *remove* a copy from a node that did not block. It is not asserted as an equality
+  // because 216 is 24 messages × 9 bystanders — saturation — so equality here says the
+  // ceiling was reached in both arms, not that the two worlds are identical.
+  if (sum("delivery", "bystanderReceipts") < sum("none", "bystanderReceipts")) {
+    failures.push(
+      `arm delivery: bystanders received ${sum("delivery", "bystanderReceipts")} of the blocked ` +
+        `sender's copies against ${sum("none", "bystanderReceipts")} with no blocklist — a local ` +
+        `block removed a message from a device that never asked for it`
+    );
+  }
+  // And the reason `relay` exists at all: it has to cost the blocked source airtime.
+  if (meanOf("relay", "transmissions") >= meanOf("delivery", "transmissions")) {
+    failures.push(
+      `scope relay did not reduce transmissions (${meanOf("relay", "transmissions").toFixed(0)} vs ` +
+        `${meanOf("delivery", "transmissions").toFixed(0)}) — refusing to forward should be the ` +
+        `cheaper of the two`
+    );
+  }
+
+  const txSaved = meanOf("delivery", "transmissions") - meanOf("relay", "transmissions");
+  const bystanderLoss = meanOf("none", "bystanderReceipts") - meanOf("relay", "bystanderReceipts");
+  console.log(
+    `\n  mean over ${SEEDS.length} seeds\n` +
+      `    spam at the nodes that blocked it   none ${meanOf("none", "blockerReceipts").toFixed(1)} → delivery ` +
+      `${meanOf("delivery", "blockerReceipts").toFixed(1)} → relay ${meanOf("relay", "blockerReceipts").toFixed(1)}\n` +
+      `    spam at the nodes that did not      none ${meanOf("none", "bystanderReceipts").toFixed(1)} → delivery ` +
+      `${meanOf("delivery", "bystanderReceipts").toFixed(1)} → relay ${meanOf("relay", "bystanderReceipts").toFixed(1)}\n` +
+      `    SOS at the nodes that blocked it    none ${meanOf("none", "sosAtBlockers").toFixed(1)} → delivery ` +
+      `${meanOf("delivery", "sosAtBlockers").toFixed(1)} → relay ${meanOf("relay", "sosAtBlockers").toFixed(1)}\n` +
+      `    everything else at the bystanders    none ${meanOf("none", "bystanderOtherReceipts").toFixed(1)} → delivery ` +
+      `${meanOf("delivery", "bystanderOtherReceipts").toFixed(1)} → relay ${meanOf("relay", "bystanderOtherReceipts").toFixed(1)}\n` +
+      `    ACKs / bundles gossip-pruned         none ${meanOf("none", "acksReceived").toFixed(1)} / ${meanOf("none", "bundlesPruned").toFixed(1)} → delivery ` +
+      `${meanOf("delivery", "acksReceived").toFixed(1)} / ${meanOf("delivery", "bundlesPruned").toFixed(1)} → relay ` +
+      `${meanOf("relay", "acksReceived").toFixed(1)} / ${meanOf("relay", "bundlesPruned").toFixed(1)}\n` +
+      `    network delivery ratio              none ${pct(meanOf("none", "deliveryRatio"))} → delivery ` +
+      `${pct(meanOf("delivery", "deliveryRatio"))} → relay ${pct(meanOf("relay", "deliveryRatio"))}\n` +
+      `    transmissions                       none ${meanOf("none", "transmissions").toFixed(0)} → delivery ` +
+      `${meanOf("delivery", "transmissions").toFixed(0)} → relay ${meanOf("relay", "transmissions").toFixed(0)}\n` +
+      `\n` +
+      `  Read the second line as the price of "relay": ${bystanderLoss.toFixed(1)} of the blocked\n` +
+      `  sender's copies per seed never reached nodes that did not block it, because a blocker\n` +
+      `  that refuses to forward is a hole in that source's routes. The first and third lines\n` +
+      `  are the feature and its exemption. The second line is the locality claim — a block\n` +
+      `  removes nothing from a device that did not block — though at 24 messages × 9\n` +
+      `  bystanders it is a saturated one, so it rules out removal rather than proving the two\n` +
+      `  worlds identical.\n` +
+      `\n` +
+      `  The fourth line moves and the sixth moves with it, and neither is a cost of blocking.\n` +
+      `  The sixth is a whole-network ratio whose numerator counts the blocked sender's own\n` +
+      `  messages to the nodes that blocked it, so a working block reduces it by construction;\n` +
+      `  reading it as "a block costs the network delivery" is the mistake this section exists\n` +
+      `  to prevent. The fourth is unrelated traffic at unrelated nodes, and it moves because\n` +
+      `  the fifth line's ACKs are transmissions: an ignored message is not acknowledged, a\n` +
+      `  transmission not made is an RNG draw not spent, and jitter, the MPR wait and backoff\n` +
+      `  are drawn per transmission — so the two worlds diverge at the first ignored message.\n` +
+      `  The pruning half of that story is printed and is zero: docs/06 §20.5 measured\n` +
+      `  gossip-pruning as essentially never firing, and it does not fire here either.\n` +
+      `\n` +
+      `  Scope relay saves ${txSaved.toFixed(0)} transmissions per seed (${pct(txSaved / meanOf("delivery", "transmissions"))} of the network's\n` +
+      `  airtime) that scope delivery spends forwarding someone the forwarder has blocked.\n` +
+      `  Whether that trade is worth a hole in the blocked source's routes is a policy\n` +
+      `  question, so both ship and the default is the one that cannot censor anybody.\n`
+  );
+
+  if (failures.length > 0) {
+    console.log("FAIL");
+    for (const f of failures) console.log(`  · ${f}`);
+    return false;
+  }
+  console.log(
+    "PASS — the block filters what the blocker sees and nothing else: a bystander loses no\n" +
+      "  copy of the blocked sender's traffic, an SOS still gets through under both scopes,\n" +
+      "  and the network spends less airtime only when it is asked to."
+  );
+  return true;
+}
+
 const SECTIONS: ReadonlyArray<[string, () => boolean | void]> = [
   ["honest", honestSection],
   ["flood", floodSection],
+  ["block", blockSection],
 ];
 
 function main(): void {
@@ -320,10 +601,16 @@ function main(): void {
     if (section() === false) failed = true;
   }
   if (failed) {
-    console.error("\nFAIL — a cap fired on honest traffic, or stayed silent under a flood.");
+    console.error(
+      "\nFAIL — a control fired where it should not have, or stayed silent where it should " +
+        "not have."
+    );
     process.exitCode = 1;
   } else {
-    console.log("\nPASS — the caps are inert on honest traffic and fire under abuse.");
+    console.log(
+      "\nPASS — the caps and the blocklist are inert on traffic that does not abuse them, " +
+        "fire on traffic that does, and neither reaches past the node that decided."
+    );
   }
 }
 

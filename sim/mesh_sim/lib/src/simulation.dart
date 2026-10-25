@@ -100,6 +100,7 @@ class SimConfig {
     this.broadcastPerMinuteCap = broadcastPerMinuteCapDefault,
     this.relayPerSourcePerMinuteCap = relayPerSourcePerMinuteCapDefault,
     this.broadcastCapScope = BroadcastCapScope.superOnly,
+    this.blockScope = BlockScope.delivery,
     this.communityRelayPreference = false,
     this.dtnPreferCommunity = false,
     this.maxRetries = 2,
@@ -344,6 +345,9 @@ class SimConfig {
   /// Who enforces the broadcast cap: SUPERs only, as docs/04 §6 says, or every node.
   final BroadcastCapScope broadcastCapScope;
 
+  /// How far a local block reaches: delivery only, as docs/04 §6 says, or relay too.
+  final BlockScope blockScope;
+
   /// When two relays cover the same neighbours, pick the plugged one. Off by default and
   /// measured as a null result: it moves 0.6 of 100 MPR slots in a crowd and nothing
   /// downstream, because who transmits is decided per packet from what was actually heard
@@ -424,6 +428,7 @@ class SimConfig {
     int? broadcastPerMinuteCap,
     int? relayPerSourcePerMinuteCap,
     BroadcastCapScope? broadcastCapScope,
+    BlockScope? blockScope,
     bool? communityRelayPreference,
     bool? dtnPreferCommunity,
     double? voiceKbps,
@@ -486,6 +491,7 @@ class SimConfig {
         relayPerSourcePerMinuteCap:
             relayPerSourcePerMinuteCap ?? this.relayPerSourcePerMinuteCap,
         broadcastCapScope: broadcastCapScope ?? this.broadcastCapScope,
+        blockScope: blockScope ?? this.blockScope,
         communityRelayPreference:
             communityRelayPreference ?? this.communityRelayPreference,
         dtnPreferCommunity: dtnPreferCommunity ?? this.dtnPreferCommunity,
@@ -650,6 +656,7 @@ class SimulationStats {
     required this.transferBlocks,
     required this.rateBroadcastDrops,
     required this.rateRelayDrops,
+    required this.blockedDrops,
     required this.batteryPercentPerHourNormal,
     required this.batteryPercentPerHourSuper,
     required this.scansPerSec,
@@ -797,6 +804,10 @@ class SimulationStats {
   /// Relays refused because the source exceeded docs/04 §6's 30/min.
   final int rateRelayDrops;
 
+  /// Messages a node ignored because it had blocked the sender locally (docs/04 §6).
+  /// Counted per receiving node, so one broadcast heard by four blockers is four.
+  final int blockedDrops;
+
   /// skills/07 telemetry: "Battery %/h per role, scans/sec, relays/sec".
   /// Measured from the battery snapshot taken when metrics were cleared, over
   /// nodes that are online, in that role and not charging.
@@ -904,6 +915,7 @@ class SimulationStats {
         'transferBlocks': transferBlocks,
         'rateBroadcastDrops': rateBroadcastDrops,
         'rateRelayDrops': rateRelayDrops,
+        'blockedDrops': blockedDrops,
         'latencyByHop': latencyByHop.map((b) => b.toJson()).toList(),
       };
 }
@@ -1458,6 +1470,7 @@ class MeshSimulation {
   int _transferBlocks = 0;
   int _rateBroadcastDrops = 0;
   int _rateRelayDrops = 0;
+  int _blockedDrops = 0;
 
   /// Token buckets for docs/04 §6's two caps, keyed `"enforcer|source"`. Held here
   /// rather than on `MeshNode` so the feature adds no field to the cross-language
@@ -1465,6 +1478,12 @@ class MeshSimulation {
   /// untouched, and the state is per enforcing pair anyway.
   final Map<String, RateBucket> _rateBroadcasts = {};
   final Map<String, RateBucket> _rateRelays = {};
+
+  /// docs/04 §6's local blocklist, keyed blocker → blocked peers. On the simulation for
+  /// the same reason the rate buckets are: it adds no field to the cross-language node
+  /// contract, and it is inert while empty, so a shipped run behaves identically whether
+  /// or not the feature exists. Mirror of `blocked` in `src/simulation.ts`.
+  final Map<NodeId, Set<NodeId>> _blocked = {};
 
   /// Whether the transmission that just went on air collided at its receiver. Written by
   /// [_onAir], read by the contention window to decide whether to widen.
@@ -1570,6 +1589,7 @@ class MeshSimulation {
     _transferBlocks = 0;
     _rateBroadcastDrops = 0;
     _rateRelayDrops = 0;
+    _blockedDrops = 0;
     _rateBroadcasts.clear();
     _rateRelays.clear();
     _lastTxCollided = false;
@@ -2300,6 +2320,40 @@ class MeshSimulation {
     }
     t.rttVarMs = 0.75 * t.rttVarMs + 0.25 * (srtt - rtt).abs();
     t.srttMs = 0.875 * srtt + 0.125 * rtt;
+  }
+
+  /// Block a peer locally, as docs/04 §6 specifies: no moderation server exists, so the
+  /// list never leaves the device and never affects anyone else's view of the network.
+  /// Returns whether the list changed.
+  ///
+  /// Keyed on the sender's node id, which is the mesh's identity: docs/07 §4 derives
+  /// `destHint8 = SHA-256(pubKey)[0:8]`, and a node id carries that hint, so blocking a
+  /// pubKey and blocking a node id are the same act on air.
+  bool blockPeer(NodeId blockerId, NodeId peerId) {
+    if (blockerId == peerId) return false; // a node cannot block itself
+    final list = _blocked[blockerId];
+    if (list != null) return list.add(peerId);
+    _blocked[blockerId] = {peerId};
+    return true;
+  }
+
+  /// Undo a block. Returns whether the list changed.
+  bool unblockPeer(NodeId blockerId, NodeId peerId) {
+    final list = _blocked[blockerId];
+    if (list == null || !list.remove(peerId)) return false;
+    if (list.isEmpty) _blocked.remove(blockerId);
+    return true;
+  }
+
+  /// Whether [blockerId] has blocked [peerId].
+  bool isBlocked(NodeId blockerId, NodeId peerId) =>
+      _blocked[blockerId]?.contains(peerId) ?? false;
+
+  /// The peers a node has blocked, sorted — the same contract as [MeshNode.peerIds].
+  List<NodeId> blockedPeers(NodeId blockerId) {
+    final list = _blocked[blockerId]?.toList() ?? <NodeId>[];
+    list.sort();
+    return list;
   }
 
   MeshMessage? sendMessage(
@@ -3144,6 +3198,33 @@ class MeshSimulation {
       }
     }
 
+    // docs/04 §6: "Block/mute peer locally (ignore msgs from pubKey)." Placed after the
+    // hop record, like the rate gates, so the audit trail shows a node ignored a message
+    // rather than silently never seeing it — which is the difference between a user
+    // choice and packet loss. [isBlockableTraffic] keeps control plane and SOS out; see
+    // its doc comment for why blocking an ACK makes the airtime worse.
+    final blockedHere =
+        isBlockableTraffic(msg) && isBlocked(node.id, msg.from);
+    if (blockedHere) {
+      _blockedDrops++;
+      if (hopRecord != null) {
+        hopRecord.action = HopAction.blocked;
+        hopRecord.reason = '${node.name} has blocked ${msg.from}';
+      }
+      _pushLog(
+          MeshLogKind.decision,
+          node.id,
+          '${msg.id} from ${msg.from} ignored by ${node.name}: sender is blocked'
+              '${config.blockScope == BlockScope.relay ? ' (and not relayed)' : ''}',
+          peerId: via,
+          msgId: msg.id,
+          msgType: msg.type,
+          hop: msg.hopCount);
+      // "relay" is §6's "ignore floods": the blocker stops paying for someone it blocked.
+      // "delivery" stops here and lets the mesh carry the copy for everyone else.
+      if (config.blockScope == BlockScope.relay) return;
+    }
+
     // skills/04: "On ackReceived from dest: remove + gossip ACK (so relays can prune)".
     // The ACK comes back along the reverse path, and the nodes on that path are the ones
     // that were carrying copies, so hearing one is enough to drop the bundle — no extra
@@ -3153,7 +3234,7 @@ class MeshSimulation {
       _bundlesPruned += pruneAcked(node, msg.body.substring(4));
     }
 
-    if (msg.to == node.id) {
+    if (msg.to == node.id && !blockedHere) {
       if (msg.type == MsgType.ack) {
         final ackedId = msg.body.length > 4 ? msg.body.substring(4) : '';
         final pending = _pendingAcks.remove(ackedId);
@@ -3197,7 +3278,10 @@ class MeshSimulation {
     if (msg.to == groupAddress && msg.groupId != null) {
       final group = groups[msg.groupId];
       final isMember = group != null && group.members.contains(node.id);
-      if (group != null && isMember && group.keyEpoch == msg.groupEpoch) {
+      if (group != null &&
+          isMember &&
+          group.keyEpoch == msg.groupEpoch &&
+          !blockedHere) {
         final fresh = deliverToInbox(node, msg);
         if (fresh) {
           _recordDelivery(node, msg, trace);
@@ -3212,7 +3296,7 @@ class MeshSimulation {
               msgType: msg.type,
               hop: msg.hopCount + 1);
         }
-      } else if (group != null && isMember) {
+      } else if (group != null && isMember && !blockedHere) {
         // A member holding an older epoch cannot decrypt this copy: the key rotated
         // when somebody left or joined (docs/04 §4, "groupKey rotated on member
         // leave"). It still relays — the bytes are not secret to the network, only
@@ -3230,7 +3314,7 @@ class MeshSimulation {
       // normal case in a scoped flood, and logging it would drown the capture.
     }
 
-    if (msg.to == broadcastAddress) {
+    if (msg.to == broadcastAddress && !blockedHere) {
       final fresh = deliverToInbox(node, msg);
       if (fresh) {
         _broadcastReceipts++;
@@ -3904,6 +3988,7 @@ class MeshSimulation {
       transferBlocks: _transferBlocks,
       rateBroadcastDrops: _rateBroadcastDrops,
       rateRelayDrops: _rateRelayDrops,
+      blockedDrops: _blockedDrops,
       batteryPercentPerHourNormal: drainPerHour(Role.normal),
       batteryPercentPerHourSuper: drainPerHour(Role.superNode),
       scansPerSec: _scanCount / elapsedSec,

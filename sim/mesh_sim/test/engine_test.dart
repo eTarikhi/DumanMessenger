@@ -1962,6 +1962,153 @@ void main() {
       }
     });
   });
+
+  group('local blocklist (docs/04 §6, bullet 1)', () {
+    // "Block/mute peer locally (ignore msgs from pubKey)". Mirrors
+    // `src/__tests__/blocklist.test.ts`. Three properties: it is local, it filters user
+    // traffic rather than the protocol, and it is inert while empty.
+
+    MeshSimulation world([BlockScope scope = BlockScope.delivery]) {
+      final sim =
+          MeshSimulation(campusQuad(42).copyWith(blockScope: scope));
+      sim.runFor(60000.0);
+      sim.refresh();
+      return sim;
+    }
+
+    test('isBlockableTraffic covers user traffic and exempts protocol and SOS', () {
+      MeshMessage msg(MsgType type) =>
+          createMessage('m', 0.0, 'a', 'b', '', type: type);
+      for (final type in <MsgType>[
+        MsgType.text,
+        MsgType.broadcast,
+        MsgType.voice,
+        MsgType.file,
+      ]) {
+        expect(isBlockableTraffic(msg(type)), isTrue, reason: type.name);
+      }
+      for (final type in <MsgType>[
+        MsgType.ogm,
+        MsgType.ack,
+        MsgType.sync,
+        MsgType.sos,
+      ]) {
+        expect(isBlockableTraffic(msg(type)), isFalse, reason: type.name);
+      }
+      // SOS is user traffic for the relay cap and exempt from the block, so the two
+      // predicates are deliberately not the same set.
+      expect(countsAgainstRelayCap(msg(MsgType.sos)), isTrue);
+    });
+
+    test('defaults to delivery scope and is inert while empty', () {
+      expect(campusQuad(42).blockScope, equals(BlockScope.delivery));
+      expect(BlockScope.delivery.wire, equals('delivery'));
+      expect(BlockScope.relay.wire, equals('relay'));
+      final sim = world();
+      sim.runFor(60000.0);
+      sim.refresh();
+      expect(sim.stats.blockedDrops, equals(0));
+    });
+
+    test('blocks, unblocks, refuses a self-block, and reports the list sorted', () {
+      final sim = world();
+      final a = sim.nodes[0].id;
+      final b = sim.nodes[1].id;
+      final c = sim.nodes[2].id;
+      expect(sim.blockPeer(a, b), isTrue);
+      expect(sim.blockPeer(a, b), isFalse); // already blocked: the list did not change
+      expect(sim.blockPeer(a, a), isFalse); // a node cannot block itself
+      expect(sim.isBlocked(a, b), isTrue);
+      expect(sim.isBlocked(b, a), isFalse); // and it is not mutual
+      sim.blockPeer(a, c);
+      expect(sim.blockedPeers(a), equals(<NodeId>[b, c]..sort()));
+      expect(sim.unblockPeer(a, b), isTrue);
+      expect(sim.unblockPeer(a, b), isFalse);
+      expect(sim.isBlocked(a, b), isFalse);
+      sim.unblockPeer(a, c);
+      expect(sim.blockedPeers(a), isEmpty);
+    });
+
+    test('keeps a blocked peer out of the blocker inbox but not out of the mesh', () {
+      final sim = world();
+      final sender = sim.nodes[0].id;
+      final blocker = sim.nodes[1].id;
+      sim.blockPeer(blocker, sender);
+      for (var i = 0; i < 8; i++) {
+        sim.sendMessage(sender, broadcastAddress, 'spam \$i', MsgType.broadcast);
+        sim.runFor(1000.0);
+      }
+      sim.runFor(20000.0);
+      sim.refresh();
+      final inbox = sim.nodes.firstWhere((n) => n.id == blocker).inbox;
+      expect(inbox.where((m) => m.from == sender), isEmpty);
+      expect(sim.stats.blockedDrops, greaterThan(0));
+      // Local means local: other nodes still hear the blocked peer.
+      final others = sim.nodes
+          .where((n) => n.id != blocker)
+          .where((n) => n.inbox.any((m) => m.from == sender))
+          .length;
+      expect(others, greaterThan(1));
+    });
+
+    test('lets a blocked peer SOS through, and still lets the blocker send', () {
+      final sim = world();
+      final sender = sim.nodes[0].id;
+      final blocker = sim.nodes[1].id;
+      sim.blockPeer(blocker, sender);
+      sim.sendMessage(sender, broadcastAddress, 'sos help', MsgType.sos);
+      sim.sendMessage(blocker, sender, 'still allowed to send', MsgType.text);
+      sim.runFor(30000.0);
+      sim.refresh();
+      final blockerInbox = sim.nodes.firstWhere((n) => n.id == blocker).inbox;
+      expect(blockerInbox.any((m) => m.type == MsgType.sos), isTrue);
+      final senderInbox = sim.nodes.firstWhere((n) => n.id == sender).inbox;
+      expect(senderInbox.any((m) => m.body == 'still allowed to send'), isTrue);
+    });
+
+    test('keeps the blocked peer in the routing table, because OGMs are not blockable',
+        () {
+      final sim = world();
+      final blockerNode = sim.nodes[1];
+      sim.blockPeer(blockerNode.id, sim.nodes[0].id);
+      final peersBefore = blockerNode.peerIds.length;
+      sim.runFor(30000.0);
+      sim.refresh();
+      // Not a strict equality: peers come and go with mobility. The property is that
+      // blocking does not empty the table, which is what filtering OGMs would do.
+      expect(blockerNode.peerIds, isNotEmpty);
+      expect(blockerNode.peerIds.length, greaterThanOrEqualTo(peersBefore - 2));
+    });
+
+    test('relay scope costs the blocked source airtime that delivery scope spends', () {
+      Map<String, int> flooded(BlockScope scope) {
+        final sim = world(scope);
+        final sender = sim.nodes[0].id;
+        for (final n in sim.nodes) {
+          if (n.id != sender) sim.blockPeer(n.id, sender);
+        }
+        for (var i = 0; i < 24; i++) {
+          sim.sendMessage(sender, broadcastAddress, 'spam \$i', MsgType.broadcast);
+          sim.runFor(300.0);
+        }
+        sim.runFor(20000.0);
+        sim.refresh();
+        return {
+          'transmissions': sim.nodes.fold<int>(0, (sum, n) => sum + n.txCount),
+          'forwarded': sim.stats.totalForwarded,
+          'blocked': sim.stats.blockedDrops,
+        };
+      }
+
+      final delivery = flooded(BlockScope.delivery);
+      final relay = flooded(BlockScope.relay);
+      expect(delivery['transmissions']!, greaterThan(relay['transmissions']!));
+      expect(delivery['forwarded']!, greaterThan(relay['forwarded']!));
+      // One broadcast heard by four blockers is four entries under delivery; under relay
+      // the first to hear it stops the other three ever hearing it.
+      expect(delivery['blocked']!, greaterThan(relay['blocked']!));
+    });
+  });
 }
 
 double _ln(num x) => math.log(x.toDouble());

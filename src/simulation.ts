@@ -59,6 +59,7 @@ import {
   RELAY_PER_SOURCE_PER_MINUTE_CAP,
   admitByRate,
   countsAgainstRelayCap,
+  isBlockableTraffic,
   createMessage,
   decideForward,
   deliverToInbox,
@@ -332,6 +333,17 @@ export interface SimConfig {
    *  measured against each other in `docs/06` §21.5 instead of one being asserted
    *  better than the other. */
   broadcastCapScope: "super" | "all";
+  /** How far a local block reaches (`docs/04` §6: *"Block/mute peer locally (ignore msgs
+   *  from pubKey)"*).
+   *
+   *  `"delivery"` is the literal reading and the default: the blocking node ignores the
+   *  message, and the mesh still carries it for everyone else, so blocking can never cost
+   *  a third party a delivery. `"relay"` also refuses to forward, which is what §6's
+   *  battery-drain bullet means by *"ignore floods"* — the blocker stops paying airtime
+   *  and battery for someone it blocked — at the cost of putting a hole in that source's
+   *  routes wherever the blocker was a relay. Both are measured in `docs/06` §22 rather
+   *  than one being asserted better. */
+  blockScope: "delivery" | "relay";
 
   /** When two relays cover the same neighbours, pick the plugged one: a community relay's
    *  transmission costs nobody's battery and its position does not change. Off by default,
@@ -503,6 +515,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   broadcastPerMinuteCap: BROADCAST_PER_MINUTE_CAP,
   relayPerSourcePerMinuteCap: RELAY_PER_SOURCE_PER_MINUTE_CAP,
   broadcastCapScope: "super",
+  blockScope: "delivery",
   communityRelayPreference: false,
   dtnPreferCommunity: false,
 
@@ -631,6 +644,10 @@ export interface SimulationStats {
   rateBroadcastDrops: number;
   /** Relays refused because the source exceeded docs/04 §6's 30/min. */
   rateRelayDrops: number;
+  /** Messages a node ignored because it had blocked the sender locally (docs/04 §6:
+   *  "Block/mute peer locally"). Counted per receiving node, like `rateBroadcastDrops`,
+   *  so one broadcast heard by four nodes that all blocked the sender is four. */
+  blockedDrops: number;
   /** Anti-entropy packets put on air: beacons, bucket requests and replies. */
   sentSync: number;
   bytesDelivered: number;
@@ -1056,6 +1073,7 @@ export class MeshSimulation {
   private channelBackoffs = 0;
   private transferBlocks = 0;
   private rateBroadcastDrops = 0;
+  private blockedDrops = 0;
   private rateRelayDrops = 0;
   /** Token buckets for docs/04 §6's two caps, keyed `"enforcer|source"`. Kept here
    *  rather than on `MeshNode` so that adding the feature adds no field to the
@@ -1063,6 +1081,51 @@ export class MeshSimulation {
    *  surface are untouched, and the state is per enforcing pair anyway. */
   private rateBroadcasts = new Map<string, RateBucket>();
   private rateRelays = new Map<string, RateBucket>();
+  /** docs/04 §6's local blocklist, keyed blocker → blocked peers. On the simulation
+   *  rather than on `MeshNode` for the same reason the rate buckets are: a node-contract
+   *  field would move the golden vectors, and this is inert while empty, so a shipped run
+   *  behaves identically whether or not the feature exists. */
+  private blocked = new Map<NodeId, Set<NodeId>>();
+  /**
+   * Block a peer locally, as `docs/04` §6 specifies: no moderation server exists, so the
+   * list never leaves the device and never affects anyone else's view of the network.
+   * Returns whether the list changed.
+   *
+   * Keyed on the sender's node id, which is the mesh's identity: `docs/07` §4 derives
+   * `destHint8 = SHA-256(pubKey)[0:8]`, and a node id carries that hint, so blocking a
+   * pubKey and blocking a node id are the same act on air.
+   */
+  blockPeer(blockerId: NodeId, peerId: NodeId): boolean {
+    if (blockerId === peerId) return false; // a node cannot block itself
+    const list = this.blocked.get(blockerId);
+    if (list) {
+      if (list.has(peerId)) return false;
+      list.add(peerId);
+      return true;
+    }
+    this.blocked.set(blockerId, new Set([peerId]));
+    return true;
+  }
+
+  /** Undo a block. Returns whether the list changed. */
+  unblockPeer(blockerId: NodeId, peerId: NodeId): boolean {
+    const list = this.blocked.get(blockerId);
+    if (!list || !list.has(peerId)) return false;
+    list.delete(peerId);
+    if (list.size === 0) this.blocked.delete(blockerId);
+    return true;
+  }
+
+  /** Whether `blockerId` has blocked `peerId`. */
+  isBlocked(blockerId: NodeId, peerId: NodeId): boolean {
+    return this.blocked.get(blockerId)?.has(peerId) === true;
+  }
+
+  /** The peers a node has blocked, sorted — the same contract as `peerIds`. */
+  blockedPeers(blockerId: NodeId): NodeId[] {
+    return [...(this.blocked.get(blockerId) ?? [])].sort();
+  }
+
   /** Whether the transmission that just went on air collided at its receiver. Read by the
    *  contention window to decide whether to widen; written by `onAir`. */
   private lastTxCollided = false;
@@ -1181,6 +1244,7 @@ export class MeshSimulation {
     this.rateRelayDrops = 0;
     this.rateBroadcasts.clear();
     this.rateRelays.clear();
+    this.blockedDrops = 0;
     this.lastTxCollided = false;
     this.channel.clear();
     this.txUntil.clear();
@@ -2816,6 +2880,30 @@ export class MeshSimulation {
     }
 
 
+    // docs/04 §6: "Block/mute peer locally (ignore msgs from pubKey)." Placed after the
+    // hop record, like the rate gates, so the audit trail shows a node ignored a message
+    // rather than silently never seeing it — which is the difference between a user
+    // choice and packet loss. `isBlockableTraffic` keeps control plane and SOS out; see
+    // its doc comment for why blocking an ACK makes the airtime worse.
+    const blockedHere = isBlockableTraffic(msg) && this.isBlocked(node.id, msg.from);
+    if (blockedHere) {
+      this.blockedDrops++;
+      if (hopRecord) {
+        hopRecord.action = "blocked";
+        hopRecord.reason = `${node.name} has blocked ${msg.from}`;
+      }
+      this.pushLog(
+        "decision",
+        node.id,
+        `${msg.id} from ${msg.from} ignored by ${node.name}: sender is blocked` +
+          (this.config.blockScope === "relay" ? " (and not relayed)" : ""),
+        { peerId: via, msgId: msg.id, msgType: msg.type, hop: msg.hopCount }
+      );
+      // "relay" is §6's "ignore floods": the blocker stops paying for someone it blocked.
+      // "delivery" stops here and lets the mesh carry the copy for everyone else.
+      if (this.config.blockScope === "relay") return;
+    }
+
     // skills/04: "On ackReceived from dest: remove + gossip ACK (so relays can prune)".
     // The ACK comes back along the reverse path, and the nodes on that path are the ones
     // that were carrying copies, so hearing one is enough to drop the bundle — no extra
@@ -2826,7 +2914,7 @@ export class MeshSimulation {
       this.bundlesPruned += pruneAcked(node, msg.body.slice(4));
     }
 
-    if (msg.to === node.id) {
+    if (msg.to === node.id && !blockedHere) {
       if (msg.type === "ack") {
         const ackedId = msg.body.slice(4);
         const pending = this.pendingAcks.get(ackedId);
@@ -2870,7 +2958,7 @@ export class MeshSimulation {
     if (msg.to === GROUP_ADDRESS && msg.groupId) {
       const group = this.groups.get(msg.groupId);
       const isMember = group ? group.members.has(node.id) : false;
-      if (group && isMember && group.keyEpoch === msg.groupEpoch) {
+      if (group && isMember && group.keyEpoch === msg.groupEpoch && !blockedHere) {
         const fresh = deliverToInbox(node, msg);
         if (fresh) {
           this.recordDelivery(node, msg, trace);
@@ -2882,7 +2970,7 @@ export class MeshSimulation {
             { peerId: via, msgId: msg.id, msgType: msg.type, hop: msg.hopCount + 1 }
           );
         }
-      } else if (group && isMember) {
+      } else if (group && isMember && !blockedHere) {
         // A member holding an older epoch cannot decrypt this copy: the key rotated
         // when somebody left or joined (docs/04 §4, "groupKey rotated on member
         // leave"). It still relays — the bytes are not secret to the network, only
@@ -2899,7 +2987,7 @@ export class MeshSimulation {
       // normal case in a scoped flood, and logging it would drown the capture.
     }
 
-    if (msg.to === "BROADCAST") {
+    if (msg.to === "BROADCAST" && !blockedHere) {
       const fresh = deliverToInbox(node, msg);
       if (fresh) {
         this.broadcastReceipts++;
@@ -3565,6 +3653,7 @@ export class MeshSimulation {
       transferBlocks: this.transferBlocks,
       rateBroadcastDrops: this.rateBroadcastDrops,
       rateRelayDrops: this.rateRelayDrops,
+      blockedDrops: this.blockedDrops,
       channelDeafRx: this.channelDeafRx,
       sentSync: this.sentSync,
       bytesDelivered: this.bytesDelivered,

@@ -270,6 +270,7 @@ export type HopAction =
   | "delivered"
   | "relayed"
   | "suppressed"
+  | "blocked"
   | "queued"
   | "expired";
 

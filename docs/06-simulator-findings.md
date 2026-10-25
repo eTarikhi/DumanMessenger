@@ -1883,3 +1883,104 @@ of a repeated flood into one alert that only moves forward in time), and a real 
 exactly the case where a rate limit does the most harm. The gate therefore keys on
 `type === "broadcast"`, and a test pins that twelve SOS messages in a second produce zero
 suppressions.
+
+---
+
+## 22. Blocking a peer locally: what "locally" costs, and who pays
+
+`docs/04` §6 opens with a bullet that neither engine implemented: *"Block/mute peer locally
+(ignore msgs from pubKey)."* With no moderation server there is nothing to appeal to and
+nothing to synchronise, so a block is one device's decision — and the interesting question is
+not whether it works but **whether it stays that local**. Both engines now carry a blocklist
+(`blockPeer` / `unblockPeer` / `isBlocked` / `blockedPeers`), a `blockedDrops` counter, and a
+`blocked` hop action in the audit trail, and the reach of a block is a knob:
+
+- **`blockScope: "delivery"`** — the default, and the literal reading of *"ignore msgs"*. The
+  blocking node does not put the message in its inbox, and the mesh carries it for everyone
+  else exactly as before.
+- **`blockScope: "relay"`** — also refuses to forward. This is what §6's *battery-drain*
+  bullet means by *"ignore floods"*: a blocker stops paying airtime and battery for someone it
+  blocked. It costs the blocked source a route wherever the blocker was a relay.
+
+### 22.1 Two exclusions, neither of them a relaxation
+
+`isBlockableTraffic` is `countsAgainstRelayCap(msg) && msg.type !== "sos"` — user traffic only,
+minus emergencies. Both exclusions are load-bearing:
+
+- **Control plane (`ogm`, `ack`, `sync`) is not blockable.** Blocking an ACK does not silence
+  anybody; it makes the blocked peer retransmit, because it never learns its message arrived —
+  more airtime, which is the opposite of the point. Blocking an OGM is worse: it removes the
+  peer from the blocker's routing table, changes MPR selection, and can cost a third party a
+  route through a node that merely dislikes one of its neighbours. A block is a filter on what
+  a user sees, not a routing change.
+- **SOS is not blockable.** §6 already gives SOS opt-in listening and §11's collapsing, and the
+  asymmetry is not close: showing one SOS from a blocked peer costs a notification the user
+  opted into, and suppressing a real one costs a life.
+
+Note that SOS stays inside `countsAgainstRelayCap` — it is user traffic for the *relay cap* and
+exempt from the *block*. The two predicates are deliberately not the same set.
+
+### 22.2 Measured
+
+`npm run rate block`: three seeds, `campus_quad`, 20 nodes, one source sending 24 broadcasts in
+24 s while **9 of the other 19 nodes block it** — half the network blocking, so the other half
+is there to show whether a block stays local. Means over the three seeds:
+
+| | no blocklist | `delivery` (default) | `relay` |
+| --- | ---: | ---: | ---: |
+| spam reaching the nodes that blocked it | 240.0 | **0.0** | **0.0** |
+| spam reaching the nodes that did not | 216.0 | **216.0** | 199.0 |
+| SOS reaching the nodes that blocked it | 10.0 | **10.0** | **10.0** |
+| a unicast from the blocked source to its blocker | 1.0 | **0.0** | **0.0** |
+| everything else at the bystanders | 54.7 | 65.7 | 66.7 |
+| ACKs received / bundles gossip-pruned | 27.0 / 0.0 | 24.0 / 0.0 | 23.0 / 0.0 |
+| transmissions | 3 728 | 3 619 | **3 268** |
+| `blockedDrops` | 0 | 253–267 | 230–271 |
+
+The feature and its exemptions are exact: the blockers' inboxes hold nothing from the blocked
+sender under either scope, a unicast in the *other* direction still arrives (blocking filters
+what a user sees, not what a user may send), and the SOS reaches all 10 blockers in every arm —
+including under `relay`, which refuses to forward and still must not refuse an emergency.
+
+`relay` is why the knob exists: **352 fewer transmissions per seed, 9.7 % of the network's
+airtime**, that `delivery` spends forwarding someone the forwarder has blocked. The price is on
+line 2 — 17 of the blocked sender's copies per seed stop reaching nodes that never blocked it,
+because a blocker that will not forward is a hole in that source's routes. Whether that trade is
+worth it is a policy question, so both ship and the default is the one that cannot censor
+anybody.
+
+### 22.3 Two numbers that move and are not costs of blocking
+
+The probe asserts less than its first version did, because two assertions were wrong:
+
+- **The network delivery ratio moves (385.1 % → 398.7 %) and must.** It is a whole-network
+  ratio whose numerator counts the blocked sender's own messages to the nodes that blocked it,
+  so a *working* block removes deliveries from it by construction. Reading that line as "a block
+  costs the network delivery" inverts the result. (Its absolute value is above 100 % because
+  broadcast receipts count per recipient; the column is comparable across arms and not
+  interpretable as a percentage of messages.)
+- **Unrelated traffic at the bystanders moves (54.7 → 65.7) and the obvious explanation is
+  false.** The guess was ACK-gossip pruning: an ignored message is not acknowledged, and an ACK
+  is what prunes a bundle out of every carrier that overheard it, so carriers would hold copies
+  longer and deliver more. The `bundlesPruned` column is printed precisely to test that and it
+  is **zero in every arm** — §20.5 had already measured pruning as essentially never firing, and
+  it does not fire here either. What does hold is the arithmetic underneath it: an ACK not sent
+  is a transmission not made, and a transmission not made is an RNG draw not spent. Jitter, the
+  MPR wait and backoff are all drawn per transmission, so the two worlds diverge at the first
+  ignored message and unrelated counts differ the way any two different random sequences do.
+  The direction is not a property of blocking, and the probe reports it instead of asserting it.
+
+What survives as an assertion is the direction that matters: **a block never removes a copy from
+a device that did not block** (line 2, `delivery` ≥ no blocklist). It is asserted as an
+inequality rather than an equality because 216 is 24 messages × 9 bystanders — saturation — so
+equality there says the ceiling was reached in both arms, not that the two worlds are identical.
+
+### 22.4 Where the state lives
+
+The blocklist is on the simulation, not on `MeshNode`, for the same reason the rate buckets are:
+it adds no field to the cross-language node contract, and it is inert while empty, so a shipped
+run and every golden vector are byte-identical whether or not the feature exists. Keys are node
+ids, which is what *"from pubKey"* means on air — `docs/07` §4 derives
+`destHint8 = SHA-256(pubKey)[0:8]` and a node id carries that hint, so blocking a pubKey and
+blocking a node id are the same act. The CLI exposes `--block-scope` but has no way to populate a
+blocklist, so the flag exists to be measured by the probe rather than run by hand.
