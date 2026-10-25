@@ -40,6 +40,57 @@ export const RATE_WINDOW_MS = 60 * 1000;
 /** Text < 1 KB rides BLE; larger payloads need Wi-Fi Direct (docs/02 §3.1). */
 export const BLE_MAX_BYTES = 1024;
 
+/**
+ * One OGM's field widths, derived from `src/types.ts`'s `OGM` and `docs/03` §4 the way
+ * `PACKET_OVERHEAD_BYTES` derives the sealed packet's 95 B from `skills/03`'s layout —
+ * because a beacon's size has to come from the fields it actually carries, not from a guess.
+ *
+ * 32 is the X25519 public-key width `docs/07` §4 specifies, the same field
+ * `PACKET_OVERHEAD_BYTES` spells as `from`. `src/crypto/identity.ts` exports it as
+ * `NODE_ID_BYTES` and this file may not import it: nothing in `App.tsx`'s import graph may
+ * reach `src/crypto`, or `node:crypto` lands in the Vite bundle.
+ */
+export const OGM_ID_BYTES = 32;
+/** Sequence number, 4 B, and the coverage score, a float32 in [0,1]. */
+export const OGM_SEQ_BYTES = 4;
+export const OGM_SCORE_BYTES = 4;
+/** `isSuper`, `declinedRouter` and `hopCount` at 1 B each, `peerCount` at 2 B. */
+export const OGM_FLAG_BYTES = 1 + 1 + 1 + 2;
+/** `batteryBucket` is `floor(battery * 10)`, so 0-10 fits one byte. */
+export const OGM_BATTERY_BYTES = 1;
+/** One `bestHopTo` entry: a destination id and its hop count. Spelled as literals, like
+ *  `PACKET_OVERHEAD_BYTES` above, because `check-parity.py` compares the two engines'
+ *  non-scalar initialisers as *text* and identifier case is the one thing the two languages
+ *  cannot agree on. `radio-occupancy.test.ts` ties each of these to the named widths, so a
+ *  width change fails a test instead of silently propagating. */
+export const OGM_HOP_ENTRY_BYTES = 32 + 1;
+/** The part of a beacon that does not depend on how much it advertises:
+ *  `OGM_ID_BYTES + OGM_SEQ_BYTES + OGM_SCORE_BYTES + OGM_FLAG_BYTES + OGM_BATTERY_BYTES`. */
+export const OGM_FIXED_BYTES = 32 + 4 + 4 + (1 + 1 + 1 + 2) + 1;
+
+/**
+ * What one beacon costs on air, in bytes.
+ *
+ * The engine had no answer to this before `docs/06` §24.5 asked for one: OGMs ride
+ * `beacon()` rather than `onAir()`, so they have no `sizeBytes`, and every duration charged
+ * to a beacon was `hopLatencyBleMs` by default. A beacon is not a small packet — it carries
+ * the MPR neighbour set that makes two-hop coverage knowable (`docs/01`'s OLSR MPR) plus up
+ * to eight route advertisements — and that is the difference between the two occupancy
+ * models `radioOccupancy` selects.
+ */
+export function ogmWireBytes(neighborCount: number, bestHopCount: number): number {
+  return (
+    OGM_FIXED_BYTES +
+    Math.max(0, neighborCount) * OGM_ID_BYTES +
+    Math.max(0, bestHopCount) * OGM_HOP_ENTRY_BYTES
+  );
+}
+
+/** A beacon at both advertise limits, which is what a dense mesh actually sends:
+ *  `ogmWireBytes(MPR_NEIGHBOR_ADVERTISE_LIMIT, BEST_HOP_ADVERTISE_LIMIT)`, spelled out for
+ *  `check-parity.py` and tied back to the limits by a test. */
+export const OGM_MAX_WIRE_BYTES = 46 + 30 * 32 + 8 * 33;
+
 /** Padding block, per `skills/03`: "DO pad to 256B blocks". */
 export const PAD_BLOCK_BYTES = 256;
 

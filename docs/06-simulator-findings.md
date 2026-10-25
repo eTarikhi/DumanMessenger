@@ -2202,10 +2202,20 @@ The arithmetic pins the defect more narrowly than "a latency is used as an occup
 which is *why* `hopLatencyBleMs` can be 120 and `serializationMs` can charge only the excess
 over `BLE_MAX_BYTES`: the base latency is calibrated to one full-sized GATT write, and the two
 are consistent at that size. What is not consistent is that occupancy is therefore
-**size-independent below 1 024 bytes**. A 40-byte beacon and a 1 KB media chunk both hold the
-radio for 120 ms in this model, where at the modelled bit rate they are 4 ms and 102 ms apart.
-Beacons and short texts are the overwhelming majority of packets in an idle mesh, so the
-over-subscription is almost entirely small packets being charged a large packet's occupancy.
+**size-independent below 1 024 bytes**: a short text and a 1 KB media chunk both hold the radio
+for 120 ms here, where at the modelled bit rate a 256-byte padded text is 25.6 ms and a full
+packet 102.4 ms.
+
+> **Correction (§24.6).** This paragraph's example was a *"40-byte beacon"*, and it was wrong
+> in a way that matters: beacons are the largest routine packet in the system, not the
+> smallest. An OGM carries its MPR neighbour set and up to eight route advertisements, which
+> §24.6 derives at **630 B** typically and **1 270 B** at the advertise limits — 63 ms and
+> 127 ms of airtime. So the flat 120 ms is within a factor of two of a typical beacon's real
+> cost and about right for a fully loaded one; the over-charge falls on **small data packets**,
+> and the conclusion that follows ("the over-subscription is almost entirely small packets
+> being charged a large packet's occupancy") is wrong for beacons specifically. §24.6 measures
+> what happens when every packet is charged its own size, and the over-subscription only
+> halves.
 
 ### 24.5 The next question this leaves
 
@@ -2220,7 +2230,7 @@ beacon carries — originator, sequence number, score and the MPR neighbour set 
 way `PACKET_OVERHEAD_FROM_FIELDS` re-derives the sealed packet's 95 bytes rather than
 asserting it. That is a modelling change with published consequences, since §12's contention
 arms were measured under the flat occupancy and would have to be re-run and re-read beside it,
-so it is recorded as the next question rather than started halfway.
+so it is recorded as the next question rather than started halfway. **§24.6 answers it.**
 
 Until then the rule for reading this repository's numbers is the one §24.3 states: **counts are
 exact, durations are the model's**, and `radioDemandRatio` is published beside any duration so
@@ -2234,3 +2244,83 @@ in `SimulationStats` in both engines, with per-node accessors (`wakeLocksFor`,
 `docs/04` §6's battery-drain attack needs, and what the tests use to show that 30 broadcasts
 concentrated on one node cost its neighbours more radio time than the same 30 spread evenly.
 The accounting consumes no RNG, so every golden vector is unchanged.
+
+### 24.6 The answer: beacons have a size now, and occupancy is a knob
+
+`radioOccupancy` selects between the two readings of "how long does this packet hold a radio":
+
+- `"hop-latency"` ships, unchanged, and is what every number in this repository was measured
+  under: the calibrated hop latency plus serialization of whatever exceeds a full BLE packet.
+- `"airtime"` charges `bytes × 8 / kbps` for the **whole** packet, from the rate constants the
+  engine already had (`bleKbps` 80, `wifiDirectKbps` 20 000), and sizes beacons from the
+  fields `docs/03` §4 says an OGM carries.
+
+Delivery latency is untouched: `airTime` keeps its hop-latency base in both models, because
+that is what `docs/02` §6's budget measures. Only the busy-radio duration — the one `csma`,
+the capture model and the wake-lock accounting read — changes. Under the shipped `free`/`none`
+baseline nothing reads it at all except the accounting, so `radio-occupancy.test.ts` asserts
+field by field that `totalDelivered`, `totalForwarded`, `deliveryRatio`, `broadcastReach`,
+`overheadRatio`, `mprSuppressed`, `controlOverhead`, `sentUnicast` and `sentBroadcast` are
+**identical** between the two models while `wakeLockMs` is not, and that the acquisition
+*count* is identical too, since only durations changed. That is what makes the knob safe to
+add defaulted off.
+
+**The derived beacon.** `ogmWireBytes` follows `PACKET_OVERHEAD_FROM_FIELDS`'s precedent and
+re-derives the size from field widths instead of asserting one: `nodeId` 32 B, `seq` 4 B,
+`score` 4 B, `isSuper`/`declinedRouter`/`hopCount` 1 B each, `peerCount` 2 B, `batteryBucket`
+1 B — 46 B fixed — plus 32 B per advertised neighbour and 33 B per `bestHopTo` entry, bounded
+by the limits the engine actually enforces (`MPR_NEIGHBOR_ADVERTISE_LIMIT` 30,
+`BEST_HOP_ADVERTISE_LIMIT` 8, now exported so a size bound cannot drift from the real one).
+
+| beacon | bytes | airtime at 80 kbit/s | charged before |
+| --- | ---: | ---: | ---: |
+| fixed fields only | 46 B | 4.6 ms | 120 ms |
+| typical (10 neighbours, 8 routes) | **630 B** | **63.0 ms** | 120 ms |
+| at both advertise limits (30, 8) | **1 270 B** | 127.0 ms | 120 ms |
+
+The last row is a finding of its own: **a fully loaded beacon is 1 270 B, which is over the
+1 024 B BLE ceiling**, so `selectTransport` would put a dense node's beacons on Wi-Fi Direct.
+Nothing sized beacons before, so nothing noticed. Whether to clamp the MPR set, shorten the
+route advertisements, or accept that dense nodes beacon on the other radio is a spec decision
+for `docs/03` §4, not a simulator one, and it is recorded here rather than made silently.
+
+**Measured** (`npm run media occupancy`, three seeds, 30 messages over a 60 s window after a
+90 s settle):
+
+| scenario | channel | occupancy | radio demand | wake time | delivery | queue drops | deferrals |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| campus_quad | free | hop-latency | 4.23× | 84.60 min | 100.0 % | 0 | 0 |
+| campus_quad | free | **airtime** | **1.92×** | 38.46 min | 100.0 % | 0 | 0 |
+| campus_quad | csma | hop-latency | 4.16× | 83.22 min | 98.7 % | 507 | 3 886 |
+| campus_quad | csma | **airtime** | 1.88× | 37.66 min | **100.0 %** | **361** | **2 067** |
+| festival_crowd | free | hop-latency | 8.56× | 513.79 min | 95.8 % | 0 | 0 |
+| festival_crowd | free | **airtime** | **5.69×** | 341.48 min | 95.8 % | 0 | 0 |
+| festival_crowd | halfDuplex | hop-latency | 8.10× | 485.72 min | 77.9 % | 3 767 | 2 513 |
+| festival_crowd | halfDuplex | **airtime** | 5.50× | 330.08 min | **75.9 %** | 3 672 | 2 610 |
+| festival_crowd | csma | hop-latency | 7.56× | 453.78 min | 71.5 % | 3 929 | 13 540 |
+| festival_crowd | csma | **airtime** | 5.59× | 335.26 min | **81.9 %** | 3 813 | **6 382** |
+
+Four things this says.
+
+1. **Sizing packets properly halves the demand and does not make it physical.** 4.23× → 1.92×
+   on campus_quad, 8.56× → 5.69× in the crowd. Still above 1 everywhere, so §24.3's
+   over-subscription is only *partly* the flat per-packet charge: the dominant term is the
+   volume of beacon receptions and the gossip that follows them, which no per-packet
+   correction can touch. At 60 nodes with `docs/03` §1's 2 s interval, the control plane alone
+   asks for several times the airtime one radio has, even priced correctly. That is a finding
+   about the beacon interval at density, not about this engine's constants.
+2. **Under the shipped baseline the two models are the same world**, as the test above pins.
+3. **Under contention they diverge, and not uniformly.** csma gains a lot — crowd delivery
+   71.5 % → 81.9 %, deferrals halved; campus delivery 98.7 % → 100 % with 29 % fewer drops.
+   Half-duplex in the same crowd goes the other way: 77.9 % → **75.9 %**, deferrals up 4 %. A
+   radio that frees sooner transmits sooner, and whether that helps depends on whether the
+   model lets it listen first — csma does, half-duplex does not. The disagreement is reported
+   rather than explained; nothing here establishes the mechanism.
+4. **Therefore `docs/08` §12's contention magnitudes are a property of the occupancy model
+   they were measured under**, not of the mesh. Its directions survive — a queue still earns
+   back what collisions cost, capture still takes over as the margin rises — but a reader
+   quoting §12's drop and deferral counts is quoting the flat-charge world, and §12 now says
+   so.
+
+What ships is the default: `"hop-latency"`, every published number where it was, golden
+vectors byte-identical, and the alternative measured rather than asserted.

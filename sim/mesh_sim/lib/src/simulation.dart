@@ -45,6 +45,7 @@ class SimConfig {
     this.ogmIntervalMs = 2000,
     this.coverTraffic = false,
     this.coverIntervalMs = 30000,
+    this.radioOccupancy = RadioOccupancy.hopLatency,
     this.ogmJitterMs = 200,
     this.ogmTtl = 5,
     this.electionIntervalMs = 30000,
@@ -147,6 +148,15 @@ class SimConfig {
   /// Mean interval between a node's dummy beacons. "Low rate" is the document's word and
   /// not a number, so docs/06 §23 sweeps it instead of picking one.
   final double coverIntervalMs;
+
+  /// How long a packet holds a radio, which is not the same question as how long it takes to
+  /// arrive (docs/06 §24.5-§24.6). [RadioOccupancy.hopLatency] ships and is what every
+  /// published number was measured under; [RadioOccupancy.airtime] charges only
+  /// `bytes x 8 / kbps` for the whole packet. Delivery latency is unaffected either way —
+  /// `airTime` keeps its hop-latency base, because that is what docs/02 §6's budget
+  /// measures — and under the shipped `free`/`none` baseline nothing reads occupancy except
+  /// the wake-lock accounting, so the knob moves telemetry and nothing else.
+  final RadioOccupancy radioOccupancy;
   final double ogmJitterMs;
   final int ogmTtl;
   final double electionIntervalMs;
@@ -446,6 +456,7 @@ class SimConfig {
     BlockScope? blockScope,
     bool? coverTraffic,
     double? coverIntervalMs,
+    RadioOccupancy? radioOccupancy,
     bool? communityRelayPreference,
     bool? dtnPreferCommunity,
     double? voiceKbps,
@@ -511,6 +522,7 @@ class SimConfig {
         blockScope: blockScope ?? this.blockScope,
         coverTraffic: coverTraffic ?? this.coverTraffic,
         coverIntervalMs: coverIntervalMs ?? this.coverIntervalMs,
+        radioOccupancy: radioOccupancy ?? this.radioOccupancy,
         communityRelayPreference:
             communityRelayPreference ?? this.communityRelayPreference,
         dtnPreferCommunity: dtnPreferCommunity ?? this.dtnPreferCommunity,
@@ -1899,7 +1911,7 @@ class MeshSimulation {
     // transmits once per neighbour. Charging the sender per peer inflated an idle node's
     // wake-lock share past 100 % of the clock, which is how that was caught. The receiver
     // side *is* per peer, because each of them really does wake and listen.
-    if (peers.isNotEmpty) _holdWakeLock(node.id, _beaconWakeMs());
+    if (peers.isNotEmpty) _holdWakeLock(node.id, _beaconWakeMs(ogm));
     for (final peer in peers) {
       _ogmTx++;
       _pushLog(
@@ -1911,7 +1923,7 @@ class MeshSimulation {
         _lostOgmTx++;
         continue;
       }
-      _holdWakeLock(peer.id, _beaconWakeMs());
+      _holdWakeLock(peer.id, _beaconWakeMs(ogm));
       _acceptOgm(peer, ogm, node.id);
     }
   }
@@ -1925,7 +1937,7 @@ class MeshSimulation {
     // One gossip retransmission, not one per neighbour — the same reasoning as [_beacon].
     final gossipTo =
         peersInRange(receiver, nodes, rf).where((p) => p.id != via).toList();
-    if (gossipTo.isNotEmpty) _holdWakeLock(receiver.id, _beaconWakeMs());
+    if (gossipTo.isNotEmpty) _holdWakeLock(receiver.id, _beaconWakeMs(next));
     for (final peer in gossipTo) {
       _ogmTx++;
       if (chance(rng,
@@ -1933,7 +1945,7 @@ class MeshSimulation {
         _lostOgmTx++;
         continue;
       }
-      _holdWakeLock(peer.id, _beaconWakeMs());
+      _holdWakeLock(peer.id, _beaconWakeMs(next));
       _acceptOgm(peer, next, receiver.id);
     }
   }
@@ -2423,13 +2435,45 @@ class MeshSimulation {
     t.srttMs = 0.875 * srtt + 0.125 * rtt;
   }
 
+  /// How long [bytes] take to push over [transport] at the modelled bit rate — the whole
+  /// packet, unlike [serializationMs], which charges only the excess over a full BLE packet
+  /// because the calibrated hop latency already includes one.
+  double airtimeMs(int bytes, TransportType transport) {
+    final kbps = transport == TransportType.wifiDirect
+        ? config.wifiDirectKbps
+        : config.bleKbps;
+    return (math.max(0, bytes) * 8) / kbps; // bits over kbit/s is milliseconds
+  }
+
+  /// How long a packet holds a radio, under [SimConfig.radioOccupancy]. The
+  /// [RadioOccupancy.hopLatency] branch is the expression `_onAir` used before this method
+  /// existed, so the default model is unchanged and the golden vectors do not move.
+  double occupancyMs(int bytes, TransportType transport) {
+    if (config.radioOccupancy == RadioOccupancy.airtime) {
+      return airtimeMs(bytes, transport);
+    }
+    return (transport == TransportType.wifiDirect
+            ? config.hopLatencyWifiMs
+            : config.hopLatencyBleMs) +
+        serializationMs(bytes, transport);
+  }
+
   /// What one beacon costs in wake-lock time. Beacons ride [_beacon] rather than [_onAir],
-  /// so they have no packet and no size in this engine — the limitation docs/06 §23.2 names
-  /// for cover traffic — and are accounted as one BLE hop with no payload term. That is a
-  /// floor: a real OGM carries an originator, a sequence number, a score and a neighbour
-  /// list. It cannot be ignored, because on an idle network beaconing is the only radio
+  /// so under the shipped occupancy model they are accounted as one BLE hop with no payload
+  /// term. It cannot be ignored, because on an idle network beaconing is the only radio
   /// activity there is — one acquisition every 2 s per node.
-  double _beaconWakeMs() => config.hopLatencyBleMs;
+  ///
+  /// Under [RadioOccupancy.airtime] the duration comes from [ogmWireBytes], derived from the
+  /// fields an OGM actually carries, so a beacon advertising 30 neighbours and 8 routes
+  /// costs what that payload costs and one advertising 3 neighbours costs far less.
+  double _beaconWakeMs(Ogm ogm) {
+    if (config.radioOccupancy == RadioOccupancy.airtime) {
+      return airtimeMs(
+          ogmWireBytes(ogm.neighborIds.length, ogm.bestHopTo.length),
+          TransportType.ble);
+    }
+    return config.hopLatencyBleMs;
+  }
 
   /// One wake-lock acquisition of [ms] milliseconds by [nodeId] (skills/07 telemetry).
   void _holdWakeLock(NodeId nodeId, double ms) {
@@ -3040,10 +3084,7 @@ class MeshSimulation {
     // below needs it before the packet's fate is known, and both branches that never land
     // return it. No random number is consumed here, so `ChannelCapture.none` stays
     // bit-identical to the model every other result was measured under.
-    final occupied = (msg.transport == TransportType.wifiDirect
-            ? config.hopLatencyWifiMs
-            : config.hopLatencyBleMs) +
-        serializationMs(msg.sizeBytes, msg.transport);
+    final occupied = occupancyMs(msg.sizeBytes, msg.transport);
     if (config.channelAccess != ChannelAccess.free) {
       // A retry timer measures the silence after a transmission, so under a queued radio it
       // has to start when the packet leaves rather than when it was handed over.
@@ -3158,11 +3199,18 @@ class MeshSimulation {
     final airTime = base +
         serializationMs(msg.sizeBytes, msg.transport) +
         randRange(rng, config.jitterMinMs, config.jitterMaxMs);
-    if (capture) _rxUntil[target.id] = now + airTime;
+    // Occupancy is not latency. `airTime` says when this packet lands, which keeps its
+    // hop-latency base under both models because that is what docs/02 §6's budget measures;
+    // `rxOccupied` says how long the radio was busy hearing it, which is the only one of the
+    // two [SimConfig.radioOccupancy] may change. Identical under the shipped model.
+    final rxOccupied = config.radioOccupancy == RadioOccupancy.airtime
+        ? airtimeMs(msg.sizeBytes, msg.transport)
+        : airTime;
+    if (capture) _rxUntil[target.id] = now + rxOccupied;
     // The receiving side of the same lock, counted whether or not the packet survives the
     // link: a radio that woke and listened spent the power either way, which is what makes
     // a flood a battery-drain attack rather than a bandwidth one.
-    _holdWakeLock(target.id, airTime);
+    _holdWakeLock(target.id, rxOccupied);
     int? seq;
     if (config.channelCapture == ChannelCapture.strongest) {
       // Only assigned here, so the two shipped modes consume nothing and behave exactly as

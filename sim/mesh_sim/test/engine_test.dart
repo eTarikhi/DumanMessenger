@@ -2298,6 +2298,127 @@ void main() {
       expect(others(measured(concentrated)), greaterThan(others(measured(spread))));
     });
   });
+
+  group('radio occupancy and the derived beacon size (docs/06 §24.6)', () {
+    // Mirrors `src/__tests__/radio-occupancy.test.ts`. What a radio is *busy* for is not
+    // how long a packet takes to arrive, and the shipped model charged one for the other.
+
+    // Takes a config rather than a scenario function: Dart's scenarios are declared with an
+    // optional positional seed (`SimConfig campusQuad([int seed = 42])`), and whether that
+    // type is assignable to a required-parameter function type is a subtyping question this
+    // repository has no compiler to answer. Passing the built config avoids asking it.
+    MeshSimulation run(SimConfig base,
+        {ChannelAccess? access, RadioOccupancy? occupancy}) {
+      final sim = MeshSimulation(
+          base.copyWith(channelAccess: access, radioOccupancy: occupancy));
+      sim.runFor(90000.0);
+      sim.refresh();
+      sim.clearRecords();
+      sim.injectTraffic(30, 40000.0);
+      sim.runFor(60000.0);
+      sim.refresh();
+      return sim;
+    }
+
+    test('derives a beacon from the fields docs/03 §4 says an OGM carries', () {
+      expect(ogmIdBytes, equals(32));
+      expect(ogmHopEntryBytes, equals(33));
+      expect(ogmFixedBytes, equals(46));
+      expect(ogmWireBytes(0, 0), equals(ogmFixedBytes));
+      expect(ogmWireBytes(10, 8), equals(46 + 10 * 32 + 8 * 33));
+      expect(ogmWireBytes(10, 8), equals(630));
+      expect(ogmWireBytes(-5, -5), equals(ogmFixedBytes));
+    });
+
+    test('ties the literal widths to the named ones, which is what makes them safe', () {
+      // `check-parity.py` compares the two engines' non-scalar initialisers as *text*, and
+      // identifier case is the one thing Dart and TypeScript cannot agree on, so these are
+      // spelled as literals on both sides. These assertions are what stop a width change
+      // from silently invalidating the literal.
+      expect(ogmHopEntryBytes, equals(ogmIdBytes + 1));
+      expect(
+          ogmFixedBytes,
+          equals(ogmIdBytes +
+              ogmSeqBytes +
+              ogmScoreBytes +
+              ogmFlagBytes +
+              ogmBatteryBytes));
+      expect(mprNeighborAdvertiseLimit, equals(30));
+      expect(bestHopAdvertiseLimit, equals(8));
+      expect(ogmMaxWireBytes,
+          equals(ogmWireBytes(mprNeighborAdvertiseLimit, bestHopAdvertiseLimit)));
+      expect(ogmMaxWireBytes, equals(1270));
+    });
+
+    test('puts a fully loaded beacon over the BLE ceiling', () {
+      // A node advertising 30 neighbours and 8 routes sends 1270 B, and `selectTransport`
+      // flips to Wi-Fi Direct above 1024. Nothing sized beacons before, so nothing noticed.
+      expect(ogmMaxWireBytes, greaterThan(bleMaxBytes));
+      expect(ogmWireBytes(10, 8), lessThan(bleMaxBytes));
+    });
+
+    test('ships on the model every published number was measured under', () {
+      expect(campusQuad(42).radioOccupancy, equals(RadioOccupancy.hopLatency));
+      expect(festivalCrowd(42).radioOccupancy, equals(RadioOccupancy.hopLatency));
+    });
+
+    test('charges airtime from the rate constants the engine already had', () {
+      final sim = MeshSimulation(campusQuad(42));
+      // 1024 B at 80 kbit/s is 102.4 ms — which is why a 120 ms hop latency can claim to
+      // include one full-sized GATT write, and why the two models agree near the ceiling.
+      expect(sim.airtimeMs(1024, TransportType.ble), closeTo(102.4, 1e-9));
+      expect(sim.airtimeMs(256, TransportType.ble), closeTo(25.6, 1e-9));
+      expect(sim.airtimeMs(0, TransportType.ble), equals(0));
+      expect(sim.airtimeMs(630, TransportType.ble), closeTo(63.0, 1e-9));
+      expect(sim.airtimeMs(1024, TransportType.wifiDirect), closeTo(0.4096, 1e-9));
+    });
+
+    test('changes telemetry and nothing else under the shipped radio baseline', () {
+      // Under free/none no code path reads occupancy except the wake-lock accounting, so the
+      // two models must produce identical worlds and different telemetry. This is what makes
+      // the knob safe to add defaulted off: it cannot move a published delivery, latency or
+      // overhead figure unless a contention model is switched on at the same time.
+      final flat = run(campusQuad(42), occupancy: RadioOccupancy.hopLatency);
+      final sized = run(campusQuad(42), occupancy: RadioOccupancy.airtime);
+      expect(flat.config.channelAccess, equals(ChannelAccess.free));
+      expect(flat.config.channelCapture, equals(ChannelCapture.none));
+      expect(sized.stats.totalDelivered, equals(flat.stats.totalDelivered));
+      expect(sized.stats.totalForwarded, equals(flat.stats.totalForwarded));
+      expect(sized.stats.deliveryRatio, equals(flat.stats.deliveryRatio));
+      expect(sized.stats.broadcastReach, equals(flat.stats.broadcastReach));
+      expect(sized.stats.overheadRatio, equals(flat.stats.overheadRatio));
+      expect(sized.stats.mprSuppressed, equals(flat.stats.mprSuppressed));
+      expect(sized.stats.controlOverhead, equals(flat.stats.controlOverhead));
+      expect(sized.stats.sentUnicast, equals(flat.stats.sentUnicast));
+      expect(sized.stats.sentBroadcast, equals(flat.stats.sentBroadcast));
+      // Same events, different durations.
+      expect(sized.stats.wakeLocks, equals(flat.stats.wakeLocks));
+      expect(sized.stats.wakeLockMs, lessThan(flat.stats.wakeLockMs));
+    });
+
+    test('halves the demanded radio time without making it physical', () {
+      // The over-subscription docs/06 §24.3 measured is only partly the flat per-packet
+      // charge: the dominant term is the volume of beacon receptions and their gossip.
+      final flat = run(campusQuad(42), occupancy: RadioOccupancy.hopLatency);
+      final sized = run(campusQuad(42), occupancy: RadioOccupancy.airtime);
+      expect(sized.stats.radioDemandRatio, lessThan(flat.stats.radioDemandRatio));
+      expect(sized.stats.radioDemandRatio, greaterThan(1));
+      expect(flat.stats.radioDemandRatio, greaterThan(3));
+      expect(sized.stats.radioDemandRatio, lessThan(2.5));
+    });
+
+    test('costs a dense crowd fewer deferrals under csma, and buys it delivery', () {
+      // docs/08 §12's magnitudes were measured under the flat charge, so they are
+      // pessimistic here — by about ten points of delivery on three seeds.
+      final flat = run(festivalCrowd(42),
+          access: ChannelAccess.csma, occupancy: RadioOccupancy.hopLatency);
+      final sized = run(festivalCrowd(42),
+          access: ChannelAccess.csma, occupancy: RadioOccupancy.airtime);
+      expect(sized.stats.channelDeferrals, lessThan(flat.stats.channelDeferrals));
+      expect(sized.stats.channelDrops, lessThan(flat.stats.channelDrops));
+      expect(sized.stats.deliveryRatio, greaterThan(flat.stats.deliveryRatio));
+    });
+  });
 }
 
 double _ln(num x) => math.log(x.toDouble());

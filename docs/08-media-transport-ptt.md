@@ -552,6 +552,19 @@ radio a phone actually has.
 > yet and made queueing look substantially worse than it is. §12.11 documents the defect
 > and what each table said before it was fixed; the tables below are the corrected ones.
 
+> **Every number in this section is also a property of one occupancy model** (`docs/06`
+> §24.6). A packet here holds a radio for the calibrated hop latency — 120 ms on BLE —
+> whatever its size, because `hopLatencyBleMs` was calibrated to include one full-sized GATT
+> write. That is right at 1 024 B and over-charges everything below it: a 256 B padded text
+> is 25.6 ms of airtime at the modelled bit rate, and a beacon (which §24.6 derives at 630 B
+> typically) is 63 ms. Charging each packet its own size instead, behind
+> `radioOccupancy: "airtime"`, moves this section's magnitudes considerably and **not always
+> the same way**: under `csma` in `festival_crowd` delivery goes 71.5 % → 81.9 % and
+> deferrals halve, while under `half-duplex` in the same crowd delivery goes 77.9 % → 75.9 %.
+> The *directions* below survive — a queue still earns back what collisions cost, capture
+> still takes over as the margin rises, a media load gate still costs what it says it costs —
+> but the drop and deferral counts are the flat-charge world's, and are quoted here as such.
+
 `channelAccess: "free"` ships and is the default: an infinitely wide radio, exactly what
 every number in this document before §12 was measured under, golden vectors byte-identical
 included. `"halfDuplex"` gives each device one transmitter doing one thing at a time —

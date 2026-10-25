@@ -66,6 +66,7 @@ import {
   enqueueOpp,
   isSeen,
   markSeen,
+  ogmWireBytes,
   pruneAcked,
   pruneOppQueue,
   pruneSeenCache,
@@ -154,6 +155,23 @@ export interface SimConfig {
   /** Mean interval between a node's dummy beacons. "Low rate" is the document's word and
    *  not a number, so `docs/06` §23 sweeps it instead of picking one. */
   coverIntervalMs: number;
+  /** How long a packet holds a radio — which is *not* the same question as how long it takes
+   *  to arrive, and `docs/06` §24.3 measured what conflating them costs.
+   *
+   *  - `"hop-latency"` ships. Occupancy is the calibrated hop latency plus the serialization
+   *    of whatever exceeds a full BLE packet, which is what `docs/08` §12's contention arms
+   *    were measured under and what every published number in this repository assumes.
+   *  - `"airtime"` charges only `bytes × 8 / kbps`, the rate the engine already has for
+   *    serialization, applied to the whole packet instead of to its excess over 1 024 B.
+   *    Physically that is how long a radio is busy; the hop latency is scheduling and
+   *    propagation on top of it, during which a device may or may not be awake.
+   *
+   *  Delivery latency is **not** affected: `airTime` keeps its hop-latency base in both
+   *  models, because that is what `docs/02` §6's budget measures. Only the busy-radio
+   *  duration used by `csma`, the capture model and the wake-lock accounting changes. Under
+   *  the shipped `free`/`none` baseline nothing consumes occupancy at all, so this knob
+   *  moves the telemetry and nothing else — which is what makes it safe to add. */
+  radioOccupancy: "hop-latency" | "airtime";
   ogmJitterMs: number;
   ogmTtl: number;
   electionIntervalMs: number;
@@ -469,6 +487,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   ogmIntervalMs: 2000,
   coverTraffic: false,
   coverIntervalMs: 30_000,
+  radioOccupancy: "hop-latency",
   ogmJitterMs: 200,
   ogmTtl: 5,
   electionIntervalMs: 30000,
@@ -701,7 +720,11 @@ export interface SimulationStats {
    *  in `beacon()` exists to give each link its own loss draw, not because the radio
    *  transmits once per neighbour — and once to each peer that actually hears it, because
    *  each of those radios really did wake. Charging the sender per peer inflated an idle
-   *  node's share past 100 % of the clock, which is how that was caught. */
+   *  node's share past 100 % of the clock, which is how that was caught.
+   *
+   *  Under `radioOccupancy: "airtime"` the duration comes from `ogmWireBytes`, derived from
+   *  the fields an OGM actually carries, so a beacon advertising 30 neighbours and 8 routes
+   *  costs what that payload costs and one advertising 3 neighbours costs far less. */
   wakeLocks: number;
   /** Total milliseconds those locks were held, network-wide, over the measured window. */
   wakeLockMs: number;
@@ -1196,6 +1219,31 @@ export class MeshSimulation {
   }
 
   /**
+   * How long `bytes` take to push over `transport` at the modelled bit rate — the whole
+   * packet, unlike `serializationMs`, which charges only the excess over a full BLE packet
+   * because the calibrated hop latency already includes one.
+   */
+  airtimeMs(bytes: number, transport: TransportType): number {
+    const kbps = transport === "wifiDirect" ? this.config.wifiDirectKbps : this.config.bleKbps;
+    return (Math.max(0, bytes) * 8) / kbps; // bits over kbit/s is milliseconds
+  }
+
+  /**
+   * How long a packet holds a radio, under `radioOccupancy`.
+   *
+   * The `"hop-latency"` branch is the expression `onAir` used before this method existed,
+   * byte for byte, so the default model is unchanged and the golden vectors do not move.
+   */
+  occupancyMs(bytes: number, transport: TransportType): number {
+    if (this.config.radioOccupancy === "airtime") return this.airtimeMs(bytes, transport);
+    return (
+      (transport === "wifiDirect"
+        ? this.config.hopLatencyWifiMs
+        : this.config.hopLatencyBleMs) + this.serializationMs(bytes, transport)
+    );
+  }
+
+  /**
    * What one beacon costs in wake-lock time.
    *
    * Beacons ride `beacon()` rather than `onAir()`, so they have no packet and no size in
@@ -1207,7 +1255,16 @@ export class MeshSimulation {
    * one acquisition every 2 s per node, which is exactly what `skills/07`'s duty-cycle
    * question is about.
    */
-  private beaconWakeMs(): number {
+  private beaconWakeMs(ogm: OGM): number {
+    if (this.config.radioOccupancy === "airtime") {
+      // The size the beacon actually carries: its MPR neighbour set and its route
+      // advertisements are the payload, and both are bounded by the advertise limits
+      // `ogmWireBytes` was derived from.
+      return this.airtimeMs(
+        ogmWireBytes(ogm.neighborIds.length, Object.keys(ogm.bestHopTo).length),
+        "ble"
+      );
+    }
     return this.config.hopLatencyBleMs;
   }
 
@@ -1625,7 +1682,7 @@ export class MeshSimulation {
     // transmits once per neighbour. Charging the sender per peer inflated an idle node's
     // wake-lock share past 100 % of the clock, which is how this was caught. The receiver
     // side *is* per peer, because each of them really does wake and listen.
-    if (peers.length > 0) this.holdWakeLock(node.id, this.beaconWakeMs());
+    if (peers.length > 0) this.holdWakeLock(node.id, this.beaconWakeMs(ogm));
     for (const peer of peers) {
       this.ogmTx++;
       this.pushLog("ogm", node.id, `OGM seq ${ogm.seq} → ${peer.id} (score ${ogm.score.toFixed(2)})`, {
@@ -1636,7 +1693,7 @@ export class MeshSimulation {
         continue;
       }
       // The receiver pays only if it heard the beacon, mirroring the data path.
-      this.holdWakeLock(peer.id, this.beaconWakeMs());
+      this.holdWakeLock(peer.id, this.beaconWakeMs(ogm));
       this.acceptOgm(peer, ogm, node.id);
     }
   }
@@ -1649,7 +1706,7 @@ export class MeshSimulation {
     if (!next) return;
     // One gossip retransmission, not one per neighbour — the same reasoning as `beacon`.
     const gossipTo = peersInRange(receiver, this.nodes, this.rf).filter((p) => p.id !== via);
-    if (gossipTo.length > 0) this.holdWakeLock(receiver.id, this.beaconWakeMs());
+    if (gossipTo.length > 0) this.holdWakeLock(receiver.id, this.beaconWakeMs(next));
     for (const peer of gossipTo) {
       this.ogmTx++;
       if (
@@ -1658,7 +1715,7 @@ export class MeshSimulation {
         this.lostOgmTx++;
         continue;
       }
-      this.holdWakeLock(peer.id, this.beaconWakeMs());
+      this.holdWakeLock(peer.id, this.beaconWakeMs(next));
       this.acceptOgm(peer, next, receiver.id);
     }
   }
@@ -2766,9 +2823,7 @@ export class MeshSimulation {
     // model below needs it before the packet's fate is known, and both branches that never
     // land return it. No random number is consumed here, so `channelCapture: "none"` stays
     // bit-identical to the model every other result in this repository was measured under.
-    const occupied =
-      (msg.transport === "wifiDirect" ? this.config.hopLatencyWifiMs : this.config.hopLatencyBleMs) +
-      this.serializationMs(msg.sizeBytes, msg.transport);
+    const occupied = this.occupancyMs(msg.sizeBytes, msg.transport);
     if (this.config.channelAccess !== "free") {
       // A retry timer measures the silence after a transmission, so under a queued radio it
       // has to start when the packet leaves rather than when it was handed over.
@@ -2873,11 +2928,19 @@ export class MeshSimulation {
       base +
       this.serializationMs(msg.sizeBytes, msg.transport) +
       randRange(this.rng, this.config.jitterMinMs, this.config.jitterMaxMs);
-    if (capture) this.rxUntil.set(target.id, this.now + airTime);
+    // Occupancy is not latency. `airTime` says when this packet lands, which keeps its
+    // hop-latency base under both models because that is what docs/02 §6's budget measures;
+    // `rxOccupied` says how long the radio was busy hearing it, which is the only one of the
+    // two `radioOccupancy` may change (docs/06 §24.5). Identical under the shipped model.
+    const rxOccupied =
+      this.config.radioOccupancy === "airtime"
+        ? this.airtimeMs(msg.sizeBytes, msg.transport)
+        : airTime;
+    if (capture) this.rxUntil.set(target.id, this.now + rxOccupied);
     // The receiving side of the same lock. Counted whether or not the packet survives the
     // link: a radio that woke up and listened spent the power either way, which is exactly
     // what makes a flood a battery-drain attack rather than a bandwidth one.
-    this.holdWakeLock(target.id, airTime);
+    this.holdWakeLock(target.id, rxOccupied);
     let seq: number | undefined;
     if (this.config.channelCapture === "strongest") {
       // Only assigned here, so the two shipped modes consume nothing and behave exactly as

@@ -120,8 +120,11 @@ export function computeScore(
   return Math.min(1, score);
 }
 
-/** Entries advertised in an OGM so peers can learn routes to non-neighbours. */
-const BEST_HOP_ADVERTISE_LIMIT = 8;
+/** Entries advertised in an OGM so peers can learn routes to non-neighbours.
+ *  Exported so `OGM_MAX_WIRE_BYTES` — which `check-parity.py` requires to be spelled as a
+ *  literal on both engines — can be tied back to the limit the engine really enforces by a
+ *  test. A size bound that could drift from the real one would be worse than no bound. */
+export const BEST_HOP_ADVERTISE_LIMIT = 8;
 
 export function buildOGM(node: MeshNode, hopCount = 0): OGM {
   const bestHopTo: Record<string, number> = {};

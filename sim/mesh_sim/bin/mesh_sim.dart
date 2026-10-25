@@ -98,6 +98,12 @@ Duman mesh simulator (headless)
   --cover-interval <ms> Mean gap between a node's dummy beacons, default 30000. Read only
                         with --cover-traffic, like --capture-ratio is read only under
                         --channel-capture strongest
+  --radio-occupancy <n> How long a packet holds a radio, which is not how long it takes to
+                        arrive: hop-latency (ships, and is what docs/08 §12's contention
+                        numbers were measured under) or airtime (bytes x 8 / kbps for the
+                        whole packet, beacons sized from the fields an OGM carries).
+                        Delivery latency is the same either way; under the shipped free/none
+                        radio only the wake-lock telemetry moves. docs/06 §24.6
   --block-scope <name>
                       delivery | relay. How far a local block reaches (docs/04 §6,
                       "Block/mute peer locally"). `delivery` — the default — means the
@@ -329,6 +335,23 @@ void main(List<String> args) {
     config = config.copyWith(coverIntervalMs: ms);
   }
 
+  final occupancyName = _arg(args, '--radio-occupancy', '');
+  if (occupancyName.isNotEmpty) {
+    switch (occupancyName) {
+      case 'hop-latency':
+        config = config.copyWith(radioOccupancy: RadioOccupancy.hopLatency);
+        break;
+      case 'airtime':
+        config = config.copyWith(radioOccupancy: RadioOccupancy.airtime);
+        break;
+      default:
+        stderr.writeln('Unknown --radio-occupancy "$occupancyName". '
+            'Try: hop-latency | airtime');
+        exitCode = 64;
+        return;
+    }
+  }
+
   final blockScopeName = _arg(args, '--block-scope', '');
   if (blockScopeName.isNotEmpty) {
     switch (blockScopeName) {
@@ -433,6 +456,7 @@ void main(List<String> args) {
       'blockScope': config.blockScope.wire,
       'coverTraffic': config.coverTraffic,
       'coverIntervalMs': config.coverIntervalMs,
+      'radioOccupancy': config.radioOccupancy.wire,
     },
     'nodes': sim.nodes.length,
     'sent': sent,

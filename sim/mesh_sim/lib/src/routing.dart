@@ -131,6 +131,47 @@ bool isBlockableTraffic(MeshMessage msg) =>
 /// Text < 1 KB rides BLE; larger payloads need Wi-Fi Direct (docs/02 §3.1).
 const int bleMaxBytes = 1024;
 
+/// One OGM's field widths, derived from [Ogm] and docs/03 §4 the way [packetOverheadBytes]
+/// derives the sealed packet's 95 B from skills/03's layout — a beacon's size has to come
+/// from the fields it actually carries, not from a guess.
+///
+/// 32 is the X25519 public-key width docs/07 §4 specifies, the same field
+/// [packetOverheadBytes] spells as `from`.
+const int ogmIdBytes = 32;
+const int ogmSeqBytes = 4;
+const int ogmScoreBytes = 4;
+
+/// `isSuper`, `declinedRouter` and `hopCount` at 1 B each, `peerCount` at 2 B.
+const int ogmFlagBytes = 1 + 1 + 1 + 2;
+
+/// `batteryBucket` is `(battery * 10).floor()`, so 0-10 fits one byte.
+const int ogmBatteryBytes = 1;
+
+/// One `bestHopTo` entry: a destination id and its hop count. Spelled as literals, like
+/// [packetOverheadBytes], because `check-parity.py` compares the two engines' non-scalar
+/// initialisers as *text* and identifier case is the one thing the two languages cannot
+/// agree on. `engine_test.dart` ties each of these to the named widths, so a width change
+/// fails a test instead of silently propagating.
+const int ogmHopEntryBytes = 32 + 1;
+
+/// The part of a beacon that does not depend on how much it advertises:
+/// `ogmIdBytes + ogmSeqBytes + ogmScoreBytes + ogmFlagBytes + ogmBatteryBytes`.
+const int ogmFixedBytes = 32 + 4 + 4 + (1 + 1 + 1 + 2) + 1;
+
+/// What one beacon costs on air, in bytes. OGMs ride `_beacon` rather than `_onAir`, so they
+/// had no size at all and every duration charged to a beacon was a hop latency by default.
+/// A beacon is not a small packet: it carries the MPR neighbour set that makes two-hop
+/// coverage knowable, plus up to eight route advertisements.
+int ogmWireBytes(int neighborCount, int bestHopCount) =>
+    ogmFixedBytes +
+    math.max(0, neighborCount) * ogmIdBytes +
+    math.max(0, bestHopCount) * ogmHopEntryBytes;
+
+/// A beacon at both advertise limits, which is what a dense mesh actually sends:
+/// `ogmWireBytes(mprNeighborAdvertiseLimit, bestHopAdvertiseLimit)`, spelled out for
+/// `check-parity.py` and tied back to the limits by a test.
+const int ogmMaxWireBytes = 46 + 30 * 32 + 8 * 33;
+
 const String broadcastAddress = 'BROADCAST';
 
 TransportType selectTransport(int sizeBytes) =>

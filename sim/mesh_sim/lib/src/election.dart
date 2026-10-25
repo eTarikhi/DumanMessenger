@@ -82,7 +82,9 @@ const int denseFallbackFanout = 6;
 const double neighborScoreTtlMs = 30000;
 
 /// Entries advertised in an OGM so peers can learn routes to non-neighbours.
-const int _bestHopAdvertiseLimit = 8;
+/// Exported because `ogmWireBytes` needs it to bound a beacon's size, and a
+/// size bound that disagreed with the real one would be worse than no bound.
+const int bestHopAdvertiseLimit = 8;
 
 /// Normalise a peer count. [observedMax] is 0 for the shipped fixed denominator of 50; a
 /// positive value switches to the largest peer count this node has heard, which is what
@@ -134,7 +136,7 @@ Ogm buildOgm(MeshNode node, [int hopCount = 0]) {
       final byHop = a.value.hopCount.compareTo(b.value.hopCount);
       return byHop != 0 ? byHop : a.key.compareTo(b.key);
     });
-  for (final e in entries.take(_bestHopAdvertiseLimit)) {
+  for (final e in entries.take(bestHopAdvertiseLimit)) {
     bestHopTo[e.key] = e.value.hopCount;
   }
   return Ogm(

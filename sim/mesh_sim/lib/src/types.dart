@@ -192,11 +192,26 @@ enum BroadcastCapScope { superOnly, all }
 /// third party a delivery. [relay] also refuses to forward, which is what §6's
 /// battery-drain bullet means by "ignore floods", at the cost of a hole in that source's
 /// routes wherever the blocker was a relay. Measured against each other in `docs/06` §22.
+/// How long a packet holds a radio, which is not the same question as how long it takes to
+/// arrive (docs/06 §24.5-§24.6). [RadioOccupancy.hopLatency] ships: occupancy is the
+/// calibrated hop latency plus the serialization of whatever exceeds a full BLE packet,
+/// which is what docs/08 §12's contention arms were measured under. [RadioOccupancy.airtime]
+/// charges only `bytes x 8 / kbps`, the rate the engine already had, applied to the whole
+/// packet. Delivery latency is unaffected either way.
+enum RadioOccupancy { hopLatency, airtime }
+
 enum BlockScope { delivery, relay }
 
 extension BlockScopeName on BlockScope {
   /// CLI and JSON spelling, matching the TypeScript engine's `"delivery" | "relay"`.
   String get wire => this == BlockScope.delivery ? 'delivery' : 'relay';
+}
+
+extension RadioOccupancyName on RadioOccupancy {
+  /// CLI and JSON spelling, matching the TypeScript engine's
+  /// `"hop-latency" | "airtime"`.
+  String get wire =>
+      this == RadioOccupancy.hopLatency ? 'hop-latency' : 'airtime';
 }
 
 extension BroadcastCapScopeName on BroadcastCapScope {

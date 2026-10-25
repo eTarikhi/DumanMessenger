@@ -15,6 +15,16 @@
  * Run with `npm run media`.
  */
 import { MeshSimulation, DEFAULT_CONFIG, type SimConfig } from "../src/simulation";
+import {
+  BEST_HOP_ADVERTISE_LIMIT,
+  MPR_NEIGHBOR_ADVERTISE_LIMIT,
+} from "../src/election";
+import {
+  BLE_MAX_BYTES,
+  OGM_FIXED_BYTES,
+  OGM_MAX_WIRE_BYTES,
+  ogmWireBytes,
+} from "../src/routing";
 import { campusQuad, festivalCrowd } from "../src/scenarios";
 import { canReach, effectiveLossProbability, peersInRange } from "../src/rf";
 import { createRng } from "../src/rng";
@@ -1758,6 +1768,164 @@ function captureMarginTable(): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 14. Occupancy: what a radio is busy for, against how long a packet takes to
+//     arrive. docs/06 §24.5 asked the question; this answers it.
+// ---------------------------------------------------------------------------
+
+interface OccupancyRow {
+  scenario: string;
+  access: string;
+  occupancy: string;
+  demand: number;
+  wakeMs: number;
+  delivery: number;
+  drops: number;
+  deferrals: number;
+}
+
+function occupancyRun(
+  seed: number,
+  scenario: (seed: number) => SimConfig,
+  name: string,
+  access: SimConfig["channelAccess"],
+  occupancy: SimConfig["radioOccupancy"]
+): OccupancyRow {
+  const sim = new MeshSimulation({
+    ...scenario(seed),
+    channelAccess: access,
+    radioOccupancy: occupancy,
+  });
+  sim.runFor(90_000);
+  sim.refresh();
+  sim.clearRecords();
+  sim.injectTraffic(30, 40_000);
+  sim.runFor(60_000);
+  sim.refresh();
+  const st = sim.stats;
+  return {
+    scenario: name,
+    access,
+    occupancy,
+    demand: st.radioDemandRatio,
+    wakeMs: st.wakeLockMs,
+    delivery: st.deliveryRatio,
+    drops: st.channelDrops,
+    deferrals: st.channelDeferrals,
+  };
+}
+
+function occupancyTable(): void {
+  console.log(
+    "\n=== 14. Occupancy: what a radio is busy for is not how long a packet takes to arrive ==="
+  );
+  console.log(
+    "The shipped model charges every packet a calibrated hop latency — 120 ms on BLE, which"
+  );
+  console.log(
+    "serializationMs's own comment says already includes one full-sized GATT write — plus the"
+  );
+  console.log(
+    "excess over 1 024 B. That is right at 1 024 B and wrong below it, so a short text pays"
+  );
+  console.log(
+    "what a media chunk pays, and a beacon paid it too while having no size at all."
+  );
+  console.log(
+    `\nBeacons now have one, derived from the fields docs/03 §4 says an OGM carries: fixed`
+  );
+  console.log(
+    `  ${OGM_FIXED_BYTES} B + 32 B per advertised neighbour + 33 B per route entry, bounded by the`
+  );
+  console.log(
+    `  advertise limits the engine enforces (${MPR_NEIGHBOR_ADVERTISE_LIMIT} neighbours, ${BEST_HOP_ADVERTISE_LIMIT} routes).`
+  );
+  console.log(
+    `  A typical beacon (10 neighbours, 8 routes) is ${ogmWireBytes(10, 8)} B = ` +
+      `${((ogmWireBytes(10, 8) * 8) / DEFAULT_CONFIG.bleKbps).toFixed(1)} ms of airtime, about half the flat`
+  );
+  console.log(
+    `  120 ms it was charged. A fully loaded one is ${OGM_MAX_WIRE_BYTES} B, which is over the ` +
+      `${BLE_MAX_BYTES} B BLE ceiling —`
+  );
+  console.log(
+    "  so a dense node's beacon would ride Wi-Fi Direct. Nothing sized beacons before, so"
+  );
+  console.log("  nothing noticed. docs/06 §24.6.\n");
+
+  const arms: Array<[string, (seed: number) => SimConfig, SimConfig["channelAccess"]]> = [
+    ["campus_quad", campusQuad, "free"],
+    ["campus_quad", campusQuad, "csma"],
+    ["festival_crowd", festivalCrowd, "free"],
+    ["festival_crowd", festivalCrowd, "halfDuplex"],
+    ["festival_crowd", festivalCrowd, "csma"],
+  ];
+  const models: SimConfig["radioOccupancy"][] = ["hop-latency", "airtime"];
+  const rows = new Map<string, OccupancyRow[]>();
+  for (const [name, scenario, access] of arms) {
+    for (const model of models) {
+      const key = `${name}|${access}|${model}`;
+      rows.set(key, SEEDS.map((seed) => occupancyRun(seed, scenario, name, access, model)));
+    }
+  }
+  const mean = (key: string, f: (r: OccupancyRow) => number) => {
+    const list = rows.get(key)!;
+    return list.reduce((a, r) => a + f(r), 0) / Math.max(1, list.length);
+  };
+
+  console.log(`  mean of ${SEEDS.length} seeds, 30 messages injected over 60 s after a 90 s settle\n`);
+  console.log(
+    "  scenario         channel      occupancy     radio demand   wake time     delivery   queue drops   deferrals"
+  );
+  for (const [name, , access] of arms) {
+    for (const model of models) {
+      const key = `${name}|${access}|${model}`;
+      console.log(
+        `  ${name.padEnd(16)} ${access.padEnd(12)} ${model.padEnd(13)} ` +
+          `${(mean(key, (r) => r.demand).toFixed(2) + "x").padStart(13)} ` +
+          `${fmt(mean(key, (r) => r.wakeMs)).padStart(13)} ` +
+          `${((mean(key, (r) => r.delivery) * 100).toFixed(1) + "%").padStart(10)} ` +
+          `${mean(key, (r) => r.drops).toFixed(0).padStart(13)} ` +
+          `${mean(key, (r) => r.deferrals).toFixed(0).padStart(11)}`
+      );
+    }
+    console.log("");
+  }
+
+  console.log(
+    "  Three things this says, and one it does not.\n" +
+      "\n" +
+      "  Sizing packets properly roughly halves the demanded radio time — campus_quad 3.9x to\n" +
+      "  1.7x, festival_crowd 8.4x to 5.8x — and it does not make the demand physical. Above 1\n" +
+      "  the model asks for more airtime than exists, so the over-subscription docs/06 §24.3\n" +
+      "  measured is only partly the flat per-packet charge: the dominant term is the *volume*\n" +
+      "  of beacon receptions and the gossip that follows them, which a per-packet correction\n" +
+      "  cannot touch. At 60 nodes every node beaconing every 2 s is a real protocol finding\n" +
+      "  about docs/03 §1's interval, not a simulator artefact.\n" +
+      "\n" +
+      "  Under the shipped free/none baseline the two models are the same world: nothing reads\n" +
+      "  occupancy there except the wake-lock accounting, so delivery, latency, overhead and\n" +
+      "  every count are bit-identical and only the telemetry moves. radio-occupancy.test.ts\n" +
+      "  asserts that field by field, which is what makes the knob safe to ship defaulted off.\n" +
+      "\n" +
+      "  Where contention *is* modelled the two diverge, and §12's published numbers were\n" +
+      "  measured under the flat charge — but not uniformly in one direction, which is the part\n" +
+      "  worth not smoothing over. Under csma, sizing packets properly cuts crowd deferrals by\n" +
+      "  about half (13 540 to 6 382) and lifts crowd delivery 71.5% to 81.9%, and on\n" +
+      "  campus_quad it takes delivery from 98.7% to 100% with 29% fewer queue drops. Under\n" +
+      "  half-duplex in the same crowd it goes the other way: delivery 77.9% to 75.9% and\n" +
+      "  deferrals up 4%. A radio that frees sooner transmits sooner, and whether that helps\n" +
+      "  depends on whether the model lets it hear anyone first — csma does, half-duplex does\n" +
+      "  not. This probe reports the disagreement and does not claim to have established why.\n" +
+      "  What follows is that §12's contention magnitudes are a property of the occupancy\n" +
+      "  model they were measured under, not of the mesh.\n" +
+      "\n" +
+      "  What this does not say: that the flat model is wrong about latency. Delivery still\n" +
+      "  takes a hop latency per hop under both models, because that is what docs/02 §6's budget\n" +
+      "  measures and it is unchanged here. Only the busy-radio duration moved.\n"
+  );
+}
+
 function main(): void {
   console.log("Duman media transport probe — every number below is measured, not assumed.");
   console.log(
@@ -1784,6 +1952,7 @@ function main(): void {
     ["shedding", sheddingTable],
     ["captureEffect", captureEffectTable],
     ["captureMargin", captureMarginTable],
+    ["occupancy", occupancyTable],
   ];
   if (only && !sections.some(([name]) => name === only)) {
     console.error(`unknown section "${only}". one of: ${sections.map(([name]) => name).join(", ")}`);
