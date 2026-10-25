@@ -2935,18 +2935,39 @@ Collected in one place, since a reader should not have to reconstruct the order:
    seed in one piece a third of the window still delivered 93.3 %, while a broadcast cannot cross a
    gap that exists when it is sent (§24.13). §24.11 nearly made that inference and was corrected by
    the per-seed table.
-8. **The battery model's role gap is a constant, and the engine can now say how much of it is
-   mechanism.** `SUPER_DRAIN_PER_HOUR = (0.15 / 8) * 4` sets the scale; the duty cycle the same
-   skill specifies reproduces the direction at 3.00-3.27× (`awakeRatio` 0.30-0.33 against
-   `sleepDrainFactor` 0.25) and *widens* the measured ratio to 4.23× when it is on (§24.1). The
-   Wi-Fi Direct group-owner role still costs nothing here, and that is the missing term. Wake-locks
-   are reported as a role split rather than a percentage of the clock because the model demands
-   about **4.2×** the airtime that exists on `campus_quad` over three seeds (3.9× on seed 42
-   alone, which is what §24.1-§24.3 quote), and **1.9×** once packets are priced by size.
+8. **The battery model is the one structural gap left, and it has now been measured three
+   times.** `SUPER_DRAIN_PER_HOUR = (0.15 / 8) * 4` sets the role gap's scale; the duty cycle the
+   same skill specifies reproduces the *direction* at 3.00-3.27× (`awakeRatio` 0.30-0.33 against
+   `sleepDrainFactor` 0.25) and widens the measured ratio to 4.23× when it is on (§24.1). What the
+   model has is a role-based hourly rate with a duty-cycle multiplier, and what it therefore cannot
+   express is any cost that accrues *per event*:
 
-Items 1 and 8 are work. Items 2, 3 and 7 are decisions not to do work, which is the more common
-output of a measurement and the one most often lost. Items 4, 5 and 6 are rules for reading
-anything else in this document.
+   - the Wi-Fi Direct group-owner role costs nothing (§24.1), though `docs/05` §1.2 names it as one
+     of *"the two dominant power drains"*;
+   - a packet on air costs nothing (§24.3), which is why wake-locks are reported as a role split
+     rather than a percentage of the clock — the model demands about 4.2× the airtime that exists
+     on `campus_quad` over three seeds (3.9× on seed 42 alone, which is what §24.1-§24.3 quote),
+     and 1.9× once packets are priced by size;
+   - a scan costs nothing (§24.15), which is why cutting scans by 70 % moves NORMAL drain from
+     1.331 to 1.331 %/h and `docs/05` §1.2's *"reduces redundant wake-ups"* cannot be evaluated
+     here at all.
+
+   The consequence is narrower than it sounds and worth stating exactly: this engine can compare
+   **what one role costs relative to another**, and it can compare **how much radio work a
+   configuration does**, but it cannot convert the second into the first. Every mitigation in
+   `docs/05` §1.2 that works by doing *less* of something — adaptive scanning, tearing a group
+   down, beaconing less often — is therefore unpriceable here, and the three subsections above are
+   three separate discoveries of that one fact. Building the missing dimension needs a per-event
+   energy term calibrated against a device (Battery Historian on a phone holding a group against
+   one that does not, which is what `docs/05` §1.2's own note asks for), not a constant chosen to
+   make a mitigation row evaluate; §24's amendment to §10.5 is the argument for refusing that
+   second route.
+
+Items 1 and 8 are work, and item 8 is the larger of the two: item 1 is a protocol change with a
+known shape, while item 8 is a missing dimension in the model that has now silently bounded three
+separate measurements and will bound the next one too. Items 2, 3 and 7 are decisions not to do
+work, which is the more common output of a measurement and the one most often lost. Items 4, 5 and
+6 are rules for reading anything else in this document.
 
 ### 24.15 Adaptive scan intervals: `docs/05` §1.2's third row, built — and unpriceable here
 
