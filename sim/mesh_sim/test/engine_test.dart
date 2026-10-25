@@ -2109,6 +2109,101 @@ void main() {
       expect(delivery['blocked']!, greaterThan(relay['blocked']!));
     });
   });
+
+  group('cover traffic (docs/04 §5, dummy beacons)', () {
+    // Mirrors `src/__tests__/cover-traffic.test.ts`. The measurement behind this feature is
+    // a null result — docs/06 §23 — so these tests assert what makes the knob shippable
+    // rather than what makes it useful: inert when off, emits at the rate it is told to,
+    // costs airtime in proportion, and does not starve the network. Nothing here asserts
+    // that a sender is hidden, because on this observable in this topology they are not.
+
+    const windowMs = 60000.0;
+
+    /// [traffic] injects honest messages in the window. Only the delivery floor needs them
+    /// — without traffic there is nothing to deliver and the ratio is 0 by definition — and
+    /// only the airtime test must go without, because `injectTraffic` draws from the same
+    /// RNG the cover beacons do, so the arms diverge and real traffic varies by more than
+    /// the cover packets add.
+    Map<String, num> world(bool cover,
+        [double intervalMs = 30000.0, bool traffic = false]) {
+      final sim = MeshSimulation(campusQuad(42).copyWith(
+        coverTraffic: cover,
+        coverIntervalMs: intervalMs,
+      ));
+      sim.runFor(90000.0); // settle elections, as the probes do
+      sim.refresh();
+      sim.clearRecords();
+      final before = sim.nodes.map((n) => n.txCount).toList();
+      if (traffic) sim.injectTraffic(20, windowMs);
+      sim.runFor(windowMs);
+      sim.refresh();
+      var tx = 0;
+      for (var i = 0; i < sim.nodes.length; i++) {
+        tx += sim.nodes[i].txCount - before[i];
+      }
+      return {
+        'coverTx': sim.stats.coverTx,
+        'transmissions': tx,
+        'deliveryRatio': sim.stats.deliveryRatio,
+        'controlOverhead': sim.stats.controlOverhead,
+      };
+    }
+
+    test('is off by default at a rate the document does not specify', () {
+      final config = campusQuad(42);
+      expect(config.coverTraffic, isFalse);
+      // "Low rate" is an adjective, so the default is a round guess and docs/06 §23 sweeps
+      // 60/30/10/5 s rather than defending one.
+      expect(config.coverIntervalMs, equals(30000.0));
+      final on = config.copyWith(coverTraffic: true);
+      expect(on.coverTraffic, isTrue);
+      expect(on.coverIntervalMs, equals(config.coverIntervalMs));
+    });
+
+    test('emits nothing when off, which is what keeps every published number intact', () {
+      expect(world(false)['coverTx'], equals(0));
+    });
+
+    test('emits at the rate it is told to, and faster when told to be faster', () {
+      final off = world(false)['coverTx']!;
+      final slow = world(true, 30000.0)['coverTx']!;
+      final fast = world(true, 5000.0)['coverTx']!;
+      expect(off, equals(0));
+      expect(slow, greaterThan(0));
+      expect(fast, greaterThan(slow));
+      // Order of magnitude, not an exact count: a node that is offline or out of battery
+      // does not beacon, and the interval carries the same ±ogmJitterMs as a real OGM.
+      const nodes = 20;
+      expect(fast, greaterThanOrEqualTo(nodes * (windowMs / 5000.0) * 0.5));
+      expect(fast, lessThanOrEqualTo(nodes * (windowMs / 5000.0) * 2));
+    });
+
+    test('costs airtime in proportion to its rate', () {
+      final off = world(false)['transmissions']!;
+      final slow = world(true, 30000.0)['transmissions']!;
+      final fast = world(true, 5000.0)['transmissions']!;
+      expect(slow, greaterThan(off));
+      expect(fast, greaterThan(slow));
+    });
+
+    test('does not starve the network, which is the floor §23 asserts not an equality', () {
+      // Not an equality: cover packets consume RNG draws, so the two worlds diverge from
+      // the first dummy beacon and unrelated counts differ the way any two sequences do.
+      for (final interval in <double>[30000.0, 5000.0]) {
+        expect(world(true, interval, true)['deliveryRatio']!, greaterThan(0.5),
+            reason: '\${interval}ms');
+      }
+    });
+
+    test('counts cover separately from the routing protocol own beacons', () {
+      final r = world(true, 5000.0);
+      // `controlOverhead` is the OGM count the routing protocol needs; cover traffic is
+      // optional and its whole cost belongs in `coverTx`, so neither is folded into the
+      // other and a reader can see what disabling cover would actually save.
+      expect(r['coverTx']!, greaterThan(0));
+      expect(r['controlOverhead']!, greaterThan(0));
+    });
+  });
 }
 
 double _ln(num x) => math.log(x.toDouble());

@@ -23,6 +23,7 @@
     "history-probe.ts",
     "e2ee-probe.ts",
     "rate-probe.ts",
+    "cover-probe.ts",
     "capture-json.ts",
     "field-report.ts"
   ],

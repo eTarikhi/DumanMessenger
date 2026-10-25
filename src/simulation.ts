@@ -139,6 +139,21 @@ export interface SimConfig {
   tickIntervalMs: number;
   physicsIntervalMs: number;
   ogmIntervalMs: number;
+  /** docs/04 §5: *"Mitigate traffic analysis: random jitter 50-200 ms before forwarding,
+   *  dummy beacons at low rate."* The jitter half ships unconditionally (`jitterMinMs` /
+   *  `jitterMaxMs`); this is the dummy-beacon half, off by default.
+   *
+   *  A cover packet is one radio burst that carries nothing: it increments the node's
+   *  `txCount`, which is what a passive observer counts, and it is logged at the `ogm`
+   *  kind so it stays behind the same `captureOgm` opt-in as real beacons. It creates no
+   *  routing state, delivers nothing, and is never acknowledged — a dummy that had to be
+   *  ACKed would not be a dummy. What it models is **timing and count** cover only: this
+   *  engine gives beacons no length, so a length-based observer is out of reach here and
+   *  `docs/06` §23 says so rather than implying the mitigation is complete. */
+  coverTraffic: boolean;
+  /** Mean interval between a node's dummy beacons. "Low rate" is the document's word and
+   *  not a number, so `docs/06` §23 sweeps it instead of picking one. */
+  coverIntervalMs: number;
   ogmJitterMs: number;
   ogmTtl: number;
   electionIntervalMs: number;
@@ -452,6 +467,8 @@ export const DEFAULT_CONFIG: SimConfig = {
   tickIntervalMs: 1000,
   physicsIntervalMs: 250,
   ogmIntervalMs: 2000,
+  coverTraffic: false,
+  coverIntervalMs: 30_000,
   ogmJitterMs: 200,
   ogmTtl: 5,
   electionIntervalMs: 30000,
@@ -650,6 +667,11 @@ export interface SimulationStats {
   blockedDrops: number;
   /** Anti-entropy packets put on air: beacons, bucket requests and replies. */
   sentSync: number;
+  /** Dummy beacons put on air by `coverTraffic` (docs/04 §5). Zero unless it is on, which
+   *  is what makes the feature inert: a shipped run reports 0 and behaves identically.
+   *  Not included in `controlOverhead`, which counts the OGMs the routing protocol needs;
+   *  cover traffic is optional and its whole cost belongs in this column. */
+  coverTx: number;
   bytesDelivered: number;
 
   /** skills/07 telemetry: "Battery %/h per role, scans/sec, relays/sec".
@@ -1139,6 +1161,7 @@ export class MeshSimulation {
    *  busy, so the map stays empty and costs nothing. */
   private channel = new Map<NodeId, ChannelState>();
   private ogmTx = 0;
+  private coverTx = 0;
   private lostDataTx = 0;
   private lostOgmTx = 0;
   private duplicateRx = 0;
@@ -1205,6 +1228,9 @@ export class MeshSimulation {
     for (const node of this.nodes) {
       const stagger = randRange(this.rng, 0, this.config.ogmIntervalMs);
       this.queue.push(stagger, "ogm", node.id);
+      // Reuses the stagger already drawn for the beacon rather than drawing its own, so
+      // enabling cover traffic does not shift the RNG sequence at t=0.
+      if (this.config.coverTraffic) this.queue.push(stagger, "cover", node.id);
       this.queue.push(stagger / 2, "scan", node.id);
     }
     if (this.config.trafficIntervalMs > 0) {
@@ -1252,6 +1278,7 @@ export class MeshSimulation {
     this.rxRssi.clear();
     this.rxSeq.clear();
     this.ogmTx = 0;
+    this.coverTx = 0;
     this.lostDataTx = 0;
     this.lostOgmTx = 0;
     this.duplicateRx = 0;
@@ -1375,6 +1402,9 @@ export class MeshSimulation {
       case "ogm":
         this.onOgm(nodeId);
         break;
+      case "cover":
+        this.onCover(nodeId);
+        break;
       case "election":
         this.onElection();
         break;
@@ -1449,6 +1479,7 @@ export class MeshSimulation {
         node.role = "NORMAL";
         node.reasonTrace = "Battery depleted";
         this.queue.cancel("ogm", node.id);
+        this.queue.cancel("cover", node.id);
         this.queue.cancel("scan", node.id);
         // A dead radio is an idle radio: whatever it had committed to is gone, and a
         // node that comes back must not inherit a busy transmitter.
@@ -1475,6 +1506,32 @@ export class MeshSimulation {
     this.queue.push(
       this.now + Math.max(200, this.config.ogmIntervalMs + jitter),
       "ogm",
+      nodeId
+    );
+  }
+
+  /**
+   * Put one dummy beacon on air (docs/04 §5, "dummy beacons at low rate").
+   *
+   * The point of cover traffic is that an observer cannot tell it from the real thing, so
+   * it is counted exactly where a real transmission is counted — `node.txCount` — and
+   * nowhere else. It does not enter the message path: no routing state, no delivery, no
+   * ACK. Returning early when the knob is off keeps the reschedule from happening, so a
+   * disabled run pushes no event and spends no draw.
+   */
+  private onCover(nodeId: string): void {
+    if (!this.config.coverTraffic) return;
+    const node = this.byId(nodeId);
+    if (!node || !node.isOnline) return;
+    node.txCount++;
+    this.coverTx++;
+    this.pushLog("ogm", node.id, `dummy beacon (cover traffic) → peers in range`, {
+      peerId: undefined,
+    });
+    const jitter = randRange(this.rng, -this.config.ogmJitterMs, this.config.ogmJitterMs);
+    this.queue.push(
+      this.now + Math.max(200, this.config.coverIntervalMs + jitter),
+      "cover",
       nodeId
     );
   }
@@ -3456,6 +3513,7 @@ export class MeshSimulation {
       node.reasonTrace = "Offline";
       node.offlineAt = this.now;
       this.queue.cancel("ogm", node.id);
+      this.queue.cancel("cover", node.id);
       this.queue.cancel("scan", node.id);
       this.channel.delete(node.id);
       this.queue.cancel("channel", node.id);
@@ -3467,6 +3525,7 @@ export class MeshSimulation {
       node.offlineAt = -1;
       node.reasonTrace = "Reconnected";
       this.queue.push(this.now + 100, "ogm", node.id);
+      if (this.config.coverTraffic) this.queue.push(this.now + 100, "cover", node.id);
       this.queue.push(this.now + 100, "scan", node.id);
     }
     this.stats = this.computeStats();
@@ -3616,6 +3675,7 @@ export class MeshSimulation {
       roleChangesPerNodeMin,
       electionsPerMin: roleChangesPerNodeMin,
       controlOverhead: this.ogmTx,
+      coverTx: this.coverTx,
       retriesSent: this.retriesSent,
       retriesExhausted: this.retriesExhausted,
       acksReceived: this.acksReceived,

@@ -1984,3 +1984,96 @@ ids, which is what *"from pubKey"* means on air — `docs/07` §4 derives
 `destHint8 = SHA-256(pubKey)[0:8]` and a node id carries that hint, so blocking a pubKey and
 blocking a node id are the same act. The CLI exposes `--block-scope` but has no way to populate a
 blocklist, so the flag exists to be measured by the probe rather than run by hand.
+
+---
+
+## 23. Dummy beacons: a rejected lever, and the observable that rejected it
+
+`docs/04` §5 asks for two traffic-analysis mitigations in one line: *"random jitter 50-200 ms
+before forwarding, dummy beacons at low rate"*. The jitter half has shipped unconditionally
+since the engine's first version — `jitterMinMs` / `jitterMaxMs`, drawn per forward, and the
+reason `docs/02` §6's latency budget has a spread rather than a point. The dummy beacons did
+not exist. They do now: `coverTraffic` and `coverIntervalMs` in both engines, a `cover` event
+kind, a `coverTx` counter, and `--cover-traffic` / `--cover-interval` on the Dart CLI. A cover
+packet is one radio burst that carries nothing — it increments the sending node's `txCount`,
+which is what a passive observer counts, creates no routing state, delivers nothing, and is
+never acknowledged, because a dummy that had to be ACKed would not be a dummy.
+
+**The measurement says it buys nothing here, so it ships off.** This is the eighteenth rejected
+lever in this document and the first one rejected by a security mitigation rather than a
+routing idea.
+
+### 23.1 What the sweep measures
+
+`npm run cover sweep`: three seeds, `campus_quad`, 20 nodes. One ordinary node (index 3, so
+not a node the election favours) sends a burst of 12 broadcasts over 60 s while every other
+node sends one unicast. The observer sees nothing but **transmission counts per node** over a
+120 s window and names whichever node transmitted most. Two statistics:
+
+- **rank** — the target's position in that ordering, 1 being most conspicuous;
+- **conspicuousness** — the target's count as a z-score against all nodes, i.e. how far it
+  stands out from the median in standard deviations. Zero means invisible in that statistic.
+
+Means over three seeds:
+
+| cover interval | `coverTx` | transmissions | vs off | delivery | observer named the target | rank | conspicuousness |
+| --- | ---: | ---: | ---: | ---: | :---: | ---: | ---: |
+| off | 0 | 1 073 | — | 100.0 % | **0 / 3** | 7.0 | 0.844 |
+| 60 s | 60 | 1 127 | +5.0 % | 100.0 % | 0 / 3 | 6.7 | 0.959 |
+| 30 s | 100 | 1 203 | +12.1 % | 100.0 % | 0 / 3 | 6.7 | 0.750 |
+| 10 s | 320 | 1 392 | +29.7 % | 100.0 % | 0 / 3 | 7.0 | 0.791 |
+| 5 s | 640 | 1 784 | **+66.2 %** | 100.0 % | 0 / 3 | 7.3 | 0.866 |
+
+The cost column is monotone and real: dummy beacons are transmissions, and 5 s intervals add
+two thirds to the network's airtime. The benefit columns are flat. The z-score moves by
+hundredths in no direction — 0.844 → 0.959 → 0.750 → 0.791 → 0.866 — and the rank by a
+third of a position, which with 20 nodes and three seeds is noise.
+
+### 23.2 Why it is null: the sender was already hidden
+
+The column that explains the other two is *"observer named the target"*: **0 / 3 with cover
+off**. In a dense 20-node mesh every node relays, and relay traffic dominates each node's
+transmission count, so a 12-message burst does not make its sender the top transmitter — the
+target ranks 7th of 20 before a single dummy beacon exists. Cover traffic cannot hide a sender
+who is already hidden; it can only add to the pile.
+
+That is a statement about **this observable in this topology**, not about cover traffic in
+general, and the difference matters:
+
+- The premise is that relaying swamps origination. A sparse or partitioned world relays far
+  less (§12 and §16 both measure topologies where a node hears one or two peers), so the
+  observer's accuracy there is an open question and the 0 / 3 column is the thing to re-read
+  before generalising.
+- The observable is a **count**. This engine gives beacons no length at all, so an adversary
+  doing length-based traffic analysis — arguably the more realistic one against encrypted
+  payloads — is not modelled here, and defending against it would need *padded* cover rather
+  than *counted* cover. `src/crypto/packet.ts` pads to a 256-byte block for exactly this
+  reason on the payload side; there is no equivalent on the beacon side.
+- The battery model is a role-based hourly rate (`NORMAL_DRAIN_PER_HOUR` in `src/rf.ts`) with
+  no per-packet term, so the cost of cover traffic shows up in airtime and in nothing else.
+  Neither this probe nor `skills/07`'s *"Battery %/h per role"* can price a per-packet
+  mitigation, which bounds what any battery number in this repository can say about one.
+
+### 23.3 The assertion that had to be removed
+
+The probe's first version asserted the benefit: *"the tightest cover interval must make the
+sender less conspicuous than no cover at all."* Its first honest run failed, and the failure
+was the result rather than a bug. The assertion is gone and the numbers are reported instead,
+which is the discipline §1 states for all eighteen levers — a check that only passes when the
+numbers flatter the feature is how a rejected lever gets published as a win.
+
+What the section still asserts is what makes the knob shippable rather than what makes it
+useful: `coverTx` is 0 when the knob is off (so no golden vector and no published number
+moves), transmissions rise monotonically as the interval tightens (a dummy beacon that costs
+nothing is not on air), and delivery does not collapse in any arm. Delivery is asserted in the
+weak form — a floor, not an equality — because cover packets consume RNG draws, so the arms
+are different worlds, and an equality there would be the same mistake `npm run rate block`
+made twice before §22.3 corrected it.
+
+### 23.4 What is shipped
+
+The knob stays in both engines, off by default, with the sweep reproducible in one command. A
+mitigation that this topology does not need is not a mitigation that no topology needs, and
+removing it would make the next person re-derive the null result from scratch. `docs/04` §5
+keeps its sentence — it is a requirement, and this section is the evidence about one
+implementation of it — with a note pointing here.

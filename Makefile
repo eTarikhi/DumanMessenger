@@ -185,6 +185,9 @@ e2ee: ## What E2EE costs on this mesh (docs/07 §2-§4, §7). SECT=latency|churn
 rate: ## What docs/04 §6's abuse limits cost and buy (docs/06 §21). SECT=honest|flood
 	@npm run rate $(if $(SECT),-- $(SECT),)
 
+cover: ## What docs/04 §5's dummy beacons cost and buy (docs/06 §23). SECT=inert|sweep
+	@npm run cover $(if $(SECT),-- $(SECT),)
+
 dart-get: ## dart pub get
 	@cd sim/mesh_sim && dart pub get
 

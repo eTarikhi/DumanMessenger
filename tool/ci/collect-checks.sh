@@ -123,6 +123,7 @@ REGISTRY_EVIDENCE=(
   "history-probe|npm run history|yes|the docs/06 §17 numbers, reproduced"
   "e2ee-probe|npm run e2ee — handshake latency, session churn, packet sizing, real crypto cost|yes|the docs/07 §2-§4 and §7 numbers, reproduced"
   "rate-probe|npm run rate — docs/04 §6's abuse limits, honest and flooded|yes|the docs/06 §21 numbers, reproduced"
+  "cover-probe|npm run cover — docs/04 §5's dummy beacons, inert and swept|yes|the docs/06 §23 numbers, reproduced — a null result"
 )
 
 describe_group() {
@@ -439,6 +440,10 @@ if selected evidence; then
     run_step o "npm run rate (honest, flood)" "evidence-rate.txt" "$ROOT" npm run rate
     add_row evidence rate-probe "$o" "$SECONDS" ""
     [ "$o" = success ] || add_fail evidence rate-probe evidence-rate.txt
+
+    run_step o "npm run cover (inert, sweep)" "evidence-cover.txt" "$ROOT" npm run cover
+    add_row evidence cover-probe "$o" "$SECONDS" ""
+    [ "$o" = success ] || add_fail evidence cover-probe evidence-cover.txt
   fi
   echo
 fi

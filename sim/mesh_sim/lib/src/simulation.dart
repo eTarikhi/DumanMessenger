@@ -43,6 +43,8 @@ class SimConfig {
     this.tickIntervalMs = 1000,
     this.physicsIntervalMs = 250,
     this.ogmIntervalMs = 2000,
+    this.coverTraffic = false,
+    this.coverIntervalMs = 30000,
     this.ogmJitterMs = 200,
     this.ogmTtl = 5,
     this.electionIntervalMs = 30000,
@@ -132,6 +134,19 @@ class SimConfig {
   final double tickIntervalMs;
   final double physicsIntervalMs;
   final double ogmIntervalMs;
+
+  /// docs/04 §5: "Mitigate traffic analysis: random jitter 50-200 ms before forwarding,
+  /// dummy beacons at low rate." The jitter half ships unconditionally; this is the
+  /// dummy-beacon half, off by default. A cover packet is one radio burst carrying
+  /// nothing: it increments the node's `txCount`, which is what a passive observer counts,
+  /// creates no routing state, delivers nothing and is never acknowledged. It models
+  /// timing and count cover only — this engine gives beacons no length, so a length-based
+  /// observer is out of reach here (docs/06 §23).
+  final bool coverTraffic;
+
+  /// Mean interval between a node's dummy beacons. "Low rate" is the document's word and
+  /// not a number, so docs/06 §23 sweeps it instead of picking one.
+  final double coverIntervalMs;
   final double ogmJitterMs;
   final int ogmTtl;
   final double electionIntervalMs;
@@ -429,6 +444,8 @@ class SimConfig {
     int? relayPerSourcePerMinuteCap,
     BroadcastCapScope? broadcastCapScope,
     BlockScope? blockScope,
+    bool? coverTraffic,
+    double? coverIntervalMs,
     bool? communityRelayPreference,
     bool? dtnPreferCommunity,
     double? voiceKbps,
@@ -492,6 +509,8 @@ class SimConfig {
             relayPerSourcePerMinuteCap ?? this.relayPerSourcePerMinuteCap,
         broadcastCapScope: broadcastCapScope ?? this.broadcastCapScope,
         blockScope: blockScope ?? this.blockScope,
+        coverTraffic: coverTraffic ?? this.coverTraffic,
+        coverIntervalMs: coverIntervalMs ?? this.coverIntervalMs,
         communityRelayPreference:
             communityRelayPreference ?? this.communityRelayPreference,
         dtnPreferCommunity: dtnPreferCommunity ?? this.dtnPreferCommunity,
@@ -634,6 +653,7 @@ class SimulationStats {
     required this.sentChunks,
     required this.bytesDelivered,
     required this.sentSync,
+    required this.coverTx,
     required this.historyBeacons,
     required this.historyRequests,
     required this.historyReplies,
@@ -744,6 +764,12 @@ class SimulationStats {
   /// [sentUnicast]/[deliveryRatio]: a digest is control traffic, not a message anybody
   /// sent to anybody.
   final int sentSync;
+
+  /// Dummy beacons put on air by [SimConfig.coverTraffic] (docs/04 §5). Zero unless it is
+  /// on, which is what makes the feature inert. Not included in [controlOverhead], which
+  /// counts the OGMs the routing protocol needs; cover traffic is optional and its whole
+  /// cost belongs in this column.
+  final int coverTx;
   final int historyBeacons;
   final int historyRequests;
   final int historyReplies;
@@ -893,6 +919,7 @@ class SimulationStats {
         'sentChunks': sentChunks,
         'bytesDelivered': bytesDelivered,
         'sentSync': sentSync,
+        'coverTx': coverTx,
         'historyBeacons': historyBeacons,
         'historyRequests': historyRequests,
         'historyReplies': historyReplies,
@@ -1502,6 +1529,7 @@ class MeshSimulation {
   /// [ChannelAccess.free] a radio is never busy, so the map stays empty.
   final Map<NodeId, _ChannelState> _channel = <NodeId, _ChannelState>{};
   int _ogmTx = 0;
+  int _coverTx = 0;
   int _lostDataTx = 0;
   int _lostOgmTx = 0;
   int _duplicateRx = 0;
@@ -1554,6 +1582,9 @@ class MeshSimulation {
     for (final node in nodes) {
       final stagger = randRange(rng, 0, config.ogmIntervalMs);
       _queue.push(stagger, EventKind.ogm, node.id);
+      // Reuses the stagger already drawn for the beacon rather than drawing its own, so
+      // enabling cover traffic does not shift the RNG sequence at t=0.
+      if (config.coverTraffic) _queue.push(stagger, EventKind.cover, node.id);
       _queue.push(stagger / 2, EventKind.scan, node.id);
     }
     if (config.trafficIntervalMs > 0) {
@@ -1599,6 +1630,7 @@ class MeshSimulation {
     _rxRssi.clear();
     _rxSeq.clear();
     _ogmTx = 0;
+    _coverTx = 0;
     _lostDataTx = 0;
     _lostOgmTx = 0;
     _duplicateRx = 0;
@@ -1705,6 +1737,9 @@ class MeshSimulation {
       case EventKind.ogm:
         _onOgm(nodeId);
         break;
+      case EventKind.cover:
+        _onCover(nodeId);
+        break;
       case EventKind.election:
         _onElection();
         break;
@@ -1776,6 +1811,7 @@ class MeshSimulation {
         node.role = Role.normal;
         node.reasonTrace = 'Battery depleted';
         _queue.cancel(EventKind.ogm, node.id);
+        _queue.cancel(EventKind.cover, node.id);
         _queue.cancel(EventKind.scan, node.id);
         // A dead radio is an idle radio: whatever it had committed to is gone, and a node
         // that comes back must not inherit a busy transmitter.
@@ -1800,6 +1836,25 @@ class MeshSimulation {
     final jitter = randRange(rng, -config.ogmJitterMs, config.ogmJitterMs);
     _queue.push(now + math.max(200.0, config.ogmIntervalMs + jitter),
         EventKind.ogm, nodeId);
+  }
+
+  /// Put one dummy beacon on air (docs/04 §5, "dummy beacons at low rate").
+  ///
+  /// The point of cover traffic is that an observer cannot tell it from the real thing, so
+  /// it is counted exactly where a real transmission is counted — [MeshNode.txCount] — and
+  /// nowhere else. It does not enter the message path: no routing state, no delivery, no
+  /// ACK. Returning early when the knob is off keeps the reschedule from happening, so a
+  /// disabled run pushes no event and spends no draw.
+  void _onCover(String nodeId) {
+    if (!config.coverTraffic) return;
+    final node = _byId(nodeId);
+    if (node == null || !node.isOnline) return;
+    node.txCount++;
+    _coverTx++;
+    _pushLog(MeshLogKind.ogm, node.id, 'dummy beacon (cover traffic) → peers in range');
+    final jitter = randRange(rng, -config.ogmJitterMs, config.ogmJitterMs);
+    _queue.push(now + math.max(200.0, config.coverIntervalMs + jitter),
+        EventKind.cover, nodeId);
   }
 
   /// Transmit an OGM to every peer, then let each peer gossip it onward.
@@ -3782,6 +3837,7 @@ class MeshSimulation {
       node.reasonTrace = 'Offline';
       node.offlineAt = now;
       _queue.cancel(EventKind.ogm, node.id);
+      _queue.cancel(EventKind.cover, node.id);
       _queue.cancel(EventKind.scan, node.id);
       _channel.remove(node.id);
       _queue.cancel(EventKind.channel, node.id);
@@ -3793,6 +3849,7 @@ class MeshSimulation {
       node.offlineAt = -1;
       node.reasonTrace = 'Reconnected';
       _queue.push(now + 100, EventKind.ogm, node.id);
+      if (config.coverTraffic) _queue.push(now + 100, EventKind.cover, node.id);
       _queue.push(now + 100, EventKind.scan, node.id);
     }
     stats = _computeStats();
@@ -3948,6 +4005,7 @@ class MeshSimulation {
       roleChangesPerNodeMin: roleChangesPerNodeMin,
       electionsPerMin: roleChangesPerNodeMin,
       controlOverhead: _ogmTx,
+      coverTx: _coverTx,
       retriesSent: _retriesSent,
       retriesExhausted: _retriesExhausted,
       acksReceived: _acksReceived,

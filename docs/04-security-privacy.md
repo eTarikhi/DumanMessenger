@@ -104,6 +104,14 @@ auth tag: HMAC or AEAD tag (AES-GCM / ChaChaPoly)
 - SUPER nodes **cannot read** E2EE DMs — they see only header.
 - No IP metadata — Briar advantage (no metadata to subpoena [3](https://yolah.fr/vpn-security/briar-offline-messaging-resilient/)).
 - Mitigate traffic analysis: random jitter 50-200 ms before forwarding, dummy beacons at low rate.
+  > **Implementation note (Oct 2026 — `src/simulation.ts` `onCover` + `sim/mesh_sim`; evidence in `docs/06-simulator-findings.md` §23):** both halves are built in both engines. The
+  > jitter half has shipped unconditionally from the start (`jitterMinMs` 50 / `jitterMaxMs` 200, drawn per forward, and the reason `docs/02` §6's latency budget is a spread rather than a
+  > point). The dummy beacons are `coverTraffic` + `coverIntervalMs` (`--cover-traffic`, `--cover-interval`), **off by default, because measuring them produced a null result**: one node's
+  > 12-message burst is already invisible to an observer counting transmissions — it names the sender 0 times in 3 seeds with cover off, because in a dense mesh relaying dominates every
+  > node's count — and tightening the interval to 5 s moves the sender's z-score from 0.844 to 0.866 with no direction while costing **66 %** more airtime. Three things this line does not
+  > say, which the implementation had to decide: that a dummy beacon is never acknowledged (one that had to be would not be a dummy); that *"low rate"* is an adjective, so §23 sweeps
+  > 60/30/10/5 s rather than picking a number; and that this engine gives beacons no length, so the modelled cover is timing and count only — an adversary doing length-based analysis is
+  > not reachable here, and defending against it would need padded cover on the beacon side, of which `src/crypto/packet.ts`'s 256-byte block padding is the payload-side equivalent.
 
 ---
 

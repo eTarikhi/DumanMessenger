@@ -91,6 +91,13 @@ Duman mesh simulator (headless)
                       super | all. Who enforces the broadcast cap. `super` is what
                       docs/04 §6 says and bounds how far a flood travels; `all` also
                       stops the flooder's own neighbours hearing it (docs/06 §21.5)
+  --cover-traffic       emit dummy beacons at a low rate (docs/04 §5's traffic-analysis
+                        mitigation). Off by default; costs airtime and hides nothing this
+                        engine cannot model — see docs/06 §23 for what it does and does not
+                        cover. Reports coverTx
+  --cover-interval <ms> Mean gap between a node's dummy beacons, default 30000. Read only
+                        with --cover-traffic, like --capture-ratio is read only under
+                        --channel-capture strongest
   --block-scope <name>
                       delivery | relay. How far a local block reaches (docs/04 §6,
                       "Block/mute peer locally"). `delivery` — the default — means the
@@ -306,6 +313,22 @@ void main(List<String> args) {
     config = config.copyWith(rateLimits: true);
   }
 
+  if (args.contains('--cover-traffic')) {
+    config = config.copyWith(coverTraffic: true);
+  }
+
+  final coverArg = _arg(args, '--cover-interval', '');
+  if (coverArg.isNotEmpty) {
+    // tryParse, not parse: a bad number is a usage error with a message, not a stack trace.
+    final ms = double.tryParse(coverArg);
+    if (ms == null || ms <= 0) {
+      stderr.writeln('--cover-interval needs a positive number of ms, got "$coverArg"');
+      exitCode = 64;
+      return;
+    }
+    config = config.copyWith(coverIntervalMs: ms);
+  }
+
   final blockScopeName = _arg(args, '--block-scope', '');
   if (blockScopeName.isNotEmpty) {
     switch (blockScopeName) {
@@ -408,6 +431,8 @@ void main(List<String> args) {
       'relayPerSourcePerMinuteCap': config.relayPerSourcePerMinuteCap,
       'broadcastCapScope': config.broadcastCapScope.wire,
       'blockScope': config.blockScope.wire,
+      'coverTraffic': config.coverTraffic,
+      'coverIntervalMs': config.coverIntervalMs,
     },
     'nodes': sim.nodes.length,
     'sent': sent,
