@@ -2175,6 +2175,35 @@ section reports wake locks as a **split between roles**, which is a ratio and su
 over-subscription, and publishes `radioDemandRatio` beside it rather than letting a reader
 turn the milliseconds into a percentage of a device's day.
 
+The arithmetic pins the defect more narrowly than "a latency is used as an occupancy".
+`bleKbps` is 80, so a full-sized 1 024-byte packet really does take `1024 × 8 / 80 = 102 ms` —
+which is *why* `hopLatencyBleMs` can be 120 and `serializationMs` can charge only the excess
+over `BLE_MAX_BYTES`: the base latency is calibrated to one full-sized GATT write, and the two
+are consistent at that size. What is not consistent is that occupancy is therefore
+**size-independent below 1 024 bytes**. A 40-byte beacon and a 1 KB media chunk both hold the
+radio for 120 ms in this model, where at the modelled bit rate they are 4 ms and 102 ms apart.
+Beacons and short texts are the overwhelming majority of packets in an idle mesh, so the
+over-subscription is almost entirely small packets being charged a large packet's occupancy.
+
+### 24.5 The next question this leaves
+
+Charging occupancy proportionally — `sizeBytes × 8 / kbps`, from constants the engine already
+has — is a small change to two expressions (`occupied` in `onAir`, `airTime` in the receive
+path), and it would make `radioDemandRatio` physically readable for the first time. It is not
+made here, for one reason: **beacons have no size in this engine at all**, and §24.3 shows
+beacon *reception* is the dominant term. A proportional model applied only to messages would
+leave the dominant term on the flat 120 ms and report a demand ratio that looks fixed without
+being so. Doing it properly needs an OGM byte size derived from the fields `docs/03` §1 says a
+beacon carries — originator, sequence number, score and the MPR neighbour set — in the same
+way `PACKET_OVERHEAD_FROM_FIELDS` re-derives the sealed packet's 95 bytes rather than
+asserting it. That is a modelling change with published consequences, since §12's contention
+arms were measured under the flat occupancy and would have to be re-run and re-read beside it,
+so it is recorded as the next question rather than started halfway.
+
+Until then the rule for reading this repository's numbers is the one §24.3 states: **counts are
+exact, durations are the model's**, and `radioDemandRatio` is published beside any duration so
+a reader can see the factor by which the model over-subscribes the radio.
+
 ### 24.4 What ships
 
 `wakeLocks`, `wakeLockMs`, `wakeLockShareNormal`, `wakeLockShareSuper` and `radioDemandRatio`
