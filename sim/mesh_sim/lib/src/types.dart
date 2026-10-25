@@ -203,6 +203,14 @@ enum BroadcastCapScope { superOnly, all }
 /// §24.11 — and ships off: where the two modes land in comparable topologies the derived
 /// interval buys no delivery and costs airtime, and the one place it saves airtime is the one
 /// place the comparison cannot be read, because the two worlds differ in connectivity.
+/// Whether a node scans on its role's fixed interval or on one scaled by how many peers it had
+/// at the last scan. [ScanIntervalMode.density] is docs/05 §1.2's third mitigation row —
+/// "Scan interval scales with peer density: dense = shorter interval, sparse = longer" — which
+/// was documented and never built. Its direction is the *inverse* of [OgmIntervalMode.density]
+/// and that is not a contradiction: a scan is this device waking to look, a beacon is every
+/// neighbour waking to listen, so the two costs scale with density in opposite directions.
+enum ScanIntervalMode { fixed, density }
+
 enum OgmIntervalMode { fixed, density }
 
 enum RadioOccupancy { hopLatency, airtime }
@@ -212,6 +220,11 @@ enum BlockScope { delivery, relay }
 extension BlockScopeName on BlockScope {
   /// CLI and JSON spelling, matching the TypeScript engine's `"delivery" | "relay"`.
   String get wire => this == BlockScope.delivery ? 'delivery' : 'relay';
+}
+
+extension ScanIntervalModeName on ScanIntervalMode {
+  /// CLI and JSON spelling, matching the TypeScript engine's `"fixed" | "density"`.
+  String get wire => this == ScanIntervalMode.fixed ? 'fixed' : 'density';
 }
 
 extension OgmIntervalModeName on OgmIntervalMode {

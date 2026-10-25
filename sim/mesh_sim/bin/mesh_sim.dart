@@ -98,6 +98,12 @@ Duman mesh simulator (headless)
   --cover-interval <ms> Mean gap between a node's dummy beacons, default 30000. Read only
                         with --cover-traffic, like --capture-ratio is read only under
                         --channel-capture strongest
+  --scan-interval-mode <n>
+                        fixed (ships) or density: scale each node's scan interval by its peer
+                        count, dense sooner and sparse later, anchored so ten peers reproduces
+                        the configured interval and clamped to a quarter..four times it.
+                        docs/05 §1.2's third mitigation row, which was documented and never
+                        built. The inverse direction to --ogm-interval-mode, deliberately
   --ogm-interval-mode <n> fixed (ships, docs/03 §4's 2 s for every node) or density (each
                         node stretches its interval in proportion to its peer count, so the
                         receptions it imposes stay constant). Density is measured and
@@ -352,6 +358,23 @@ void main(List<String> args) {
     config = config.copyWith(coverIntervalMs: ms);
   }
 
+  final scanModeName = _arg(args, '--scan-interval-mode', '');
+  if (scanModeName.isNotEmpty) {
+    switch (scanModeName) {
+      case 'fixed':
+        config = config.copyWith(scanIntervalMode: ScanIntervalMode.fixed);
+        break;
+      case 'density':
+        config = config.copyWith(scanIntervalMode: ScanIntervalMode.density);
+        break;
+      default:
+        stderr.writeln('Unknown --scan-interval-mode "$scanModeName". '
+            'Try: fixed | density');
+        exitCode = 64;
+        return;
+    }
+  }
+
   final intervalModeName = _arg(args, '--ogm-interval-mode', '');
   if (intervalModeName.isNotEmpty) {
     switch (intervalModeName) {
@@ -520,6 +543,8 @@ void main(List<String> args) {
       'connectivitySampleMs': config.connectivitySampleMs,
       'ogmIntervalMode': config.ogmIntervalMode.wire,
       'ogmDensityReferencePeers': config.ogmDensityReferencePeers,
+      'scanIntervalMode': config.scanIntervalMode.wire,
+      'scanDensityReferencePeers': config.scanDensityReferencePeers,
     },
     'nodes': sim.nodes.length,
     'sent': sent,

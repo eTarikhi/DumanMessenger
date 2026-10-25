@@ -2587,6 +2587,77 @@ void main() {
     });
   });
 
+  group('adaptive scan intervals (docs/05 §1.2, layer 3)', () {
+    // Mirrors `src/__tests__/scan-interval.test.ts`. The direction is the inverse of the
+    // beacon rule §24.11 rejected, and deliberately: a scan is this device waking to look, a
+    // beacon is every neighbour waking to listen.
+
+    MeshSimulation world(SimConfig config) {
+      final sim = MeshSimulation(config);
+      sim.runFor(90000.0);
+      sim.refresh();
+      sim.clearRecords();
+      sim.injectTraffic(30, 40000.0);
+      sim.runFor(60000.0);
+      sim.refresh();
+      return sim;
+    }
+
+    test('ships fixed, so nothing published moves', () {
+      // Written out rather than iterated over a list of scenario functions: Dart declares them
+      // with an optional positional seed (`SimConfig campusQuad([int seed = 42])`), and whether
+      // that type is assignable to a required-parameter function type is a subtyping question
+      // this repository has no compiler to answer. The same reason the occupancy group's helper
+      // takes a built config instead of a scenario.
+      for (final config in <SimConfig>[
+        campusQuad(42),
+        sparseVillage(42),
+        festivalCrowd(42)
+      ]) {
+        expect(config.scanIntervalMode, equals(ScanIntervalMode.fixed));
+        expect(config.scanDensityReferencePeers, equals(10));
+      }
+    });
+
+    test('scans less in a sparse world, which is the row claimed saving', () {
+      final fixed = world(sparseVillage(42));
+      final adaptive =
+          world(sparseVillage(42).copyWith(scanIntervalMode: ScanIntervalMode.density));
+      expect(adaptive.stats.scansPerSec, lessThan(fixed.stats.scansPerSec));
+      // Fewer scans in a sparse world must not strand a message, because there is little to
+      // discover either way.
+      expect(adaptive.stats.deliveryRatio,
+          greaterThanOrEqualTo(fixed.stats.deliveryRatio - 0.05));
+    });
+
+    test('scans more in a dense world, which is what the row says and what it costs', () {
+      final fixed = world(festivalCrowd(42));
+      final adaptive =
+          world(festivalCrowd(42).copyWith(scanIntervalMode: ScanIntervalMode.density));
+      expect(adaptive.stats.scansPerSec, greaterThan(fixed.stats.scansPerSec));
+    });
+
+    test('is anchored, so a reference-density node scans at the configured interval', () {
+      // At ten peers both modes agree, so a difference anywhere is attributable to density and
+      // not to a re-tuned constant. campus_quad's median peer count is near ten, which is why
+      // the two modes land close there and far apart at the extremes.
+      final fixed = world(campusQuad(42));
+      final adaptive =
+          world(campusQuad(42).copyWith(scanIntervalMode: ScanIntervalMode.density));
+      final ratio = adaptive.stats.scansPerSec / fixed.stats.scansPerSec;
+      expect(ratio, greaterThan(0.6));
+      expect(ratio, lessThan(1.6));
+    });
+
+    test('clamps, so one peer does not stop a scan and a crowd does not pin a node awake', () {
+      final fixed = world(festivalCrowd(42));
+      final adaptive =
+          world(festivalCrowd(42).copyWith(scanIntervalMode: ScanIntervalMode.density));
+      expect(adaptive.stats.scansPerSec, lessThan(fixed.stats.scansPerSec * 4.5));
+      expect(adaptive.stats.scansPerSec, greaterThan(fixed.stats.scansPerSec / 4.5));
+    });
+  });
+
   group('density-derived beacon interval (docs/06 §24.11)', () {
     // Mirrors the second describe in `src/__tests__/connectivity.test.ts`. §24.7 argued for
     // deriving the interval per node because no single interval served both densities; §24.11

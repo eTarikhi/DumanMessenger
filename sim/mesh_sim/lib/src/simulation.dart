@@ -50,6 +50,8 @@ class SimConfig {
     this.connectivitySampleMs = 5000,
     this.ogmIntervalMode = OgmIntervalMode.fixed,
     this.ogmDensityReferencePeers = 10,
+    this.scanIntervalMode = ScanIntervalMode.fixed,
+    this.scanDensityReferencePeers = 10,
     this.ogmJitterMs = 200,
     this.ogmTtl = 5,
     this.electionIntervalMs = 30000,
@@ -199,6 +201,17 @@ class SimConfig {
   /// is the median peer count campus_quad produces, so the reference world is the one §4's 2 s
   /// was written against and the crowd stretches from there.
   final int ogmDensityReferencePeers;
+
+  /// Whether a node scans on its role's fixed interval or on one scaled by its peer count at the
+  /// last scan — docs/05 §1.2's adaptive-scan-interval row, documented and never built until now.
+  /// Anchored so a node with [scanDensityReferencePeers] peers scans at exactly its role's
+  /// configured interval, and clamped to `[base / 4, base * 4]` so a node with one peer does not
+  /// stop scanning and a node in a crowd does not scan continuously. Consumes no random number, so
+  /// the fixed mode's draw sequence is untouched and the golden vectors do not move.
+  final ScanIntervalMode scanIntervalMode;
+
+  /// The peer count at which [ScanIntervalMode.density] reproduces the configured interval.
+  final int scanDensityReferencePeers;
   final double ogmJitterMs;
   final int ogmTtl;
   final double electionIntervalMs;
@@ -503,6 +516,8 @@ class SimConfig {
     double? connectivitySampleMs,
     OgmIntervalMode? ogmIntervalMode,
     int? ogmDensityReferencePeers,
+    ScanIntervalMode? scanIntervalMode,
+    int? scanDensityReferencePeers,
     bool? communityRelayPreference,
     bool? dtnPreferCommunity,
     double? voiceKbps,
@@ -574,6 +589,9 @@ class SimConfig {
         ogmIntervalMode: ogmIntervalMode ?? this.ogmIntervalMode,
         ogmDensityReferencePeers:
             ogmDensityReferencePeers ?? this.ogmDensityReferencePeers,
+        scanIntervalMode: scanIntervalMode ?? this.scanIntervalMode,
+        scanDensityReferencePeers:
+            scanDensityReferencePeers ?? this.scanDensityReferencePeers,
         communityRelayPreference:
             communityRelayPreference ?? this.communityRelayPreference,
         dtnPreferCommunity: dtnPreferCommunity ?? this.dtnPreferCommunity,
@@ -2002,6 +2020,23 @@ class MeshSimulation {
         EventKind.cover, nodeId);
   }
 
+  /// The interval before this node's next scan, under [SimConfig.scanIntervalMode] — docs/05
+  /// §1.2's adaptive-scan-interval row. Scaled from the peer count the *previous* scan found,
+  /// because a node cannot know how dense its neighbourhood is before it looks, which is why the
+  /// clamp matters: a node that has just moved into a crowd scans at its old, longer interval for
+  /// one cycle, and a node just left alone scans at its old, shorter one.
+  double _scanIntervalFor(MeshNode node) {
+    final base = node.role == Role.superNode
+        ? config.scanIntervalSuperMs
+        : config.scanIntervalNormalMs;
+    if (config.scanIntervalMode == ScanIntervalMode.fixed) return base;
+    final peers = math.max(1, node.peerIds.length);
+    final reference = math.max(1, config.scanDensityReferencePeers);
+    // Inverse of the beacon rule: dense scans sooner, sparse scans later.
+    final raw = (base * reference) / peers;
+    return math.min(base * 4, math.max(base / 4, raw));
+  }
+
   /// The interval before this node's next beacon, under [SimConfig.ogmIntervalMode].
   ///
   /// [OgmIntervalMode.density] holds the receptions a node imposes constant: at interval `I`
@@ -2146,9 +2181,7 @@ class MeshSimulation {
   void _onScan(String nodeId) {
     final node = _byId(nodeId);
     if (node == null || !node.isOnline) return;
-    final interval = node.role == Role.superNode
-        ? config.scanIntervalSuperMs
-        : config.scanIntervalNormalMs;
+    final interval = _scanIntervalFor(node);
 
     if (!isAwake(node)) {
       // Scanner off: no discovery, no OppQueue hand-off, no MPR recompute this

@@ -227,6 +227,24 @@ export interface SimConfig {
    *  peer count `campus_quad` produces, so the reference world is the one §4's 2 s was written
    *  against and the crowd stretches from there. */
   ogmDensityReferencePeers: number;
+  /** Whether a node scans on its role's fixed interval or on one scaled by how many peers it
+   *  had at the last scan.
+   *
+   *  `"fixed"` ships. `"density"` is the third row of `docs/05` §1.2's mitigation table —
+   *  *"Scan interval scales with peer density: dense = shorter interval (peers stable), sparse =
+   *  longer (fewer discoveries expected)"* — which was documented and never built. The direction
+   *  is the **inverse** of the beacon rule `docs/06` §24.11 built and rejected, and that is not a
+   *  contradiction: a scan is this device waking to look, while a beacon is every neighbour waking
+   *  to listen, so the cost of each scales with density in opposite directions. Neither result is
+   *  a verdict on the other.
+   *
+   *  Anchored so a node with `scanDensityReferencePeers` peers scans at exactly its role's
+   *  configured interval, and clamped to `[base / 4, base × 4]` so a node with one peer does not
+   *  stop scanning and a node in a crowd does not scan continuously. Consumes no random number, so
+   *  the fixed mode's draw sequence is untouched and the golden vectors do not move. */
+  scanIntervalMode: "fixed" | "density";
+  /** The peer count at which `"density"` reproduces the role's configured scan interval. */
+  scanDensityReferencePeers: number;
   ogmJitterMs: number;
   ogmTtl: number;
   electionIntervalMs: number;
@@ -547,6 +565,8 @@ export const DEFAULT_CONFIG: SimConfig = {
   connectivitySampleMs: 5_000,
   ogmIntervalMode: "fixed",
   ogmDensityReferencePeers: 10,
+  scanIntervalMode: "fixed",
+  scanDensityReferencePeers: 10,
   ogmJitterMs: 200,
   ogmTtl: 5,
   electionIntervalMs: 30000,
@@ -1815,6 +1835,26 @@ export class MeshSimulation {
   }
 
   /**
+   * The interval before this node's next scan, under `scanIntervalMode` — `docs/05` §1.2's
+   * adaptive-scan-interval row.
+   *
+   * Scaled from the peer count the *previous* scan found, because a node cannot know how dense its
+   * neighbourhood is before it looks — which is why the clamp matters: a node that has just moved
+   * into a crowd scans at its old, longer interval for one cycle, and a node just left alone scans
+   * at its old, shorter one.
+   */
+  private scanIntervalFor(node: MeshNode): number {
+    const base =
+      node.role === "SUPER" ? this.config.scanIntervalSuperMs : this.config.scanIntervalNormalMs;
+    if (this.config.scanIntervalMode === "fixed") return base;
+    const peers = Math.max(1, node.peerIds.length);
+    const reference = Math.max(1, this.config.scanDensityReferencePeers);
+    // Inverse of the beacon rule: dense scans sooner, sparse scans later.
+    const raw = (base * reference) / peers;
+    return Math.min(base * 4, Math.max(base / 4, raw));
+  }
+
+  /**
    * The interval before this node's next beacon, under `ogmIntervalMode`.
    *
    * `"density"` holds the receptions a node imposes constant: at interval `I` with `p` peers
@@ -1948,8 +1988,7 @@ export class MeshSimulation {
   private onScan(nodeId: string): void {
     const node = this.byId(nodeId);
     if (!node || !node.isOnline) return;
-    const interval =
-      node.role === "SUPER" ? this.config.scanIntervalSuperMs : this.config.scanIntervalNormalMs;
+    const interval = this.scanIntervalFor(node);
 
     if (!this.isAwake(node)) {
       // Scanner off: no discovery, no OppQueue hand-off, no MPR recompute this
