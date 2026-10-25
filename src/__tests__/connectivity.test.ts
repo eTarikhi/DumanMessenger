@@ -9,6 +9,8 @@
  */
 import { describe, expect, it } from "vitest";
 import { MeshSimulation, type SimConfig } from "../simulation";
+import { radioComponents } from "../rf";
+import { makeNode, rfWith } from "./helpers";
 import { campusQuad, festivalCrowd, sparseVillage } from "../scenarios";
 
 function measured(over: Partial<SimConfig> = {}, scenario = campusQuad) {
@@ -187,5 +189,59 @@ describe("the density-derived beacon interval (docs/06 §24.11)", () => {
     // in seven, which is the strongest claim the data supports. On this seed it is better too,
     // but one seed is why that sentence says eight.
     expect(derived.stats.broadcastReach).toBeGreaterThanOrEqual(fixed.stats.broadcastReach);
+  });
+});
+
+describe("radioComponents — the one walk behind both the metric and the picture", () => {
+  it("splits what is out of range, largest piece first", () => {
+    const rf = rfWith();
+    const comps = radioComponents(
+      [makeNode("a", 0, 0), makeNode("b", 10, 0), makeNode("c", 90, 90)],
+      rf
+    );
+    expect(comps.length).toBe(2);
+    expect(comps[0].sort()).toEqual(["a", "b"]);
+    expect(comps[1]).toEqual(["c"]);
+  });
+
+  it("partitions every node exactly once", () => {
+    const rf = rfWith();
+    const nodes = [
+      makeNode("a", 0, 0),
+      makeNode("b", 10, 0),
+      makeNode("c", 90, 90),
+      makeNode("d", 95, 95),
+      makeNode("e", 45, 45),
+    ];
+    const flat = radioComponents(nodes, rf).flat();
+    expect(flat.length).toBe(nodes.length);
+    expect(new Set(flat).size).toBe(nodes.length);
+  });
+
+  it("makes an offline node its own component rather than absorbing it into a neighbour's", () => {
+    // peersInRange filters the far end on isOnline and never the near one, so without forcing
+    // this the offline node lists live neighbours that do not list it back — an asymmetric edge
+    // a depth-first search follows, reporting one piece while a node in it hears nobody.
+    const rf = rfWith();
+    const comps = radioComponents(
+      [
+        makeNode("a", 0, 0),
+        makeNode("off", 10, 0, { isOnline: false }),
+        makeNode("b", 20, 0),
+      ],
+      rf
+    );
+    const offline = comps.find((c) => c.includes("off"));
+    expect(offline).toEqual(["off"]);
+    expect(comps[0].sort()).toEqual(["a", "b"]);
+  });
+
+  it("is what componentSizes reports the sizes of, so the metric and the picture agree", () => {
+    const sim = measured({ connectivitySampleMs: 5_000 }, festivalCrowd);
+    expect(sim.components().map((c) => c.length)).toEqual(sim.componentSizes());
+    // And the premise the published numbers rest on: nothing was offline in those runs, so
+    // forcing offline nodes into their own components cannot have moved any of them.
+    expect(sim.nodes.every((n) => n.isOnline)).toBe(true);
+    expect(measured({}, campusQuad).nodes.every((n) => n.isOnline)).toBe(true);
   });
 });

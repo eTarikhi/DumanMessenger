@@ -39,6 +39,7 @@ import {
   integrateMotion,
   effectiveLossProbability,
   peersInRange,
+  radioComponents,
   rssiModel,
 } from "./rf";
 import {
@@ -1376,27 +1377,17 @@ export class MeshSimulation {
    * reach, because a graph sampled once after the window cannot see a partition that healed.
    */
   componentSizes(): number[] {
-    const adj = new Map<NodeId, NodeId[]>();
-    for (const node of this.nodes) {
-      adj.set(node.id, peersInRange(node, this.nodes, this.rf).map((p) => p.id));
-    }
-    const seen = new Set<NodeId>();
-    const out: number[] = [];
-    for (const node of this.nodes) {
-      if (seen.has(node.id)) continue;
-      let size = 0;
-      const stack = [node.id];
-      while (stack.length > 0) {
-        const id = stack.pop()!;
-        if (seen.has(id)) continue;
-        seen.add(id);
-        size++;
-        for (const nb of adj.get(id) ?? []) if (!seen.has(nb)) stack.push(nb);
-      }
-      out.push(size);
-    }
-    out.sort((a, b) => b - a);
-    return out;
+    return radioComponents(this.nodes, this.rf).map((c) => c.length);
+  }
+
+  /**
+   * The radio graph's components as node-id lists, largest first — the same walk
+   * `componentSizes` reports the sizes of, for a caller that needs to know *which* node is in
+   * which piece. `MeshCanvas` uses it to draw a split; a probe could use it to attribute a
+   * delivery failure to the component the sender was in.
+   */
+  components(): NodeId[][] {
+    return radioComponents(this.nodes, this.rf);
   }
 
   /** Take one connectivity sample if the interval has elapsed. Called from the physics tick,

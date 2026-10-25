@@ -2526,6 +2526,41 @@ void main() {
       expect(sim.stats.meanLargestComponent, equals(1.0));
     });
 
+    test('splits what is out of range, largest piece first', () {
+      final comps = radioComponents(<MeshNode>[
+        makeNode('a', 0, 0),
+        makeNode('b', 10, 0),
+        makeNode('c', 90, 90),
+      ], rfWith());
+      expect(comps, hasLength(2));
+      expect(comps[0]..sort(), equals(<NodeId>['a', 'b']));
+      expect(comps[1], equals(<NodeId>['c']));
+    });
+
+    test('makes an offline node its own component rather than absorbing it', () {
+      // `peersInRange` filters the far end on isOnline and never the near one, so without
+      // forcing this the offline node lists live neighbours that do not list it back — an
+      // asymmetric edge a depth-first search follows, reporting one piece while a node in it
+      // hears nobody.
+      final comps = radioComponents(<MeshNode>[
+        makeNode('a', 0, 0),
+        makeNode('off', 10, 0, isOnline: false),
+        makeNode('b', 20, 0),
+      ], rfWith());
+      expect(comps.firstWhere((c) => c.contains('off')), equals(<NodeId>['off']));
+      expect(comps[0]..sort(), equals(<NodeId>['a', 'b']));
+    });
+
+    test('is what componentSizes reports the sizes of, so metric and picture agree', () {
+      final sim = world(campusQuad(42));
+      expect(sim.components().map((c) => c.length).toList(),
+          equals(sim.componentSizes()));
+      // The premise the published numbers in docs/06 §24.10-§24.13 rest on: nothing was
+      // offline in those runs, so forcing offline nodes into their own components cannot
+      // have moved any of them.
+      expect(sim.nodes.every((n) => n.isOnline), isTrue);
+    });
+
     test('says a settled 20-node campus stays in one piece', () {
       final sim = world(campusQuad(42).copyWith(connectivitySampleMs: 5000.0));
       expect(sim.stats.connectedSampleShare, equals(1.0));

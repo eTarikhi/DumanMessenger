@@ -2613,31 +2613,14 @@ class MeshSimulation {
   /// broadcast has to cross. docs/06 §24.10 uses this to explain festival_crowd's two modes,
   /// and any measurement of reach in a mobile network should report it beside the reach,
   /// because a graph sampled once after the window cannot see a partition that healed.
-  List<int> componentSizes() {
-    final adj = <NodeId, List<NodeId>>{};
-    for (final node in nodes) {
-      adj[node.id] = peersInRange(node, nodes, rf).map((p) => p.id).toList();
-    }
-    final seen = <NodeId>{};
-    final out = <int>[];
-    for (final node in nodes) {
-      if (seen.contains(node.id)) continue;
-      var size = 0;
-      final stack = <NodeId>[node.id];
-      while (stack.isNotEmpty) {
-        final id = stack.removeLast();
-        if (seen.contains(id)) continue;
-        seen.add(id);
-        size++;
-        for (final nb in adj[id] ?? const <NodeId>[]) {
-          if (!seen.contains(nb)) stack.add(nb);
-        }
-      }
-      out.add(size);
-    }
-    out.sort((a, b) => b.compareTo(a));
-    return out;
-  }
+  List<int> componentSizes() =>
+      radioComponents(nodes, rf).map((c) => c.length).toList();
+
+  /// The radio graph's components as node-id lists, largest first — the same walk
+  /// [componentSizes] reports the sizes of, for a caller that needs to know *which* node is in
+  /// which piece. The TypeScript visualiser draws it; a probe could use it to attribute a
+  /// delivery failure to the component the sender was in.
+  List<List<NodeId>> components() => radioComponents(nodes, rf);
 
   /// Take one connectivity sample if the interval has elapsed. Called from the physics tick, so
   /// it adds no event to the queue and consumes no random number.
