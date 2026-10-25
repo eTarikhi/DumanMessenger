@@ -51,12 +51,19 @@ dart run bin/mesh_sim.dart --capture      # pcap-like mesh log tail (--capture-o
 
 ```bash
 npm ci
-npm test          # 166 tests: RF, election, routing, DTN, power, SOS, hop traces, acceptance, UI renders
-npm run dev       # canvas: watch SUPERs get elected, MPR suppress floods, bundles wait for a contact
-                  # click a node to decline its router role or turn on battery saver
+npm test          # 451 tests: RF, election, routing, DTN, power, SOS, hop traces, abuse limits,
+                  # blocks, wake-locks, radio occupancy, connectivity, acceptance, UI renders
+npm run dev       # canvas: watch SUPERs get elected, MPR suppress floods, bundles wait for a
+                  # contact, and a split network draw a ring per component. Click a node to
+                  # decline its router role, turn on battery saver, or block a peer locally
 npm run golden    # regenerate test-fixtures/golden-vectors.json after an engine change
-npm run media     # the media transport probe behind docs/08 (files, PTT, retry timer, contention, the radio)
+npm run media     # 17 sections, ~14 min: docs/08's media and radio work plus docs/06 §24's
+                  # occupancy, beacon interval, reach and interval-mode measurements
 npm run history   # group-history anti-entropy, with and without repair (docs/06 §17)
+npm run e2ee      # what E2EE costs on this mesh: handshake legs, session churn, packet sizing,
+                  # real crypto throughput (docs/07 §2-§4, §7)
+npm run rate      # docs/04 §6's abuse limits: honest traffic, a 12x flooder, a local block
+npm run cover     # docs/04 §5's dummy beacons — measured, and rejected (docs/06 §23)
 npm run field:capture -- campus_quad 42 /tmp/cap.jsonl [flood-all]   # a field-test capture, from a run
 npm run field:report  -- /tmp/cap.jsonl /tmp/base.jsonl              # the roadmap's field numbers (docs/09)
 ```
@@ -68,13 +75,27 @@ case), `sparse_village` and `partitioned_pair` (store-carry-forward DTN),
 Measured on `campus_quad` across six seeds: **SUPER ratio 20-25%, delivery
 97.3-100%, 97.3-100% of messages within 5 hops, 7-9% of the naive flood-all
 relay budget, ≤0.22 role changes per node per minute.** In the 60-node crowd the
-engine delivers **91.3-95.3%** at 12-14% of naive flood's relays — naive flooding
-does reach 100% there, for 7-9× the transmissions.
+engine delivers **85.3-98.7% over nine seeds** at 12-14% of naive flood's relays — naive
+flooding does reach 100% there, for 7-9× the relays (`docs/06` §6, §16).
+
+That crowd range is wide because the crowd is **bimodal**, and quoting it without saying so
+would be the mistake this repository spent a week unwinding: 60 mobile nodes spawned in clusters
+split and re-join inside a measurement window, so broadcast reach lands near 98% in a window that
+stays connected and 50-79% in one that does not. Which mode a seed takes is not stable across
+arms, so a three-seed mean can be ordered almost arbitrarily — one did, and §24.8 retracted it.
+Read any crowd number beside its in-window connectivity (`connectedSampleShare`) and its seed
+count; `docs/06` §24.8-§24.13 is the whole story, and §24.14 collects what follows from it.
+
 Criteria, calibration evidence and the protocol bugs found while measuring are in
-[`docs/06-simulator-findings.md`](docs/06-simulator-findings.md). E2EE is specified and costed —
-handshake latency per leg, when to negotiate at all, and the packet/padding size model both engines
-now use — in [`docs/07-e2ee-noise-xx.md`](docs/07-e2ee-noise-xx.md); no cryptography is implemented
-here, because `skills/03` says never to write custom crypto.
+[`docs/06-simulator-findings.md`](docs/06-simulator-findings.md). E2EE is specified, costed **and
+implemented** — handshake latency per leg, when to negotiate at all, and the packet/padding size
+model both engines use — in [`docs/07-e2ee-noise-xx.md`](docs/07-e2ee-noise-xx.md). `src/crypto/`
+carries Noise_XX, the symmetric ratchet, SAS comparison, identity/QR and packet sealing across
+eight modules and 87 tests, built on `node:crypto`'s vetted primitives rather than anything
+hand-rolled, which is what `skills/03`'s *"never custom crypto"* actually asks for. It is
+deliberately outside the browser bundle — nothing in `App.tsx`'s import graph may reach it, and a
+test fails if that changes — and there is no Dart mirror, because the Dart SDK has no X25519 or
+ChaCha20 and no package source was reachable to add one.
 
 **SOS mode** (`docs/05` §3.2-3.3, roadmap Phase 3): the originator floods, then re-floods three
 times at 5 s intervals, each flood a *fresh message id* (the seen-cache would swallow a repeat that
