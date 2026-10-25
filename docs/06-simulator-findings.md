@@ -2499,3 +2499,66 @@ land in either of two modes, print the per-seed spread beside the mean, and do n
 ordering between arms on a sample too small to contain both modes. Where a section's numbers
 predate that rule and rest on `festival_crowd`, they carry their seed count — as §24.6's now do
 — and it is the direction that should be quoted rather than the magnitude.
+
+### 24.9 Why the crowd has two modes: two explanations tested, both failed
+
+§24.8 established that `festival_crowd` is bimodal and left it at that. Two explanations are
+obvious enough to be worth testing before accepting the bimodality as a fact about the world,
+and `npm run media reach` tests both.
+
+**Hypothesis 1 — the crowd partitions, so a broadcast simply cannot reach everyone.** The
+radio graph at the end of each window, by seed:
+
+| interval | seed | 42 | 7 | 1234 | 99 | 2024 | 31337 | 555 | 8 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 s | reach | 98 | 98 | 98 | **79** | **79** | **54** | 87 | 98 |
+| 2 s | components | 60 | 60 | 60 | **40 + 20** | 60 | **40 + 20** | 60 | 60 |
+| 12 s | reach | **70** | 98 | 98 | 93 | **55** | **70** | **61** | 98 |
+| 12 s | components | 60 | 60 | 60 | 60 | 60 | 60 | 60 | 60 |
+
+Partly true, and not the story. At 2 s two of eight seeds split **40 + 20** and both are
+weak-reach seeds, so for those two the ceiling is the component the sender happens to be in
+rather than any routing failure — which is worth knowing, because it means those rows are not
+evidence about the protocol at all. But seed 2024 reaches 79 % in a *fully connected* world,
+and at 12 s **all eight worlds are connected** while reach still spans 55-98 %. Partitioning
+explains two rows of sixteen and cannot be the mode.
+
+**Hypothesis 2 — stale two-hop views make MPR suppress the only path to part of the network.**
+The prediction is sharp: if wrong suppression is the mechanism, removing suppression entirely
+must restore reach. `relayPolicy: "flood-all"` removes it, eight seeds:
+
+| interval | policy | reach | delivery | MPR suppressed | overhead | per-seed reach |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| 2 s | `mpr` | **86.5 %** | 92.0 % | 523 | 2 319 % | 98 98 98 79 79 54 87 98 |
+| 2 s | `flood-all` | 81.8 % | 90.5 % | 0 | 17 728 % | 98 98 98 66 **98** **42** 55 98 |
+| 12 s | `mpr` | 80.4 % | 87.5 % | 698 | 2 662 % | 70 98 98 93 55 70 61 98 |
+| 12 s | `flood-all` | 84.8 % | 91.0 % | 0 | 14 857 % | 98 98 98 91 65 53 77 98 |
+
+Refuted. Flooding suppresses nothing and spends roughly **six times** the overhead, and the
+weak mode walks straight through it: per-seed reach under `flood-all` still reads 42 %, 55 %
+and 66 % at 2 s, where MPR gave 79 %, 54 % and 87 %. At 2 s flooding is *worse on the mean*
+(81.8 % against 86.5 %) despite unlimited retransmission, and it moves different seeds than
+MPR does — 2024 recovers to 98 % while 31337 falls to 42 %. A limit that cannot be lifted by
+removing the policy that was blamed for it is not that policy's doing.
+
+**So the weak mode is neither topology nor suppression**, and this document does not claim to
+know what it is. Three candidates were not tested and are named rather than guessed at:
+
+- a receiver inside its duty-cycle sleep window when the broadcast passes, which the crowd's
+  density makes likely and `scansSkippedAsleep` would quantify per seed;
+- queue shedding under the crowd's own load, which §12.14 measured as mostly the source's own
+  shedding and which a 60-node world with 30 injected messages may hit differently;
+- the fact that reach is averaged over a 60 s window in which a 60-node crowd's graph is still
+  moving, so the component table above — measured at the *end* of the window — is not the graph
+  each broadcast had to cross. The two split seeds at 2 s may be split for part of the window
+  and joined for the rest, or the reverse.
+
+The third is the one that would change how the metric should be read, and it is testable by
+sampling connectivity during the window rather than after it.
+
+**What fell out on the way, and is worth more than the question.** The overhead column is the
+first measurement of `skills/02`'s acceptance target — *"overhead ≤70 % of flood-all"* — in the
+densest scenario this repository has, on eight seeds: MPR holds overhead to **13 %** of
+flood-all at 2 s (2 319 % against 17 728 %) and **18 %** at 12 s, while at 2 s delivering
+*more* reach than flooding does. The target is met by a factor of five, and the earlier
+measurements of it were on 20 nodes.

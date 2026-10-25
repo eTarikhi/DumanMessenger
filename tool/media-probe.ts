@@ -29,6 +29,7 @@ import { NEIGHBOR_SCORE_TTL_MS } from "../src/election";
 import { campusQuad, festivalCrowd } from "../src/scenarios";
 import { canReach, effectiveLossProbability, peersInRange } from "../src/rf";
 import { createRng } from "../src/rng";
+import type { RelayPolicy } from "../src/types";
 import type {
   ChannelAccess,
   ChannelBackoff,
@@ -2135,6 +2136,146 @@ function beaconTable(): void {
   );
 }
 
+// ---------------------------------------------------------------------------
+// 16. Why a 60-node crowd has two modes, and the two explanations that failed
+// ---------------------------------------------------------------------------
+
+interface ReachRow {
+  seed: number;
+  reach: number;
+  delivery: number;
+  suppressed: number;
+  overhead: number;
+  /** Component sizes of the radio graph at the end of the window, largest first. */
+  components: number[];
+}
+
+function reachRun(
+  seed: number,
+  interval: number,
+  policy: RelayPolicy
+): ReachRow {
+  const sim = new MeshSimulation({
+    ...festivalCrowd(seed),
+    radioOccupancy: "airtime",
+    ogmIntervalMs: interval,
+    relayPolicy: policy,
+  });
+  sim.runFor(90_000);
+  sim.refresh();
+  sim.clearRecords();
+  sim.injectTraffic(30, 40_000);
+  sim.runFor(60_000);
+  sim.refresh();
+  // Who can hear whom, at the end of the window: the graph a broadcast has to cross.
+  const nodes = sim.nodes;
+  const adj = new Map<NodeId, NodeId[]>();
+  for (const n of nodes) adj.set(n.id, peersInRange(n, nodes, sim.rf).map((p) => p.id));
+  const seen = new Set<NodeId>();
+  const components: number[] = [];
+  for (const n of nodes) {
+    if (seen.has(n.id)) continue;
+    let size = 0;
+    const stack = [n.id];
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      size++;
+      for (const nb of adj.get(id) ?? []) if (!seen.has(nb)) stack.push(nb);
+    }
+    components.push(size);
+  }
+  components.sort((a, b) => b - a);
+  return {
+    seed,
+    reach: sim.stats.broadcastReach,
+    delivery: sim.stats.deliveryRatio,
+    suppressed: sim.stats.mprSuppressed,
+    overhead: sim.stats.overheadRatio,
+    components,
+  };
+}
+
+const REACH_SEEDS = [42, 7, 1234, 99, 2024, 31337, 555, 8];
+
+function reachTable(): void {
+  console.log(
+    "\n=== 16. Why a 60-node crowd has two modes, and the two explanations that failed ==="
+  );
+  console.log(
+    "§24.8 found `festival_crowd` bimodal: broadcast reach lands either near 98% or between"
+  );
+  console.log(
+    "50 and 79%, and which seeds are weak differs per arm. Two explanations are obvious, and"
+  );
+  console.log(
+    "both are testable here — one from the radio graph, one from the forwarding policy.\n"
+  );
+
+  console.log("  Hypothesis 1: the crowd partitions, so a broadcast cannot reach everyone.\n");
+  console.log("  interval   seed     reach   components (largest first)");
+  for (const interval of [2_000, 12_000]) {
+    for (const seed of REACH_SEEDS) {
+      const r = reachRun(seed, interval, "mpr");
+      const split = r.components.length > 1 ? "  <-- SPLIT" : "";
+      console.log(
+        `  ${(interval / 1000 + " s").padEnd(10)} ${String(seed).padEnd(8)} ` +
+          `${((r.reach * 100).toFixed(0) + "%").padStart(5)}   ` +
+          `[${r.components.slice(0, 4).join(", ")}] of ${r.components.reduce((a, b) => a + b, 0)}${split}`
+      );
+    }
+    console.log("");
+  }
+  console.log(
+    "  Partly true and not the story. At 2 s two of eight seeds split 40/20, and both are\n" +
+      "  weak-reach seeds — so for those the ceiling is the component the sender is in, not a\n" +
+      "  routing failure. But a weak seed at 2 s (2024, 79%) is fully connected, and at 12 s\n" +
+      "  **all eight worlds are connected** while reach still spans 55-98%. Partitioning\n" +
+      "  explains two rows of sixteen and cannot explain the mode.\n"
+  );
+
+  console.log("  Hypothesis 2: stale two-hop views make MPR suppress the only path.\n");
+  console.log("  interval   policy      reach   delivery   MPR suppressed   overhead   per-seed reach");
+  for (const interval of [2_000, 12_000]) {
+    for (const policy of ["mpr", "flood-all"] as RelayPolicy[]) {
+      const rows = REACH_SEEDS.map((seed) => reachRun(seed, interval, policy));
+      const mean = (f: (r: ReachRow) => number) =>
+        rows.reduce((a, r) => a + f(r), 0) / Math.max(1, rows.length);
+      console.log(
+        `  ${(interval / 1000 + " s").padEnd(10)} ${policy.padEnd(11)} ` +
+          `${((mean((r) => r.reach) * 100).toFixed(1) + "%").padStart(6)} ` +
+          `${((mean((r) => r.delivery) * 100).toFixed(1) + "%").padStart(10)} ` +
+          `${mean((r) => r.suppressed).toFixed(0).padStart(16)} ` +
+          `${((mean((r) => r.overhead) * 100).toFixed(0) + "%").padStart(10)}   ` +
+          rows.map((r) => (r.reach * 100).toFixed(0)).join(" ")
+      );
+    }
+    console.log("");
+  }
+  console.log(
+    "  Refuted. `flood-all` suppresses nothing at all and spends roughly six times the\n" +
+      "  overhead, and the weak mode survives it: per-seed reach under flood-all still reads\n" +
+      "  42%, 55% and 66% at 2 s, where MPR gave 79%, 54% and 87%. At 2 s flooding is\n" +
+      "  *worse* on the mean (81.8% against 86.5%) despite unlimited retransmission. A\n" +
+      "  forwarding policy that cannot be improved by removing the forwarding policy is not\n" +
+      "  what is limiting reach.\n" +
+      "\n" +
+      "  So the weak mode is neither topology nor suppression, and this probe does not claim\n" +
+      "  to know what it is. What is left untested and is worth naming: a receiver that is\n" +
+      "  asleep inside its duty-cycle window when the broadcast passes, queue shedding under\n" +
+      "  the crowd's own load, and the fact that reach is averaged over a 60 s window in\n" +
+      "  which a 60-node crowd's graph is still moving — so the component measured at the end\n" +
+      "  is not the one each broadcast had to cross. docs/06 §24.9.\n" +
+      "\n" +
+      "  One thing that fell out and is worth keeping: MPR's overhead against flood-all in the\n" +
+      "  densest scenario, on eight seeds, is 2 319% against 17 728% at 2 s and 2 662% against\n" +
+      "  14 857% at 12 s — **13% and 18% of flood-all**, against skills/02's acceptance target\n" +
+      "  of \u226470%, while delivering *more* reach at 2 s. That target is met here by a wide\n" +
+      "  margin, and this is the first place it has been measured in a 60-node world.\n"
+  );
+}
+
 function main(): void {
   console.log("Duman media transport probe — every number below is measured, not assumed.");
   console.log(
@@ -2163,6 +2304,7 @@ function main(): void {
     ["captureMargin", captureMarginTable],
     ["occupancy", occupancyTable],
     ["beacon", beaconTable],
+    ["reach", reachTable],
   ];
   if (only && !sections.some(([name]) => name === only)) {
     console.error(`unknown section "${only}". one of: ${sections.map(([name]) => name).join(", ")}`);
