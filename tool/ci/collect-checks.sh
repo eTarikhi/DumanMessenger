@@ -176,6 +176,21 @@ init_artifacts checks
 RUN_ID="$(basename "$artifact_dir")"
 [ -n "$REPORT" ] || REPORT="$artifact_dir/REPORT.md"
 
+# A caller-supplied --report or --json may point anywhere, and nothing else here creates a
+# directory for it. Without this the report redirect fails into a path that does not exist
+# and the JSON step tracebacks — while the closing line still tells the caller a report was
+# written, which is the part that costs them time. Hit for real with
+# `--report artifacts/ci/<a-new-directory>/REPORT.md`.
+ensure_parent() {
+  local target="$1" dir
+  [ -n "$target" ] || return 0
+  dir="$(dirname "$target")"
+  [ -d "$dir" ] && return 0
+  mkdir -p "$dir" 2>/dev/null || { err "cannot create $dir for $target"; exit 64; }
+}
+ensure_parent "$REPORT"
+ensure_parent "$JSON_OUT"
+
 START_ALL=$(date +%s)
 
 log "collecting checks · $(git_branch) @ $(git_sha)"
@@ -615,7 +630,7 @@ rm -f "$PASTE"
 # --- json ----------------------------------------------------------------------
 
 if [ -n "$JSON_OUT" ] && have python3; then
-  python3 - "$JSON_OUT" "$(git_sha)" "$(git_branch)" "$N_PASS" "$N_FAIL" "$N_NOTRUN" \
+  if python3 - "$JSON_OUT" "$(git_sha)" "$(git_branch)" "$N_PASS" "$N_FAIL" "$N_NOTRUN" \
             "$((END_ALL - START_ALL))" "$RUN_ID" "$REPORT" "${SELECTED// /,}" ${ROWS[@]+"${ROWS[@]}"} <<'PY'
 import json, sys
 from datetime import datetime, timezone
@@ -634,7 +649,12 @@ json.dump({
     "notRun": int(nnotrun), "report": report, "checks": checks,
 }, open(out, "w", encoding="utf-8"), indent=2)
 PY
-  log_dim "json record: $JSON_OUT"
+  then
+    log_dim "json record: $JSON_OUT"
+  else
+    # Say so, rather than printing the path as though a record existed at it.
+    err "could not write the json record to ${JSON_OUT#$ROOT/}"
+  fi
 fi
 
 echo
@@ -655,7 +675,11 @@ if [ "$N_FAIL" -gt 0 ] || [ "$N_NOTRUN" -gt 0 ]; then
     err "less than compiling. Install it per docs/11 §2 and re-run; if 'dart analyze' is red the"
     err "paste-back block above carries '--- dart diagnostics ---' with file:line:col locations."
   fi
-  err "Report: ${REPORT#$ROOT/}"
+  if [ -f "$REPORT" ]; then
+    err "Report: ${REPORT#$ROOT/}"
+  else
+    err "Report: could not be written to ${REPORT#$ROOT/}"
+  fi
   exit 1
 fi
 
