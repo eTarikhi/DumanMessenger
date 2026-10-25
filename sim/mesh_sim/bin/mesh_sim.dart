@@ -98,6 +98,11 @@ Duman mesh simulator (headless)
   --cover-interval <ms> Mean gap between a node's dummy beacons, default 30000. Read only
                         with --cover-traffic, like --capture-ratio is read only under
                         --channel-capture strongest
+  --ogm-interval-mode <n> fixed (ships, docs/03 §4's 2 s for every node) or density (each
+                        node stretches its interval in proportion to its peer count, so the
+                        receptions it imposes stay constant). Density is measured and
+                        rejected — docs/06 §24.11 — and is here so the measurement is
+                        reproducible rather than so it can be turned on
   --connectivity-sample <ms>
                         How often to sample whether the radio graph is in one piece,
                         default 5000; 0 disables it. Reports connectivitySamples,
@@ -347,6 +352,23 @@ void main(List<String> args) {
     config = config.copyWith(coverIntervalMs: ms);
   }
 
+  final intervalModeName = _arg(args, '--ogm-interval-mode', '');
+  if (intervalModeName.isNotEmpty) {
+    switch (intervalModeName) {
+      case 'fixed':
+        config = config.copyWith(ogmIntervalMode: OgmIntervalMode.fixed);
+        break;
+      case 'density':
+        config = config.copyWith(ogmIntervalMode: OgmIntervalMode.density);
+        break;
+      default:
+        stderr.writeln('Unknown --ogm-interval-mode "$intervalModeName". '
+            'Try: fixed | density');
+        exitCode = 64;
+        return;
+    }
+  }
+
   final connArg = _arg(args, '--connectivity-sample', '');
   if (connArg.isNotEmpty) {
     // tryParse, not parse: a bad number is a usage error with a message, not a stack trace.
@@ -496,6 +518,8 @@ void main(List<String> args) {
       'radioOccupancy': config.radioOccupancy.wire,
       'ogmAliasBytes': config.ogmAliasBytes,
       'connectivitySampleMs': config.connectivitySampleMs,
+      'ogmIntervalMode': config.ogmIntervalMode.wire,
+      'ogmDensityReferencePeers': config.ogmDensityReferencePeers,
     },
     'nodes': sim.nodes.length,
     'sent': sent,

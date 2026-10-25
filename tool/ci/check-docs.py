@@ -125,7 +125,7 @@ def dart_accepted_values(repo: Repo) -> Dict[str, Set[str]]:
     src = repo.read("sim/mesh_sim/bin/mesh_sim.dart")
     out: Dict[str, Set[str]] = {}
     for var in ["policyName", "accessName", "captureName", "priorityName", "backoffName",
-                "capScopeName", "blockScopeName", "occupancyName"]:
+                "capScopeName", "blockScopeName", "occupancyName", "intervalModeName"]:
         i = src.find(f"switch ({var})")
         if i < 0:
             continue

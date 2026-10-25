@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { MeshSimulation, type SimConfig } from "../simulation";
-import { campusQuad, festivalCrowd } from "../scenarios";
+import { campusQuad, festivalCrowd, sparseVillage } from "../scenarios";
 
 function measured(over: Partial<SimConfig> = {}, scenario = campusQuad) {
   const sim = new MeshSimulation({ ...scenario(42), ...over });
@@ -102,5 +102,51 @@ describe("connectivity sampling (docs/06 §24.10)", () => {
     }
     expect(on.stats.connectivitySamples).toBeGreaterThan(0);
     expect(off.stats.connectivitySamples).toBe(0);
+  });
+});
+
+describe("the density-derived beacon interval (docs/06 §24.11)", () => {
+  it("ships on the fixed interval docs/03 §4 specifies", () => {
+    const config = campusQuad(42);
+    expect(config.ogmIntervalMode).toBe("fixed");
+    expect(config.ogmDensityReferencePeers).toBe(10);
+    expect(config.ogmIntervalMs).toBe(2_000);
+  });
+
+  it("beacons a reference-density node at exactly the specified interval", () => {
+    // The rule is anchored, not a replacement: a node with ten peers beacons every 2 s in
+    // both modes, so the derived mode cannot be blamed for a change it did not make. Measured
+    // through the beacon count over a window, since the interval itself is private.
+    const fixed = measured({ ogmIntervalMode: "fixed" });
+    expect(fixed.stats.controlOverhead).toBeGreaterThan(0);
+    const on = measured({ connectivitySampleMs: 0 });
+    const off = measured({ connectivitySampleMs: 0, ogmIntervalMode: "density" });
+    // In a settled campus the peer counts sit near the reference, so the two modes beacon
+    // within a third of each other — and the derived mode is not cheaper, which is the first
+    // half of why §24.11 rejects it.
+    expect(off.stats.controlOverhead).toBeGreaterThan(on.stats.controlOverhead * 0.66);
+    expect(off.stats.deliveryRatio).toBeLessThanOrEqual(on.stats.deliveryRatio + 0.05);
+  });
+
+  it("spends more airtime in a sparse world, where the floor bites", () => {
+    // docs/06 §24.11: sparse_village pays 3.1x the demanded radio time for 1.6 points of
+    // delivery. A node with three peers hits the ogmIntervalMs / 4 floor and beacons four
+    // times the specified rate, to hold a reception load nobody was struggling with. The
+    // threshold here is loose because the two modes are different worlds; the direction is
+    // what is being pinned, and it is the direction that made the lever get rejected.
+    const fixed = measured({ radioOccupancy: "airtime" }, sparseVillage);
+    const derived = measured(
+      { radioOccupancy: "airtime", ogmIntervalMode: "density" },
+      sparseVillage
+    );
+    expect(derived.stats.controlOverhead).toBeGreaterThan(fixed.stats.controlOverhead);
+    expect(derived.stats.radioDemandRatio).toBeGreaterThan(fixed.stats.radioDemandRatio);
+    // And the topologies are comparable, which is what makes the comparison readable at all:
+    // §24.10's metric says both worlds are equally partitioned, so the cost is not a topology
+    // difference in disguise.
+    expect(derived.stats.meanLargestComponent).toBeCloseTo(
+      fixed.stats.meanLargestComponent,
+      1
+    );
   });
 });

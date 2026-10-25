@@ -194,6 +194,37 @@ export interface SimConfig {
    *  partitioned, which is exactly the mistake §24.9 made. Sampling consumes no RNG and
    *  schedules no events, so it cannot move a golden vector or a published number. */
   connectivitySampleMs: number;
+  /** Whether a node beacons on the fixed interval `docs/03` §4 specifies, or on one derived
+   *  from how many peers will hear it.
+   *
+   *  - `"fixed"` ships: every node beacons every `ogmIntervalMs`, which is what §4 says and
+   *    what every published number assumes.
+   *  - `"density"` holds the *receptions a node imposes on its neighbourhood* constant, by
+   *    stretching the interval in proportion to its peer count. It is **measured and
+   *    rejected** — `docs/06` §24.11 — and ships off for the same reason `coverTraffic` does.
+   *    The motivation was real: §24.7 found no single interval serving both densities, since
+   *    at 20 nodes 25 s costs nothing and cuts demanded radio time tenfold while at 60 nodes
+   *    5 s beats the specified 2 s and everything longer degrades it. Deriving the interval
+   *    per node does not follow from that, and measuring it says why: where the two modes land
+   *    in comparable topologies the derived interval buys no delivery and costs airtime —
+   *    `sparse_village` pays 3.1× the demanded radio time for +1.6 points, `campus_quad` 1.2×
+   *    for −0.7 — and the one place it saves airtime, the crowd, is the one place the
+   *    comparison cannot be read at all, because the two worlds differ in connectivity
+   *    (mean largest component 85 % against 94 %) and §24.10 shows reach tracks that rather
+   *    than the interval.
+   *
+   *  The rule is anchored so that a node with `ogmDensityReferencePeers` peers beacons at
+   *  exactly `ogmIntervalMs` — the specified 2 s is not replaced, it becomes what the
+   *  reference density does — and clamped to `[ogmIntervalMs / 4, NEIGHBOR_SCORE_TTL_MS / 2]`,
+   *  the upper bound being two chances per soft-state TTL so one lost beacon cannot expire a
+   *  neighbour that is still there. The lower bound is what makes it expensive in a sparse
+   *  world: a node with three peers beacons every 500 ms, four times the specified rate, to
+   *  hold a reception load nobody was struggling with. */
+  ogmIntervalMode: "fixed" | "density";
+  /** The peer count at which `"density"` reproduces `ogmIntervalMs` exactly. 10 is the median
+   *  peer count `campus_quad` produces, so the reference world is the one §4's 2 s was written
+   *  against and the crowd stretches from there. */
+  ogmDensityReferencePeers: number;
   ogmJitterMs: number;
   ogmTtl: number;
   electionIntervalMs: number;
@@ -512,6 +543,8 @@ export const DEFAULT_CONFIG: SimConfig = {
   radioOccupancy: "hop-latency",
   ogmAliasBytes: 32,
   connectivitySampleMs: 5_000,
+  ogmIntervalMode: "fixed",
+  ogmDensityReferencePeers: 10,
   ogmJitterMs: 200,
   ogmTtl: 5,
   electionIntervalMs: 30000,
@@ -1757,7 +1790,7 @@ export class MeshSimulation {
     this.beacon(node, ogm);
     const jitter = randRange(this.rng, -this.config.ogmJitterMs, this.config.ogmJitterMs);
     this.queue.push(
-      this.now + Math.max(200, this.config.ogmIntervalMs + jitter),
+      this.now + Math.max(200, this.ogmIntervalFor(node) + jitter),
       "ogm",
       nodeId
     );
@@ -1787,6 +1820,30 @@ export class MeshSimulation {
       "cover",
       nodeId
     );
+  }
+
+  /**
+   * The interval before this node's next beacon, under `ogmIntervalMode`.
+   *
+   * `"density"` holds the receptions a node imposes constant: at interval `I` with `p` peers
+   * it causes `p / I` receptions per millisecond, so setting `I` proportional to `p` keeps
+   * that product at whatever the reference density produces. Called after `refreshPeerList`,
+   * so `peerIds` is this instant's neighbourhood and a node that walks into a crowd starts
+   * beaconing more slowly on its next beacon rather than on a timer of its own.
+   *
+   * Consumes no random number: the jitter draw belongs to the caller and happens either way,
+   * so the fixed mode's sequence of draws is untouched and the golden vectors do not move.
+   */
+  private ogmIntervalFor(node: MeshNode): number {
+    if (this.config.ogmIntervalMode === "fixed") return this.config.ogmIntervalMs;
+    const peers = Math.max(1, node.peerIds.length);
+    const reference = Math.max(1, this.config.ogmDensityReferencePeers);
+    const raw = (this.config.ogmIntervalMs * peers) / reference;
+    const floor = this.config.ogmIntervalMs / 4;
+    // Two chances per soft-state TTL: a neighbour expires at NEIGHBOR_SCORE_TTL_MS, and an
+    // interval at half that survives one lost beacon, which BLE links produce routinely.
+    const ceiling = NEIGHBOR_SCORE_TTL_MS / 2;
+    return Math.min(ceiling, Math.max(floor, raw));
   }
 
   /** Transmit an OGM to every peer, then let each peer gossip it onward. */

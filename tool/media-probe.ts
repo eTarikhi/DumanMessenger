@@ -26,7 +26,7 @@ import {
   ogmWireBytes,
 } from "../src/routing";
 import { NEIGHBOR_SCORE_TTL_MS } from "../src/election";
-import { campusQuad, festivalCrowd } from "../src/scenarios";
+import { campusQuad, festivalCrowd, sparseVillage } from "../src/scenarios";
 import { canReach, effectiveLossProbability, peersInRange } from "../src/rf";
 import { createRng } from "../src/rng";
 import type { RelayPolicy } from "../src/types";
@@ -2364,6 +2364,136 @@ function reachTable(): void {
   );
 }
 
+// ---------------------------------------------------------------------------
+// 17. Deriving the beacon interval from density: §24.7's follow-up, measured and
+//     rejected. The connectivity columns are why it can be rejected honestly.
+// ---------------------------------------------------------------------------
+
+interface IntervalModeRow {
+  delivery: number;
+  reach: number;
+  demand: number;
+  ogms: number;
+  connected: number;
+  largest: number;
+}
+
+function intervalModeRun(
+  seed: number,
+  scenario: (seed: number) => SimConfig,
+  mode: SimConfig["ogmIntervalMode"]
+): IntervalModeRow {
+  const sim = new MeshSimulation({
+    ...scenario(seed),
+    radioOccupancy: "airtime",
+    ogmIntervalMode: mode,
+  });
+  sim.runFor(90_000);
+  sim.refresh();
+  sim.clearRecords();
+  sim.injectTraffic(30, 40_000);
+  sim.runFor(60_000);
+  sim.refresh();
+  const st = sim.stats;
+  return {
+    delivery: st.deliveryRatio,
+    reach: st.broadcastReach,
+    demand: st.radioDemandRatio,
+    ogms: st.controlOverhead,
+    connected: st.connectedSampleShare,
+    largest: st.meanLargestComponent,
+  };
+}
+
+function intervalModeTable(): void {
+  console.log(
+    "\n=== 17. Deriving the beacon interval from density: the follow-up §24.7 argued for ==="
+  );
+  console.log(
+    "§24.7 found no single interval serving both densities: at 20 nodes stretching 2 s to 25 s"
+  );
+  console.log(
+    "costs nothing and cuts demanded radio time tenfold, while at 60 nodes 5 s beats the"
+  );
+  console.log(
+    "specified 2 s and everything longer degrades delivery. The obvious follow-up is to derive"
+  );
+  console.log(
+    "the interval per node instead of choosing one, stretching it in proportion to peer count"
+  );
+  console.log(
+    "so the receptions a node imposes stay constant, anchored so ten peers reproduces the"
+  );
+  console.log(
+    "specified 2 s. Eight seeds, three scenarios, priced under radioOccupancy: airtime.\n"
+  );
+  console.log(
+    "  scenario         mode      delivery    reach   radio demand   OGMs sent   connected in-window   mean largest component"
+  );
+  for (const [name, scenario] of [
+    ["sparse_village", sparseVillage],
+    ["campus_quad", campusQuad],
+    ["festival_crowd", festivalCrowd],
+  ] as Array<[string, (seed: number) => SimConfig]>) {
+    const means = new Map<string, IntervalModeRow>();
+    for (const mode of ["fixed", "density"] as SimConfig["ogmIntervalMode"][]) {
+      const rows = BEACON_SEEDS.map((seed) => intervalModeRun(seed, scenario, mode));
+      const mean = (f: (r: IntervalModeRow) => number) =>
+        rows.reduce((a, r) => a + f(r), 0) / Math.max(1, rows.length);
+      const m = {
+        delivery: mean((r) => r.delivery),
+        reach: mean((r) => r.reach),
+        demand: mean((r) => r.demand),
+        ogms: mean((r) => r.ogms),
+        connected: mean((r) => r.connected),
+        largest: mean((r) => r.largest),
+      };
+      means.set(mode, m);
+      console.log(
+        `  ${name.padEnd(16)} ${mode.padEnd(9)} ` +
+          `${((m.delivery * 100).toFixed(1) + "%").padStart(8)} ` +
+          `${((m.reach * 100).toFixed(1) + "%").padStart(8)} ` +
+          `${(m.demand.toFixed(2) + "x").padStart(14)} ` +
+          `${m.ogms.toFixed(0).padStart(11)} ` +
+          `${((m.connected * 100).toFixed(0) + "%").padStart(21)} ` +
+          `${((m.largest * 100).toFixed(0) + "%").padStart(23)}`
+      );
+    }
+    const f = means.get("fixed")!;
+    const d = means.get("density")!;
+    console.log(
+      `  ${"".padEnd(16)} ${"Δ".padEnd(9)} ` +
+        `${(((d.delivery - f.delivery) * 100).toFixed(1) + " pts").padStart(8)} ` +
+        `${"".padStart(8)} ` +
+        `${((d.demand / f.demand).toFixed(2) + "x").padStart(14)} ` +
+        `${((d.ogms / f.ogms).toFixed(2) + "x").padStart(11)} ` +
+        `   topology comparable: ${Math.abs(d.largest - f.largest) < 0.03 ? "yes" : "NO — read §24.10 first"}`
+    );
+    console.log("");
+  }
+  console.log(
+    "  Read the last line of each pair before the rest, because it decides whether the pair\n" +
+      "  means anything. §24.10 showed reach tracks the largest in-window component, so two\n" +
+      "  arms whose connectivity differs are not a comparison of what was changed.\n" +
+      "\n" +
+      "  sparse_village and campus_quad are comparable — both modes land in the same topology\n" +
+      "  — and in both the derived interval buys no delivery and costs airtime: 3.1x the\n" +
+      "  demanded radio time for 1.6 points in the village, 1.2x for a loss of 0.7 on campus.\n" +
+      "  The mechanism is the clamp's floor: a node with three peers beacons every 500 ms,\n" +
+      "  four times the specified rate, to hold a reception load nobody was struggling with.\n" +
+      "\n" +
+      "  festival_crowd is where the derived interval saves airtime, 5.7x down to 3.3x, and it\n" +
+      "  is exactly where the comparison cannot be read: the two modes land in different\n" +
+      "  topologies (mean largest component 94% against 85%), so the 8.6-point delivery gap\n" +
+      "  cannot be attributed to the interval. That is not a defence of the lever — it is the\n" +
+      "  reason the verdict rests on the two scenarios where the topology is comparable.\n" +
+      "\n" +
+      "  So the follow-up §24.7 argued for is measured and rejected: ogmIntervalMode ships\n" +
+      "  fixed, the specified 2 s stays, and the flag exists so this table is reproducible\n" +
+      "  rather than so the mode can be turned on. docs/06 §24.11.\n"
+  );
+}
+
 function main(): void {
   console.log("Duman media transport probe — every number below is measured, not assumed.");
   console.log(
@@ -2393,6 +2523,7 @@ function main(): void {
     ["occupancy", occupancyTable],
     ["beacon", beaconTable],
     ["reach", reachTable],
+    ["intervalMode", intervalModeTable],
   ];
   if (only && !sections.some(([name]) => name === only)) {
     console.error(`unknown section "${only}". one of: ${sections.map(([name]) => name).join(", ")}`);

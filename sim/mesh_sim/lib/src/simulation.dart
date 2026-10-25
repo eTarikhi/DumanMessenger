@@ -48,6 +48,8 @@ class SimConfig {
     this.radioOccupancy = RadioOccupancy.hopLatency,
     this.ogmAliasBytes = 32,
     this.connectivitySampleMs = 5000,
+    this.ogmIntervalMode = OgmIntervalMode.fixed,
+    this.ogmDensityReferencePeers = 10,
     this.ogmJitterMs = 200,
     this.ogmTtl = 5,
     this.electionIntervalMs = 30000,
@@ -179,6 +181,19 @@ class SimConfig {
   /// mistake §24.9 made. Sampling consumes no random numbers and schedules no events, so it
   /// cannot move a golden vector or a published number.
   final double connectivitySampleMs;
+
+  /// Whether a node beacons on the fixed interval docs/03 §4 specifies or on one derived from
+  /// its peer count. [OgmIntervalMode.density] is measured and rejected (docs/06 §24.11) and
+  /// ships off: sparse_village pays 3.1x the demanded radio time for 1.6 points of delivery,
+  /// campus_quad 1.2x for -0.7, and the crowd — the only place it saves airtime — is the one
+  /// place the comparison cannot be read, because the two worlds differ in connectivity and
+  /// §24.10 shows reach tracks that rather than the interval.
+  final OgmIntervalMode ogmIntervalMode;
+
+  /// The peer count at which [OgmIntervalMode.density] reproduces [ogmIntervalMs] exactly. 10
+  /// is the median peer count campus_quad produces, so the reference world is the one §4's 2 s
+  /// was written against and the crowd stretches from there.
+  final int ogmDensityReferencePeers;
   final double ogmJitterMs;
   final int ogmTtl;
   final double electionIntervalMs;
@@ -481,6 +496,8 @@ class SimConfig {
     RadioOccupancy? radioOccupancy,
     int? ogmAliasBytes,
     double? connectivitySampleMs,
+    OgmIntervalMode? ogmIntervalMode,
+    int? ogmDensityReferencePeers,
     bool? communityRelayPreference,
     bool? dtnPreferCommunity,
     double? voiceKbps,
@@ -549,6 +566,9 @@ class SimConfig {
         radioOccupancy: radioOccupancy ?? this.radioOccupancy,
         ogmAliasBytes: ogmAliasBytes ?? this.ogmAliasBytes,
         connectivitySampleMs: connectivitySampleMs ?? this.connectivitySampleMs,
+        ogmIntervalMode: ogmIntervalMode ?? this.ogmIntervalMode,
+        ogmDensityReferencePeers:
+            ogmDensityReferencePeers ?? this.ogmDensityReferencePeers,
         communityRelayPreference:
             communityRelayPreference ?? this.communityRelayPreference,
         dtnPreferCommunity: dtnPreferCommunity ?? this.dtnPreferCommunity,
@@ -1954,7 +1974,7 @@ class MeshSimulation {
     node.seq++;
     _beacon(node, buildOgm(node));
     final jitter = randRange(rng, -config.ogmJitterMs, config.ogmJitterMs);
-    _queue.push(now + math.max(200.0, config.ogmIntervalMs + jitter),
+    _queue.push(now + math.max(200.0, _ogmIntervalFor(node) + jitter),
         EventKind.ogm, nodeId);
   }
 
@@ -1975,6 +1995,26 @@ class MeshSimulation {
     final jitter = randRange(rng, -config.ogmJitterMs, config.ogmJitterMs);
     _queue.push(now + math.max(200.0, config.coverIntervalMs + jitter),
         EventKind.cover, nodeId);
+  }
+
+  /// The interval before this node's next beacon, under [SimConfig.ogmIntervalMode].
+  ///
+  /// [OgmIntervalMode.density] holds the receptions a node imposes constant: at interval `I`
+  /// with `p` peers it causes `p / I` receptions per millisecond, so setting `I` proportional
+  /// to `p` keeps that product at whatever the reference density produces. Called after
+  /// `_refreshPeerList`, so `peerIds` is this instant's neighbourhood. Consumes no random
+  /// number — the jitter draw belongs to the caller and happens either way — so the fixed
+  /// mode's sequence of draws is untouched and the golden vectors do not move.
+  double _ogmIntervalFor(MeshNode node) {
+    if (config.ogmIntervalMode == OgmIntervalMode.fixed) return config.ogmIntervalMs;
+    final peers = math.max(1, node.peerIds.length);
+    final reference = math.max(1, config.ogmDensityReferencePeers);
+    final raw = (config.ogmIntervalMs * peers) / reference;
+    final floor = config.ogmIntervalMs / 4;
+    // Two chances per soft-state TTL: a neighbour expires at neighborScoreTtlMs, and an
+    // interval at half that survives one lost beacon, which BLE links produce routinely.
+    final ceiling = neighborScoreTtlMs / 2;
+    return math.min(ceiling, math.max(floor, raw));
   }
 
   /// Transmit an OGM to every peer, then let each peer gossip it onward.

@@ -198,6 +198,13 @@ enum BroadcastCapScope { superOnly, all }
 /// which is what docs/08 §12's contention arms were measured under. [RadioOccupancy.airtime]
 /// charges only `bytes x 8 / kbps`, the rate the engine already had, applied to the whole
 /// packet. Delivery latency is unaffected either way.
+/// Whether a node beacons on the fixed interval docs/03 §4 specifies, or on one derived from
+/// how many peers will hear it. [OgmIntervalMode.density] is measured and rejected — docs/06
+/// §24.11 — and ships off: where the two modes land in comparable topologies the derived
+/// interval buys no delivery and costs airtime, and the one place it saves airtime is the one
+/// place the comparison cannot be read, because the two worlds differ in connectivity.
+enum OgmIntervalMode { fixed, density }
+
 enum RadioOccupancy { hopLatency, airtime }
 
 enum BlockScope { delivery, relay }
@@ -205,6 +212,11 @@ enum BlockScope { delivery, relay }
 extension BlockScopeName on BlockScope {
   /// CLI and JSON spelling, matching the TypeScript engine's `"delivery" | "relay"`.
   String get wire => this == BlockScope.delivery ? 'delivery' : 'relay';
+}
+
+extension OgmIntervalModeName on OgmIntervalMode {
+  /// CLI and JSON spelling, matching the TypeScript engine's `"fixed" | "density"`.
+  String get wire => this == OgmIntervalMode.fixed ? 'fixed' : 'density';
 }
 
 extension RadioOccupancyName on RadioOccupancy {

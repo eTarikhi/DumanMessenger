@@ -2550,6 +2550,58 @@ void main() {
       expect(on.stats.connectivitySamples, greaterThan(0));
       expect(off.stats.connectivitySamples, equals(0));
     });
+  });
+
+  group('density-derived beacon interval (docs/06 §24.11)', () {
+    // Mirrors the second describe in `src/__tests__/connectivity.test.ts`. §24.7 argued for
+    // deriving the interval per node because no single interval served both densities; §24.11
+    // measures it and rejects it, so these tests pin the default and the direction that made
+    // it lose rather than any benefit.
+
+    MeshSimulation world(SimConfig config) {
+      final sim = MeshSimulation(config);
+      sim.runFor(90000.0);
+      sim.refresh();
+      sim.clearRecords();
+      sim.injectTraffic(30, 40000.0);
+      sim.runFor(60000.0);
+      sim.refresh();
+      return sim;
+    }
+
+    test('ships on the fixed interval docs/03 §4 specifies', () {
+      final config = campusQuad(42);
+      expect(config.ogmIntervalMode, equals(OgmIntervalMode.fixed));
+      expect(config.ogmDensityReferencePeers, equals(10));
+      expect(config.ogmIntervalMs, equals(2000));
+      // The rule is anchored, not a replacement: at the reference peer count the derived mode
+      // reproduces the specified interval, so it cannot be blamed for a change it did not make.
+      final derived = config.copyWith(ogmIntervalMode: OgmIntervalMode.density);
+      expect(derived.ogmIntervalMode, equals(OgmIntervalMode.density));
+      expect(derived.ogmIntervalMs, equals(config.ogmIntervalMs));
+    });
+
+    test('spends more airtime in a sparse world, where the clamp floor bites', () {
+      // docs/06 §24.11: sparse_village pays 3.1x the demanded radio time for 1.6 points of
+      // delivery, because a node with three peers hits the ogmIntervalMs / 4 floor and beacons
+      // four times the specified rate to hold a reception load nobody was struggling with.
+      // Thresholds are loose — the two modes are different worlds — and the direction is what
+      // is being pinned, which is the direction that made the lever get rejected.
+      final fixed = world(
+          sparseVillage(42).copyWith(radioOccupancy: RadioOccupancy.airtime));
+      final derived = world(sparseVillage(42).copyWith(
+          radioOccupancy: RadioOccupancy.airtime,
+          ogmIntervalMode: OgmIntervalMode.density));
+      expect(derived.stats.controlOverhead,
+          greaterThan(fixed.stats.controlOverhead));
+      expect(derived.stats.radioDemandRatio,
+          greaterThan(fixed.stats.radioDemandRatio));
+      // And the topologies are comparable, which is what makes the comparison readable at all:
+      // §24.10's metric says both worlds are equally partitioned, so the cost is not a
+      // topology difference in disguise.
+      expect(derived.stats.meanLargestComponent,
+          closeTo(fixed.stats.meanLargestComponent, 0.1));
+    });
 
     test('costs a dense crowd fewer deferrals under csma, and buys it delivery', () {
       // docs/08 §12's magnitudes were measured under the flat charge, so they are

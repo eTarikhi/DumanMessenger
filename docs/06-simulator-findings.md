@@ -2660,3 +2660,68 @@ densest scenario this repository has, on eight seeds: MPR holds overhead to **13
 flood-all at 2 s (2 319 % against 17 728 %) and **18 %** at 12 s, while at 2 s delivering
 *more* reach than flooding does. The target is met by a factor of five, and the earlier
 measurements of it were on 20 nodes.
+
+### 24.11 Deriving the beacon interval from density: §24.7's follow-up, measured and rejected
+
+§24.7 ended with an argument rather than a conclusion. On eight seeds the two densities
+disagreed sharply and in opposite directions about what the beacon interval should be — at 20
+nodes 25 s costs nothing and cuts demanded radio time tenfold, at 60 nodes 5 s beats the
+specified 2 s and everything longer degrades delivery — so no single interval serves both,
+"which is the argument for deriving it". `ogmIntervalMode: "density"` derives it.
+
+The rule holds the receptions a node imposes on its neighbourhood constant: at interval `I`
+with `p` peers a node causes `p / I` receptions per millisecond, so setting `I` proportional to
+`p` keeps that product where the reference density puts it. It is anchored rather than
+invented — a node with `ogmDensityReferencePeers` (10, the median `campus_quad` produces)
+beacons at exactly the specified 2 s, so §4's number is not replaced, it becomes what the
+reference density does — and clamped to `[ogmIntervalMs / 4, NEIGHBOR_SCORE_TTL_MS / 2]`, the
+ceiling being two chances per soft-state TTL so one lost beacon cannot expire a neighbour that
+is still there.
+
+`npm run media intervalMode`, eight seeds, priced under `radioOccupancy: "airtime"`:
+
+| scenario | mode | delivery | reach | radio demand | OGMs sent | connected in-window | mean largest component |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| sparse_village | fixed | 26.2 % | 24.8 % | 0.17× | 3 210 | 0 % | 33 % |
+| sparse_village | **density** | 27.8 % | 24.9 % | **0.53×** | **10 728** | 0 % | 33 % |
+| | *Δ* | *+1.6 pts* | | *3.11× cost* | *3.34×* | | *comparable* |
+| campus_quad | fixed | 100.0 % | 94.9 % | 1.97× | 35 560 | 100 % | 100 % |
+| campus_quad | **density** | 99.3 % | 95.0 % | **2.37×** | **43 965** | 100 % | 100 % |
+| | *Δ* | *−0.7 pts* | | *1.20× cost* | *1.24×* | | *comparable* |
+| festival_crowd | fixed | 92.0 % | 86.5 % | 5.66× | 224 159 | 76 % | 94 % |
+| festival_crowd | **density** | 83.4 % | 77.6 % | **3.31×** | **131 914** | **49 %** | **85 %** |
+| | *Δ* | *−8.7 pts* | | *0.58× (saves)* | *0.59×* | | ***not comparable*** |
+
+**Read the last column before the rest.** §24.10 showed that reach tracks the largest in-window
+component, so two arms that land in different topologies are not a comparison of whatever was
+changed between them. That is what makes the verdict here honest rather than convenient:
+
+- In `sparse_village` and `campus_quad` both modes land in the same topology — 33 % and 100 %
+  largest component respectively, in-window connectivity identical — so those two rows *are* a
+  comparison, and the derived interval loses both. It buys 1.6 points of delivery in the village
+  for **3.11×** the demanded radio time and 3.34× the beacons, and on campus it costs 0.7 points
+  and 1.20× the airtime for nothing. The mechanism is the clamp's floor: a node with three peers
+  beacons every 500 ms, four times the specified rate, to hold a reception load nobody was
+  struggling with. Deriving the interval cuts both ways, and in a sparse world it cuts upward.
+- In `festival_crowd` the derived interval saves 42 % of the demanded radio time and 41 % of the
+  beacons, which is the only place it does what it was designed to do — and it is exactly the
+  place the comparison cannot be read. The two modes land in different topologies (mean largest
+  component 94 % against 85 %, in-window connectivity 76 % against 49 %), so the 8.7-point
+  delivery gap cannot be attributed to the interval. It may be mostly the partitioning; §24.10
+  says that is what a gap of that shape usually is.
+
+**So the follow-up is rejected**, and the verdict rests on the two scenarios where the topology
+is comparable rather than on the one where the lever looks best. `ogmIntervalMode` ships
+`"fixed"`, the specified 2 s stays, the golden vectors are byte-identical, and the flag exists so
+this table is reproducible rather than so the mode can be turned on. This is the nineteenth
+rejected lever in this document and the first rejected by a metric that had been added one commit
+earlier: without `connectedSampleShare` and `meanLargestComponent` the crowd row would have read
+as a lever that saves 42 % of the airtime at a cost of 8.7 delivery points, which is a trade worth
+arguing about, and the argument would have been about a topology difference nobody had measured.
+
+What would change the verdict is not a better rule but a fairer comparison: the crowd needs the
+two modes seeded into the *same* topology before the interval can be blamed for anything, which
+means either fixing node positions (`enableMobility: false`) or averaging over enough seeds that
+the mode split washes out. Neither was done here, and §24.11 does not claim the derived interval
+is harmful in a crowd — only that it is not shown to help, and that where it can be shown, it
+does not.
