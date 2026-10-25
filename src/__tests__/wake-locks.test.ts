@@ -96,6 +96,30 @@ describe("wake-lock accounting (skills/07)", () => {
     expect(sim.stats.radioDemandRatio).toBeLessThan(10);
   });
 
+  it("does not let the packet share be read as the energy gap between roles", () => {
+    // docs/06 §24.1, and the correction it carries. SUPERs hold ~28 % of packet radio demand
+    // while being 25 % of the nodes — a ratio near 1.14 — and the measured battery ratio
+    // between the same two roles is three to four times larger. Both are true, they are
+    // different quantities, and an earlier version of §24.1 quoted the first as though it
+    // were the second. The role gap lives in *scan duty*, which this accounting excludes on
+    // purpose, so this test pins the distinction instead of either number.
+    const superShare = (sim: MeshSimulation) =>
+      sim.nodes.filter((n) => n.role === "SUPER").length / sim.nodes.length;
+    const energyRatio = (sim: MeshSimulation) =>
+      sim.stats.batteryPercentPerHourSuper /
+      Math.max(1e-9, sim.stats.batteryPercentPerHourNormal);
+
+    const dutyOff = measured(honest, { dutyCycleEnabled: false });
+    const dutyOn = measured(honest, { dutyCycleEnabled: true });
+
+    // Packet demand: a modest multiple of the node share, not an energy gap.
+    expect(dutyOn.stats.wakeLockShareSuper / 100).toBeLessThan(superShare(dutyOn) * 2);
+    // Energy: much larger, and the duty cycle widens it, because an asleep NORMAL pays
+    // sleepDrainFactor 0.25 while a SUPER scans continuously and pays full rate.
+    expect(energyRatio(dutyOn)).toBeGreaterThan(2);
+    expect(energyRatio(dutyOn)).toBeGreaterThan(energyRatio(dutyOff));
+  });
+
   it("prices concentration on the neighbours who have to hear it", () => {
     // docs/04 §6 calls a flood a battery-drain attack. The wake-lock column is where that
     // becomes visible: every node in range pays a reception for every copy, and reception

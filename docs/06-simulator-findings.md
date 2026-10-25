@@ -2117,40 +2117,62 @@ there is.
 
 Three findings, in descending order of how much they change what this repository claims.
 
-### 24.1 The 4× battery gap between roles is an assumption, and the activity says 1.14×
+### 24.1 What the 4× battery gap between roles rests on
 
-SUPERs are 5 of 20 nodes — 25 % — and hold **28.7 %** of the network's demanded radio time.
-That is more than their share of the nodes, which is the direction `skills/02` implies
-(continuous scanning, MPR-selected forwarding), and it is a ratio of **1.14**, not 4.
+> **Correction (same day, hours after this subsection was first written).** Its first version
+> was titled *"the activity says 1.14×"* and concluded that this engine "cannot currently
+> justify the 4×". Both were wrong, and the error is worth keeping visible because it is
+> easy to repeat: it compared a SUPER's share of **packet-level radio demand** with its share
+> of **nodes**, and presented that ratio as an estimate of the role's *energy* gap. They are
+> different quantities. The role gap in this engine lives overwhelmingly in **scan duty**,
+> which the wake-lock accounting deliberately excludes (§24's header) to avoid double-counting
+> a reception inside a scan window — so a packet-only measure was never going to see it. The
+> measured numbers below are unchanged; the claim built on them is replaced.
 
-The battery model in `src/rf.ts` is where the 4 comes from, and it is a constant:
-`SUPER_DRAIN_PER_HOUR = (0.15 / 8) * 4`, calibrated to `docs/05` §1.2's target that a NORMAL
-node survives 8 h at ≤15 % drain and a SUPER costs roughly four times as much. So the 6.82
-against 2.29 %/h in the table above is that constant being reported back, not a measurement
-of what SUPERs do. The counted activity supports a much smaller gap.
+What the gap actually rests on, in three parts:
 
-Neither number is wrong and they are not measuring the same thing: a SUPER also holds a
-Wi-Fi Direct group-open role and scans continuously, and **neither of those is modelled here
-at all** — the duty cycle gates *scanning* only, and nothing in the engine costs a node
-anything for being a group owner. So the honest statement is that this engine cannot
-currently justify the 4×, can justify "SUPERs do more radio work than their share", and
-would need a scan-window and GO-role cost term before it could do more than that.
+1. **A constant sets the scale.** `src/rf.ts` has `SUPER_DRAIN_PER_HOUR = (0.15 / 8) * 4`,
+   calibrated to `docs/05` §1.2's target that a NORMAL node survives 8 h at ≤15 % drain and a
+   SUPER costs roughly four times as much. That 4 is an assumption, and saying so is the part
+   of the original claim that stands.
+2. **A mechanism the engine does model moves the same way, and amplifies it.** `skills/07`'s
+   duty cycle — NORMAL `scan 3s/sleep 7s`, SUPER continuous — is implemented, and an asleep
+   node pays `sleepDrainFactor` **0.25** of its rate. Measured `awakeRatio` is **0.333** on
+   `campus_quad` and **0.306** on `festival_crowd`, so a NORMAL node's effective rate is
+   `0.333 × 1 + 0.667 × 0.25 = 0.50` of full — halved — while a SUPER's is untouched at 1.0.
+   Switching the duty cycle on therefore *widens* the measured gap rather than narrowing it:
+   the battery ratio goes from **2.98×** to **4.23×** on `campus_quad` (2.29/6.82 → 1.32/5.60
+   %/h) and reaches **5.51×** on `festival_crowd`. The scan-duty ratio alone, `1 / awakeRatio`,
+   is **3.00×** and **3.27×** — the same order as the constant, from a mechanism rather than
+   from calibration.
+3. **Packet-level demand adds a little.** SUPERs are 5 of 20 nodes and hold **28.7 %** of
+   demanded radio time, a ratio of **1.14** over their share of the nodes. That is the right
+   reading of the 1.14 figure: SUPERs do somewhat more packet radio work than their numbers
+   imply, which is the direction `skills/02` predicts. It is not an estimate of the energy
+   gap and must not be quoted as one.
 
-### 24.2 The duty cycle saves 42 % of battery and 10 % of radio time
+What genuinely remains unmodelled is narrower than the original claim said: the Wi-Fi Direct
+**group-owner role costs nothing** in this engine, and a real GO keeps a group alive whether
+or not it is forwarding. So the honest statement is that the 4× is a calibrated constant
+*whose direction and rough magnitude an implemented mechanism independently reproduces*, and
+that the one role cost still missing is the GO's.
+
+### 24.2 The duty cycle saves 42 % of battery and 10 % of *packet* radio time
 
 Switching `dutyCycleEnabled` on moves NORMAL drain from 2.29 to 1.32 %/h — a 42 % saving —
-while demanded radio time falls only from 4 680 339 to 4 231 497 ms, **10 %**, and wake-lock
-acquisitions from 37 906 to 34 226. The two models disagree by a factor of four about the
-same intervention.
+while demanded *packet* radio time falls only from 4 680 339 to 4 231 497 ms, **10 %**, and
+wake-lock acquisitions from 37 906 to 34 226.
 
-The reason is the same as §24.1's: the battery saving is the duty-cycle multiplier in the
-drain model, while the radio-time saving is only the receptions an asleep scanner misses
-(`scansSkippedAsleep`, and `awakeRatio` reports the window share directly). A real device
-also stops *listening* — which the engine models — and stops holding a scan wake lock, which
-it does not, because scan windows are deliberately excluded from this accounting to avoid
-double-counting a reception that happens inside one. §24.1's caveat applies here unchanged:
-`skills/07`'s duty-cycle claim is implemented where the engine has a mechanism, and the
-battery number attached to it is calibrated rather than derived.
+That is not a disagreement between two models of the same thing, which is how this subsection
+first read it. The 42 % is `1 − (awakeRatio + (1 − awakeRatio) × sleepDrainFactor)` = `1 −
+0.50`: the whole scan window, priced at 0.25 while asleep. The 10 % is only the receptions an
+asleep scanner misses (`scansSkippedAsleep`; `awakeRatio` reports the window share directly).
+The two figures measure different scopes — all radio duty against packet duty — and the
+packet scope excludes scan windows by construction, so it *cannot* show the battery saving.
+Read together they say something useful: **most of what the duty cycle saves is the scanning
+itself, not the traffic it causes a node to miss**, at roughly four to one on `campus_quad`.
+That is the mechanism `skills/07`'s budget depends on, and it is why CI gates the <15 % per
+8 h figure in `--duty-cycle` mode only.
 
 ### 24.3 The model demands four times the airtime that exists
 
