@@ -329,12 +329,25 @@ one — on a machine where nothing else can run, this group still gives an answe
    reports, so `--json` and the React dashboard are not the same contract on both sides and a
    consumer reads `undefined` from one of them. Nothing else in the pipeline would notice either.
 
-   The rule does **not** extend to the shared enums, and the reason is worth recording because it
-   is a limit of the checker rather than an oversight. Parsing a Dart `enum` body reliably means
-   knowing where it ends and the neighbouring `extension` begins, and a first attempt at exactly
-   that read `HopAction`'s Dart values as `class`, `final` and `required`, and `MsgType`'s
-   TypeScript union as three of its eight members. A parity check that invents disagreements is
-   worse than no parity check, so enums stay out until that parse is right.
+   The rule does **not** extend to the shared enums, and the reason is not that they cannot be
+   parsed. They can: mask comments and strings on both sides, walk to the *matching* brace rather
+   than the first one at column zero, and every one of the thirteen enums named on both sides
+   agrees on its member count today — `ChannelAccess` 3, `ChannelBackoff` 2, `ChannelCapture` 3,
+   `ChannelPriority` 3, `EventKind` 14, `ForwardMode` 6, `HopAction` 7, `MeshLogKind` 13,
+   `MsgType` 8, `PeerNorm` 2, `RelayPolicy` 3, `Role` 2, `TransportType` 3. (Two earlier attempts
+   at that parse disagreed with this list because they read prose out of doc comments and stopped
+   at the wrong brace, which is why the numbers were measured before being written down.)
+
+   The obstacle is that the two languages are *supposed* to spell the members differently, in
+   three ways at once: Dart cannot use `super` or `class` as identifiers, so `Role.superNode` is
+   TypeScript's `"SUPER"` and `ChannelPriority.byClass` is its `"class"`; Dart writes lowerCamel
+   where TypeScript writes kebab-case (`halfDuplex` / `"half-duplex"`, `waitMpr` / `"wait-mpr"`,
+   `floodAll` / `"flood-all"`); and Dart's `EventKind.ackTimeout` is TypeScript's `"acktimeout"`.
+   Eight of the enums also exist in TypeScript only as unnamed unions inline in `SimConfig`, so
+   they cannot be paired by name at all. Comparing them would need an alias table covering all
+   three conventions — precisely the exception list long enough to hide what the check was for,
+   which is why the constant inventories are reported rather than required to match. Measuring the
+   counts by hand once, and writing the result here, costs less and lies less.
 4. **`dart-sites`** — `tool/ci/check-dart-sites.py`, asking whether the Dart engine's *repeated*
    declarations are all present. `make dart-sites` runs it alone. The Dart engine repeats every
    `SimConfig` field at up to five places (declaration, constructor parameter, `copyWith`

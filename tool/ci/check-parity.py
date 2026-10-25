@@ -244,11 +244,16 @@ def dart_class_fields(text: str, name: str) -> Optional[List[str]]:
 # exactly (83 fields and 80 fields, none one-sided) before the rule was written, which is what
 # makes it safe for the rule to fail rather than report.
 #
-# Enums are deliberately absent from this list. Extracting them reliably means knowing where a
-# Dart `enum` body ends and the neighbouring `extension` begins, and a first attempt at exactly
-# that read `HopAction`'s Dart values as `class`, `final` and `required`, and `MsgType`'s
-# TypeScript union as three of its eight members. A parity check that invents disagreements is
-# worse than no parity check, so until that parse is right, it is not here.
+# Enums are deliberately absent from this list, and not because they cannot be parsed — with
+# comments masked and the *matching* brace walked to, all thirteen enums named on both sides agree
+# on their member counts (measured, and the counts are written down in docs/10 §5). They are absent
+# because the two languages are supposed to spell the members differently in three ways at once:
+# Dart cannot use `super` or `class` as identifiers (`Role.superNode` is TypeScript's `"SUPER"`,
+# `ChannelPriority.byClass` is its `"class"`), Dart writes lowerCamel where TypeScript writes
+# kebab-case (`halfDuplex` / `"half-duplex"`), and Dart's `EventKind.ackTimeout` is TypeScript's
+# `"acktimeout"`. Eight more exist in TypeScript only as unnamed unions inline in `SimConfig`, so
+# they cannot be paired by name at all. Comparing them would need an alias table covering all three
+# conventions, which is the exception list long enough to hide what the check was for.
 INVENTORY_TYPES = ("SimConfig", "SimulationStats")
 
 
