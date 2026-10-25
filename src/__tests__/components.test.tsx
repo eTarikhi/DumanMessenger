@@ -651,6 +651,39 @@ describe("the radio channel in the UI (docs/08 §12)", () => {
     expect(csma).toContain("Binary exponential");
   });
 
+  it("offers both abuse controls from docs/04 §6, with the measurement in the tooltip", () => {
+    const sim = world();
+    const panel = (config: SimConfig) =>
+      renderToStaticMarkup(
+        <ConfigPanel
+          config={config}
+          onChange={() => null}
+          showLinks={false}
+          showRanges={false}
+          onToggleLinks={() => null}
+          onToggleRanges={() => null}
+          autoTraffic={false}
+          onToggleAutoTraffic={() => null}
+        />
+      );
+
+    const html = panel(sim.config);
+    expect(html).toContain("Abuse limits");
+    expect(html).toContain("BLOCK REACH");
+    expect(html).toContain("this inbox only");
+    expect(html).toContain("and refuse to relay");
+    // The §22 numbers travel with the control, so choosing a scope is choosing with the
+    // trade-off visible rather than reading it afterwards.
+    expect(html).toContain("9.7% of airtime saved");
+    expect(html).toContain("a hole in that source");
+    expect(html).toContain("cannot censor anybody");
+
+    // The control reflects the config rather than being decoration: the two scopes render
+    // differently, and the shipped one is the literal reading of §6.
+    expect(sim.config.blockScope).toBe("delivery");
+    expect(panel({ ...sim.config, blockScope: "relay" })).not.toEqual(html);
+  });
+
   it("offers both channel models in the config panel, and says which one ships", () => {
     const sim = world();
     const html = renderToStaticMarkup(
