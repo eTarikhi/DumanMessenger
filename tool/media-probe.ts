@@ -2004,6 +2004,9 @@ const BEACON_INTERVALS = [2_000, 5_000, 12_000, 25_000];
  */
 const BEACON_SEEDS = [42, 7, 1234, 99, 2024, 31337, 555, 8];
 
+/** The same eight, named separately so a reader of section 18 is not hunting for §24.8's list. */
+const SCAN_SEEDS = BEACON_SEEDS;
+
 function beaconTable(): void {
   console.log(
     "\n=== 15. The beacon interval: docs/03 says 2 s and nothing in the corpus says why ==="
@@ -2525,6 +2528,145 @@ function intervalModeTable(): void {
   );
 }
 
+// ---------------------------------------------------------------------------
+// 18. Adaptive scan intervals: docs/05 §1.2's third mitigation row, built and
+//     measured — including whether the engine can charge for what it saves.
+// ---------------------------------------------------------------------------
+
+interface ScanRow {
+  battNormal: number;
+  battSuper: number;
+  scans: number;
+  awake: number;
+  skipped: number;
+  delivery: number;
+}
+
+function scanRun(
+  seed: number,
+  scenario: (seed: number) => SimConfig,
+  mode: SimConfig["scanIntervalMode"],
+  duty: boolean
+): ScanRow {
+  const sim = new MeshSimulation({
+    ...scenario(seed),
+    scanIntervalMode: mode,
+    dutyCycleEnabled: duty,
+  });
+  sim.runFor(90_000);
+  sim.refresh();
+  sim.clearRecords();
+  sim.injectTraffic(30, 40_000);
+  sim.runFor(60_000);
+  sim.refresh();
+  const st = sim.stats;
+  return {
+    battNormal: st.batteryPercentPerHourNormal,
+    battSuper: st.batteryPercentPerHourSuper,
+    scans: st.scansPerSec,
+    awake: st.awakeRatio,
+    skipped: st.scansSkippedAsleep,
+    delivery: st.deliveryRatio,
+  };
+}
+
+function scanIntervalTable(): void {
+  console.log(
+    "\n=== 18. Adaptive scan intervals: docs/05 §1.2's third row, and what the engine can charge for ==="
+  );
+  console.log(
+    "§1.2's mitigation table lists three layers and its third is \"Adaptive scan intervals —\n"
+  );
+  console.log(
+    "scan interval scales with peer density: dense = shorter interval (peers stable), sparse =\n"
+  );
+  console.log(
+    "longer (fewer discoveries expected)\", with the expected impact \"reduces redundant\n"
+  );
+  console.log(
+    "wake-ups\". `scanIntervalMode: \"density\"` implements it, anchored so ten peers reproduces\n"
+  );
+  console.log(
+    "the configured interval and clamped to a quarter..four times it. Eight seeds.\n"
+  );
+  console.log(
+    "  scenario         duty   mode      NORMAL %/h   SUPER %/h   scans/s   awake   scans slept   delivery"
+  );
+  for (const [name, scenario] of [
+    ["sparse_village", sparseVillage],
+    ["campus_quad", campusQuad],
+    ["festival_crowd", festivalCrowd],
+  ] as Array<[string, (seed: number) => SimConfig]>) {
+    for (const duty of [true, false]) {
+      const rows = new Map<string, ScanRow>();
+      for (const mode of ["fixed", "density"] as SimConfig["scanIntervalMode"][]) {
+        const perSeed = SCAN_SEEDS.map((seed) => scanRun(seed, scenario, mode, duty));
+        const mean = (f: (r: ScanRow) => number) =>
+          perSeed.reduce((a, r) => a + f(r), 0) / Math.max(1, perSeed.length);
+        const m = {
+          battNormal: mean((r) => r.battNormal),
+          battSuper: mean((r) => r.battSuper),
+          scans: mean((r) => r.scans),
+          awake: mean((r) => r.awake),
+          skipped: mean((r) => r.skipped),
+          delivery: mean((r) => r.delivery),
+        };
+        rows.set(mode, m);
+        console.log(
+          `  ${name.padEnd(16)} ${(duty ? "on" : "off").padEnd(6)} ${mode.padEnd(9)} ` +
+            `${m.battNormal.toFixed(3).padStart(11)} ` +
+            `${m.battSuper.toFixed(3).padStart(11)} ` +
+            `${m.scans.toFixed(2).padStart(9)} ` +
+            `${((m.awake * 100).toFixed(1) + "%").padStart(7)} ` +
+            `${m.skipped.toFixed(0).padStart(13)} ` +
+            `${((m.delivery * 100).toFixed(1) + "%").padStart(10)}`
+        );
+      }
+      const f = rows.get("fixed")!;
+      const d = rows.get("density")!;
+      console.log(
+        `  ${"".padEnd(16)} ${"".padEnd(6)} ${"Δ".padEnd(9)} ` +
+          `${(((d.battNormal - f.battNormal) / Math.max(1e-9, f.battNormal)) * 100).toFixed(1).padStart(10)}% ` +
+          `${(((d.battSuper - f.battSuper) / Math.max(1e-9, f.battSuper)) * 100).toFixed(1).padStart(10)}% ` +
+          `${((d.scans / Math.max(1e-9, f.scans) - 1) * 100).toFixed(0).padStart(8)}% ` +
+          `${"".padStart(7)} ` +
+          `${"".padStart(13)} ` +
+          `${(((d.delivery - f.delivery) * 100).toFixed(1) + " pts").padStart(10)}`
+      );
+    }
+    console.log("");
+  }
+  console.log(
+    "  Two results, and the second is the one that matters.\n" +
+      "\n" +
+      "  The row does what it says. Scans per second fall about 70% in sparse_village (8.29 to\n" +
+      "  2.45 with the duty cycle on, 15.80 to 4.72 without) and rise about 75% in\n" +
+      "  festival_crowd (58.2 to 102.2, and 92.1 to 160.1), with campus_quad in between at\n" +
+      "  -11%. Sparse scans less, dense scans sooner, anchored at ten peers.\n" +
+      "\n" +
+      "  And the claimed benefit is not measurable in this engine. Look at the battery columns:\n" +
+      "  cutting scans by 70% in sparse_village changes NORMAL drain from 1.331 to 1.331 %/h and\n" +
+      "  SUPER from 1.875 to 1.875 — identical to three decimals — because `batteryDrain` charges\n" +
+      "  the duty-cycle *window* (`isAwake`, `sleepDrainFactor`) and not the scan events inside\n" +
+      "  it. Everywhere else the battery moves by 2% or less and in both directions, which is\n" +
+      "  noise. So 'reduces redundant wake-ups' is true of the wake-up count and invisible to\n" +
+      "  only currency §1.2 states its impact in. This is the third time this document has hit the\n" +
+      "  same wall: §24.1 found no cost for the Wi-Fi Direct group-owner role, §24.3 found no\n" +
+      "  per-packet term, and here there is no per-scan term. The battery model is a role-based\n" +
+      "  hourly rate, and a mitigation that works by doing less of something cannot be priced by\n" +
+      "  it. Saying so is the finding; inventing a millijoule-per-scan constant to make the row\n" +
+      "  evaluate would be measuring a guess.\n" +
+      "\n" +
+      "  What the row does buy is delivery, and it buys it by *spending* wake-ups rather than\n" +
+      "  saving them: +6.8 points in festival_crowd with the duty cycle on (82.5 to 89.4%) and +5.8\n" +
+      "  without (92.0 to 97.8%), +1.0 on campus, nothing in the sparse village where there is\n" +
+      "  little to discover either way. That inverts §1.2's framing for the dense case — there,\n" +
+      "  'dense = shorter interval' is a delivery lever with a battery cost the engine cannot\n" +
+      "  charge, not a saving. Whether the trade is worth making needs a device, and §1.2's own\n" +
+      "  mitigation table is where that question belongs. docs/06 §24.15.\n"
+  );
+}
+
 function main(): void {
   console.log("Duman media transport probe — every number below is measured, not assumed.");
   console.log(
@@ -2555,6 +2697,7 @@ function main(): void {
     ["beacon", beaconTable],
     ["reach", reachTable],
     ["intervalMode", intervalModeTable],
+    ["scanInterval", scanIntervalTable],
   ];
   if (only && !sections.some(([name]) => name === only)) {
     console.error(`unknown section "${only}". one of: ${sections.map(([name]) => name).join(", ")}`);

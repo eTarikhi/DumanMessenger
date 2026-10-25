@@ -72,11 +72,17 @@ Continuous BLE scanning and Wi-Fi Direct group ownership are the two dominant po
 >    cost: the engine charges a Wi-Fi Direct group nothing for existing, which §24.1 names as the one missing term in the role gap. It cannot simply be added, because this section gives
 >    the GO cost as *"significantly more"* with no number, and `SUPER_DRAIN_PER_HOUR = (0.15 / 8) * 4` may already bundle it with continuous scanning — so adding a GO factor on top risks
 >    charging the same drain twice. Settling that needs a device measurement (Battery Historian on a phone holding a group against one that does not), not a simulator constant.
-> 3. **Adaptive scan intervals — not implemented.** `scanIntervalSuperMs` and `scanIntervalNormalMs` are fixed, and nothing scales them with peer density. Note the direction this row
->    specifies is **dense = shorter**, the opposite of the beacon-interval rule `docs/06` §24.11 built and rejected: that one stretched the *OGM beacon* interval in proportion to peer count
->    to hold imposed receptions constant, and lost because a sparse node then beaconed four times the specified rate for nothing. Scanning and beaconing are different mechanisms with
->    different costs — a scan is this device waking to look, a beacon is every neighbour waking to listen — so this row should not be read as already answered by §24.11, and §24.11 should
->    not be read as a verdict on this one.
+> 3. **Adaptive scan intervals — now implemented, and its claimed benefit is not measurable here.** `scanIntervalMode: "density"` (`--scan-interval-mode`) scales each node's scan interval
+>    by its peer count, dense sooner and sparse later, anchored so ten peers reproduces the configured interval and clamped to a quarter..four times it. It does what this row specifies:
+>    scans per second fall ~70% in `sparse_village` and rise ~75% in `festival_crowd`. But the *"reduces redundant wake-ups"* impact column **cannot be evaluated by this engine**: cutting
+>    scans by 70% moves NORMAL drain from 1.331 to 1.331 %/h, identical to three decimals, because `batteryDrain` charges the duty-cycle *window* and not the scan events inside it. What the
+>    row does buy is delivery, and it buys it by *spending* wake-ups rather than saving them: **+6.8 points** in a 60-node crowd with the duty cycle on (82.5 → 89.4%). So for the dense case
+>    this row is a delivery lever with a battery cost the simulator cannot charge, not a saving — and pricing it needs a device, which is what layer 2's note says about the group-owner role
+>    too. `docs/06-simulator-findings.md` §24.15 has the grid.
+>
+>    The direction this row specifies is **dense = shorter**, the opposite of the beacon-interval rule `docs/06` §24.11 built and rejected, and §24.15 explains why the two are not in
+>    conflict: a scan is a local cost bought for a local benefit, so spending it where the neighbourhood is dense pays, while a beacon is a local cost imposed on *every* neighbour, so
+>    spending it where the neighbourhood is dense is exactly backwards. Same word "density", opposite sign, and the sign comes from who pays.
 | Charging bonus | Plugged devices get +0.1 coverage score → more likely to become SUPER | Encourages café/tablet community relays |
 | Battery floor | Battery <25% → forced demotion from SUPER; <15% → minimal beacon only | Prevents dead-phone scenarios |
 | OS-level integration | Android ForegroundService (connectedDevice type) + battery-optimization exemption request; iOS bluetooth-central background mode with state restoration | Prevents silent OS kills; documents tradeoff to user |

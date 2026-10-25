@@ -2947,3 +2947,64 @@ Collected in one place, since a reader should not have to reconstruct the order:
 Items 1 and 8 are work. Items 2, 3 and 7 are decisions not to do work, which is the more common
 output of a measurement and the one most often lost. Items 4, 5 and 6 are rules for reading
 anything else in this document.
+
+### 24.15 Adaptive scan intervals: `docs/05` §1.2's third row, built — and unpriceable here
+
+`docs/05` §1.2's mitigation table has three layers. Its third — *"Adaptive scan intervals: scan
+interval scales with peer density: dense = shorter interval (peers stable), sparse = longer (fewer
+discoveries expected)"*, expected impact *"reduces redundant wake-ups"* — was documented and never
+built. `scanIntervalMode: "density"` builds it, anchored so ten peers reproduces the configured
+interval and clamped to `[base / 4, base × 4]`. `npm run media scanInterval`, eight seeds:
+
+| scenario | duty | mode | NORMAL %/h | SUPER %/h | scans/s | awake | scans slept | delivery |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| sparse_village | on | fixed | 1.331 | 1.875 | 8.29 | 25.7 % | 451 | 26.2 % |
+| sparse_village | on | **density** | **1.331** | **1.875** | **2.45** | 25.7 % | 136 | 26.2 % |
+| sparse_village | off | fixed | 2.745 | 1.875 | 15.80 | 100 % | 0 | 26.2 % |
+| sparse_village | off | **density** | **2.745** | **1.875** | **4.72** | 100 % | 0 | 26.2 % |
+| campus_quad | on | fixed | 1.284 | 7.223 | 21.85 | 27.9 % | 660 | 97.9 % |
+| campus_quad | on | **density** | 1.254 | 7.362 | 19.42 | 27.2 % | 549 | 98.9 % |
+| campus_quad | off | fixed | 2.610 | 6.935 | 32.85 | 100 % | 0 | 100.0 % |
+| campus_quad | off | **density** | 2.606 | 7.282 | 28.54 | 100 % | 0 | 100.0 % |
+| festival_crowd | on | fixed | 1.458 | 7.038 | 58.17 | 30.7 % | 2 064 | 82.5 % |
+| festival_crowd | on | **density** | 1.428 | 6.998 | **102.19** | 29.8 % | 3 564 | **89.4 %** |
+| festival_crowd | off | fixed | 2.856 | 7.196 | 92.13 | 100 % | 0 | 92.0 % |
+| festival_crowd | off | **density** | 2.863 | 6.967 | **160.11** | 100 % | 0 | **97.8 %** |
+
+**The rule does what §1.2 specifies.** Scans per second fall about 70 % in `sparse_village` (8.29 →
+2.45 with the duty cycle on, 15.80 → 4.72 without) and rise about 75 % in `festival_crowd` (58.2 →
+102.2, 92.1 → 160.1), with `campus_quad` in between at −11 % — sparse scans less, dense scans
+sooner, and the anchor holds because campus sits near the reference density.
+
+**The benefit it claims is not measurable in this engine, and that is the finding.** Cutting scans
+by 70 % in `sparse_village` changes NORMAL drain from **1.331 to 1.331 %/h** and SUPER from **1.875
+to 1.875** — identical to three decimals, with the duty cycle on *and* off. Everywhere else the
+battery moves by 2 % or less and in both directions, which is noise. The reason is in `src/rf.ts`:
+`batteryDrain` charges the duty-cycle *window* — `isAwake(node) ? 1 : sleepDrainFactor` — and not
+the scan events inside it, so a node that scans three times a second and one that scans fifteen
+cost the same while both are awake.
+
+This is the third time this document has met the same wall, and the three are the same wall:
+§24.1 found the engine charges nothing for the Wi-Fi Direct group-owner role, §24.3 found no
+per-packet term in the drain model, and here there is no per-scan term. **The battery model is a
+role-based hourly rate with a duty-cycle multiplier, so a mitigation that works by doing less of
+something cannot be priced by it.** Saying that is the finding. Inventing a millijoule-per-scan
+constant so the row would evaluate is precisely what §24's amendment to §10.5 refused to do, and
+it would produce a number that looks measured and is not.
+
+**What the row does buy is delivery, and it buys it by spending wake-ups rather than saving
+them:** +6.8 points in `festival_crowd` with the duty cycle on (82.5 → 89.4 %) and +5.8 without
+(92.0 → 97.8 %), +1.0 on `campus_quad`, and nothing in the sparse village where there is little to
+discover either way. For the dense case that inverts §1.2's framing — there, *"dense = shorter
+interval"* is a delivery lever whose battery cost this engine cannot charge, not a saving. Whether
+the trade is worth making is a device question, and §1.2's own mitigation table is where it belongs.
+
+Note also what the two directions cost and earn, because it is the cleanest statement yet of why
+§24.11's rejected beacon rule and this one are not in conflict. In the sparse village, scanning
+70 % less often costs nothing and earns nothing — there is little to discover. In the crowd,
+scanning 75 % more often earns nearly seven points of delivery. Scanning is a *local* cost bought
+for a *local* benefit, so spending it where the neighbourhood is dense pays; beaconing is a local
+cost imposed on *every neighbour*, so spending it where the neighbourhood is dense is exactly
+backwards. Same word "density", opposite sign, and the sign comes from who pays.
+
+Ships `"fixed"`, so no published number moves and the golden vectors are byte-identical.
