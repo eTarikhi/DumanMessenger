@@ -242,6 +242,11 @@ Adding checks to it would break that claim. So the superset lives in its own scr
 make checks            # every check, one pass, one report
 make checks-list       # what it would run — runs nothing
 make checks-evidence   # also reproduce the numbers published in docs/06–docs/09 (slow)
+
+# Or both halves at once, which is what a daily run should use:
+make daily             # the CI mirror + every check + the evidence probes, one DAILY.md (~27 min)
+make daily-fast        # the same, minus the evidence probes (measured 11.5 min without Dart)
+make daily-checks      # the full CI mirror + every check, no re-measuring
 ```
 
 Three differences from `make ci` matter:

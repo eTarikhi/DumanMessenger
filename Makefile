@@ -91,6 +91,21 @@ checks-list: ## What `make checks` would run, and which checks have never been r
 checks-evidence: ## `make checks` plus the slow probes that reproduce the docs' numbers
 	@$(CI)/collect-checks.sh --with-evidence
 
+# One command for the daily run. The CI mirror and the check collection were separately
+# runnable and separately interpretable — run-pipeline.sh exits 2 for "partial" while
+# collect-checks.sh exits 1 for both "failed" and "could not run" — so daily.sh composes them,
+# reads the collector's JSON to tell those two apart, and reports one verdict: GREEN, FAILED or
+# INCOMPLETE. INCOMPLETE is not a pass, and on a machine without the Dart SDK it is the expected
+# result, because sim/mesh_sim is the authoritative engine and nothing here can compile it.
+daily: ## Everything: the CI mirror, every check, and the evidence probes. ~27 min
+	@$(CI)/daily.sh
+
+daily-fast: ## The daily quick run: CI mirror (fast) plus every check, no evidence. ~12 min
+	@$(CI)/daily.sh --fast
+
+daily-checks: ## The full CI mirror and every check, but no re-measuring of published numbers
+	@$(CI)/daily.sh --no-evidence
+
 ## --- push, gated -------------------------------------------------------------
 
 push: ## Validate with the full pipeline, then push (refuses on red or partial)

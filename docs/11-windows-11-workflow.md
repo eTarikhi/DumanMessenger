@@ -168,6 +168,46 @@ block you can paste back. It is also the only tool here that will tell you which
 `not-run` and exits `1`, which is the correct answer rather than a broken one: those checks did
 not pass, and saying so is the point.
 
+### The daily run
+
+`checks` is every check. `daily` is every check **and** the CI mirror, composed into one dated
+artifact directory with one summary and one verdict:
+
+```powershell
+.\make.ps1 daily            # everything, including the probes behind the published numbers
+.\make.ps1 daily-fast       # the quick daily run — measured at 11.5 min without a Dart SDK
+.\make.ps1 daily-checks     # the full CI mirror and every check, no re-measuring
+```
+
+Use `daily` rather than running `ci` and `checks` separately. The two halves were separately
+interpretable and their exit codes meant different things — `run-pipeline.sh` exits `2` for
+*partial*, while `collect-checks.sh` exits `1` for both *failed* and *could not run* — so
+`daily.sh` reads the collector's JSON to tell those apart and reports one of three verdicts:
+
+| verdict | exit | what it means, and what to do |
+| --- | ---: | --- |
+| **GREEN** | `0` | Everything that could run, ran and passed, and nothing was skipped. Push. |
+| **FAILED** | `1` | Something failed. Read `pipeline.txt` and `checks.txt` in the artifact directory before pushing anything. |
+| **INCOMPLETE** | `2` | Nothing failed, but part of the run could not execute. **This is not a pass.** On a machine without the Dart SDK it is the expected verdict, and it is the reason §2 exists: `sim/mesh_sim` is the authoritative engine, and the four static checkers that stand in for a compiler here (delimiter balance, cross-language constant parity, config/stats inventory parity, declaration-site consistency) are not one. |
+
+Everything lands under `artifacts/ci/daily/<UTC stamp>-<sha>/`, with `DAILY.md` as the one page to
+read: the verdict, the elapsed time, which toolchain was missing, both halves' results side by
+side, and the file list. `artifacts/` is gitignored, so a daily run never dirties the tree — which
+matters if the run is scheduled.
+
+To actually schedule it, Windows Task Scheduler wants a program and arguments, not a shell:
+
+```
+Program:   wsl.exe
+Arguments: bash -lc "cd ~/DumanMessenger && ./tool/ci/daily.sh --no-evidence"
+```
+
+Point it at the repository inside the distro rather than `/mnt/c/...` if you can — §3's
+performance warning applies to a scheduled run more than to an interactive one, because nobody is
+there to notice it taking forty minutes. A scheduled run should also redirect somewhere durable;
+`daily.sh` already writes everything under its artifact directory, so the task's own history is
+what needs a location, not the report.
+
 ### If PowerShell refuses to run it
 
 That is the execution policy, not the script:
@@ -365,20 +405,42 @@ pipeline exit codes, the PR flow including its refusal to merge when CI is billi
 failing build and a billing refusal. `collect-checks.sh` is in that group — run on Linux, against a
 deliberately failing Dart stub as well as against a missing SDK, so both of its exit paths are
 exercised. `check-dart-balance.py` is in it too: 22/22 files balanced and 19/19 self-test cases
-behaving, including the 12 clean snippets that must not alarm. What is *not* verified is reaching
-any of it through `make.ps1`, which is the paragraph below.
+behaving, including the 12 clean snippets that must not alarm. So are the two checkers added since:
+`check-dart-sites.py`, which verifies the Dart engine's repeated declarations (88 `SimConfig`
+fields across up to five sites each, 83 `SimulationStats` fields across four, 14 `EventKind`
+values with 14 cases) and carries a 9-case self-test, and `check-parity.py`'s inventory rule, which
+requires the two engines' `SimConfig` and `SimulationStats` field lists to be *identical* — 88 and
+83, none one-sided. `daily.sh` is in this group as well, run on Linux against a missing SDK, so its
+INCOMPLETE path and its exit `2` are exercised; its GREEN path is not exercisable here, because
+GREEN requires the Dart half to run. What is *not* verified is reaching any of it through
+`make.ps1`, which is the paragraph below.
 
 **Not verified at all: the Dart engine.** `sim/mesh_sim` has never been compiled on the current
 tree — no SDK here, and `storage.googleapis.com` is not reachable from this sandbox, so none could
 be installed. `make checks` reports the whole `dart` group as `not-run`, which is the honest label
-and not a pass. Two specific things are therefore unverified and are the first to look at if
-`dart analyze` is red: the radio-model mirror added for `docs/08` §12.9–§12.15 (audited line by line
-against `src/simulation.ts`, with its three capture-effect tests realigned to the assertions the
-TypeScript side actually makes) and the `utf8ByteLength` / `wireSizeOfBody` mirror of the packet
-byte-counting fix, plus the five tests that go with it. Both are mechanical translations rather
-than re-implementations, which is the most that can be said for code nobody has compiled. If
-`dart analyze` fails, the collector's paste-back block carries `--- dart diagnostics ---` with
-`file:line:col` locations from `diagnostics.py` — enough to fix it blind, which is why it is there.
+and not a pass.
+
+What is therefore unverified has grown well past the two items this paragraph once listed. In
+roughly the order they were added, and all of them mechanical translations of TypeScript that *is*
+compiled and tested: the radio-model mirror for `docs/08` §12.9–§12.15; the `utf8ByteLength` /
+`wireSizeOfBody` byte-counting mirror; `docs/04` §6's abuse limits and the local blocklist
+(`blockPeer`/`isBlocked`, the `blocked` hop action, `BlockScope`); §5's dummy beacons (a `cover`
+event kind, which needed a case in `_handleEvent` or the switch is non-exhaustive); `skills/07`'s
+wake-lock accounting; `radioOccupancy` with `airtimeMs`/`occupancyMs` and the derived
+`ogmWireBytes`; `ogmAliasBytes`; `routeExpiries`; in-window connectivity sampling with
+`componentSizes()` and `radioComponents()`; and `scanIntervalMode`. That is roughly ninety Dart
+tests as well, none of which has ever run.
+
+Four static checkers stand in for part of a compiler and are worth knowing about when reading a
+red `dart analyze`: delimiter balance, cross-language constant parity, the config/stats inventory
+rule, and declaration-site consistency. Between them they would catch an unclosed brace, a protocol
+constant changed on one side only, a knob added to one engine and not the other, a stats field
+missing from `toJson()`, and an `EventKind` with no case. They would **not** catch a wrong
+identifier, a type mismatch, a bad enum member name or a missing import — and three defects of
+exactly that kind were found by hand this month and fixed before commit, so the residual risk is
+real rather than theoretical. If `dart analyze` fails, the collector's paste-back block carries
+`--- dart diagnostics ---` with `file:line:col` locations from `diagnostics.py` — enough to fix it
+blind, which is why it is there.
 
 **Not verified by execution:** `make.ps1`. The sandbox this was written in has no PowerShell and
 cannot install one — the release asset host is not reachable from it. So `make.ps1` was **statically
@@ -386,6 +448,18 @@ checked only**, by `tool/ci/check-ps1.py`, which confirms balanced delimiters an
 PowerShell 7-only syntax (`??`, `?.`, the ternary, `&&`/`||` as pipeline chain operators) so that it
 runs on the Windows PowerShell 5.1 that Windows 11 actually ships. It is written defensively — every
 failure path prints an explicit reason and a fix rather than throwing — but it has not been run.
+Its `daily`, `daily-fast` and `daily-checks` entries are in the same position: they are three more
+rows in `$ScriptTargets` pointing at `tool/ci/daily.sh`, which *is* verified by execution on Linux,
+and `check-ps1.py` confirms all twenty targets are backed by real Makefile targets — but the
+forwarding itself has not been exercised.
+
+The Task Scheduler snippet in §3 is in the same category and worth calling out separately, because
+it is the one command in this document that is neither run nor statically checked: `wsl.exe` with
+`bash -lc` is the documented way to give Task Scheduler a program and arguments rather than a
+shell, and the quoting is what usually goes wrong. Treat it as a starting point, confirm it once by
+hand from a `cmd` prompt before scheduling it, and check that the working directory resolves —
+`bash -lc` starts in the home directory, which is why the `cd` is inside the quoted command rather
+than left to the task's "Start in" field.
 
 Run `.\make.ps1 doctor` first. If it misbehaves, `$env:DUMAN_CI_VERBOSE = 1` prints the exact
 command it handed to the shell, and `.\make.ps1 -Runtime bash <target>` forces the other runtime.
