@@ -697,6 +697,15 @@ export interface SimulationStats {
    *  "Block/mute peer locally"). Counted per receiving node, like `rateBroadcastDrops`,
    *  so one broadcast heard by four nodes that all blocked the sender is four. */
   blockedDrops: number;
+  /** Route entries dropped because no beacon refreshed them inside
+   *  `NEIGHBOR_SCORE_TTL_MS` — the route table's churn.
+   *
+   *  A neighbour that expires and is re-learned a moment later costs two table updates, and
+   *  in between, anything that needed it is forwarded by a node that no longer knows where it
+   *  goes. `docs/06` §24.7 uses this to test why a 12 s beacon interval delivered worse than
+   *  both 5 s and 25 s in a 60-node crowd: the flap hypothesis predicts the middle interval
+   *  is the one that churns, and before this counter existed there was no way to ask. */
+  routeExpiries: number;
   /** Anti-entropy packets put on air: beacons, bucket requests and replies. */
   sentSync: number;
   /** Dummy beacons put on air by `coverTraffic` (docs/04 §5). Zero unless it is on, which
@@ -1315,6 +1324,7 @@ export class MeshSimulation {
   private channel = new Map<NodeId, ChannelState>();
   private ogmTx = 0;
   private coverTx = 0;
+  private routeExpiries = 0;
   private lostDataTx = 0;
   private lostOgmTx = 0;
   private duplicateRx = 0;
@@ -1434,6 +1444,7 @@ export class MeshSimulation {
     this.rxSeq.clear();
     this.ogmTx = 0;
     this.coverTx = 0;
+    this.routeExpiries = 0;
     this.lostDataTx = 0;
     this.lostOgmTx = 0;
     this.duplicateRx = 0;
@@ -1821,7 +1832,7 @@ export class MeshSimulation {
       node.avgRssi = sum / peers.length;
     }
     pruneSeenCache(node, this.now);
-    pruneStaleEntries(node, this.now, NEIGHBOR_SCORE_TTL_MS);
+    this.routeExpiries += pruneStaleEntries(node, this.now, NEIGHBOR_SCORE_TTL_MS);
     pruneOppQueue(node, this.now);
     node.mprSet = selectMprSet(node, this.nodes, this.config.communityRelayPreference);
 
@@ -3871,6 +3882,7 @@ export class MeshSimulation {
       electionsPerMin: roleChangesPerNodeMin,
       controlOverhead: this.ogmTx,
       coverTx: this.coverTx,
+      routeExpiries: this.routeExpiries,
       retriesSent: this.retriesSent,
       retriesExhausted: this.retriesExhausted,
       acksReceived: this.acksReceived,

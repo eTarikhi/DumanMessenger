@@ -549,10 +549,20 @@ ElectionOutcome electRole(MeshNode node, List<MeshNode> allNodes, RfParams rf,
 }
 
 /// Drop routes and scores that have not been refreshed (soft state, docs/05 §1.4).
-void pruneStaleEntries(MeshNode node, double nowMs, double maxAgeMs) {
+/// Returns how many **route entries** were dropped, which is the route table's churn: a
+/// neighbour that expires and is re-learned a moment later costs two table updates, and in
+/// between, anything that needed it is forwarded by a node that no longer knows where it
+/// goes. docs/06 §24.7 needs that number to test why a 12 s beacon interval delivered worse
+/// than both 5 s and 25 s in a 60-node crowd. Callers that do not care can ignore it, as
+/// every existing one did when this returned void.
+int pruneStaleEntries(MeshNode node, double nowMs, double maxAgeMs) {
   // Drop 2-hop views for nodes that are no longer direct neighbours.
   final peers = node.peerIds.toSet();
   node.twoHopView.removeWhere((id, _) => !peers.contains(id));
+  // Counted before removal because `removeWhere` does not report how much it took.
+  final expired = node.nextHopTable.values
+      .where((e) => nowMs - e.lastSeen > maxAgeMs)
+      .length;
   node.nextHopTable.removeWhere((_, e) => nowMs - e.lastSeen > maxAgeMs);
   // Receipt windows are keyed by the neighbour that delivered them: a neighbour
   // we can no longer hear is not a candidate next hop, and an originator whose
@@ -573,6 +583,7 @@ void pruneStaleEntries(MeshNode node, double nowMs, double maxAgeMs) {
     node.ogmTable.remove(id);
     node.neighborScores.remove(id);
   }
+  return expired;
 }
 
 NodeId? getNextHop(MeshNode node, NodeId dest) {

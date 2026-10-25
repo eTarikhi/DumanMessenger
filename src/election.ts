@@ -553,15 +553,29 @@ export function electRole(
   return { role: "NORMAL", reason: `NORMAL: score ${node.score.toFixed(2)}, rank ${rankLabel}` };
 }
 
-/** Drop routes and scores that have not been refreshed (soft state, docs/05 §1.4). */
-export function pruneStaleEntries(node: MeshNode, nowMs: number, maxAgeMs: number): void {
+/**
+ * Drop routes and scores that have not been refreshed (soft state, docs/05 §1.4).
+ *
+ * Returns how many **route entries** were dropped, which is the route table's churn: a
+ * neighbour that expires and is re-learned a moment later costs two table updates and, in
+ * between, any message that needed it is forwarded by a node that no longer knows where it
+ * goes. `docs/06` §24.7 needed that number to test why a 12 s beacon interval delivered
+ * *worse* than both 5 s and 25 s in a 60-node crowd — the flap hypothesis says the middle
+ * interval should be the one that churns, and without a count there was no way to ask.
+ * Callers that do not care can ignore it, as every existing one did when this returned void.
+ */
+export function pruneStaleEntries(node: MeshNode, nowMs: number, maxAgeMs: number): number {
   // Drop 2-hop views for nodes that are no longer direct neighbours.
   const peers = new Set<NodeId>(node.peerIds);
   for (const id of Object.keys(node.twoHopView)) {
     if (!peers.has(id)) delete node.twoHopView[id];
   }
+  let expired = 0;
   for (const id of Object.keys(node.nextHopTable)) {
-    if (nowMs - node.nextHopTable[id].lastSeen > maxAgeMs) delete node.nextHopTable[id];
+    if (nowMs - node.nextHopTable[id].lastSeen > maxAgeMs) {
+      delete node.nextHopTable[id];
+      expired++;
+    }
   }
   // Receipt windows are keyed by the neighbour that delivered them: a neighbour
   // we can no longer hear is not a candidate next hop, and an originator whose
@@ -585,6 +599,7 @@ export function pruneStaleEntries(node: MeshNode, nowMs: number, maxAgeMs: numbe
       delete node.neighborScores[id];
     }
   }
+  return expired;
 }
 
 export function getNextHop(node: MeshNode, dest: NodeId): NodeId | null {

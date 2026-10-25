@@ -2322,12 +2322,18 @@ Four things this says.
    > specified 2 s interval measures **0.79×** — inside the radio budget — with delivery and
    > broadcast reach unchanged. §24.7 has both tables.
 2. **Under the shipped baseline the two models are the same world**, as the test above pins.
-3. **Under contention they diverge, and not uniformly.** csma gains a lot — crowd delivery
-   71.5 % → 81.9 %, deferrals halved; campus delivery 98.7 % → 100 % with 29 % fewer drops.
-   Half-duplex in the same crowd goes the other way: 77.9 % → **75.9 %**, deferrals up 4 %. A
-   radio that frees sooner transmits sooner, and whether that helps depends on whether the
-   model lets it listen first — csma does, half-duplex does not. The disagreement is reported
-   rather than explained; nothing here establishes the mechanism.
+3. **Under contention they diverge, and not uniformly.** csma gains — in the table above,
+   crowd delivery 71.5 % → 81.9 % and campus 98.7 % → 100 % — while half-duplex in the same
+   crowd goes the other way, 77.9 % → **75.9 %**. A radio that frees sooner transmits sooner,
+   and whether that helps depends on whether the model lets it listen first — csma does,
+   half-duplex does not. The disagreement is reported rather than explained; nothing here
+   establishes the mechanism.
+
+   > **The csma magnitudes above are three-seed and §24.8 re-measures them on eight**, because
+   > `festival_crowd` turns out to be bimodal and three seeds cannot see through it. Every
+   > direction holds and one strengthens: crowd delivery 68.5 % → **74.1 %** with deferrals
+   > 12 649 → 6 707, and campus 94.5 % → **100.0 % on all eight seeds** with broadcast reach
+   > 57.8 % → 81.6 %. The crowd's +10.4 points was optimistic; +5.6 is the number to quote.
 4. **Therefore `docs/08` §12's contention magnitudes are a property of the occupancy model
    they were measured under**, not of the mesh. Its directions survive — a queue still earns
    back what collisions cost, capture still takes over as the margin rises — but a reader
@@ -2339,9 +2345,11 @@ vectors byte-identical, and the alternative measured rather than asserted.
 
 ### 24.7 The two levers on the control plane: interval and encoding
 
-`npm run media beacon`, three seeds, priced under `radioOccupancy: "airtime"` throughout —
-under the flat charge every arm would carry the same 120 ms artefact and the sweep would be
-measuring that instead.
+`npm run media beacon`, priced under `radioOccupancy: "airtime"` throughout — under the flat
+charge every arm would carry the same 120 ms artefact and the sweep would be measuring that
+instead. **Eight seeds**, not the three the rest of this probe uses; §24.8 explains why, and
+what the three-seed version of this table got wrong. Both tables print the per-seed spread
+beside the mean for the same reason.
 
 **The interval.** `docs/03` §4 specifies a 2 s beacon and nothing in the corpus says why. It
 has a hard ceiling in the engine: neighbour scores expire at `NEIGHBOR_SCORE_TTL_MS` 30 s, so
@@ -2350,31 +2358,59 @@ enough to drop a neighbour that is still there.
 
 `campus_quad`, 20 nodes:
 
-| interval | radio demand | delivery | broadcast reach | overhead | avg hops | avg latency | OGMs sent | MPR suppressed |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| **2 s (spec)** | 1.92× | 100.0 % | 95.0 % | 763 % | 1.88 | 900 ms | 35 242 | 115 |
-| 5 s | 0.79× | 100.0 % | 95.0 % | 595 % | 1.64 | 715 ms | 14 009 | 101 |
-| 12 s | 0.35× | 100.0 % | 94.7 % | 728 % | 1.98 | 742 ms | 5 788 | 80 |
-| 25 s | 0.18× | 100.0 % | 94.8 % | 617 % | 1.89 | 702 ms | 2 725 | 90 |
+| interval | radio demand | delivery | broadcast reach | overhead | avg hops | avg latency | OGMs sent | MPR suppressed | route expiries | per-seed reach |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| **2 s (spec)** | 1.97× | 100.0 % | 94.9 % | 888 % | 1.88 | 977 ms | 35 560 | 121 | 38 | 95 95 95 95 94 95 95 95 |
+| 5 s | 0.82× | 98.3 % | 95.0 % | 855 % | 1.81 | 761 ms | 14 093 | 105 | 57 | 95 95 95 95 95 95 95 95 |
+| 12 s | 0.37× | 100.0 % | 94.9 % | 775 % | 1.89 | 710 ms | 5 907 | 93 | 74 | 95 94 95 95 95 95 95 95 |
+| 25 s | 0.19× | 100.0 % | 94.9 % | 697 % | 1.92 | 923 ms | 2 734 | 87 | 85 | 95 95 95 95 95 95 95 95 |
 
 `festival_crowd`, 60 nodes:
 
-| interval | radio demand | delivery | broadcast reach | overhead | avg hops | avg latency | OGMs sent | MPR suppressed |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| **2 s (spec)** | 5.69× | 95.8 % | 98.0 % | 2 323 % | 2.70 | 1.38 s | 225 919 | 525 |
-| 5 s | 2.27× | **96.7 %** | 98.1 % | 2 521 % | 2.88 | 1.45 s | 87 033 | 562 |
-| 12 s | 1.02× | 93.9 % | **88.8 %** | 2 011 % | 2.77 | 1.13 s | 36 517 | 633 |
-| 25 s | 0.59× | 97.1 % | 97.6 % | 2 843 % | 2.82 | 1.46 s | 18 310 | 551 |
+| interval | radio demand | delivery | broadcast reach | overhead | avg hops | avg latency | OGMs sent | MPR suppressed | route expiries | per-seed reach |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| **2 s (spec)** | 5.66× | 92.0 % | 86.5 % | 2 319 % | 2.62 | 1.81 s | 224 159 | 523 | 1 149 | 98 98 98 79 79 54 87 98 |
+| 5 s | 2.31× | **94.8 %** | 88.5 % | 2 301 % | 2.80 | 1.69 s | 88 397 | 551 | 1 288 | 98 98 98 68 65 86 97 98 |
+| 12 s | 1.03× | 87.5 % | 80.4 % | 2 662 % | 2.59 | 2.74 s | 36 459 | 698 | 1 260 | 70 98 98 93 55 70 61 98 |
+| 25 s | 0.60× | 79.2 % | 82.6 % | 2 811 % | 2.63 | 1.22 s | 17 961 | 687 | 1 154 | 97 97 98 68 96 55 50 98 |
 
-At 20 nodes the interval barely matters: stretching it 12.5× cuts demanded radio time tenfold
-and delivery does not move off 100 %, broadcast reach does not move off ~95 %, and average
-latency is *better* at every longer interval — fewer beacons contending with data. At 60 nodes
-it matters and not monotonically: 5 s is better than the spec on delivery (96.7 % against
-95.8 %), 12 s is clearly worse (93.9 %, and broadcast reach falls to **88.8 %**, the signature
-of routes going stale), and 25 s recovers to 97.1 %. That non-monotonicity is reported, not
-explained: three seeds is thin for a 60-node stochastic world, and the plausible reading — at
-25 s so little control traffic exists that the data plane has the radio to itself, and density
-carries messages regardless of table freshness — was not measured and is not asserted here.
+Look at the last column before reading any of the others. `festival_crowd` does not have a
+broadcast reach; it has two, roughly 98 % and roughly 55-70 %, and which one a seed lands in
+decides the mean. Every arm shows both modes and **not the same seeds in each** — at 2 s the
+weak seeds are 99, 2024 and 31337, at 25 s they are 2024, 31337 and 555 — so even a paired
+comparison of means carries several points of sampling noise in a 60-node world.
+
+At 20 nodes the interval barely matters, and the per-seed column says why its mean can be
+trusted: every seed reaches 94-95 %, so that world is unimodal and eight of eight agree.
+Stretching the interval 12.5× cuts demanded radio time tenfold (1.97× → 0.19×), delivery stays
+at 100 % in three of the four arms, reach never leaves ~95 %, and route expiries rise only from
+38 to 85 across the whole window — the soft state sits comfortably inside its 30 s TTL at every
+interval tested, which is why nothing degrades.
+
+At 60 nodes the ordering is monotone past 5 s, and **the specified interval is not the best
+arm**: 5 s delivers 94.8 % against 2 s's 92.0 %, then 12 s falls to 87.5 % and 25 s to 79.2 %,
+with demand falling 5.66× → 0.60× along the way. So the crowd does trade freshness for airtime,
+at roughly 1.5 points of delivery per halving of demanded radio time past the 5 s optimum.
+
+> **Retraction.** The three-seed version of this table, published earlier the same day, read
+> 95.8 / 96.7 / 93.9 / 97.1 % and was described as non-monotone, with 25 s "recovering" and the
+> dip at 12 s called *the signature of routes going stale*. The recovery does not exist. Over
+> eight seeds 25 s is the **worst** arm, and the ordering is the one routing theory predicts.
+> The non-monotonicity was the sample, not the mesh: three of the eight seeds land in the weak
+> mode and *which* three differs from arm to arm, so a three-seed mean can be ordered almost
+> arbitrarily. §24.8 keeps the measurement that showed it, and `npm run media beacon` now runs
+> eight seeds and prints the spread beside the mean.
+
+**Route churn refutes the flap hypothesis.** The obvious story for a mid-range interval doing
+worst is that entries expire and are re-learned repeatedly, so the table flaps. `routeExpiries`
+was added to test exactly that, and it says no: the crowd expires **1 149 / 1 288 / 1 260 /
+1 154** route entries at 2 / 5 / 12 / 25 s — flat, and if anything highest at 5 s, the *best*
+arm. Churn in a dense mobile crowd is dominated by nodes walking out of range, not by the
+beacon interval, and stretching the interval 12.5× moves it by less than 12 %. The 12 s dip was
+never a mechanism; it was sampling, and the counter that was built to explain it is what says
+so. At 20 nodes, where mobility is low, expiries do rise monotonically with the interval
+(38 → 57 → 74 → 85), which is the behaviour the hypothesis predicted and the place it does not
+matter.
 
 **The encoding.** `docs/03` §4 says *"a real deployment advertises 2-byte aliases (~60 B for
 30 neighbours)"*. This engine advertises the 32-byte X25519 public key, which is what
@@ -2384,16 +2420,22 @@ sender nobody has heard from yet.
 
 | scenario | encoding | typical beacon | max beacon | radio demand | delivery | broadcast reach | OGMs sent |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| campus_quad (20) | 32 B public key | 630 B | 1 270 B | 1.92× | 100.0 % | 95.0 % | 35 242 |
-| campus_quad (20) | **2 B alias (§4)** | **90 B** | **130 B** | **0.33×** | 100.0 % | 95.0 % | 35 242 |
-| festival_crowd (60) | 32 B public key | 630 B | 1 270 B | 5.69× | 95.8 % | 98.0 % | 225 919 |
-| festival_crowd (60) | **2 B alias (§4)** | **90 B** | **130 B** | **0.79×** | 95.8 % | 98.0 % | 225 919 |
+| campus_quad (20) | 32 B public key | 630 B | 1 270 B | 1.97× | 100.0 % | 94.9 % | 35 560 |
+| campus_quad (20) | **2 B alias (§4)** | **90 B** | **130 B** | **0.34×** | 100.0 % | 94.9 % | 35 560 |
+| festival_crowd (60) | 32 B public key | 630 B | 1 270 B | 5.66× | 92.0 % | 86.5 % | 224 159 |
+| festival_crowd (60) | **2 B alias (§4)** | **90 B** | **130 B** | **0.78×** | 92.0 % | 86.5 % | 224 159 |
+
+These two arms are identical in delivery, reach and OGM count **by construction**, not by
+measurement luck: the encoding changes how a beacon is *priced*, and nothing in the engine
+transmits one differently, so the two runs are the same world read with different units. That
+is what makes this the clean lever of the two — it cannot perturb routing, and
+`radio-occupancy.test.ts` asserts the identity rather than assuming it.
 
 **The encoding is the bigger lever, and it is free.** Aliases cut the beacon, not the number of
 beacons — `OGMs sent` is identical in both rows, so nothing about route freshness, election
-convergence or MPR coverage changes — and demanded radio time falls 5.8× in the crowd and 5.8×
-on campus. At the *specified* 2 s interval, with the encoding the specification itself
-prescribes, the control plane at 60 nodes fits inside the radio budget at **0.79×**. The
+convergence or MPR coverage changes — and demanded radio time falls 5.8× in the crowd and on
+campus alike. At the *specified* 2 s interval, with the encoding the specification itself
+prescribes, the control plane at 60 nodes fits inside the radio budget at **0.78×**. The
 over-subscription this section started from was never a property of the protocol; it was a
 property of this simulator putting public keys on the air.
 
@@ -2410,9 +2452,50 @@ adopting it in the simulator would mean modelling aliases as a real routing chan
 would have to learn the alias↔key binding before it could use one, which is a new
 state-sync question and not a constant.
 
-**The follow-up §24.6 named is demoted.** An interval that adapts to density was proposed
-because the two scenario tables disagreed about what the interval should be. They still
-disagree, but under the prescribed encoding both densities fit inside the budget at the
-specified interval, so the case for adapting it is now about headroom rather than feasibility.
-It remains unimplemented, and the convergence objection stands: a node that slows its beacons
-because it has many neighbours is exactly the node its neighbours most need to hear from.
+**The follow-up §24.6 named survives, and is better supported than before.** An interval that
+adapts to density was proposed because the two scenario tables disagreed about what the
+interval should be. On eight seeds they disagree sharply and in opposite directions: at 20
+nodes 25 s costs nothing at all and buys a tenfold cut in demanded radio time, while at 60
+nodes the specified 2 s is beaten by 5 s and everything longer degrades delivery. There is no
+single right interval for both, which is the argument for deriving it. Under the prescribed
+alias encoding both densities fit inside the budget at the specified interval, so the case is
+about headroom and battery rather than feasibility — and the convergence objection still
+stands: a node that slows its beacons because it has many neighbours is exactly the node its
+neighbours most need to hear from. It remains unimplemented.
+
+### 24.8 Three seeds is not enough for a 60-node crowd, and this is not the first time
+
+`festival_crowd` is bimodal. Across eight seeds and four beacon intervals, broadcast reach
+lands either near 98 % or between 50 and 79 %, and which mode a seed takes is not stable across
+arms:
+
+| broadcast reach | 42 | 7 | 1234 | 99 | 2024 | 31337 | 555 | 8 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| at 2 s | 98 | 98 | 98 | 79 | 79 | 54 | 87 | 98 |
+| at 5 s | 98 | 98 | 98 | 68 | 65 | 86 | 97 | 98 |
+| at 12 s | 70 | 98 | 98 | 93 | 55 | 70 | 61 | 98 |
+| at 25 s | 97 | 97 | 98 | 68 | 96 | 55 | 50 | 98 |
+
+Three of the eight seeds are weak in most arms, but not the same three, so a mean over any
+small sample is dominated by which mode the sample happened to hit. The probe's shared seed
+list is `[42, 7, 1234]` — three of the four strongest seeds in this table, near 98 % at 2 s and
+5 s, and *including* the one seed (42) that collapses to 70 % at 12 s. That is exactly how the
+three-seed table came to look non-monotone: it sampled the 12 s arm's bad seed alongside the
+other arms' good ones.
+
+`campus_quad` is not bimodal — all eight seeds reach 94-95 % at every interval — so its
+three-seed numbers were sound and moved by less than a point on reseeding. The problem is
+specific to the 60-node crowd, which is also the world this repository leans on most for its
+density claims.
+
+This document has been here before. §11 records *"a tuning change that three seeds would have
+justified and six refute"*, and §12.15 prints six seeds with the worst one beside the mean
+*"because on three this table showed a monotone improvement"* toward a conclusion that did not
+survive. §24.7 is the third instance and the first where the artefact had already been
+published in this file before it was caught.
+
+**The rule that follows**, and that `npm run media beacon` now implements: in a world that can
+land in either of two modes, print the per-seed spread beside the mean, and do not report an
+ordering between arms on a sample too small to contain both modes. Where a section's numbers
+predate that rule and rest on `festival_crowd`, they carry their seed count — as §24.6's now do
+— and it is the direction that should be quoted rather than the magnitude.

@@ -204,6 +204,20 @@ describe("radioOccupancy", () => {
     expect(sized.stats.deliveryRatio).toBeGreaterThan(flat.stats.deliveryRatio);
   });
 
+  it("counts route churn, and a beacon interval near the soft-state TTL churns more", () => {
+    // docs/06 §24.7: the interval sweep in `npm run media beacon` found delivery
+    // non-monotone at 60 nodes — 5 s better than the specified 2 s, 12 s worse than both,
+    // 25 s better again — and reported it without explaining it. `routeExpiries` is what
+    // makes the flap hypothesis testable: if the middle interval hurts because entries
+    // expire and are re-learned, churn should peak there rather than rise with the interval.
+    const spec = run({ ogmIntervalMs: 2_000 });
+    const slow = run({ ogmIntervalMs: 25_000 });
+    expect(spec.stats.routeExpiries).toBeGreaterThanOrEqual(0);
+    // NEIGHBOR_SCORE_TTL_MS is 30 s, so a 25 s beacon keeps an entry alive only if no
+    // beacon is ever lost; the specified 2 s interval gets fifteen chances per TTL.
+    expect(slow.stats.routeExpiries).toBeGreaterThan(spec.stats.routeExpiries);
+  });
+
   it("leaves a sparse mesh's delivery alone under contention, which bounds the finding", () => {
     // campus_quad delivers everything in every arm under both models, so the correction is
     // about density and not about the contention model in general.

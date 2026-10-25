@@ -328,11 +328,17 @@ void main() {
     test('expires soft state that has not been refreshed', () {
       final me = makeNode('me', 0, 0);
       receiveOgm(me, buildOgm(makeNode('x', 0, 0, seq: 1)), 'x', 1000);
-      pruneStaleEntries(me, 1000, neighborScoreTtlMs);
+      // Nothing is stale yet, so nothing is dropped and nothing is reported.
+      expect(pruneStaleEntries(me, 1000, neighborScoreTtlMs), equals(0));
       expect(me.nextHopTable.containsKey('x'), isTrue);
-      pruneStaleEntries(me, 40000, neighborScoreTtlMs);
+      // One route entry ages out, and the returned count is what the caller accumulates
+      // into `routeExpiries` — the churn measure docs/06 §24.7 needed to test why a 12 s
+      // beacon interval looked worse than both 5 s and 25 s in a 60-node crowd.
+      expect(pruneStaleEntries(me, 40000, neighborScoreTtlMs), equals(1));
       expect(me.nextHopTable.containsKey('x'), isFalse);
       expect(me.ogmTable.containsKey('x'), isFalse);
+      // Idempotent: the entry is already gone, so the second call reports nothing.
+      expect(pruneStaleEntries(me, 40000, neighborScoreTtlMs), equals(0));
     });
 
     test('keeps link quality per neighbour, so a duplicate cannot zero it', () {

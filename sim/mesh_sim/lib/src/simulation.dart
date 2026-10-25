@@ -676,6 +676,7 @@ class SimulationStats {
     required this.transferStalls,
     required this.sentChunks,
     required this.bytesDelivered,
+    required this.routeExpiries,
     required this.sentSync,
     required this.coverTx,
     required this.historyBeacons,
@@ -792,6 +793,11 @@ class SimulationStats {
   /// the payload bytes the whole exchange occupied. Counted apart from
   /// [sentUnicast]/[deliveryRatio]: a digest is control traffic, not a message anybody
   /// sent to anybody.
+  /// Route entries dropped because no beacon refreshed them inside [neighborScoreTtlMs] —
+  /// the route table's churn. docs/06 §24.7 uses it to test why a 12 s beacon interval
+  /// delivered worse than both 5 s and 25 s in a 60-node crowd.
+  final int routeExpiries;
+
   final int sentSync;
 
   /// Dummy beacons put on air by [SimConfig.coverTraffic] (docs/04 §5). Zero unless it is
@@ -968,6 +974,7 @@ class SimulationStats {
         'transferStalls': transferStalls,
         'sentChunks': sentChunks,
         'bytesDelivered': bytesDelivered,
+        'routeExpiries': routeExpiries,
         'sentSync': sentSync,
         'coverTx': coverTx,
         'historyBeacons': historyBeacons,
@@ -1586,6 +1593,7 @@ class MeshSimulation {
   final Map<NodeId, _ChannelState> _channel = <NodeId, _ChannelState>{};
   int _ogmTx = 0;
   int _coverTx = 0;
+  int _routeExpiries = 0;
   int _lostDataTx = 0;
   int _lostOgmTx = 0;
   int _duplicateRx = 0;
@@ -1689,6 +1697,7 @@ class MeshSimulation {
     _rxSeq.clear();
     _ogmTx = 0;
     _coverTx = 0;
+    _routeExpiries = 0;
     _lostDataTx = 0;
     _lostOgmTx = 0;
     _duplicateRx = 0;
@@ -2062,7 +2071,7 @@ class MeshSimulation {
       node.avgRssi = sum / peers.length;
     }
     pruneSeenCache(node, now);
-    pruneStaleEntries(node, now, neighborScoreTtlMs);
+    _routeExpiries += pruneStaleEntries(node, now, neighborScoreTtlMs);
     pruneOppQueue(node, now);
     node.mprSet =
         selectMprSet(node, nodes, config.communityRelayPreference);
@@ -4170,6 +4179,7 @@ class MeshSimulation {
       transferStalls: _transferStalls,
       sentChunks: _sentChunks,
       bytesDelivered: _bytesDelivered,
+      routeExpiries: _routeExpiries,
       sentSync: _sentSync,
       historyBeacons: _historyBeacons,
       historyRequests: _historyRequests,

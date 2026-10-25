@@ -1944,6 +1944,9 @@ interface BeaconRow {
   latency: number;
   control: number;
   suppressed: number;
+  /** Route entries that expired unrenewed — the route table's churn, and the number the
+   *  flap hypothesis about the 12 s arm needs (`docs/06` §24.7). */
+  expiries: number;
 }
 
 function beaconRun(
@@ -1978,10 +1981,27 @@ function beaconRun(
     latency: st.avgLatencyMs,
     control: st.controlOverhead,
     suppressed: st.mprSuppressed,
+    expiries: st.routeExpiries,
   };
 }
 
 const BEACON_INTERVALS = [2_000, 5_000, 12_000, 25_000];
+
+/**
+ * This section does not use the file's three seeds, and the reason is measured.
+ *
+ * `festival_crowd` at 60 nodes is bimodal: some seeds reach ~98 % of the network with a
+ * broadcast and others reach 50-70 %, so which mode the sample happens to land in dominates
+ * the mean. The first version of this table used the shared three seeds and reported delivery
+ * as 96.7 % at 5 s, 93.9 % at 12 s and 97.1 % at 25 s — non-monotone, and published in
+ * `docs/06` §24.7 as a result that was "reported, not explained". Over eight seeds the
+ * ordering reverses and becomes monotone in the direction routing theory predicts: 94.8 %,
+ * 87.5 %, 79.2 %. The non-monotonicity was the sample, not the mesh.
+ *
+ * The shared `SEEDS` are left alone on purpose. Every other section's numbers are published
+ * against them, and widening them here would silently re-measure `docs/08` §1-§14.
+ */
+const BEACON_SEEDS = [42, 7, 1234, 99, 2024, 31337, 555, 8];
 
 function beaconTable(): void {
   console.log(
@@ -2010,13 +2030,13 @@ function beaconTable(): void {
     ["campus_quad (20 nodes)", campusQuad],
     ["festival_crowd (60 nodes)", festivalCrowd],
   ] as Array<[string, (seed: number) => SimConfig]>) {
-    console.log(`  ${name}, mean of ${SEEDS.length} seeds\n`);
+    console.log(`  ${name}, mean of ${BEACON_SEEDS.length} seeds\n`);
     console.log(
-      "  interval   radio demand   delivery   broadcast reach   overhead   avg hops   avg latency   OGMs sent   MPR suppressed"
+      "  interval   radio demand   delivery   broadcast reach   overhead   avg hops   avg latency   OGMs sent   MPR suppressed   route expiries   per-seed broadcast reach"
     );
     const rows: BeaconRow[] = [];
     for (const interval of BEACON_INTERVALS) {
-      const perSeed = SEEDS.map((seed) => beaconRun(seed, scenario, interval));
+      const perSeed = BEACON_SEEDS.map((seed) => beaconRun(seed, scenario, interval));
       const mean = (f: (r: BeaconRow) => number) =>
         perSeed.reduce((a, r) => a + f(r), 0) / Math.max(1, perSeed.length);
       rows.push({
@@ -2029,6 +2049,7 @@ function beaconTable(): void {
         latency: mean((r) => r.latency),
         control: mean((r) => r.control),
         suppressed: mean((r) => r.suppressed),
+        expiries: mean((r) => r.expiries),
       });
       const r = rows[rows.length - 1];
       console.log(
@@ -2040,7 +2061,11 @@ function beaconTable(): void {
           `${r.hops.toFixed(2).padStart(10)} ` +
           `${fmt(r.latency).padStart(13)} ` +
           `${r.control.toFixed(0).padStart(11)} ` +
-          `${r.suppressed.toFixed(0).padStart(16)}`
+          `${r.suppressed.toFixed(0).padStart(16)} ` +
+          `${r.expiries.toFixed(0).padStart(16)}   ` +
+          // The spread, not just the mean: in a bimodal world the mean alone is what let a
+          // three-seed sample publish a result the eight-seed sample contradicts.
+          perSeed.map((x) => (x.reach * 100).toFixed(0)).join(" ")
       );
     }
     const spec = rows[0];
@@ -2080,7 +2105,9 @@ function beaconTable(): void {
       ["32 B public key", 32],
       ["2 B alias (§4)", 2],
     ] as Array<[string, number]>) {
-      const perSeed = SEEDS.map((seed) => beaconRun(seed, scenario, 2_000, aliasBytes));
+      const perSeed = BEACON_SEEDS.map((seed) =>
+        beaconRun(seed, scenario, 2_000, aliasBytes)
+      );
       const mean = (f: (r: BeaconRow) => number) =>
         perSeed.reduce((a, r) => a + f(r), 0) / Math.max(1, perSeed.length);
       console.log(
