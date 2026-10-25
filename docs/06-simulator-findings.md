@@ -2811,3 +2811,45 @@ reassignment — many more seeds, or a mobility model whose draws do not depend 
 schedule — and neither is cheap. Until then the flag is there, both tables are reproducible with
 `npm run media intervalMode` including their per-seed spreads, and the verdict is recorded as
 *cheaper where it can be measured, unmeasurable where it ships, and not shown to deliver more*.
+
+### 24.13 What the seed sensitivity means for the acceptance gates
+
+§24.8 and §24.10 are about how to read a measurement. This is about the tests that *gate* the
+build, because two of them run on `festival_crowd` and therefore on the bimodal world.
+
+`src/__tests__/acceptance.test.ts` asserts, for the dense crowd, that delivery is ≥ 0.85, SUPER
+ratio is 10-30 %, average hops ≤ 4 and role flapping ≤ 1 per node per minute — on seeds 42, 7
+and 1234. Those are three of the strongest seeds in §24.10's table, so the first question is
+whether the gates pass because the engine meets them or because the seeds were kind. Measured
+across nine seeds with the same harness (150 messages, shipped configuration):
+
+| seed | 42 | 7 | 1234 | 99 | 2024 | 2026 | 31337 | 555 | 8 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| delivery | 94.7 % | 94.7 % | 96.7 % | 88.7 % | **85.3 %** | 93.3 % | 93.3 % | 94.0 % | 98.7 % |
+| SUPER ratio | 18.3 % | 20.0 % | 21.7 % | 15.0 % | 15.0 % | 18.3 % | 16.7 % | 20.0 % | 21.7 % |
+| avg hops | 3.01 | 2.78 | 2.81 | 2.71 | 2.69 | 3.08 | 2.49 | 2.82 | 2.75 |
+| flap / node / min | 0.12 | 0.09 | 0.16 | 0.09 | 0.09 | 0.12 | 0.07 | 0.11 | 0.14 |
+| connected in-window | 89 % | 87 % | 93 % | **51 %** | **51 %** | 96 % | **33 %** | 80 % | 100 % |
+
+**All nine clear the 0.85 delivery bar**, so the bar is not seed-lucky — and the other three
+gates have real headroom everywhere (SUPER ratio 15.0-21.7 % against a 10-30 % gate, hops
+2.49-3.08 against ≤ 4, flap 0.07-0.16 against ≤ 1). But the weakest seed clears delivery by
+**0.3 points**, while the three seeds the gate uses sit about ten points above it. A gate that
+passes on three strong seeds by ten points and on the weakest of nine by a third of a point is
+not measuring the same margin it appears to be.
+
+**Delivery does not track connectivity the way broadcast reach does**, and that is the more
+useful half of the table. Seed 31337 is in one piece for a third of the window and still
+delivers 93.3 %, while seeds 99 and 2024 are in one piece half the time and deliver the two
+worst ratios. §24.10's "reach tracks the largest in-window component" is a statement about
+*broadcasts*, and it does not carry over: a unicast can be queued, retried and carried by a node
+walking between clusters, so it tolerates a partition that a broadcast simply cannot cross. Any
+argument that moves from reach to delivery — including the one §24.11's crowd row invited — has
+to make that step explicitly.
+
+`acceptance.test.ts` now asserts the crowd's delivery bar over all nine seeds at **0.80** rather
+than adding a second 0.85 gate. The lower floor has 5.3 points of margin on the weakest seed and
+still catches a regression in the weak mode, which the three-seed gate cannot see; asserting
+0.85 over nine would be asserting a boundary the scenario actually reaches, and would fail on any
+change that moved one seed by half a point. The other three bars are asserted over all nine as
+well, since their headroom is wide enough that doing so costs nothing and covers the weak mode.

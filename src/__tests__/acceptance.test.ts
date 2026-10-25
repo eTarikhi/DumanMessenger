@@ -245,6 +245,40 @@ describe("dense crowd (docs/02 §6: 50+ nodes)", () => {
     expect(r.deliveryRatio).toBeGreaterThanOrEqual(0.85);
   });
 
+  it("holds its delivery bar on seeds the gate above does not use", () => {
+    // The two crowd gates above run seeds 42, 7 and 1234. `docs/06` §24.8-§24.10 found this
+    // scenario is bimodal — broadcast reach lands near 98% or between 50 and 79% depending on
+    // how much of the window the network spends in one piece — and those three seeds are among
+    // the strong ones, so a gate calibrated on them could have been passing on luck. Measured
+    // across nine seeds with this harness (150 messages, shipped config), delivery reads:
+    //
+    //   42 94.7 · 7 94.7 · 1234 96.7 · 99 88.7 · 2024 85.3 · 2026 93.3 · 31337 93.3 ·
+    //   555 94.0 · 8 98.7   (percent)
+    //
+    // Every one clears the 0.85 bar the gate above asserts, so the bar is not seed-lucky —
+    // but the weakest clears it by **0.3 points**, and the three seeds in use sit about ten
+    // points above it. In-window connectivity over the same nine ranges from 33% to 100%, and
+    // delivery does not track it the way broadcast reach does: seed 31337 is in one piece a
+    // third of the window and still delivers 93.3%, because a unicast can be carried and
+    // retried where a broadcast simply cannot cross a gap that exists when it is sent.
+    //
+    // So this asserts 0.80 rather than 0.85 over the nine: a floor with real margin (5.3
+    // points on the weakest seed) that would still catch a regression in the weak mode, which
+    // is what the gates above cannot see. Asserting 0.85 here would be asserting a boundary
+    // the scenario reaches, and it would fail on a change that moved one seed by half a point.
+    for (const seed of [42, 7, 1234, 99, 2024, 2026, 31337, 555, 8]) {
+      const r = measure(festivalCrowd(seed), false);
+      expect(r.deliveryRatio, `seed ${seed}`).toBeGreaterThanOrEqual(0.8);
+      // The other three crowd bars have real headroom on every seed, so they are worth
+      // asserting widely rather than on one: SUPER ratio 15.0-21.7% against a 10-30% gate,
+      // avgHops 2.49-3.08 against <=4, and flap 0.07-0.16 per node per minute against <=1.
+      expect(r.superRatio, `seed ${seed}`).toBeGreaterThanOrEqual(0.1);
+      expect(r.superRatio, `seed ${seed}`).toBeLessThanOrEqual(0.3);
+      expect(r.avgHops, `seed ${seed}`).toBeLessThanOrEqual(4);
+      expect(r.flapPerNodeMin, `seed ${seed}`).toBeLessThanOrEqual(1);
+    }
+  });
+
   it("costs MPR nothing against the same engine without suppression", () => {
     // docs/05 §"Duman's hybrid selection": MPR suppression must cut redundant
     // transmissions without costing delivery. Suppression gated on *coverage*
