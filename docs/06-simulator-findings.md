@@ -2886,3 +2886,55 @@ still catches a regression in the weak mode, which the three-seed gate cannot se
 0.85 over nine would be asserting a boundary the scenario actually reaches, and would fail on any
 change that moved one seed by half a point. The other three bars are asserted over all nine as
 well, since their headroom is wide enough that doing so costs nothing and covers the weak mode.
+
+### 24.14 What follows for the control plane, on this evidence
+
+§24 ran to thirteen subsections because each measurement changed what the next one should ask.
+Collected in one place, since a reader should not have to reconstruct the order:
+
+1. **Advertise aliases in beacons, not public keys.** The largest lever measured anywhere in this
+   document, and the only one that is close to free: 5.66× → 0.78× demanded radio time at 60
+   nodes with the *same* beacon count, delivery and reach unchanged (§24.7), and it survives the
+   cost of distributing the bindings by about 25:1 even at the crowd's measured churn (§24.7's
+   binding arithmetic). `docs/03` §4 already prescribes it. Nothing implements it, and
+   implementing it is a state-sync change rather than a constant — which is the one item on this
+   list worth building.
+2. **Leave the beacon interval at 2 s.** No single interval serves both densities (§24.7), the
+   derived one is cheaper only where the topology can be held still and is not shown to buy
+   delivery anywhere (§24.11-§24.12), and once beacons carry aliases the specified interval
+   already fits inside the radio budget at 60 nodes. The pressure to change it was an artefact of
+   the encoding.
+3. **Do not add cover traffic.** Rejected (§23): an observer counting transmissions names a
+   12-message burst's sender 0 times in 3 seeds *with cover off*, because relaying already
+   dominates every node's count, and tightening to 5 s costs 66 % more airtime to move a z-score
+   from 0.844 to 0.866.
+4. **Price occupancy by size in any future contention work.** The flat 120 ms charge is right at a
+   full 1 024 B packet and wrong below it — a 256 B padded text is 25.6 ms of airtime — so §12's
+   drop and deferral magnitudes belong to the flat-charge world. Its *directions* survive; under
+   `csma` in a crowd, sizing packets halves deferrals and lifts delivery 68.5 % → 74.1 %, and on
+   campus it reaches 100 % on all eight seeds (§24.6).
+5. **Report in-window connectivity beside reach, and use eight seeds in a crowd.** A 60-node crowd
+   is bimodal because it splits and re-joins during the window (§24.10); a graph sampled after the
+   window cannot see it (§24.9), and three seeds published an ordering that eight reversed
+   (§24.8). `connectedSampleShare` and `meanLargestComponent` are in `SimulationStats`, the capture
+   schema carries a `topology` record, and the visualiser draws the split.
+6. **Treat mobility as a connectivity mechanism, not only as a difficulty.** The same 60 nodes in
+   the same area deliver 92.0 % moving and 74.4 % standing still, and are in one piece 76 % of the
+   window against 50 %, because the scenario spawns clusters and wandering nodes are the bridges
+   (§24.12). A field test that asks people to stand still measures a worse-connected network, and
+   `docs/09` §5 now says so.
+7. **Do not read a unicast number off a broadcast one.** In a partitioned world they diverge: one
+   seed in one piece a third of the window still delivered 93.3 %, while a broadcast cannot cross a
+   gap that exists when it is sent (§24.13). §24.11 nearly made that inference and was corrected by
+   the per-seed table.
+8. **The battery model's role gap is a constant, and the engine can now say how much of it is
+   mechanism.** `SUPER_DRAIN_PER_HOUR = (0.15 / 8) * 4` sets the scale; the duty cycle the same
+   skill specifies reproduces the direction at 3.00-3.27× (`awakeRatio` 0.30-0.33 against
+   `sleepDrainFactor` 0.25) and *widens* the measured ratio to 4.23× when it is on (§24.1). The
+   Wi-Fi Direct group-owner role still costs nothing here, and that is the missing term. Wake-locks
+   are reported as a role split rather than a percentage of the clock because the model demands
+   3.9× the airtime that exists, 1.9× once packets are priced by size.
+
+Items 1 and 8 are work. Items 2, 3 and 7 are decisions not to do work, which is the more common
+output of a measurement and the one most often lost. Items 4, 5 and 6 are rules for reading
+anything else in this document.
