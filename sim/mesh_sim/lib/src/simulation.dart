@@ -47,6 +47,7 @@ class SimConfig {
     this.coverIntervalMs = 30000,
     this.radioOccupancy = RadioOccupancy.hopLatency,
     this.ogmAliasBytes = 32,
+    this.connectivitySampleMs = 5000,
     this.ogmJitterMs = 200,
     this.ogmTtl = 5,
     this.electionIntervalMs = 30000,
@@ -167,6 +168,17 @@ class SimConfig {
   /// dominates demanded radio time, the encoding is a bigger lever than the beacon interval.
   /// The originator's own id stays 32 B either way.
   final int ogmAliasBytes;
+
+  /// How often to sample the connectivity of the radio graph, in ms. 0 disables it.
+  ///
+  /// docs/06 §24.10 measured why this belongs in the engine rather than in a probe: a 60-node
+  /// crowd splits and re-joins repeatedly inside a measurement window, so `broadcastReach` and
+  /// `deliveryRatio` averaged over that window are unreadable without knowing how much of it the
+  /// network was in one piece. The graph measured *after* the window cannot tell you — a
+  /// partition that healed looks like a network that was never partitioned, which is exactly the
+  /// mistake §24.9 made. Sampling consumes no random numbers and schedules no events, so it
+  /// cannot move a golden vector or a published number.
+  final double connectivitySampleMs;
   final double ogmJitterMs;
   final int ogmTtl;
   final double electionIntervalMs;
@@ -468,6 +480,7 @@ class SimConfig {
     double? coverIntervalMs,
     RadioOccupancy? radioOccupancy,
     int? ogmAliasBytes,
+    double? connectivitySampleMs,
     bool? communityRelayPreference,
     bool? dtnPreferCommunity,
     double? voiceKbps,
@@ -535,6 +548,7 @@ class SimConfig {
         coverIntervalMs: coverIntervalMs ?? this.coverIntervalMs,
         radioOccupancy: radioOccupancy ?? this.radioOccupancy,
         ogmAliasBytes: ogmAliasBytes ?? this.ogmAliasBytes,
+        connectivitySampleMs: connectivitySampleMs ?? this.connectivitySampleMs,
         communityRelayPreference:
             communityRelayPreference ?? this.communityRelayPreference,
         dtnPreferCommunity: dtnPreferCommunity ?? this.dtnPreferCommunity,
@@ -677,6 +691,9 @@ class SimulationStats {
     required this.sentChunks,
     required this.bytesDelivered,
     required this.routeExpiries,
+    required this.connectivitySamples,
+    required this.connectedSampleShare,
+    required this.meanLargestComponent,
     required this.sentSync,
     required this.coverTx,
     required this.historyBeacons,
@@ -797,6 +814,21 @@ class SimulationStats {
   /// the route table's churn. docs/06 §24.7 uses it to test why a 12 s beacon interval
   /// delivered worse than both 5 s and 25 s in a 60-node crowd.
   final int routeExpiries;
+
+  /// How many times the radio graph was sampled inside the window, at
+  /// [SimConfig.connectivitySampleMs]. Zero disables the metric, not the network.
+  final int connectivitySamples;
+
+  /// Fraction of those samples at which every node could reach every other. Read this beside
+  /// `broadcastReach` and `deliveryRatio` in any mobile scenario: docs/06 §24.10 shows
+  /// festival_crowd reaches 98% when it stays connected and 54-79% when it does not, and the
+  /// two look like one bimodal metric unless this is beside them.
+  final double connectedSampleShare;
+
+  /// Mean share of the network inside the largest component across those samples. A broadcast
+  /// cannot do better than this, so a reach near it is a topology result and a reach well below
+  /// it is a routing one.
+  final double meanLargestComponent;
 
   final int sentSync;
 
@@ -975,6 +1007,9 @@ class SimulationStats {
         'sentChunks': sentChunks,
         'bytesDelivered': bytesDelivered,
         'routeExpiries': routeExpiries,
+        'connectivitySamples': connectivitySamples,
+        'connectedSampleShare': connectedSampleShare,
+        'meanLargestComponent': meanLargestComponent,
         'sentSync': sentSync,
         'coverTx': coverTx,
         'historyBeacons': historyBeacons,
@@ -1594,6 +1629,13 @@ class MeshSimulation {
   int _ogmTx = 0;
   int _coverTx = 0;
   int _routeExpiries = 0;
+
+  /// In-window connectivity sampling (docs/06 §24.10). Counters, not state: nothing here feeds
+  /// back into routing, so a sample cannot change the world it is measuring.
+  int _connectivitySamples = 0;
+  int _connectedSamples = 0;
+  double _largestComponentSum = 0;
+  double _lastConnectivitySampleMs = -1;
   int _lostDataTx = 0;
   int _lostOgmTx = 0;
   int _duplicateRx = 0;
@@ -1698,6 +1740,12 @@ class MeshSimulation {
     _ogmTx = 0;
     _coverTx = 0;
     _routeExpiries = 0;
+    _connectivitySamples = 0;
+    _connectedSamples = 0;
+    _largestComponentSum = 0;
+    // Sample from the start of the window rather than inheriting the settle period's clock, so
+    // a caller that clears and then runs for 60 s gets 60 s of samples.
+    _lastConnectivitySampleMs = now;
     _lostDataTx = 0;
     _lostOgmTx = 0;
     _duplicateRx = 0;
@@ -1890,6 +1938,11 @@ class MeshSimulation {
         _rxSeq.remove(node.id);
       }
     }
+    // Sampled here rather than from its own event: a queue entry would carry a sequence number,
+    // and two events at the same instant are ordered by it, so adding one could reorder
+    // unrelated events. This consumes no random number and schedules nothing, so a published
+    // number and a golden vector are both untouched by it.
+    _sampleConnectivity();
     _queue.push(now + config.physicsIntervalMs, EventKind.physics, '*');
   }
 
@@ -2508,6 +2561,53 @@ class MeshSimulation {
 
   /// Milliseconds one node has spent holding a wake lock since the metrics were cleared.
   double wakeLockMsFor(NodeId nodeId) => _wakeLockMsByNode[nodeId] ?? 0;
+
+  /// Component sizes of the radio graph right now — who can hear whom — largest first.
+  ///
+  /// A node is in a component with the peers inside RF range of it, which is the graph a
+  /// broadcast has to cross. docs/06 §24.10 uses this to explain festival_crowd's two modes,
+  /// and any measurement of reach in a mobile network should report it beside the reach,
+  /// because a graph sampled once after the window cannot see a partition that healed.
+  List<int> componentSizes() {
+    final adj = <NodeId, List<NodeId>>{};
+    for (final node in nodes) {
+      adj[node.id] = peersInRange(node, nodes, rf).map((p) => p.id).toList();
+    }
+    final seen = <NodeId>{};
+    final out = <int>[];
+    for (final node in nodes) {
+      if (seen.contains(node.id)) continue;
+      var size = 0;
+      final stack = <NodeId>[node.id];
+      while (stack.isNotEmpty) {
+        final id = stack.removeLast();
+        if (seen.contains(id)) continue;
+        seen.add(id);
+        size++;
+        for (final nb in adj[id] ?? const <NodeId>[]) {
+          if (!seen.contains(nb)) stack.add(nb);
+        }
+      }
+      out.add(size);
+    }
+    out.sort((a, b) => b.compareTo(a));
+    return out;
+  }
+
+  /// Take one connectivity sample if the interval has elapsed. Called from the physics tick, so
+  /// it adds no event to the queue and consumes no random number.
+  void _sampleConnectivity() {
+    final every = config.connectivitySampleMs;
+    if (every <= 0) return;
+    if (_lastConnectivitySampleMs < 0) _lastConnectivitySampleMs = now;
+    if (now - _lastConnectivitySampleMs < every) return;
+    _lastConnectivitySampleMs = now;
+    final sizes = componentSizes();
+    if (sizes.isEmpty) return;
+    _connectivitySamples++;
+    if (sizes.length == 1) _connectedSamples++;
+    _largestComponentSum += sizes.first / nodes.length;
+  }
 
   /// Block a peer locally, as docs/04 §6 specifies: no moderation server exists, so the
   /// list never leaves the device and never affects anyone else's view of the network.
@@ -4180,6 +4280,13 @@ class MeshSimulation {
       sentChunks: _sentChunks,
       bytesDelivered: _bytesDelivered,
       routeExpiries: _routeExpiries,
+      connectivitySamples: _connectivitySamples,
+      connectedSampleShare: _connectivitySamples == 0
+          ? 1.0
+          : _connectedSamples / _connectivitySamples,
+      meanLargestComponent: _connectivitySamples == 0
+          ? 1.0
+          : _largestComponentSum / _connectivitySamples,
       sentSync: _sentSync,
       historyBeacons: _historyBeacons,
       historyRequests: _historyRequests,

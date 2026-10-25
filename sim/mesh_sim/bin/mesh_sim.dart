@@ -98,6 +98,13 @@ Duman mesh simulator (headless)
   --cover-interval <ms> Mean gap between a node's dummy beacons, default 30000. Read only
                         with --cover-traffic, like --capture-ratio is read only under
                         --channel-capture strongest
+  --connectivity-sample <ms>
+                        How often to sample whether the radio graph is in one piece,
+                        default 5000; 0 disables it. Reports connectivitySamples,
+                        connectedSampleShare and meanLargestComponent. Read these beside
+                        delivery and reach in any mobile scenario: a 60-node crowd splits
+                        and re-joins inside a window, and the graph measured after the
+                        window cannot see a partition that healed (docs/06 §24.10)
   --ogm-alias-bytes <n> Bytes one advertised neighbour costs on air, read only with
                         --radio-occupancy airtime. 32 ships (this engine advertises the
                         X25519 public key); docs/03 §4 says a real deployment advertises
@@ -340,6 +347,19 @@ void main(List<String> args) {
     config = config.copyWith(coverIntervalMs: ms);
   }
 
+  final connArg = _arg(args, '--connectivity-sample', '');
+  if (connArg.isNotEmpty) {
+    // tryParse, not parse: a bad number is a usage error with a message, not a stack trace.
+    final ms = double.tryParse(connArg);
+    if (ms == null || ms < 0) {
+      stderr.writeln(
+          '--connectivity-sample needs a non-negative number of ms, got "$connArg"');
+      exitCode = 64;
+      return;
+    }
+    config = config.copyWith(connectivitySampleMs: ms);
+  }
+
   final aliasArg = _arg(args, '--ogm-alias-bytes', '');
   if (aliasArg.isNotEmpty) {
     // tryParse, not parse: a bad number is a usage error with a message, not a stack trace.
@@ -475,6 +495,7 @@ void main(List<String> args) {
       'coverIntervalMs': config.coverIntervalMs,
       'radioOccupancy': config.radioOccupancy.wire,
       'ogmAliasBytes': config.ogmAliasBytes,
+      'connectivitySampleMs': config.connectivitySampleMs,
     },
     'nodes': sim.nodes.length,
     'sent': sent,

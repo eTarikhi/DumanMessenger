@@ -2462,6 +2462,95 @@ void main() {
           greaterThan(3));
     });
 
+    test('samples connectivity in-window, which an end-of-window graph cannot', () {
+      // docs/06 §24.10: a 60-node crowd splits and re-joins inside a measurement window, so
+      // broadcastReach reads as two modes unless the reader can see how much of the window the
+      // network was in one piece. Seed 2024 is the case §24.9 got wrong — whole at the end of
+      // the window, split for most of it.
+      final crowd = MeshSimulation(festivalCrowd(2024));
+      crowd.runFor(90000.0);
+      crowd.refresh();
+      crowd.clearRecords();
+      crowd.injectTraffic(30, 40000.0);
+      crowd.runFor(60000.0);
+      crowd.refresh();
+      // Whole at the end — the measurement that misled §24.9.
+      expect(crowd.componentSizes(), equals(<int>[crowd.nodes.length]));
+      // And not whole during the window. Thresholds are deliberately loose: the sampler runs
+      // on the physics tick, so which instants it lands on is not worth pinning.
+      expect(crowd.stats.connectivitySamples, greaterThan(0));
+      expect(crowd.stats.connectedSampleShare, lessThan(1.0));
+      expect(crowd.stats.meanLargestComponent, lessThan(1.0));
+      expect(crowd.stats.broadcastReach, lessThan(0.9));
+    });
+  });
+
+  group('connectivity sampling (docs/06 §24.10)', () {
+    // Mirrors `src/__tests__/connectivity.test.ts`.
+
+    MeshSimulation world(SimConfig config) {
+      final sim = MeshSimulation(config);
+      sim.runFor(90000.0);
+      sim.refresh();
+      sim.clearRecords();
+      sim.injectTraffic(30, 40000.0);
+      sim.runFor(60000.0);
+      sim.refresh();
+      return sim;
+    }
+
+    test('reports the radio graph components, largest first, summing to the network', () {
+      final sim = world(campusQuad(42));
+      final sizes = sim.componentSizes();
+      expect(sizes, isNotEmpty);
+      expect(sizes.fold<int>(0, (a, b) => a + b), equals(sim.nodes.length));
+      for (var i = 1; i < sizes.length; i++) {
+        expect(sizes[i - 1], greaterThanOrEqualTo(sizes[i]));
+      }
+    });
+
+    test('samples the window at the configured interval, not the settle period', () {
+      final sim = world(campusQuad(42).copyWith(connectivitySampleMs: 5000.0));
+      // 60 s window at 5 s per sample, and the sampler runs on the 250 ms physics tick, so a
+      // sample lands on the first tick at or after each boundary rather than exactly on it.
+      expect(sim.stats.connectivitySamples, greaterThanOrEqualTo(11));
+      expect(sim.stats.connectivitySamples, lessThanOrEqualTo(13));
+    });
+
+    test('can be disabled, and a disabled run reports trivially connected defaults', () {
+      final sim = world(campusQuad(42).copyWith(connectivitySampleMs: 0));
+      expect(sim.stats.connectivitySamples, equals(0));
+      // Zero samples must not read as "never connected": with nothing measured the shares are
+      // 1, so a consumer comparing them against a threshold is not misled.
+      expect(sim.stats.connectedSampleShare, equals(1.0));
+      expect(sim.stats.meanLargestComponent, equals(1.0));
+    });
+
+    test('says a settled 20-node campus stays in one piece', () {
+      final sim = world(campusQuad(42).copyWith(connectivitySampleMs: 5000.0));
+      expect(sim.stats.connectedSampleShare, equals(1.0));
+      expect(sim.stats.meanLargestComponent, equals(1.0));
+      expect(sim.componentSizes(), equals(<int>[sim.nodes.length]));
+    });
+
+    test('does not change the world it measures', () {
+      // Sampling reads the graph and writes counters: no random number, no scheduled event. So
+      // a run that samples and a run that does not must agree on everything that is not a
+      // connectivity statistic — which is what makes it safe to leave on by default.
+      final on = world(campusQuad(42).copyWith(connectivitySampleMs: 5000.0));
+      final off = world(campusQuad(42).copyWith(connectivitySampleMs: 0));
+      expect(on.stats.totalDelivered, equals(off.stats.totalDelivered));
+      expect(on.stats.totalForwarded, equals(off.stats.totalForwarded));
+      expect(on.stats.deliveryRatio, equals(off.stats.deliveryRatio));
+      expect(on.stats.broadcastReach, equals(off.stats.broadcastReach));
+      expect(on.stats.overheadRatio, equals(off.stats.overheadRatio));
+      expect(on.stats.controlOverhead, equals(off.stats.controlOverhead));
+      expect(on.stats.routeExpiries, equals(off.stats.routeExpiries));
+      expect(on.stats.wakeLocks, equals(off.stats.wakeLocks));
+      expect(on.stats.connectivitySamples, greaterThan(0));
+      expect(off.stats.connectivitySamples, equals(0));
+    });
+
     test('costs a dense crowd fewer deferrals under csma, and buys it delivery', () {
       // docs/08 §12's magnitudes were measured under the flat charge, so they are
       // pessimistic here — by about ten points of delivery on three seeds.

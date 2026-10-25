@@ -2626,6 +2626,34 @@ enough seeds that both modes appear — which is what §24.8 asks for and what `
 beacon` and `npm run media reach` now do. `campus_quad` does not have this problem: all eight
 seeds are connected throughout and reach 94-95 % at every interval tested.
 
+**And the engine now reports it, so the next measurement cannot forget to.** "Read it beside
+the reach" is advice, and advice is what §24.9 failed to follow, so the sampling that produced
+the table above moved into the engine rather than staying in a probe: `connectivitySampleMs`
+(5 s by default, `0` to disable, `--connectivity-sample` on the Dart CLI) samples the radio
+graph from the physics tick and reports `connectivitySamples`, `connectedSampleShare` and
+`meanLargestComponent` in `SimulationStats` beside the reach they qualify, and
+`componentSizes()` is public so a caller can ask directly. The React status bar renders it as
+*Connected in-window* immediately to the right of *Broadcast reach*, which is the only place it
+does any good.
+
+Three properties were worth insisting on, and `connectivity.test.ts` pins all three:
+
+- **It cannot change what it measures.** Sampling reads the graph and writes counters — no
+  random number, no queued event. A run that samples and a run that does not agree on
+  `totalDelivered`, `totalForwarded`, `deliveryRatio`, `broadcastReach`, `overheadRatio`,
+  `controlOverhead`, `routeExpiries` and `wakeLocks`, field by field. That is why it is on by
+  default, which is unusual for this repository and only safe because of that test. It is
+  sampled from the physics tick rather than from its own event for the same reason: a queue
+  entry carries a sequence number, and two events at the same instant are ordered by it, so
+  adding one could reorder unrelated events.
+- **Disabled reads as connected, not as broken.** With zero samples both shares are 1, so a
+  consumer comparing them against a threshold is not told the network was never in one piece.
+- **It reproduces the finding.** Seed 2024 in `festival_crowd` is whole at the end of the
+  window — `componentSizes()` returns `[60]` — while `connectedSampleShare` is below 1 and
+  `meanLargestComponent` below 0.95, which is §24.9's mistake and its correction expressed as
+  one assertion pair. If a future change made the in-window sample agree with the end-of-window
+  snapshot, that test would fail, and it would fail on the thing that mattered.
+
 **What fell out on the way, and is worth more than the question.** The overhead column is the
 first measurement of `skills/02`'s acceptance target — *"overhead ≤70 % of flood-all"* — in the
 densest scenario this repository has, on eight seeds: MPR holds overhead to **13 %** of

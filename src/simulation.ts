@@ -184,6 +184,16 @@ export interface SimConfig {
    *  measures that instead of asserting it. The originator's own id stays 32 B either way:
    *  an alias cannot identify a sender nobody has heard from yet. */
   ogmAliasBytes: number;
+  /** How often to sample the connectivity of the radio graph, in ms. `0` disables it.
+   *
+   *  `docs/06` §24.10 measured why this belongs in the engine rather than in a probe: a
+   *  60-node crowd splits and re-joins repeatedly inside a measurement window, so
+   *  `broadcastReach` and `deliveryRatio` averaged over that window are unreadable without
+   *  knowing how much of it the network was in one piece. The graph measured *after* the
+   *  window cannot tell you — a partition that healed looks like a network that was never
+   *  partitioned, which is exactly the mistake §24.9 made. Sampling consumes no RNG and
+   *  schedules no events, so it cannot move a golden vector or a published number. */
+  connectivitySampleMs: number;
   ogmJitterMs: number;
   ogmTtl: number;
   electionIntervalMs: number;
@@ -501,6 +511,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   coverIntervalMs: 30_000,
   radioOccupancy: "hop-latency",
   ogmAliasBytes: 32,
+  connectivitySampleMs: 5_000,
   ogmJitterMs: 200,
   ogmTtl: 5,
   electionIntervalMs: 30000,
@@ -706,6 +717,18 @@ export interface SimulationStats {
    *  both 5 s and 25 s in a 60-node crowd: the flap hypothesis predicts the middle interval
    *  is the one that churns, and before this counter existed there was no way to ask. */
   routeExpiries: number;
+  /** How many times the radio graph was sampled inside the window, at
+   *  `connectivitySampleMs`. Zero disables the metric, not the network. */
+  connectivitySamples: number;
+  /** Fraction of those samples at which every node could reach every other. **Read this
+   *  beside `broadcastReach` and `deliveryRatio` in any mobile scenario**: `docs/06` §24.10
+   *  shows `festival_crowd` reaches 98 % when it stays connected and 54-79 % when it does
+   *  not, and the two look like one bimodal metric unless this column is beside them. */
+  connectedSampleShare: number;
+  /** Mean share of the network inside the largest component across those samples. A
+   *  broadcast cannot do better than this, so a reach near it is a topology result and a
+   *  reach well below it is a routing one. */
+  meanLargestComponent: number;
   /** Anti-entropy packets put on air: beacons, bucket requests and replies. */
   sentSync: number;
   /** Dummy beacons put on air by `coverTraffic` (docs/04 §5). Zero unless it is on, which
@@ -1310,6 +1333,53 @@ export class MeshSimulation {
     return this.wakeLockMsByNode.get(nodeId) ?? 0;
   }
 
+  /**
+   * Component sizes of the radio graph right now — who can hear whom — largest first.
+   *
+   * A node is in a component with the peers inside RF range of it, which is the graph a
+   * broadcast has to cross. `docs/06` §24.10 uses this to explain `festival_crowd`'s two
+   * modes, and any measurement of reach in a mobile network should report it beside the
+   * reach, because a graph sampled once after the window cannot see a partition that healed.
+   */
+  componentSizes(): number[] {
+    const adj = new Map<NodeId, NodeId[]>();
+    for (const node of this.nodes) {
+      adj.set(node.id, peersInRange(node, this.nodes, this.rf).map((p) => p.id));
+    }
+    const seen = new Set<NodeId>();
+    const out: number[] = [];
+    for (const node of this.nodes) {
+      if (seen.has(node.id)) continue;
+      let size = 0;
+      const stack = [node.id];
+      while (stack.length > 0) {
+        const id = stack.pop()!;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        size++;
+        for (const nb of adj.get(id) ?? []) if (!seen.has(nb)) stack.push(nb);
+      }
+      out.push(size);
+    }
+    out.sort((a, b) => b - a);
+    return out;
+  }
+
+  /** Take one connectivity sample if the interval has elapsed. Called from the physics tick,
+   *  so it adds no event to the queue and consumes no random number. */
+  private sampleConnectivity(): void {
+    const every = this.config.connectivitySampleMs;
+    if (every <= 0) return;
+    if (this.lastConnectivitySampleMs < 0) this.lastConnectivitySampleMs = this.now;
+    if (this.now - this.lastConnectivitySampleMs < every) return;
+    this.lastConnectivitySampleMs = this.now;
+    const sizes = this.componentSizes();
+    if (sizes.length === 0) return;
+    this.connectivitySamples++;
+    if (sizes.length === 1) this.connectedSamples++;
+    this.largestComponentSum += sizes[0] / this.nodes.length;
+  }
+
   /** Whether the transmission that just went on air collided at its receiver. Read by the
    *  contention window to decide whether to widen; written by `onAir`. */
   private lastTxCollided = false;
@@ -1325,6 +1395,12 @@ export class MeshSimulation {
   private ogmTx = 0;
   private coverTx = 0;
   private routeExpiries = 0;
+  /** In-window connectivity sampling (`docs/06` §24.10). Counters, not state: nothing here
+   *  feeds back into routing, so a sample cannot change the world it is measuring. */
+  private connectivitySamples = 0;
+  private connectedSamples = 0;
+  private largestComponentSum = 0;
+  private lastConnectivitySampleMs = -1;
   private lostDataTx = 0;
   private lostOgmTx = 0;
   private duplicateRx = 0;
@@ -1445,6 +1521,12 @@ export class MeshSimulation {
     this.ogmTx = 0;
     this.coverTx = 0;
     this.routeExpiries = 0;
+    this.connectivitySamples = 0;
+    this.connectedSamples = 0;
+    this.largestComponentSum = 0;
+    // Sample from the start of the window rather than inheriting the settle period's clock,
+    // so a caller that clears and then runs for 60 s gets 60 s of samples.
+    this.lastConnectivitySampleMs = this.now;
     this.lostDataTx = 0;
     this.lostOgmTx = 0;
     this.duplicateRx = 0;
@@ -1657,6 +1739,11 @@ export class MeshSimulation {
         this.rxSeq.delete(node.id);
       }
     }
+    // Sampled here rather than from its own event: a queue entry would carry a sequence
+    // number, and two events at the same instant are ordered by it, so adding one could
+    // reorder unrelated events. This consumes no random number and schedules nothing, so a
+    // published number and a golden vector are both untouched by it.
+    this.sampleConnectivity();
     this.queue.push(this.now + this.config.physicsIntervalMs, "physics", "*");
   }
 
@@ -3883,6 +3970,11 @@ export class MeshSimulation {
       controlOverhead: this.ogmTx,
       coverTx: this.coverTx,
       routeExpiries: this.routeExpiries,
+      connectivitySamples: this.connectivitySamples,
+      connectedSampleShare:
+        this.connectivitySamples === 0 ? 1 : this.connectedSamples / this.connectivitySamples,
+      meanLargestComponent:
+        this.connectivitySamples === 0 ? 1 : this.largestComponentSum / this.connectivitySamples,
       retriesSent: this.retriesSent,
       retriesExhausted: this.retriesExhausted,
       acksReceived: this.acksReceived,
