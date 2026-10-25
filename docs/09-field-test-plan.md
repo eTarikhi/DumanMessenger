@@ -148,6 +148,11 @@ denominator. `v` is the schema version.
 // One reading of the calibration walk.
 {"v":1,"kind":"calibration","atMs":1200,"device":"device-01","peerId":"device-02",
  "rssi":-73.5,"distanceM":10.0,"walls":1}
+
+// Periodic, every 30 s, ONE per boundary for the whole network — hence device "*".
+// Whether the graph is in one piece at that instant, and how big the biggest piece is.
+{"v":1,"kind":"topology","atMs":30000,"device":"*","nodes":60,"components":2,
+ "largest":35,"connected":false}
 ```
 
 Field rules that matter to the analyzer:
@@ -163,10 +168,29 @@ Field rules that matter to the analyzer:
 * `msgType` values the analyzer skips for traffic metrics: `ack`, `ogm`, `sync`. They are
   control plane, and counting them would make the delivery ratio a statement about
   beacons.
+* `topology` records are **not optional in a crowd**, and the reason is measured rather than
+  tidy. `docs/06` §24.10 found a 60-node simulated crowd splitting and re-joining inside a
+  measurement window — two components with 35 of 60 nodes in the larger at one sample, one
+  component of 60 at the next — and broadcast reach reads as two modes (98% against 50-79%)
+  depending on how much of the window was spent split. A graph reconstructed *after* the walk
+  cannot show any of that, because a partition that has healed looks exactly like one that
+  never happened; §24.9 drew precisely that wrong conclusion in simulation before §24.10
+  sampled inside the window. Emit one `topology` record at every `sample` boundary. `device`
+  is `"*"`, the convention for a record about the network rather than about a phone.
+* Reach and delivery are different quantities in a partitioned world and must not be inferred
+  from one another: a unicast can be queued, retried and carried by a phone walking between
+  clusters, so `docs/06` §24.13 measured one seed in one piece a third of the window still
+  delivering 93.3%, while a broadcast cannot cross a gap that exists when it is sent. The
+  analyzer should report both against the `topology` timeline and never one from the other.
 
 `npm run field:capture -- <scenario> <seed> <out.jsonl> [policy]` produces exactly this
-schema from a simulated run, including the `sample` and `calibration` records, so a new
-app build's logger can be checked against a reference file before anybody travels.
+schema from a simulated run, including the `sample`, `calibration` and `topology` records, so a
+new app build's logger can be checked against a reference file before anybody travels. On
+`festival_crowd` the reference file's five `topology` records read split, whole, whole, split,
+whole across the walk — which is the pattern §24.10 predicts and the thing a field capture has
+to be able to show before its reach numbers mean anything. On `campus_quad` all five read
+whole, which is why that scenario's three-seed numbers were sound and the crowd's were not
+(§24.8).
 
 ---
 
