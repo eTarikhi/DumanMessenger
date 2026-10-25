@@ -314,14 +314,32 @@ one — on a machine where nothing else can run, this group still gives an answe
    design, and a check demanding symmetry would need an exception list long enough to hide what it
    was for. One-sided names are listed rather than failed, which is how the checker found
    `MPR_WAIT_MS` / `mprWaitDefaultMs` — a synonym pair it had been silently skipping.
-4. **`checker-self-test`** — all three checkers' own `--self-test` modes. `check-docs.py` injects one
+4. **`dart-sites`** — `tool/ci/check-dart-sites.py`, asking whether the Dart engine's *repeated*
+   declarations are all present. `make dart-sites` runs it alone. The Dart engine repeats every
+   `SimConfig` field at up to five places (declaration, constructor parameter, `copyWith`
+   parameter, `copyWith` body) and every `SimulationStats` field at four (declaration,
+   `required this.` parameter, `toJson()` entry, and the construction site in `_computeStats`),
+   plus one `case` per `EventKind` value. The sites are hundreds of lines apart, `sim/mesh_sim`
+   cannot be compiled here, and the failure modes are not all loud: a stats field missing from
+   `toJson()` compiles and runs and simply never appears in `--json` output — which is what
+   commit `f18c5c6` found 32 of — and a `copyWith` parameter with no body assignment compiles and
+   *silently keeps the old value*, so an experiment that thinks it set a knob did not. It walks a
+   comment-and-string-masked copy of the file at identical offsets, because doc comments inside a
+   parameter list contain unbalanced parentheses, and it understands all three member shapes Dart
+   uses here: block bodies, bodyless `const` constructors, and expression bodies
+   (`copyWith({...}) => SimConfig(...)`).
+5. **`checker-self-test`** — all four checkers' own `--self-test` modes. `check-docs.py` injects one
    fault per check into a copy of the tree and requires each to be caught *and named*;
    `check-dart-balance.py` runs 19 snippets, 12 of which are clean and must not alarm, and
-   `check-parity.py` breaks a synthetic two-engine fixture in 8 ways. This row exists because all
-   three checkers have found bugs in themselves: `check-docs.py` caught its own
-   `.sh`-stem regex and `make help`'s digit-blind grep, and `check-dart-balance.py` caught itself
+   `check-parity.py` breaks a synthetic two-engine fixture in 8 ways; `check-dart-sites.py` breaks
+   the real engine in memory in 8 ways and requires each to be named. This row exists because all
+   four checkers have found bugs in themselves: `check-docs.py` caught its own
+   `.sh`-stem regex and `make help`'s digit-blind grep, `check-dart-balance.py` caught itself
    holding a string delimiter beside the stack instead of in the frame, which made it report
-   `mesh_sim.dart`'s usage text as an unterminated string. A check that always passes is
+   `mesh_sim.dart`'s usage text as an unterminated string, and `check-dart-sites.py` caught itself
+   brace-walking into a parameter list so it never saw a body, missing expression-bodied members
+   altogether, and then reporting four correctly formatted `copyWith` assignments as broken
+   because `dart format` had wrapped them across two lines. A check that always passes is
    indistinguishable from a broken one, and nothing else in the pipeline would notice.
 
 Exit codes: `0` everything passed · `1` something failed **or could not run** · `64` bad usage.

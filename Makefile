@@ -228,6 +228,9 @@ dart-balance: ## Do the Dart sources balance? Needs no Dart SDK
 parity: ## Do the two engines agree on their constants? Needs no toolchain
 	@python3 $(CI)/check-parity.py
 
+dart-sites: ## Are the Dart engine's repeated declarations all present? Needs no Dart SDK
+	@python3 $(CI)/check-dart-sites.py
+
 clean-artifacts: ## Remove captured CI run artifacts
 	@rm -rf artifacts/ci
 	@printf 'cleaned artifacts/ci/\n'

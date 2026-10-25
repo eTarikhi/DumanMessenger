@@ -82,7 +82,8 @@ REGISTRY_DOCS=(
   "drift|does every documented command actually exist?|yes|a doc naming a flag, target or probe section that is not there"
   "dart-balance|Dart delimiter balance, with no Dart SDK present|yes|an unclosed brace, string or interpolation in sim/mesh_sim"
   "parity|do the two engines agree on their constants?|yes|a protocol constant changed in src/ or sim/mesh_sim only"
-  "checker-self-test|do the three checkers still catch what they claim?|yes|a checker that always passes, which is indistinguishable from a broken one"
+  "dart-sites|Dart declaration sites consistent, with no Dart SDK present|yes|a stats field missing from toJson, a config field with no constructor parameter, an EventKind with no case"
+  "checker-self-test|do the four checkers still catch what they claim?|yes|a checker that always passes, which is indistinguishable from a broken one"
 )
 
 REGISTRY_TS=(
@@ -128,7 +129,7 @@ REGISTRY_EVIDENCE=(
 
 describe_group() {
   case "$1" in
-    docs)     printf 'Toolchain-free static checks — documentation drift, Dart balance, checker self-tests' ;;
+    docs)     printf 'Toolchain-free static checks — documentation drift, Dart balance, Dart declaration sites, cross-language parity, checker self-tests' ;;
     ts)       printf 'TypeScript engine + React visualiser — verified locally many times' ;;
     dart)     printf 'Dart authoritative engine — NEVER COMPILED on the current tree' ;;
     cli)      printf 'CLI acceptance across scenarios — never run on the current tree' ;;
@@ -227,11 +228,14 @@ echo
 # written into the docs from memory that the program does not have, and Dart that cannot be
 # compiled here at all.
 #
-# The third row runs the checkers' own self-tests. A check that always passes is
-# indistinguishable from a broken one, and both checkers here have found bugs in themselves:
-# check-docs.py caught its own `.sh`-stem regex and make help's digit-blind grep, and
-# check-dart-balance.py caught itself holding a string delimiter beside the stack instead of in
-# the frame. Running the self-tests is what stops the next such bug shipping silently.
+# The last row runs the checkers' own self-tests. A check that always passes is
+# indistinguishable from a broken one, and three of the four have found bugs in themselves:
+# check-docs.py caught its own `.sh`-stem regex and make help's digit-blind grep,
+# check-dart-balance.py caught itself holding a string delimiter beside the stack instead of
+# in the frame, and check-dart-sites.py caught itself brace-walking into a parameter list,
+# missing expression-bodied members entirely, and then reporting four correctly formatted
+# `copyWith` assignments as broken because `dart format` had wrapped them. Running the
+# self-tests is what stops the next such bug shipping silently.
 
 if selected docs; then
   log "docs — $(describe_group docs)"
@@ -259,8 +263,19 @@ if selected docs; then
     add_row docs parity "$o" "$SECONDS" ""
     [ "$o" = success ] || add_fail docs parity docs-parity.txt
 
+    # Dart declaration sites. The Dart engine repeats every config field at five places and
+    # every statistics field at four, and `sim/mesh_sim` cannot be compiled here, so a missed
+    # site is invisible until somebody's machine drowns in analyzer errors — or, worse, is
+    # not an error at all: a `copyWith` parameter with no body assignment compiles and
+    # silently keeps the old value. commit f18c5c6 fixed 32 stats fields that were missing
+    # from `toJson()`, which is the bug class this catches without a toolchain.
+    run_step o "Dart declaration sites (check-dart-sites.py)" "docs-dart-sites.txt" "$ROOT" \
+             python3 "$HERE/check-dart-sites.py"
+    add_row docs dart-sites "$o" "$SECONDS" ""
+    [ "$o" = success ] || add_fail docs dart-sites docs-dart-sites.txt
+
     run_step o "Checker self-tests (do they still fail when they should?)" "docs-checker-self-test.txt" \
-             "$ROOT" bash -c 'python3 "$1/check-docs.py" --self-test && python3 "$1/check-dart-balance.py" --self-test && python3 "$1/check-parity.py" --self-test' \
+             "$ROOT" bash -c 'python3 "$1/check-docs.py" --self-test && python3 "$1/check-dart-balance.py" --self-test && python3 "$1/check-parity.py" --self-test && python3 "$1/check-dart-sites.py" --self-test' \
              _ "$HERE"
     add_row docs checker-self-test "$o" "$SECONDS" ""
     [ "$o" = success ] || add_fail docs checker-self-test docs-checker-self-test.txt
