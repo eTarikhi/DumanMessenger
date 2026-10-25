@@ -65,7 +65,10 @@ export const OGM_BATTERY_BYTES = 1;
  *  width change fails a test instead of silently propagating. */
 export const OGM_HOP_ENTRY_BYTES = 32 + 1;
 /** The part of a beacon that does not depend on how much it advertises:
- *  `OGM_ID_BYTES + OGM_SEQ_BYTES + OGM_SCORE_BYTES + OGM_FLAG_BYTES + OGM_BATTERY_BYTES`. */
+ *  `OGM_ID_BYTES + OGM_SEQ_BYTES + OGM_SCORE_BYTES + OGM_FLAG_BYTES + OGM_BATTERY_BYTES`.
+ *  The originator's own id is always the full 32-byte public key — an alias cannot identify
+ *  a sender that has not been heard from yet, which is the whole purpose of a beacon — so
+ *  only the *advertised* neighbours and route entries are affected by `aliasBytes`. */
 export const OGM_FIXED_BYTES = 32 + 4 + 4 + (1 + 1 + 1 + 2) + 1;
 
 /**
@@ -78,11 +81,15 @@ export const OGM_FIXED_BYTES = 32 + 4 + 4 + (1 + 1 + 1 + 2) + 1;
  * to eight route advertisements — and that is the difference between the two occupancy
  * models `radioOccupancy` selects.
  */
-export function ogmWireBytes(neighborCount: number, bestHopCount: number): number {
+export function ogmWireBytes(
+  neighborCount: number,
+  bestHopCount: number,
+  aliasBytes: number = OGM_ID_BYTES
+): number {
   return (
     OGM_FIXED_BYTES +
-    Math.max(0, neighborCount) * OGM_ID_BYTES +
-    Math.max(0, bestHopCount) * OGM_HOP_ENTRY_BYTES
+    Math.max(0, neighborCount) * Math.max(0, aliasBytes) +
+    Math.max(0, bestHopCount) * (Math.max(0, aliasBytes) + 1)
   );
 }
 

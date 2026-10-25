@@ -25,6 +25,7 @@ import {
   OGM_MAX_WIRE_BYTES,
   ogmWireBytes,
 } from "../src/routing";
+import { NEIGHBOR_SCORE_TTL_MS } from "../src/election";
 import { campusQuad, festivalCrowd } from "../src/scenarios";
 import { canReach, effectiveLossProbability, peersInRange } from "../src/rf";
 import { createRng } from "../src/rng";
@@ -1926,6 +1927,187 @@ function occupancyTable(): void {
   );
 }
 
+// ---------------------------------------------------------------------------
+// 15. The beacon interval: docs/03 specifies 2 s and nothing in the corpus says
+//     why. §24.6 found the control plane alone over-subscribes the radio at 60
+//     nodes, which makes the interval the obvious lever — and NEIGHBOR_SCORE_TTL_MS
+//     30 s the obvious ceiling on it.
+// ---------------------------------------------------------------------------
+
+interface BeaconRow {
+  interval: number;
+  demand: number;
+  delivery: number;
+  reach: number;
+  overhead: number;
+  hops: number;
+  latency: number;
+  control: number;
+  suppressed: number;
+}
+
+function beaconRun(
+  seed: number,
+  scenario: (seed: number) => SimConfig,
+  interval: number,
+  aliasBytes = 32
+): BeaconRow {
+  const sim = new MeshSimulation({
+    ...scenario(seed),
+    // Priced with the model that charges each packet its own size, because the question is
+    // physical capacity. Under the flat charge every arm would carry the same 120 ms
+    // artefact §24.6 measured, and the sweep would be measuring that instead.
+    radioOccupancy: "airtime",
+    ogmIntervalMs: interval,
+    ogmAliasBytes: aliasBytes,
+  });
+  sim.runFor(90_000);
+  sim.refresh();
+  sim.clearRecords();
+  sim.injectTraffic(30, 40_000);
+  sim.runFor(60_000);
+  sim.refresh();
+  const st = sim.stats;
+  return {
+    interval,
+    demand: st.radioDemandRatio,
+    delivery: st.deliveryRatio,
+    reach: st.broadcastReach,
+    overhead: st.overheadRatio,
+    hops: st.avgHops,
+    latency: st.avgLatencyMs,
+    control: st.controlOverhead,
+    suppressed: st.mprSuppressed,
+  };
+}
+
+const BEACON_INTERVALS = [2_000, 5_000, 12_000, 25_000];
+
+function beaconTable(): void {
+  console.log(
+    "\n=== 15. The beacon interval: docs/03 says 2 s and nothing in the corpus says why ==="
+  );
+  console.log(
+    "§24.6 found the control plane alone asks for several times one radio's airtime at 60"
+  );
+  console.log(
+    "nodes, priced correctly. The interval is the lever that follows, and it has a hard"
+  );
+  console.log(
+    `ceiling: neighbour scores expire at NEIGHBOR_SCORE_TTL_MS ${NEIGHBOR_SCORE_TTL_MS / 1000} s, so an interval near`
+  );
+  console.log(
+    "that leaves one missed beacon — and BLE links lose packets routinely — long enough to"
+  );
+  console.log(
+    "drop a neighbour that is still there. Priced under radioOccupancy: airtime, because"
+  );
+  console.log(
+    "the question is capacity and the flat charge would put the same artefact in every arm.\n"
+  );
+
+  for (const [name, scenario] of [
+    ["campus_quad (20 nodes)", campusQuad],
+    ["festival_crowd (60 nodes)", festivalCrowd],
+  ] as Array<[string, (seed: number) => SimConfig]>) {
+    console.log(`  ${name}, mean of ${SEEDS.length} seeds\n`);
+    console.log(
+      "  interval   radio demand   delivery   broadcast reach   overhead   avg hops   avg latency   OGMs sent   MPR suppressed"
+    );
+    const rows: BeaconRow[] = [];
+    for (const interval of BEACON_INTERVALS) {
+      const perSeed = SEEDS.map((seed) => beaconRun(seed, scenario, interval));
+      const mean = (f: (r: BeaconRow) => number) =>
+        perSeed.reduce((a, r) => a + f(r), 0) / Math.max(1, perSeed.length);
+      rows.push({
+        interval,
+        demand: mean((r) => r.demand),
+        delivery: mean((r) => r.delivery),
+        reach: mean((r) => r.reach),
+        overhead: mean((r) => r.overhead),
+        hops: mean((r) => r.hops),
+        latency: mean((r) => r.latency),
+        control: mean((r) => r.control),
+        suppressed: mean((r) => r.suppressed),
+      });
+      const r = rows[rows.length - 1];
+      console.log(
+        `  ${(interval === 2_000 ? "2 s (spec)" : `${interval / 1000} s`).padEnd(10)} ` +
+          `${(r.demand.toFixed(2) + "x").padStart(12)} ` +
+          `${((r.delivery * 100).toFixed(1) + "%").padStart(10)} ` +
+          `${((r.reach * 100).toFixed(1) + "%").padStart(17)} ` +
+          `${((r.overhead * 100).toFixed(0) + "%").padStart(10)} ` +
+          `${r.hops.toFixed(2).padStart(10)} ` +
+          `${fmt(r.latency).padStart(13)} ` +
+          `${r.control.toFixed(0).padStart(11)} ` +
+          `${r.suppressed.toFixed(0).padStart(16)}`
+      );
+    }
+    const spec = rows[0];
+    const last = rows[rows.length - 1];
+    console.log(
+      `\n  Stretching the interval from the specified 2 s to ${last.interval / 1000} s cuts demanded radio time\n` +
+        `  ${(spec.demand.toFixed(2) + "x").padStart(6)} → ${(last.demand.toFixed(2) + "x")} and OGM transmissions ${(spec.control / Math.max(1, last.control)).toFixed(1)}× , and it costs delivery\n` +
+        `  ${((spec.delivery * 100).toFixed(1) + "%").padStart(6)} → ${((last.delivery * 100).toFixed(1) + "%")} with broadcast reach ${((spec.reach * 100).toFixed(1) + "%").padStart(6)} → ${((last.reach * 100).toFixed(1) + "%")}. Whether that trade is\n` +
+        `  worth making is a density question, so both worlds are printed rather than one\n` +
+        `  verdict: at 20 nodes and at 60 the same lever does not do the same thing.\n`
+    );
+  }
+  // --- the other lever: what one advertised neighbour costs on air -------------------
+  console.log(
+    "  The interval is not the only lever, and docs/03 §4 already names the other one: \"a\n" +
+      "  real deployment advertises 2-byte aliases (~60 B for 30 neighbours)\", where this\n" +
+      "  engine advertises the full 32-byte public key. §24.6 derived what that costs — a fully\n" +
+      "  loaded beacon is 1 270 B on public keys and 130 B on aliases, over the BLE ceiling in\n" +
+      "  the first case and far under it in the second. Since beacon *reception* dominates\n" +
+      "  demanded radio time, the encoding may be the bigger lever, so here both are measured at\n" +
+      "  the specified interval rather than either being asserted.\n"
+  );
+  console.log(
+    `  beacon size, typical (10 neighbours, 8 routes): ${ogmWireBytes(10, 8, 32)} B on public keys, ` +
+      `${ogmWireBytes(10, 8, 2)} B on aliases`
+  );
+  console.log(
+    `  beacon size, at both advertise limits (30, 8):  ${ogmWireBytes(30, 8, 32)} B on public keys, ` +
+      `${ogmWireBytes(30, 8, 2)} B on aliases (BLE ceiling ${BLE_MAX_BYTES} B)\n`
+  );
+  console.log("  scenario                     encoding     radio demand   delivery   broadcast reach   OGMs sent");
+  for (const [name, scenario] of [
+    ["campus_quad (20 nodes)", campusQuad],
+    ["festival_crowd (60 nodes)", festivalCrowd],
+  ] as Array<[string, (seed: number) => SimConfig]>) {
+    for (const [encName, aliasBytes] of [
+      ["32 B public key", 32],
+      ["2 B alias (§4)", 2],
+    ] as Array<[string, number]>) {
+      const perSeed = SEEDS.map((seed) => beaconRun(seed, scenario, 2_000, aliasBytes));
+      const mean = (f: (r: BeaconRow) => number) =>
+        perSeed.reduce((a, r) => a + f(r), 0) / Math.max(1, perSeed.length);
+      console.log(
+        `  ${name.padEnd(28)} ${encName.padEnd(14)} ` +
+          `${(mean((r) => r.demand).toFixed(2) + "x").padStart(12)} ` +
+          `${((mean((r) => r.delivery) * 100).toFixed(1) + "%").padStart(10)} ` +
+          `${((mean((r) => r.reach) * 100).toFixed(1) + "%").padStart(17)} ` +
+          `${mean((r) => r.control).toFixed(0).padStart(11)}`
+      );
+    }
+  }
+  console.log(
+    "\n  Aliases cut the beacon, not the number of beacons, so `OGMs sent` is the same in both\n" +
+      "  rows and only the demand moves. The two levers are not interchangeable: an alias\n" +
+      "  shortens every beacon in a dense world without making any route staler, while a longer\n" +
+      "  interval thins them and trades freshness for airtime. Which one a deployment should\n" +
+      "  pull first is answered by the two tables above rather than argued here.\n" +
+      "\n" +
+      "  What neither tests: an interval that *adapts* to density, which is what the two\n" +
+      "  scenario tables together argue for and which docs/03 §1 does not propose. Making the\n" +
+      "  beacon interval a function of peer count is a routing change with its own convergence\n" +
+      "  question — a node that slows its beacons because it has many neighbours is exactly the\n" +
+      "  node its neighbours most need to hear from — so it is named here as the follow-up\n" +
+      "  rather than swept. docs/06 §24.7.\n"
+  );
+}
+
 function main(): void {
   console.log("Duman media transport probe — every number below is measured, not assumed.");
   console.log(
@@ -1953,6 +2135,7 @@ function main(): void {
     ["captureEffect", captureEffectTable],
     ["captureMargin", captureMarginTable],
     ["occupancy", occupancyTable],
+    ["beacon", beaconTable],
   ];
   if (only && !sections.some(([name]) => name === only)) {
     console.error(`unknown section "${only}". one of: ${sections.map(([name]) => name).join(", ")}`);

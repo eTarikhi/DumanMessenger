@@ -91,6 +91,46 @@ describe("OGM wire size, derived rather than guessed", () => {
   it("never goes negative on an empty or clamped field", () => {
     expect(ogmWireBytes(-5, -5)).toBe(OGM_FIXED_BYTES);
   });
+
+  it("sizes the alias encoding docs/03 §4 prescribes, keeping the originator's id full width", () => {
+    // An alias shortens the advertised neighbours and route entries. The sender's own id
+    // stays 32 B: an alias cannot identify a node nobody has heard from yet, and identifying
+    // exactly that node is the whole purpose of a beacon. So the floor is 46 B, not 2 B.
+    expect(ogmWireBytes(10, 8, 2)).toBe(46 + 10 * 2 + 8 * 3);
+    expect(ogmWireBytes(10, 8, 2)).toBe(90);
+    expect(ogmWireBytes(0, 0, 2)).toBe(OGM_FIXED_BYTES);
+    expect(ogmWireBytes(30, 8, 2)).toBe(130);
+    // The measured consequence, and the reason docs/03 §4's aside matters: a fully loaded
+    // beacon is over the BLE ceiling on public keys and a sixth of it on aliases.
+    expect(ogmWireBytes(30, 8, 32)).toBeGreaterThan(BLE_MAX_BYTES);
+    expect(ogmWireBytes(30, 8, 2)).toBeLessThan(BLE_MAX_BYTES);
+    // The default is the width this engine really transmits, so adding the parameter cannot
+    // move an existing caller's number.
+    expect(ogmWireBytes(10, 8)).toBe(ogmWireBytes(10, 8, OGM_ID_BYTES));
+  });
+
+  it("defaults to the encoding the engine transmits, so nothing published moves", () => {
+    expect(campusQuad(42).ogmAliasBytes).toBe(32);
+    expect(festivalCrowd(42).ogmAliasBytes).toBe(32);
+  });
+
+  it("cuts demanded radio time by the beacon width and not by the beacon count", () => {
+    // docs/06 §24.7: the encoding is the bigger lever, and it is free in the sense that
+    // matters — the same OGMs are sent, so route freshness, election convergence and MPR
+    // coverage are untouched. Measured on campus_quad, where the crowd arm is too slow to
+    // re-measure in a unit test.
+    const keys = run({ radioOccupancy: "airtime", ogmAliasBytes: 32 });
+    const aliases = run({ radioOccupancy: "airtime", ogmAliasBytes: 2 });
+    expect(aliases.stats.controlOverhead).toBe(keys.stats.controlOverhead);
+    expect(aliases.stats.radioDemandRatio).toBeLessThan(keys.stats.radioDemandRatio);
+    expect(aliases.stats.wakeLockMs).toBeLessThan(keys.stats.wakeLockMs);
+    // Same beacons, same world: delivery and reach do not move.
+    expect(aliases.stats.deliveryRatio).toBe(keys.stats.deliveryRatio);
+    expect(aliases.stats.broadcastReach).toBe(keys.stats.broadcastReach);
+    // And the cut tracks the width ratio, which is what makes it an encoding effect rather
+    // than a knock-on one: 90 B against 630 B for a typical beacon.
+    expect(keys.stats.radioDemandRatio / aliases.stats.radioDemandRatio).toBeGreaterThan(3);
+  });
 });
 
 describe("radioOccupancy", () => {

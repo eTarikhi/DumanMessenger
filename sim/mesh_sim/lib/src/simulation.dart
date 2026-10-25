@@ -46,6 +46,7 @@ class SimConfig {
     this.coverTraffic = false,
     this.coverIntervalMs = 30000,
     this.radioOccupancy = RadioOccupancy.hopLatency,
+    this.ogmAliasBytes = 32,
     this.ogmJitterMs = 200,
     this.ogmTtl = 5,
     this.electionIntervalMs = 30000,
@@ -157,6 +158,15 @@ class SimConfig {
   /// measures — and under the shipped `free`/`none` baseline nothing reads occupancy except
   /// the wake-lock accounting, so the knob moves telemetry and nothing else.
   final RadioOccupancy radioOccupancy;
+
+  /// How many bytes one *advertised* neighbour costs on air, read only under
+  /// [RadioOccupancy.airtime]. 32 ships, because that is what this engine puts in an OGM: the
+  /// neighbour's X25519 public key. docs/03 §4 says a real deployment advertises 2-byte
+  /// aliases instead, and §24.6 derives the difference — a fully loaded beacon is 1270 B on
+  /// public keys, over the 1024 B BLE ceiling, and 130 B on aliases. Since beacon *reception*
+  /// dominates demanded radio time, the encoding is a bigger lever than the beacon interval.
+  /// The originator's own id stays 32 B either way.
+  final int ogmAliasBytes;
   final double ogmJitterMs;
   final int ogmTtl;
   final double electionIntervalMs;
@@ -457,6 +467,7 @@ class SimConfig {
     bool? coverTraffic,
     double? coverIntervalMs,
     RadioOccupancy? radioOccupancy,
+    int? ogmAliasBytes,
     bool? communityRelayPreference,
     bool? dtnPreferCommunity,
     double? voiceKbps,
@@ -523,6 +534,7 @@ class SimConfig {
         coverTraffic: coverTraffic ?? this.coverTraffic,
         coverIntervalMs: coverIntervalMs ?? this.coverIntervalMs,
         radioOccupancy: radioOccupancy ?? this.radioOccupancy,
+        ogmAliasBytes: ogmAliasBytes ?? this.ogmAliasBytes,
         communityRelayPreference:
             communityRelayPreference ?? this.communityRelayPreference,
         dtnPreferCommunity: dtnPreferCommunity ?? this.dtnPreferCommunity,
@@ -2469,7 +2481,8 @@ class MeshSimulation {
   double _beaconWakeMs(Ogm ogm) {
     if (config.radioOccupancy == RadioOccupancy.airtime) {
       return airtimeMs(
-          ogmWireBytes(ogm.neighborIds.length, ogm.bestHopTo.length),
+          ogmWireBytes(ogm.neighborIds.length, ogm.bestHopTo.length,
+              config.ogmAliasBytes),
           TransportType.ble);
     }
     return config.hopLatencyBleMs;

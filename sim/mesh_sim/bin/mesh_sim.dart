@@ -98,6 +98,11 @@ Duman mesh simulator (headless)
   --cover-interval <ms> Mean gap between a node's dummy beacons, default 30000. Read only
                         with --cover-traffic, like --capture-ratio is read only under
                         --channel-capture strongest
+  --ogm-alias-bytes <n> Bytes one advertised neighbour costs on air, read only with
+                        --radio-occupancy airtime. 32 ships (this engine advertises the
+                        X25519 public key); docs/03 §4 says a real deployment advertises
+                        2-byte aliases, which §24.6 derives at 130 B for a fully loaded
+                        beacon against 1270 B — under the BLE ceiling instead of over it
   --radio-occupancy <n> How long a packet holds a radio, which is not how long it takes to
                         arrive: hop-latency (ships, and is what docs/08 §12's contention
                         numbers were measured under) or airtime (bytes x 8 / kbps for the
@@ -335,6 +340,18 @@ void main(List<String> args) {
     config = config.copyWith(coverIntervalMs: ms);
   }
 
+  final aliasArg = _arg(args, '--ogm-alias-bytes', '');
+  if (aliasArg.isNotEmpty) {
+    // tryParse, not parse: a bad number is a usage error with a message, not a stack trace.
+    final width = int.tryParse(aliasArg);
+    if (width == null || width < 1) {
+      stderr.writeln('--ogm-alias-bytes needs a positive integer, got "$aliasArg"');
+      exitCode = 64;
+      return;
+    }
+    config = config.copyWith(ogmAliasBytes: width);
+  }
+
   final occupancyName = _arg(args, '--radio-occupancy', '');
   if (occupancyName.isNotEmpty) {
     switch (occupancyName) {
@@ -457,6 +474,7 @@ void main(List<String> args) {
       'coverTraffic': config.coverTraffic,
       'coverIntervalMs': config.coverIntervalMs,
       'radioOccupancy': config.radioOccupancy.wire,
+      'ogmAliasBytes': config.ogmAliasBytes,
     },
     'nodes': sim.nodes.length,
     'sent': sent,

@@ -2308,9 +2308,13 @@ void main() {
     // type is assignable to a required-parameter function type is a subtyping question this
     // repository has no compiler to answer. Passing the built config avoids asking it.
     MeshSimulation run(SimConfig base,
-        {ChannelAccess? access, RadioOccupancy? occupancy}) {
-      final sim = MeshSimulation(
-          base.copyWith(channelAccess: access, radioOccupancy: occupancy));
+        {ChannelAccess? access,
+        RadioOccupancy? occupancy,
+        int? aliasBytes}) {
+      final sim = MeshSimulation(base.copyWith(
+          channelAccess: access,
+          radioOccupancy: occupancy,
+          ogmAliasBytes: aliasBytes));
       sim.runFor(90000.0);
       sim.refresh();
       sim.clearRecords();
@@ -2405,6 +2409,51 @@ void main() {
       expect(sized.stats.radioDemandRatio, greaterThan(1));
       expect(flat.stats.radioDemandRatio, greaterThan(3));
       expect(sized.stats.radioDemandRatio, lessThan(2.5));
+    });
+
+    test('sizes the alias encoding docs/03 §4 prescribes', () {
+      // An alias shortens the advertised neighbours and route entries. The sender's own id
+      // stays 32 B: an alias cannot identify a node nobody has heard from yet, and
+      // identifying exactly that node is the whole purpose of a beacon. So the floor is the
+      // 46 B of fixed fields, not 2 B.
+      expect(ogmWireBytes(10, 8, 2), equals(46 + 10 * 2 + 8 * 3));
+      expect(ogmWireBytes(10, 8, 2), equals(90));
+      expect(ogmWireBytes(0, 0, 2), equals(ogmFixedBytes));
+      expect(ogmWireBytes(30, 8, 2), equals(130));
+      // The consequence that makes docs/03 §4's aside matter: a fully loaded beacon is over
+      // the BLE ceiling on public keys and a sixth of it on aliases.
+      expect(ogmWireBytes(30, 8, 32), greaterThan(bleMaxBytes));
+      expect(ogmWireBytes(30, 8, 2), lessThan(bleMaxBytes));
+      // The default is the width this engine really transmits, so adding the parameter
+      // cannot move an existing caller's number.
+      expect(ogmWireBytes(10, 8), equals(ogmWireBytes(10, 8, ogmIdBytes)));
+    });
+
+    test('defaults to the encoding the engine transmits', () {
+      expect(campusQuad(42).ogmAliasBytes, equals(32));
+      expect(festivalCrowd(42).ogmAliasBytes, equals(32));
+    });
+
+    test('cuts demanded radio time by beacon width, not by beacon count', () {
+      // docs/06 §24.7: the encoding is the bigger lever, and it is free in the sense that
+      // matters — the same OGMs are sent, so route freshness, election convergence and MPR
+      // coverage are untouched. Measured on campus_quad, where the crowd arm is too slow to
+      // re-measure in a unit test.
+      final keys = run(campusQuad(42),
+          occupancy: RadioOccupancy.airtime, aliasBytes: 32);
+      final aliases = run(campusQuad(42),
+          occupancy: RadioOccupancy.airtime, aliasBytes: 2);
+      expect(aliases.stats.controlOverhead, equals(keys.stats.controlOverhead));
+      expect(aliases.stats.radioDemandRatio,
+          lessThan(keys.stats.radioDemandRatio));
+      expect(aliases.stats.wakeLockMs, lessThan(keys.stats.wakeLockMs));
+      // Same beacons, same world: delivery and reach do not move.
+      expect(aliases.stats.deliveryRatio, equals(keys.stats.deliveryRatio));
+      expect(aliases.stats.broadcastReach, equals(keys.stats.broadcastReach));
+      // And the cut tracks the width ratio, which is what makes it an encoding effect rather
+      // than a knock-on one: 90 B against 630 B for a typical beacon.
+      expect(keys.stats.radioDemandRatio / aliases.stats.radioDemandRatio,
+          greaterThan(3));
     });
 
     test('costs a dense crowd fewer deferrals under csma, and buys it delivery', () {

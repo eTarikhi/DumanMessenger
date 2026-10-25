@@ -72,6 +72,21 @@ No election; just gossip:
 > at 12 entries a 60-node crowd (15-18 peers each) truncated every advertisement,
 > suppression collapsed 1772 → 110 and overhead went *up*. A real deployment
 > advertises 2-byte aliases (~60 B for 30 neighbours).
+>
+> **That prescription is now measured, and it is the single largest lever on the control plane
+> (`docs/06-simulator-findings.md` §24.7).** This engine advertises the full 32-byte public
+> key, which sizes a typical beacon at 630 B and a fully loaded one at 1 270 B — over the
+> 1 024 B BLE ceiling. On 2-byte aliases the same beacons are 90 B and 130 B, and at the
+> *specified* 2 s interval in a 60-node crowd the demanded radio time falls from **5.69×** the
+> airtime that exists to **0.79×** — inside budget — with delivery and broadcast reach
+> unchanged and the same number of OGMs sent, because an alias shortens a beacon without
+> thinning them. The originator's own id stays 32 B either way: an alias cannot identify a
+> sender nobody has heard from yet, which is the whole purpose of a beacon. The alias figure
+> measures ~90 B rather than the ~60 B estimated here, because §4 step 1's payload also
+> carries up to eight route advertisements at one alias plus a hop count each. Simulating
+> aliases as such would be a routing change, not a constant — a node has to learn the
+> alias↔key binding before it can use one — so `ogmAliasBytes` defaults to 32 and the 2 B arm
+> is a measurement of this design rather than an adoption of it.
 2. Each node maintains table `neighborScores[nodeId] = score` (expires after 30s no OGM → remove).
 3. To rank itself, node looks at `self + 1-hop neighbors` scores it has heard. If in top 20% → promotes. This is **2-hop-local**, not global — scales.
 

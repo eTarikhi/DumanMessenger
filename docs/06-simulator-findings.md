@@ -2280,9 +2280,14 @@ by the limits the engine actually enforces (`MPR_NEIGHBOR_ADVERTISE_LIMIT` 30,
 
 The last row is a finding of its own: **a fully loaded beacon is 1 270 B, which is over the
 1 024 B BLE ceiling**, so `selectTransport` would put a dense node's beacons on Wi-Fi Direct.
-Nothing sized beacons before, so nothing noticed. Whether to clamp the MPR set, shorten the
-route advertisements, or accept that dense nodes beacon on the other radio is a spec decision
-for `docs/03` §4, not a simulator one, and it is recorded here rather than made silently.
+Nothing sized beacons before, so nothing noticed.
+
+> **Qualified by §24.7.** This is a property of advertising the *public key*, which is what
+> this engine puts in an OGM and what the 32 B above assumes. `docs/03` §4 already says a real
+> deployment advertises 2-byte aliases instead, and §24.7 measures that encoding: the same
+> fully loaded beacon is **130 B**, a sixth of the BLE ceiling rather than a quarter over it.
+> The finding therefore stands as a warning about one encoding, not as a defect in the
+> protocol, and the spec decision it pointed at has already been made in `docs/03` §4.
 
 **Measured** (`npm run media occupancy`, three seeds, 30 messages over a 60 s window after a
 90 s settle):
@@ -2306,9 +2311,16 @@ Four things this says.
    on campus_quad, 8.56× → 5.69× in the crowd. Still above 1 everywhere, so §24.3's
    over-subscription is only *partly* the flat per-packet charge: the dominant term is the
    volume of beacon receptions and the gossip that follows them, which no per-packet
-   correction can touch. At 60 nodes with `docs/03` §1's 2 s interval, the control plane alone
-   asks for several times the airtime one radio has, even priced correctly. That is a finding
-   about the beacon interval at density, not about this engine's constants.
+   correction can touch.
+
+   > **Corrected by §24.7.** This finding went one step further and blamed the beacon
+   > *interval*: "at 60 nodes with `docs/03` §1's 2 s interval, the control plane alone asks
+   > for several times the airtime one radio has, even priced correctly — a finding about the
+   > beacon interval at density". The interval is a lever, but it is not the binding one, and
+   > the residual demand is an artefact of the **encoding** this engine uses for the neighbour
+   > list. With the 2-byte aliases `docs/03` §4 prescribes, the same crowd at the same
+   > specified 2 s interval measures **0.79×** — inside the radio budget — with delivery and
+   > broadcast reach unchanged. §24.7 has both tables.
 2. **Under the shipped baseline the two models are the same world**, as the test above pins.
 3. **Under contention they diverge, and not uniformly.** csma gains a lot — crowd delivery
    71.5 % → 81.9 %, deferrals halved; campus delivery 98.7 % → 100 % with 29 % fewer drops.
@@ -2324,3 +2336,83 @@ Four things this says.
 
 What ships is the default: `"hop-latency"`, every published number where it was, golden
 vectors byte-identical, and the alternative measured rather than asserted.
+
+### 24.7 The two levers on the control plane: interval and encoding
+
+`npm run media beacon`, three seeds, priced under `radioOccupancy: "airtime"` throughout —
+under the flat charge every arm would carry the same 120 ms artefact and the sweep would be
+measuring that instead.
+
+**The interval.** `docs/03` §4 specifies a 2 s beacon and nothing in the corpus says why. It
+has a hard ceiling in the engine: neighbour scores expire at `NEIGHBOR_SCORE_TTL_MS` 30 s, so
+an interval near that leaves one missed beacon — and BLE links lose packets routinely — long
+enough to drop a neighbour that is still there.
+
+`campus_quad`, 20 nodes:
+
+| interval | radio demand | delivery | broadcast reach | overhead | avg hops | avg latency | OGMs sent | MPR suppressed |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **2 s (spec)** | 1.92× | 100.0 % | 95.0 % | 763 % | 1.88 | 900 ms | 35 242 | 115 |
+| 5 s | 0.79× | 100.0 % | 95.0 % | 595 % | 1.64 | 715 ms | 14 009 | 101 |
+| 12 s | 0.35× | 100.0 % | 94.7 % | 728 % | 1.98 | 742 ms | 5 788 | 80 |
+| 25 s | 0.18× | 100.0 % | 94.8 % | 617 % | 1.89 | 702 ms | 2 725 | 90 |
+
+`festival_crowd`, 60 nodes:
+
+| interval | radio demand | delivery | broadcast reach | overhead | avg hops | avg latency | OGMs sent | MPR suppressed |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **2 s (spec)** | 5.69× | 95.8 % | 98.0 % | 2 323 % | 2.70 | 1.38 s | 225 919 | 525 |
+| 5 s | 2.27× | **96.7 %** | 98.1 % | 2 521 % | 2.88 | 1.45 s | 87 033 | 562 |
+| 12 s | 1.02× | 93.9 % | **88.8 %** | 2 011 % | 2.77 | 1.13 s | 36 517 | 633 |
+| 25 s | 0.59× | 97.1 % | 97.6 % | 2 843 % | 2.82 | 1.46 s | 18 310 | 551 |
+
+At 20 nodes the interval barely matters: stretching it 12.5× cuts demanded radio time tenfold
+and delivery does not move off 100 %, broadcast reach does not move off ~95 %, and average
+latency is *better* at every longer interval — fewer beacons contending with data. At 60 nodes
+it matters and not monotonically: 5 s is better than the spec on delivery (96.7 % against
+95.8 %), 12 s is clearly worse (93.9 %, and broadcast reach falls to **88.8 %**, the signature
+of routes going stale), and 25 s recovers to 97.1 %. That non-monotonicity is reported, not
+explained: three seeds is thin for a 60-node stochastic world, and the plausible reading — at
+25 s so little control traffic exists that the data plane has the radio to itself, and density
+carries messages regardless of table freshness — was not measured and is not asserted here.
+
+**The encoding.** `docs/03` §4 says *"a real deployment advertises 2-byte aliases (~60 B for
+30 neighbours)"*. This engine advertises the 32-byte X25519 public key, which is what
+`ogmWireBytes` assumed above. `ogmAliasBytes` makes that a measured dimension rather than an
+assumption; the originator's own id stays 32 B either way, because an alias cannot identify a
+sender nobody has heard from yet.
+
+| scenario | encoding | typical beacon | max beacon | radio demand | delivery | broadcast reach | OGMs sent |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| campus_quad (20) | 32 B public key | 630 B | 1 270 B | 1.92× | 100.0 % | 95.0 % | 35 242 |
+| campus_quad (20) | **2 B alias (§4)** | **90 B** | **130 B** | **0.33×** | 100.0 % | 95.0 % | 35 242 |
+| festival_crowd (60) | 32 B public key | 630 B | 1 270 B | 5.69× | 95.8 % | 98.0 % | 225 919 |
+| festival_crowd (60) | **2 B alias (§4)** | **90 B** | **130 B** | **0.79×** | 95.8 % | 98.0 % | 225 919 |
+
+**The encoding is the bigger lever, and it is free.** Aliases cut the beacon, not the number of
+beacons — `OGMs sent` is identical in both rows, so nothing about route freshness, election
+convergence or MPR coverage changes — and demanded radio time falls 5.8× in the crowd and 5.8×
+on campus. At the *specified* 2 s interval, with the encoding the specification itself
+prescribes, the control plane at 60 nodes fits inside the radio budget at **0.79×**. The
+over-subscription this section started from was never a property of the protocol; it was a
+property of this simulator putting public keys on the air.
+
+The two levers are not interchangeable, and that is the practical conclusion. An alias
+shortens every beacon in a dense world and costs nothing measurable. A longer interval thins
+them and trades freshness for airtime — visibly, at 60 nodes, where 12 s costs 9 points of
+broadcast reach. A deployment should pull the encoding first and treat the interval as a
+second-order control, which is the opposite of what §24.6's finding 1 implied.
+
+**What ships.** `ogmAliasBytes` defaults to 32 — what the engine actually transmits — so no
+published number moves and the golden vectors are byte-identical. The 2 B arm is a measurement
+of a design `docs/03` §4 already specifies, not a change to this engine's encoding, and
+adopting it in the simulator would mean modelling aliases as a real routing change: a node
+would have to learn the alias↔key binding before it could use one, which is a new
+state-sync question and not a constant.
+
+**The follow-up §24.6 named is demoted.** An interval that adapts to density was proposed
+because the two scenario tables disagreed about what the interval should be. They still
+disagree, but under the prescribed encoding both densities fit inside the budget at the
+specified interval, so the case for adapting it is now about headroom rather than feasibility.
+It remains unimplemented, and the convergence objection stands: a node that slows its beacons
+because it has many neighbours is exactly the node its neighbours most need to hear from.

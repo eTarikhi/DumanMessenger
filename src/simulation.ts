@@ -172,6 +172,18 @@ export interface SimConfig {
    *  the shipped `free`/`none` baseline nothing consumes occupancy at all, so this knob
    *  moves the telemetry and nothing else — which is what makes it safe to add. */
   radioOccupancy: "hop-latency" | "airtime";
+  /** How many bytes one *advertised* neighbour costs on air, read only under
+   *  `radioOccupancy: "airtime"`.
+   *
+   *  32 ships, because that is what this engine actually puts in an OGM: the neighbour's
+   *  X25519 public key. `docs/03` §4 says a real deployment advertises 2-byte aliases
+   *  instead (~60 B for 30 neighbours), and the difference is not cosmetic — §24.6 derives a
+   *  fully loaded beacon at 1 270 B on 32-byte ids, over the 1 024 B BLE ceiling, and at
+   *  130 B on aliases. Since beacon *reception* is the dominant term in demanded radio
+   *  time, the encoding is a bigger lever than the beacon interval, and setting this to 2
+   *  measures that instead of asserting it. The originator's own id stays 32 B either way:
+   *  an alias cannot identify a sender nobody has heard from yet. */
+  ogmAliasBytes: number;
   ogmJitterMs: number;
   ogmTtl: number;
   electionIntervalMs: number;
@@ -488,6 +500,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   coverTraffic: false,
   coverIntervalMs: 30_000,
   radioOccupancy: "hop-latency",
+  ogmAliasBytes: 32,
   ogmJitterMs: 200,
   ogmTtl: 5,
   electionIntervalMs: 30000,
@@ -1261,7 +1274,11 @@ export class MeshSimulation {
       // advertisements are the payload, and both are bounded by the advertise limits
       // `ogmWireBytes` was derived from.
       return this.airtimeMs(
-        ogmWireBytes(ogm.neighborIds.length, Object.keys(ogm.bestHopTo).length),
+        ogmWireBytes(
+          ogm.neighborIds.length,
+          Object.keys(ogm.bestHopTo).length,
+          this.config.ogmAliasBytes
+        ),
         "ble"
       );
     }

@@ -155,17 +155,21 @@ const int ogmBatteryBytes = 1;
 const int ogmHopEntryBytes = 32 + 1;
 
 /// The part of a beacon that does not depend on how much it advertises:
-/// `ogmIdBytes + ogmSeqBytes + ogmScoreBytes + ogmFlagBytes + ogmBatteryBytes`.
+/// `ogmIdBytes + ogmSeqBytes + ogmScoreBytes + ogmFlagBytes + ogmBatteryBytes`. The
+/// originator's own id is always the full 32-byte public key — an alias cannot identify a
+/// sender nobody has heard from yet, which is the whole purpose of a beacon — so only the
+/// *advertised* neighbours and route entries are affected by [SimConfig.ogmAliasBytes].
 const int ogmFixedBytes = 32 + 4 + 4 + (1 + 1 + 1 + 2) + 1;
 
 /// What one beacon costs on air, in bytes. OGMs ride `_beacon` rather than `_onAir`, so they
 /// had no size at all and every duration charged to a beacon was a hop latency by default.
 /// A beacon is not a small packet: it carries the MPR neighbour set that makes two-hop
 /// coverage knowable, plus up to eight route advertisements.
-int ogmWireBytes(int neighborCount, int bestHopCount) =>
+int ogmWireBytes(int neighborCount, int bestHopCount,
+        [int aliasBytes = ogmIdBytes]) =>
     ogmFixedBytes +
-    math.max(0, neighborCount) * ogmIdBytes +
-    math.max(0, bestHopCount) * ogmHopEntryBytes;
+    math.max(0, neighborCount) * math.max(0, aliasBytes) +
+    math.max(0, bestHopCount) * (math.max(0, aliasBytes) + 1);
 
 /// A beacon at both advertise limits, which is what a dense mesh actually sends:
 /// `ogmWireBytes(mprNeighborAdvertiseLimit, bestHopAdvertiseLimit)`, spelled out for
