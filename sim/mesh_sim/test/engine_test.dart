@@ -2204,6 +2204,100 @@ void main() {
       expect(r['controlOverhead']!, greaterThan(0));
     });
   });
+
+  group('wake-lock accounting (skills/07, fourth telemetry item)', () {
+    // Mirrors `src/__tests__/wake-locks.test.ts`. One acquisition per transmission and per
+    // reception, held for as long as that packet occupies the radio. The shares are a split
+    // between roles rather than a percentage of wall clock, because docs/06 §24 measures the
+    // model demanding roughly four times the airtime that exists.
+
+    MeshSimulation measured(void Function(MeshSimulation) traffic) {
+      final sim = MeshSimulation(campusQuad(42));
+      sim.runFor(90000.0);
+      sim.refresh();
+      sim.clearRecords();
+      traffic(sim);
+      sim.runFor(60000.0);
+      sim.refresh();
+      return sim;
+    }
+
+    void honest(MeshSimulation sim) => sim.injectTraffic(30, 40000.0);
+
+    test('counts under the shipped radio baseline, which maintains no busy-radio maps', () {
+      final sim = measured(honest);
+      expect(sim.config.channelAccess, equals(ChannelAccess.free));
+      expect(sim.config.channelCapture, equals(ChannelCapture.none));
+      expect(sim.stats.wakeLocks, greaterThan(0));
+      expect(sim.stats.wakeLockMs, greaterThan(0));
+    });
+
+    test('reports per node what it reports in total', () {
+      final sim = measured(honest);
+      final locks = sim.nodes.fold<int>(0, (sum, n) => sum + sim.wakeLocksFor(n.id));
+      final ms = sim.nodes.fold<double>(0, (sum, n) => sum + sim.wakeLockMsFor(n.id));
+      expect(locks, equals(sim.stats.wakeLocks));
+      expect(ms, closeTo(sim.stats.wakeLockMs, 1e-6));
+    });
+
+    test('splits the radio demand between roles, and the shares sum to 100', () {
+      final sim = measured(honest);
+      final normal = sim.stats.wakeLockShareNormal;
+      final superShare = sim.stats.wakeLockShareSuper;
+      expect(normal, greaterThan(0));
+      expect(superShare, greaterThan(0));
+      expect(normal + superShare, closeTo(100, 1e-6));
+      // SUPERs are the relays and a minority of the network, so their share of the radio
+      // demand has to exceed their share of the nodes.
+      final supers = sim.nodes.where((n) => n.role == Role.superNode).length;
+      expect(superShare / 100, greaterThan(supers / sim.nodes.length));
+    });
+
+    test('reports the model over-subscription plainly instead of hiding it', () {
+      // docs/06 §24: pinned as a floor rather than an exact figure, so the test says "this
+      // is a property of the model, and it is documented" rather than "this number is
+      // right". The upper bound keeps it from being a runaway.
+      final sim = measured(honest);
+      expect(sim.stats.radioDemandRatio, greaterThan(1));
+      expect(sim.stats.radioDemandRatio, lessThan(10));
+    });
+
+    test('measures the window, not the whole run', () {
+      final sim = MeshSimulation(campusQuad(42));
+      sim.runFor(90000.0);
+      sim.refresh();
+      expect(sim.stats.wakeLocks, greaterThan(0));
+      sim.clearRecords();
+      // `clearRecords` re-baselines the window but does not recompute stats — `refresh`
+      // does, and the first version of the TypeScript twin asserted on stale numbers.
+      sim.refresh();
+      expect(sim.stats.wakeLocks, equals(0));
+      expect(sim.stats.wakeLockMs, equals(0));
+    });
+
+    test('prices concentration on the neighbours who have to hear it', () {
+      void spread(MeshSimulation sim) {
+        for (var i = 0; i < 30; i++) {
+          sim.sendMessage(sim.nodes[i % sim.nodes.length].id, broadcastAddress,
+              'q \$i', MsgType.broadcast);
+          sim.runFor(1000.0);
+        }
+      }
+
+      void concentrated(MeshSimulation sim) {
+        for (var i = 0; i < 30; i++) {
+          sim.sendMessage(
+              sim.nodes[0].id, broadcastAddress, 'f \$i', MsgType.broadcast);
+          sim.runFor(1000.0);
+        }
+      }
+
+      double others(MeshSimulation sim) => sim.nodes
+          .skip(1)
+          .fold<double>(0, (sum, n) => sum + sim.wakeLockMsFor(n.id));
+      expect(others(measured(concentrated)), greaterThan(others(measured(spread))));
+    });
+  });
 }
 
 double _ln(num x) => math.log(x.toDouble());

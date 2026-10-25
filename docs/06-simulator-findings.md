@@ -540,9 +540,22 @@ timeout) or a DTN bundle (a meeting time, not a transport time) cannot smear the
 distribution. The React visualiser renders these in a metrics dashboard panel;
 `dart run bin/mesh_sim.dart --json` emits them, including the hop table.
 
-Wake-locks (`skills/07`'s fourth telemetry item) are deliberately **not**
-modelled: they are an Android API artefact with no mesh-protocol counterpart, and
-a simulator that invented a number for it would be measuring its own guess.
+Wake-locks (`skills/07`'s fourth telemetry item) were deliberately **not**
+modelled when this section was written: they are an Android API artefact with no
+mesh-protocol counterpart, and a simulator that invented a number for it would be
+measuring its own guess.
+
+> **Amendment (Oct 2026 — superseded by §24).** Wake-locks are now counted, and the
+> objection above is what shaped how. It applies to *inventing a cost per lock*, which is
+> still not done: the accounting charges only durations the engine already computed for its
+> contention model — `occupied` on the way out, `airTime` on the way in — plus one beacon
+> duration at the engine's existing per-hop unit. Summing a number the model already
+> produces is accounting, not guessing. What §24 then found is the reason the accounting was
+> worth adding: it shows the model demanding **3.9×** the radio time that exists, and it
+> shows the documented 4× battery gap between roles resting on a calibrated constant in
+> `src/rf.ts` while the counted activity supports **1.14×**. Both findings are against this
+> engine's own assumptions, which is the opposite of a simulator measuring its own guess —
+> and neither was reachable while the fourth telemetry item went unreported.
 
 
 ---
@@ -2077,3 +2090,96 @@ mitigation that this topology does not need is not a mitigation that no topology
 removing it would make the next person re-derive the null result from scratch. `docs/04` §5
 keeps its sentence — it is a requirement, and this section is the evidence about one
 implementation of it — with a note pointing here.
+
+---
+
+## 24. Wake-locks: the fourth telemetry item, and what it says about the battery model
+
+`skills/07` asks for four telemetry series: *"Battery %/h per role, scans/sec, relays/sec,
+wake-locks"*. Three shipped with the roadmap Phase 2 metrics dashboard. Wake-locks did not,
+which left unmeasured the one item that could explain *why* the battery numbers differ by
+role. Both engines now count them: one acquisition per transmission and per reception, held
+for as long as that packet occupies the radio — `occupied` on the way out, `airTime` on the
+way in, durations the engine already computes for the receiver model, so this is accounting
+rather than a new radio model and it works under the shipped `channelAccess: "free"`
+baseline where `txUntil`/`rxUntil` are never maintained. Beacons are counted too, at one
+`hopLatencyBleMs` each, because on an idle network beaconing is the only radio activity
+there is.
+
+`campus_quad`, 20 nodes, three channel and duty-cycle arms, 30 messages injected over a
+60 s window after a 90 s settle:
+
+| arm | wake locks | radio time demanded | NORMAL share | SUPER share | `radioDemandRatio` | battery %/h N / S |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `free`, duty off | 37 906 | 4 680 339 ms | 71.3 % | **28.7 %** | **3.90×** | 2.29 / 6.82 |
+| `free`, duty on | 34 226 | 4 231 497 ms | 73.3 % | 26.7 % | 3.53× | 1.32 / 5.60 |
+| `csma`, duty off | 38 964 | 4 788 135 ms | 69.7 % | 30.3 % | 3.99× | 2.49 / 5.88 |
+
+Three findings, in descending order of how much they change what this repository claims.
+
+### 24.1 The 4× battery gap between roles is an assumption, and the activity says 1.14×
+
+SUPERs are 5 of 20 nodes — 25 % — and hold **28.7 %** of the network's demanded radio time.
+That is more than their share of the nodes, which is the direction `skills/02` implies
+(continuous scanning, MPR-selected forwarding), and it is a ratio of **1.14**, not 4.
+
+The battery model in `src/rf.ts` is where the 4 comes from, and it is a constant:
+`SUPER_DRAIN_PER_HOUR = (0.15 / 8) * 4`, calibrated to `docs/05` §1.2's target that a NORMAL
+node survives 8 h at ≤15 % drain and a SUPER costs roughly four times as much. So the 6.82
+against 2.29 %/h in the table above is that constant being reported back, not a measurement
+of what SUPERs do. The counted activity supports a much smaller gap.
+
+Neither number is wrong and they are not measuring the same thing: a SUPER also holds a
+Wi-Fi Direct group-open role and scans continuously, and **neither of those is modelled here
+at all** — the duty cycle gates *scanning* only, and nothing in the engine costs a node
+anything for being a group owner. So the honest statement is that this engine cannot
+currently justify the 4×, can justify "SUPERs do more radio work than their share", and
+would need a scan-window and GO-role cost term before it could do more than that.
+
+### 24.2 The duty cycle saves 42 % of battery and 10 % of radio time
+
+Switching `dutyCycleEnabled` on moves NORMAL drain from 2.29 to 1.32 %/h — a 42 % saving —
+while demanded radio time falls only from 4 680 339 to 4 231 497 ms, **10 %**, and wake-lock
+acquisitions from 37 906 to 34 226. The two models disagree by a factor of four about the
+same intervention.
+
+The reason is the same as §24.1's: the battery saving is the duty-cycle multiplier in the
+drain model, while the radio-time saving is only the receptions an asleep scanner misses
+(`scansSkippedAsleep`, and `awakeRatio` reports the window share directly). A real device
+also stops *listening* — which the engine models — and stops holding a scan wake lock, which
+it does not, because scan windows are deliberately excluded from this accounting to avoid
+double-counting a reception that happens inside one. §24.1's caveat applies here unchanged:
+`skills/07`'s duty-cycle claim is implemented where the engine has a mechanism, and the
+battery number attached to it is calibrated rather than derived.
+
+### 24.3 The model demands four times the airtime that exists
+
+`radioDemandRatio` is total demanded radio time over `nodes × window`. It reads **3.90** under
+the shipped baseline and 3.99 under `csma` — the engine asks for roughly four times the radio
+time that physically exists, and it does so under every channel model, because the dominant
+term is *reception*: one beacon every 2 s from each of 20 nodes, charged one 120 ms hop
+latency at each of the ~10 peers that hear it, plus the gossip retransmissions that follow.
+
+`hopLatencyBleMs` is a calibrated **latency** that, per `serializationMs`'s own comment,
+already includes one GATT write of a full-sized packet. It is the right unit for "what a hop
+costs end to end" and the engine's contention model (`docs/08` §12) uses it as an occupancy
+for exactly that reason. It is not the right unit for "how long a radio was busy hearing a
+beacon", which on real BLE is a millisecond or two of airtime, not 120 ms of hop latency.
+
+Nothing published before this section is invalidated by that, because almost every airtime
+figure in this repository is a **count** — transmissions, suppressions, packets shed — and
+counts are exact. What it bounds is any *duration*: §12's deferral and collision windows, §8's
+serialization figures, and the milliseconds in the table above are all the model's durations
+rather than a device's, and they are roughly 4× over-subscribed at 20 nodes. That is why this
+section reports wake locks as a **split between roles**, which is a ratio and survives the
+over-subscription, and publishes `radioDemandRatio` beside it rather than letting a reader
+turn the milliseconds into a percentage of a device's day.
+
+### 24.4 What ships
+
+`wakeLocks`, `wakeLockMs`, `wakeLockShareNormal`, `wakeLockShareSuper` and `radioDemandRatio`
+in `SimulationStats` in both engines, with per-node accessors (`wakeLocksFor`,
+`wakeLockMsFor`) so a caller can attribute cost to a specific device — which is what pricing
+`docs/04` §6's battery-drain attack needs, and what the tests use to show that 30 broadcasts
+concentrated on one node cost its neighbours more radio time than the same 30 spread evenly.
+The accounting consumes no RNG, so every golden vector is unchanged.

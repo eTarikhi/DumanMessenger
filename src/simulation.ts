@@ -681,6 +681,48 @@ export interface SimulationStats {
   batteryPercentPerHourSuper: number;
   scansPerSec: number;
   relaysPerSec: number;
+  /** skills/07 telemetry, fourth item: "wake-locks".
+   *
+   *  A wake lock is what an Android device holds while its CPU must stay awake, and on a
+   *  messenger whose radio is the reason the device is awake, radio activity is the whole
+   *  of it. Counted here as one acquisition per transmission and per reception, held for
+   *  the duration that packet physically occupies the radio — `occupied` on the way out
+   *  and `airTime` on the way in, both of which the engine already computes for the
+   *  receiver model, so this is accounting rather than a new radio model and it works
+   *  under the shipped `channelAccess: "free"` baseline where `txUntil`/`rxUntil` are not
+   *  maintained at all.
+   *
+   *  Scan windows are deliberately not counted: `awakeRatio` and `scansSkippedAsleep`
+   *  already report the duty cycle's share, and folding them in here would double-count a
+   *  reception that happens inside a scan window. What this measures is the cost of
+   *  traffic, which is the part an abuser controls.
+   *
+   *  A beacon is charged once to its sender however many peers hear it — the per-peer loop
+   *  in `beacon()` exists to give each link its own loss draw, not because the radio
+   *  transmits once per neighbour — and once to each peer that actually hears it, because
+   *  each of those radios really did wake. Charging the sender per peer inflated an idle
+   *  node's share past 100 % of the clock, which is how that was caught. */
+  wakeLocks: number;
+  /** Total milliseconds those locks were held, network-wide, over the measured window. */
+  wakeLockMs: number;
+  /** Each role's share of the radio time the network demanded, in percent. The two sum to
+   *  100. This is a *split between roles* and deliberately not a share of wall clock: see
+   *  `radioDemandRatio` for why the absolute figure cannot be read as one. Charging nodes
+   *  are included, unlike the battery rates above — being plugged in does not keep a CPU
+   *  asleep. */
+  wakeLockShareNormal: number;
+  wakeLockShareSuper: number;
+  /** Total demanded radio time divided by the radio time that exists (`nodes × window`).
+   *
+   *  Above 1 the model is asking for more airtime than there is, and `docs/06` §24 measures
+   *  it at roughly **3.9** on `campus_quad` at 20 nodes under every channel model — because
+   *  a beacon is charged one `hopLatencyBleMs` (120 ms, calibrated to include a GATT write)
+   *  at every one of the ten peers that hear it, and reception dominates the total. Under
+   *  `channelAccess: "free"` nothing notices, since `free` enforces no exclusivity; under
+   *  `half-duplex`/`csma` the transmit queue absorbs it as deferrals. Read every airtime
+   *  figure in this repository with that in mind: transmission *counts* are exact, and
+   *  durations are the model's, not a device's. */
+  radioDemandRatio: number;
   /** Scans a duty-cycling node skipped because its scanner was asleep. */
   scansSkippedAsleep: number;
   /** Fraction of online non-SUPER nodes inside their wake window (1 when duty
@@ -1108,6 +1150,11 @@ export class MeshSimulation {
    *  field would move the golden vectors, and this is inert while empty, so a shipped run
    *  behaves identically whether or not the feature exists. */
   private blocked = new Map<NodeId, Set<NodeId>>();
+  /** skills/07's fourth telemetry item, per node: acquisitions and milliseconds held. On
+   *  the simulation rather than on `MeshNode` for the same reason as everything above it —
+   *  no field is added to the cross-language node contract, so no golden vector moves. */
+  private wakeLocksByNode = new Map<NodeId, number>();
+  private wakeLockMsByNode = new Map<NodeId, number>();
   /**
    * Block a peer locally, as `docs/04` §6 specifies: no moderation server exists, so the
    * list never leaves the device and never affects anyone else's view of the network.
@@ -1146,6 +1193,38 @@ export class MeshSimulation {
   /** The peers a node has blocked, sorted — the same contract as `peerIds`. */
   blockedPeers(blockerId: NodeId): NodeId[] {
     return [...(this.blocked.get(blockerId) ?? [])].sort();
+  }
+
+  /**
+   * What one beacon costs in wake-lock time.
+   *
+   * Beacons ride `beacon()` rather than `onAir()`, so they have no packet and no size in
+   * this engine — the same limitation `docs/06` §23.2 names for cover traffic — and are
+   * accounted as one BLE hop with no payload term. That is a floor, not an estimate: a real
+   * OGM carries an originator id, a sequence number, a score and a neighbour list, so the
+   * true figure is this plus a serialization term. It is not zero, and it cannot be
+   * ignored, because on an idle network beaconing is the *only* radio activity there is —
+   * one acquisition every 2 s per node, which is exactly what `skills/07`'s duty-cycle
+   * question is about.
+   */
+  private beaconWakeMs(): number {
+    return this.config.hopLatencyBleMs;
+  }
+
+  /** One wake-lock acquisition of `ms` milliseconds by `nodeId` (skills/07 telemetry). */
+  private holdWakeLock(nodeId: NodeId, ms: number): void {
+    this.wakeLocksByNode.set(nodeId, (this.wakeLocksByNode.get(nodeId) ?? 0) + 1);
+    this.wakeLockMsByNode.set(nodeId, (this.wakeLockMsByNode.get(nodeId) ?? 0) + ms);
+  }
+
+  /** Wake locks acquired by one node since the metrics were cleared. */
+  wakeLocksFor(nodeId: NodeId): number {
+    return this.wakeLocksByNode.get(nodeId) ?? 0;
+  }
+
+  /** Milliseconds one node has spent holding a wake lock since the metrics were cleared. */
+  wakeLockMsFor(nodeId: NodeId): number {
+    return this.wakeLockMsByNode.get(nodeId) ?? 0;
   }
 
   /** Whether the transmission that just went on air collided at its receiver. Read by the
@@ -1271,6 +1350,8 @@ export class MeshSimulation {
     this.rateBroadcasts.clear();
     this.rateRelays.clear();
     this.blockedDrops = 0;
+    this.wakeLocksByNode.clear();
+    this.wakeLockMsByNode.clear();
     this.lastTxCollided = false;
     this.channel.clear();
     this.txUntil.clear();
@@ -1538,7 +1619,14 @@ export class MeshSimulation {
 
   /** Transmit an OGM to every peer, then let each peer gossip it onward. */
   private beacon(node: MeshNode, ogm: OGM): void {
-    for (const peer of peersInRange(node, this.nodes, this.rf)) {
+    const peers = peersInRange(node, this.nodes, this.rf);
+    // One beacon is one broadcast, however many peers are in range to hear it: the per-peer
+    // loop below exists to give each link its own loss draw, not because the radio
+    // transmits once per neighbour. Charging the sender per peer inflated an idle node's
+    // wake-lock share past 100 % of the clock, which is how this was caught. The receiver
+    // side *is* per peer, because each of them really does wake and listen.
+    if (peers.length > 0) this.holdWakeLock(node.id, this.beaconWakeMs());
+    for (const peer of peers) {
       this.ogmTx++;
       this.pushLog("ogm", node.id, `OGM seq ${ogm.seq} → ${peer.id} (score ${ogm.score.toFixed(2)})`, {
         peerId: peer.id,
@@ -1547,6 +1635,8 @@ export class MeshSimulation {
         this.lostOgmTx++;
         continue;
       }
+      // The receiver pays only if it heard the beacon, mirroring the data path.
+      this.holdWakeLock(peer.id, this.beaconWakeMs());
       this.acceptOgm(peer, ogm, node.id);
     }
   }
@@ -1557,8 +1647,10 @@ export class MeshSimulation {
     if (!shouldGossip) return;
     const next = ogmToGossip(ogm, this.config.ogmTtl);
     if (!next) return;
-    for (const peer of peersInRange(receiver, this.nodes, this.rf)) {
-      if (peer.id === via) continue;
+    // One gossip retransmission, not one per neighbour — the same reasoning as `beacon`.
+    const gossipTo = peersInRange(receiver, this.nodes, this.rf).filter((p) => p.id !== via);
+    if (gossipTo.length > 0) this.holdWakeLock(receiver.id, this.beaconWakeMs());
+    for (const peer of gossipTo) {
       this.ogmTx++;
       if (
         chance(this.rng, effectiveLossProbability(receiver, peer, this.rf, this.config.linkRetries))
@@ -1566,6 +1658,7 @@ export class MeshSimulation {
         this.lostOgmTx++;
         continue;
       }
+      this.holdWakeLock(peer.id, this.beaconWakeMs());
       this.acceptOgm(peer, next, receiver.id);
     }
   }
@@ -2688,6 +2781,10 @@ export class MeshSimulation {
     // survives the link — and carrier sense needs the same fact from the other side, because
     // what a sender listens for is exactly its peers' transmit windows.
     if (capture || sense) this.txUntil.set(node.id, this.now + occupied);
+    // skills/07 "wake-locks": a transmission holds the radio — and therefore the CPU — for
+    // exactly as long as the packet occupies it. Accumulated here rather than read off
+    // `txUntil`, which the shipped `free`/`none` baseline never maintains.
+    this.holdWakeLock(node.id, occupied);
     if (chance(this.rng, loss)) {
       this.lostDataTx++;
       this.recordTxOutcome(node, 0);
@@ -2777,6 +2874,10 @@ export class MeshSimulation {
       this.serializationMs(msg.sizeBytes, msg.transport) +
       randRange(this.rng, this.config.jitterMinMs, this.config.jitterMaxMs);
     if (capture) this.rxUntil.set(target.id, this.now + airTime);
+    // The receiving side of the same lock. Counted whether or not the packet survives the
+    // link: a radio that woke up and listened spent the power either way, which is exactly
+    // what makes a flood a battery-drain attack rather than a bandwidth one.
+    this.holdWakeLock(target.id, airTime);
     let seq: number | undefined;
     if (this.config.channelCapture === "strongest") {
       // Only assigned here, so the two shipped modes consume nothing and behave exactly as
@@ -3621,6 +3722,20 @@ export class MeshSimulation {
         .filter((v) => v > 0);
       return rates.length ? rates.reduce((a, b) => a + b, 0) / rates.length : 0;
     };
+    // Not filtered on `charging`, unlike the battery rates: a plugged-in device still holds
+    // its CPU awake for every packet it hears. The denominator is the network's total, so
+    // the two shares sum to 100 and neither can exceed it — which is the property that makes
+    // them readable when the absolute milliseconds are not (see `radioDemandRatio`).
+    const heldBy = (role: "SUPER" | "NORMAL"): number =>
+      online
+        .filter((n) => n.role === role)
+        .reduce((sum, n) => sum + (this.wakeLockMsByNode.get(n.id) ?? 0), 0);
+    const heldTotal = online.reduce(
+      (sum, n) => sum + (this.wakeLockMsByNode.get(n.id) ?? 0),
+      0
+    );
+    const wakeShare = (role: "SUPER" | "NORMAL"): number =>
+      heldTotal === 0 ? 0 : (heldBy(role) / heldTotal) * 100;
     const dutyNodes = online.filter((n) => n.role !== "SUPER");
     const awakeRatio = dutyNodes.length
       ? dutyNodes.filter((n) => this.isAwake(n)).length / dutyNodes.length
@@ -3721,6 +3836,11 @@ export class MeshSimulation {
       batteryPercentPerHourSuper: drainPerHour("SUPER"),
       scansPerSec: this.scanCount / elapsedSec,
       relaysPerSec: this.relayTx / elapsedSec,
+      wakeLocks: [...this.wakeLocksByNode.values()].reduce((a, b) => a + b, 0),
+      wakeLockMs: [...this.wakeLockMsByNode.values()].reduce((a, b) => a + b, 0),
+      wakeLockShareNormal: wakeShare("NORMAL"),
+      wakeLockShareSuper: wakeShare("SUPER"),
+      radioDemandRatio: heldTotal / (Math.max(1, online.length) * elapsedMs),
       scansSkippedAsleep: this.scansSkippedAsleep,
       awakeRatio,
       electionEvents: this.roleEvents.length,
