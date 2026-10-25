@@ -2107,7 +2107,12 @@ baseline where `txUntil`/`rxUntil` are never maintained. Beacons are counted too
 there is.
 
 `campus_quad`, 20 nodes, three channel and duty-cycle arms, 30 messages injected over a
-60 s window after a 90 s settle:
+60 s window after a 90 s settle. **Seed 42 alone** — this table was measured before §24.8
+established that a single seed should not be quoted for a demand figure, and the three-seed
+means from `npm run media occupancy` are 4.23× under free and 4.16× under csma rather than the 3.90×
+and 3.99× below. Seed-to-seed variation in this quantity on `campus_quad` is about 8 %, so
+nothing in §24.1-§24.3 changes sign or scale, but the number to quote is §24.6's table, which
+carries its seed count:
 
 | arm | wake locks | radio time demanded | NORMAL share | SUPER share | `radioDemandRatio` | battery %/h N / S |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -2141,7 +2146,9 @@ What the gap actually rests on, in three parts:
    `campus_quad` and **0.306** on `festival_crowd`, so a NORMAL node's effective rate is
    `0.333 × 1 + 0.667 × 0.25 = 0.50` of full — halved — while a SUPER's is untouched at 1.0.
    Switching the duty cycle on therefore *widens* the measured gap rather than narrowing it:
-   the battery ratio goes from **2.98×** to **4.23×** on `campus_quad` (2.29/6.82 → 1.32/5.60
+   the **battery** ratio — a different quantity from §24.3's radio-demand ratio, which happens to
+   read 4.23× over three seeds too, and the coincidence is worth flagging so the two are not
+   conflated — goes from **2.98×** to **4.23×** on `campus_quad` (2.29/6.82 → 1.32/5.60
    %/h) and reaches **5.51×** on `festival_crowd`. The scan-duty ratio alone, `1 / awakeRatio`,
    is **3.00×** and **3.27×** — the same order as the constant, from a mechanism rather than
    from calibration.
@@ -2176,8 +2183,9 @@ That is the mechanism `skills/07`'s budget depends on, and it is why CI gates th
 
 ### 24.3 The model demands four times the airtime that exists
 
-`radioDemandRatio` is total demanded radio time over `nodes × window`. It reads **3.90** under
-the shipped baseline and 3.99 under `csma` — the engine asks for roughly four times the radio
+`radioDemandRatio` is total demanded radio time over `nodes × window`. On seed 42 it reads
+**3.90** under the shipped baseline and 3.99 under `csma`; over three seeds, 4.23× and 4.16×
+(§24.6). Either way the engine asks for roughly four times the radio
 time that physically exists, and it does so under every channel model, because the dominant
 term is *reception*: one beacon every 2 s from each of 20 nodes, charged one 120 ms hop
 latency at each of the ~10 peers that hear it, plus the gossip retransmissions that follow.
@@ -2933,7 +2941,8 @@ Collected in one place, since a reader should not have to reconstruct the order:
    `sleepDrainFactor` 0.25) and *widens* the measured ratio to 4.23× when it is on (§24.1). The
    Wi-Fi Direct group-owner role still costs nothing here, and that is the missing term. Wake-locks
    are reported as a role split rather than a percentage of the clock because the model demands
-   3.9× the airtime that exists, 1.9× once packets are priced by size.
+   about **4.2×** the airtime that exists on `campus_quad` over three seeds (3.9× on seed 42
+   alone, which is what §24.1-§24.3 quote), and **1.9×** once packets are priced by size.
 
 Items 1 and 8 are work. Items 2, 3 and 7 are decisions not to do work, which is the more common
 output of a measurement and the one most often lost. Items 4, 5 and 6 are rules for reading
