@@ -200,18 +200,19 @@ export interface SimConfig {
    *  - `"fixed"` ships: every node beacons every `ogmIntervalMs`, which is what §4 says and
    *    what every published number assumes.
    *  - `"density"` holds the *receptions a node imposes on its neighbourhood* constant, by
-   *    stretching the interval in proportion to its peer count. It is **measured and
-   *    rejected** — `docs/06` §24.11 — and ships off for the same reason `coverTraffic` does.
-   *    The motivation was real: §24.7 found no single interval serving both densities, since
-   *    at 20 nodes 25 s costs nothing and cuts demanded radio time tenfold while at 60 nodes
-   *    5 s beats the specified 2 s and everything longer degrades it. Deriving the interval
-   *    per node does not follow from that, and measuring it says why: where the two modes land
-   *    in comparable topologies the derived interval buys no delivery and costs airtime —
-   *    `sparse_village` pays 3.1× the demanded radio time for +1.6 points, `campus_quad` 1.2×
-   *    for −0.7 — and the one place it saves airtime, the crowd, is the one place the
-   *    comparison cannot be read at all, because the two worlds differ in connectivity
-   *    (mean largest component 85 % against 94 %) and §24.10 shows reach tracks that rather
-   *    than the interval.
+   *    stretching the interval in proportion to its peer count. It ships off, and
+   *    `docs/06` §24.11-§24.12 is why — which is not that it lost. Where the topology can be
+   *    held equal it is cheaper and does not cost reach: with `enableMobility: false` in
+   *    `festival_crowd` it takes 44 % off the demanded radio time and 44 % off the beacons, and
+   *    is equal or better on reach in seven of eight seeds. Delivery is *not* a win — better on
+   *    four seeds, worse on three, level on one, and the +2.5-point mean is mostly one seed.
+   *    Where the topology cannot be held equal it
+   *    loses or cannot be read — `sparse_village` pays 3.11× the airtime for +1.6 points and
+   *    `campus_quad` 1.20× for −0.7, both comparable, while the mobile crowd's two arms land
+   *    in different topologies (mean largest component 85 % against 94 %) so that pair means
+   *    nothing, because §24.10 shows reach tracks the topology rather than the interval. It
+   *    ships off because the shipped condition is the mobile one: turning it on would change
+   *    `docs/03` §4's 2 s on evidence from a network that is partitioned half the time.
    *
    *  The rule is anchored so that a node with `ogmDensityReferencePeers` peers beacons at
    *  exactly `ogmIntervalMs` — the specified 2 s is not replaced, it becomes what the

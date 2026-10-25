@@ -2381,12 +2381,19 @@ interface IntervalModeRow {
 function intervalModeRun(
   seed: number,
   scenario: (seed: number) => SimConfig,
-  mode: SimConfig["ogmIntervalMode"]
+  mode: SimConfig["ogmIntervalMode"],
+  mobility: boolean
 ): IntervalModeRow {
   const sim = new MeshSimulation({
     ...scenario(seed),
     radioOccupancy: "airtime",
     ogmIntervalMode: mode,
+    // Held still for one arm on purpose: with mobility on, changing the beacon schedule
+    // diverges the world, and in a bimodal scenario eight seeds is not enough to tell a
+    // lever's effect from which mode each seed happened to land in. With mobility off the
+    // two arms share a topology by construction, so the comparison isolates the interval —
+    // which is what §24.11 said the verdict needed and §24.12 supplies.
+    enableMobility: mobility,
   });
   sim.runFor(90_000);
   sim.refresh();
@@ -2428,16 +2435,24 @@ function intervalModeTable(): void {
     "specified 2 s. Eight seeds, three scenarios, priced under radioOccupancy: airtime.\n"
   );
   console.log(
-    "  scenario         mode      delivery    reach   radio demand   OGMs sent   connected in-window   mean largest component"
+    "  scenario              mode      delivery    reach   radio demand   OGMs sent   connected   largest   per-seed delivery"
   );
-  for (const [name, scenario] of [
-    ["sparse_village", sparseVillage],
-    ["campus_quad", campusQuad],
-    ["festival_crowd", festivalCrowd],
-  ] as Array<[string, (seed: number) => SimConfig]>) {
+  for (const [name, scenario, mobility] of [
+    ["sparse_village", sparseVillage, true],
+    ["campus_quad", campusQuad, true],
+    ["festival_crowd", festivalCrowd, true],
+    ["festival_crowd static", festivalCrowd, false],
+  ] as Array<[string, (seed: number) => SimConfig, boolean]>) {
     const means = new Map<string, IntervalModeRow>();
+    const perSeed = new Map<string, string>();
     for (const mode of ["fixed", "density"] as SimConfig["ogmIntervalMode"][]) {
-      const rows = BEACON_SEEDS.map((seed) => intervalModeRun(seed, scenario, mode));
+      const rows = BEACON_SEEDS.map((seed) =>
+        intervalModeRun(seed, scenario, mode, mobility)
+      );
+      // Printed beside the mean because the mean is not the finding: §24.12's delivery gain in
+      // the static crowd is four seeds better, two worse and two level, with most of the mean
+      // coming from one seed. A reader who cannot see that cannot tell a lever from a sample.
+      perSeed.set(mode, rows.map((r) => (r.delivery * 100).toFixed(0)).join(" "));
       const mean = (f: (r: IntervalModeRow) => number) =>
         rows.reduce((a, r) => a + f(r), 0) / Math.max(1, rows.length);
       const m = {
@@ -2456,7 +2471,8 @@ function intervalModeTable(): void {
           `${(m.demand.toFixed(2) + "x").padStart(14)} ` +
           `${m.ogms.toFixed(0).padStart(11)} ` +
           `${((m.connected * 100).toFixed(0) + "%").padStart(21)} ` +
-          `${((m.largest * 100).toFixed(0) + "%").padStart(23)}`
+          `${((m.largest * 100).toFixed(0) + "%").padStart(23)}   ` +
+          rows.map((r) => (r.delivery * 100).toFixed(0)).join(" ")
       );
     }
     const f = means.get("fixed")!;
@@ -2488,9 +2504,24 @@ function intervalModeTable(): void {
       "  cannot be attributed to the interval. That is not a defence of the lever — it is the\n" +
       "  reason the verdict rests on the two scenarios where the topology is comparable.\n" +
       "\n" +
-      "  So the follow-up §24.7 argued for is measured and rejected: ogmIntervalMode ships\n" +
-      "  fixed, the specified 2 s stays, and the flag exists so this table is reproducible\n" +
-      "  rather than so the mode can be turned on. docs/06 §24.11.\n"
+      "  The fourth pair is the one that settles it, and it was added after the first three.\n" +
+      "  With mobility off the two arms share a topology by construction — same connected share,\n" +
+      "  same mean largest component, and the same per seed, not only on average — so the\n" +
+      "  comparison isolates the interval instead of measuring which mode each seed landed in.\n" +
+      "  There the derived interval takes 44% off the demanded radio time and 44% off the\n" +
+      "  beacons, which is what the rule does and so does not depend on any seed. Read the\n" +
+      "  per-seed delivery column before believing anything else about it: better on four\n" +
+      "  seeds, worse on three, level on one, with most of the +2.5-point mean coming from one\n" +
+      "  seed going 45 to 67. Reach is the stronger claim, equal or better in seven of eight.\n" +
+      "  So the lever is cheaper and does not cost reach, and it does not buy delivery; the\n" +
+      "  mobile crowd cannot say anything at all, because changing the beacon schedule diverges\n" +
+      "  a bimodal world and eight seeds cannot resolve that.\n" +
+      "\n" +
+      "  What ships is still fixed, and now for a more precise reason than §24.11 gave: the\n" +
+      "  lever is shown to help where the topology can be held equal and shown to be unreadable\n" +
+      "  where it cannot, and the shipped condition is the one where it cannot. Turning it on\n" +
+      "  would mean changing docs/03 §4's 2 s on evidence from a static network. docs/06\n" +
+      "  §24.11-§24.12.\n"
   );
 }
 

@@ -183,11 +183,16 @@ class SimConfig {
   final double connectivitySampleMs;
 
   /// Whether a node beacons on the fixed interval docs/03 §4 specifies or on one derived from
-  /// its peer count. [OgmIntervalMode.density] is measured and rejected (docs/06 §24.11) and
-  /// ships off: sparse_village pays 3.1x the demanded radio time for 1.6 points of delivery,
-  /// campus_quad 1.2x for -0.7, and the crowd — the only place it saves airtime — is the one
-  /// place the comparison cannot be read, because the two worlds differ in connectivity and
-  /// §24.10 shows reach tracks that rather than the interval.
+  /// its peer count. Ships off, and docs/06 §24.11-§24.12 is why — which is not that it lost.
+  /// Where the topology can be held equal it is cheaper and does not cost reach: with mobility
+  /// off in festival_crowd it takes 44% off the demanded radio time and 44% off the beacons, and
+  /// is equal or better on reach in seven of eight seeds. Delivery is not a win — better on four
+  /// seeds, worse on three, level on one, and the +2.5 mean is mostly one seed. Where the
+  /// topology cannot be held equal it loses or cannot be read —
+  /// sparse_village pays 3.11x the airtime for 1.6 points, campus_quad 1.20x for -0.7, and the
+  /// mobile crowd's two arms land in different topologies, so that pair means nothing because
+  /// §24.10 shows reach tracks the topology rather than the interval. It ships off because the
+  /// shipped condition is the mobile one.
   final OgmIntervalMode ogmIntervalMode;
 
   /// The peer count at which [OgmIntervalMode.density] reproduces [ogmIntervalMs] exactly. 10

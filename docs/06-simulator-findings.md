@@ -2711,7 +2711,20 @@ changed between them. That is what makes the verdict here honest rather than con
   says that is what a gap of that shape usually is.
 
 **So the follow-up is rejected**, and the verdict rests on the two scenarios where the topology
-is comparable rather than on the one where the lever looks best. `ogmIntervalMode` ships
+is comparable rather than on the one where the lever looks best.
+
+> **Revised by §24.12.** "Rejected" was too strong, and the paragraph below that says the lever
+> is "not shown to help" in a crowd was missing the one comparison that could show it. Holding
+> the crowd's topology equal — mobility off, so both arms share a graph by construction, and per
+> seed rather than only on average — the derived interval takes **44 % off the demanded radio
+> time and 44 % off the beacons**, and is **equal or better on reach in seven of eight seeds**.
+> It is not harmful, and the airtime saving is real.
+>
+> What §24.12 does *not* support, and an earlier draft of this note claimed, is a delivery win:
+> the +2.5-point mean is better on four seeds, worse on three and level on one, and most of it is
+> a single seed. So the lever is cheaper and reach-neutral-to-better where it can be measured,
+> not better all round — and the shipped mobile condition remains the one where nothing can be
+> measured at all. `ogmIntervalMode` ships
 `"fixed"`, the specified 2 s stays, the golden vectors are byte-identical, and the flag exists so
 this table is reproducible rather than so the mode can be turned on. This is the nineteenth
 rejected lever in this document and the first rejected by a metric that had been added one commit
@@ -2722,6 +2735,79 @@ arguing about, and the argument would have been about a topology difference nobo
 What would change the verdict is not a better rule but a fairer comparison: the crowd needs the
 two modes seeded into the *same* topology before the interval can be blamed for anything, which
 means either fixing node positions (`enableMobility: false`) or averaging over enough seeds that
-the mode split washes out. Neither was done here, and §24.11 does not claim the derived interval
-is harmful in a crowd — only that it is not shown to help, and that where it can be shown, it
-does not.
+the mode split washes out. §24.12 does the first.
+
+### 24.12 Holding the topology still: the derived interval wins, and mobility is what connects a crowd
+
+§24.11's crowd comparison could not be read because the two arms landed in different topologies.
+`enableMobility: false` removes that as a variable: with positions fixed, the radio graph is the
+same graph in both arms, so a difference in delivery is a difference caused by the beacon
+interval and nothing else. Eight seeds, `festival_crowd`, `radioOccupancy: "airtime"`:
+
+| topology | mode | delivery | reach | radio demand | OGMs sent | connected in-window | mean largest component |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| static | fixed | 74.4 % | 71.8 % | 5.55× | 212 914 | **50 %** | **81 %** |
+| static | **density** | **76.9 %** | **74.9 %** | **3.10×** | **119 681** | **50 %** | **81 %** |
+| mobile | fixed | 92.0 % | 86.5 % | 5.66× | 224 159 | 76 % | 94 % |
+| mobile | density | 83.4 % | 77.6 % | 3.31× | 131 914 | 49 % | 85 % |
+
+The two static arms share a topology exactly — 50 % connected in-window and 81 % mean largest
+component in both, and identical *per seed* rather than only on average (100 / 100 / 100 / 58 /
+67 / 67 / 58 / 100 % largest component in both arms) — so the row is readable. What it says is
+narrower than the first draft of this section claimed, and the per-seed spread is why
+`npm run media intervalMode` now prints it beside every mean:
+
+| seed | 42 | 7 | 1234 | 99 | 2024 | 31337 | 555 | 8 | mean |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| delivery, fixed | 95 | 96 | 92 | 62 | 55 | 45 | 50 | 100 | 74.4 % |
+| delivery, density | 90 | 88 | 96 | 63 | 54 | **67** | 57 | 100 | 76.9 % |
+| reach, fixed | 95 | 93 | 98 | 46 | 44 | 53 | 48 | 98 | 71.8 % |
+| reach, density | 96 | 97 | 98 | 55 | 54 | 54 | 47 | 98 | 74.9 % |
+
+- **Airtime: a robust win, and structural rather than sampled.** 5.55× → 3.10× demanded radio
+  time and 212 914 → 119 681 beacons, both −44 %. Fewer beacons is what the rule *does*, so this
+  does not depend on any seed.
+- **Reach: equal or better in seven of eight seeds**, worse by one point in the eighth. The mean
+  is +3.1 points. This is the strongest claim the delivery-side data supports.
+- **Delivery: not a win.** Better on four seeds, worse on three, level on one, and the +2.5-point
+  mean is mostly seed 31337 going 45 → 67. The first draft of this section called the lever a win
+  "on every column at once" and cited the delivery mean; the mean is one seed's, and a per-seed
+  table is what shows that. §24.8's rule applies to a section written an hour after §24.8.
+
+So §24.11's "rejected" was too strong — the lever is cheaper and does not cost reach — and this
+section's first verdict was too strong in the other direction. What is left is a lever that buys a
+44 % cut in control-plane airtime at reach-neutral-to-better and delivery-neutral, in a network
+whose topology is held still.
+
+The mobile pair still cannot be read, and now the reason is sharper than "the worlds diverged":
+changing the beacon schedule changes which random numbers are drawn and therefore where 60 nodes
+are, and in a bimodal scenario that reassigns seeds between modes. Eight seeds cannot separate a
+lever's effect from a mode reassignment, and the static arm is what it looks like when the
+question is asked somewhere the reassignment cannot happen.
+
+**What fell out of the static arm is more interesting than the lever.** Compare the two `fixed`
+rows: the *mobile* crowd delivers 92.0 % and is in one piece 76 % of the window, while the
+*static* crowd delivers 74.4 % and is in one piece only 50 % of the time. Same 60 nodes, same
+area, same beacon interval — the only difference is that one of them moves.
+
+So in `festival_crowd`, **mobility is what connects the network**. The scenario spawns nodes in
+clusters, and left alone those clusters are separate components for half of any window; nodes
+wandering between them are the bridges, and §24.10's "splits and re-joins" is the same fact seen
+from the other end — the re-joining is movement. That inverts the usual framing of a DTN
+scenario, where mobility is the difficulty the protocol has to survive: here it is the mechanism
+by which a clustered crowd becomes one network at all, worth 17.6 points of delivery and 26
+points of in-window connectivity. It also bounds how far §24.12's static result travels — a
+static crowd is not a slower version of a mobile one, it is a *worse-connected* one, and a lever
+validated in the first has not been validated in the second.
+
+**What ships, and why.** `ogmIntervalMode` still ships `"fixed"`, and the reason is no longer
+that the lever lost. It is that what the lever buys — 44 % less control-plane airtime, reach
+neutral-to-better, delivery neutral — is measured on a topology the shipped scenario does not
+have, and the thing a reader would most want it to buy, delivery, is not bought anywhere. Turning
+it on would mean changing `docs/03` §4's 2 s beacon on evidence from a network that is partitioned
+half the time, for an airtime saving nobody has shown buys anything the user can see. The honest
+next step is not a default change but a comparison that keeps mobility and removes the mode
+reassignment — many more seeds, or a mobility model whose draws do not depend on the beacon
+schedule — and neither is cheap. Until then the flag is there, both tables are reproducible with
+`npm run media intervalMode` including their per-seed spreads, and the verdict is recorded as
+*cheaper where it can be measured, unmeasurable where it ships, and not shown to deliver more*.

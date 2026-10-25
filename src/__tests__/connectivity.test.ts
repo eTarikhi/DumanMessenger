@@ -149,4 +149,43 @@ describe("the density-derived beacon interval (docs/06 §24.11)", () => {
       1
     );
   });
+
+  it("holds the topology still, and there the derived interval is cheaper without losing reach", () => {
+    // docs/06 §24.12. With mobility off, both arms share a graph *by construction* — the
+    // positions are drawn from the same seed and never move — so a difference between them is
+    // caused by the beacon interval and nothing else. That is the comparison §24.11 said the
+    // verdict needed and could not make.
+    //
+    // What is asserted here is only what the mechanism guarantees: identical topology, fewer
+    // beacons, less demanded radio time. Delivery is *not* asserted, and that is a measured
+    // limit rather than an oversight — over eight seeds the derived interval is better on
+    // delivery in four, worse in two and level in two, and the +2.5-point mean §24.12 quotes
+    // is most of one seed (31337, +22). Seed 42, which this helper runs, is one of the two
+    // where it is worse. A test that asserted the mean's direction on one seed would be
+    // §24.8's mistake in reverse.
+    const fixed = measured(
+      { radioOccupancy: "airtime", enableMobility: false },
+      festivalCrowd
+    );
+    const derived = measured(
+      {
+        radioOccupancy: "airtime",
+        enableMobility: false,
+        ogmIntervalMode: "density",
+      },
+      festivalCrowd
+    );
+    // Identical topology, exactly and not approximately: a static graph sampled twelve times
+    // gives the same answer in both arms, so this is an equality rather than a tolerance.
+    expect(derived.stats.meanLargestComponent).toBe(fixed.stats.meanLargestComponent);
+    expect(derived.stats.connectedSampleShare).toBe(fixed.stats.connectedSampleShare);
+    // And the lever, in the two columns that are structural rather than sampled: fewer
+    // beacons, and less demanded radio time per beacon.
+    expect(derived.stats.controlOverhead).toBeLessThan(fixed.stats.controlOverhead);
+    expect(derived.stats.radioDemandRatio).toBeLessThan(fixed.stats.radioDemandRatio);
+    // Reach, not delivery: over eight seeds the derived interval is equal or better on reach
+    // in seven, which is the strongest claim the data supports. On this seed it is better too,
+    // but one seed is why that sentence says eight.
+    expect(derived.stats.broadcastReach).toBeGreaterThanOrEqual(fixed.stats.broadcastReach);
+  });
 });
