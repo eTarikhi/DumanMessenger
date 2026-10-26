@@ -300,7 +300,13 @@ one — on a machine where nothing else can run, this group still gives an answe
    run actually exists, reading the answer out of the programs rather than out of the prose. It is
    here because this repository keeps making that mistake: two probe section names were once
    documented that `tool/media-probe.ts` does not have, and four real Dart CLI flags were missing
-   from the cheat sheet. `make check-docs` runs it alone.
+   from the cheat sheet. `make check-docs` runs it alone. Ten checks, each with a fault injected
+   into a copy of the tree by `--self-test`, and the tenth was added the same day as the thing it
+   guards: **`ci-jobs`** asks whether `.github/workflows/ci.yml` and `run-pipeline.sh`'s
+   `JOBS_ALL` still name the same jobs. They are maintained in two places by hand, and the local
+   pipeline's whole claim to be evidence about the remote one rests on them agreeing — a job in the
+   workflow the pipeline does not run means a green local run says nothing about it, and a job the
+   pipeline runs that the workflow does not means CI is laxer than the local gate.
 2. **`dart-balance`** — `tool/ci/check-dart-balance.py`, delimiter balance across all 22 Dart
    sources in `sim/mesh_sim`, needing no Dart SDK. `make dart-balance` runs it alone. It is not
    `dart analyze` and does not claim to be; it exists for exactly the situation this repository is

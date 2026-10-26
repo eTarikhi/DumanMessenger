@@ -479,7 +479,66 @@ def check_ci_script_flags(repo: Repo) -> Result:
                   f"{len(impl)} scripts, {seen} flag uses checked", problems)
 
 
+def workflow_jobs(repo: Repo) -> List[str]:
+    """Job names in `.github/workflows/ci.yml`, read without a YAML dependency.
+
+    The checker is stdlib-only on purpose — it has to run on a machine that has nothing but
+    python3, which is the situation that makes it worth having. Top-level job keys are two
+    spaces in under `jobs:` and nothing else in this file is indented exactly that way.
+    """
+    path = repo.root / ".github" / "workflows" / "ci.yml"
+    if not path.exists():
+        return []
+    text = path.read_text(encoding="utf-8")
+    m = re.search(r"^jobs:\n(.*?)(?=^\S|\Z)", text, re.S | re.M)
+    if not m:
+        return []
+    return re.findall(r"^  ([a-z][a-z0-9-]*):$", m.group(1), re.M)
+
+
+def pipeline_jobs(repo: Repo) -> List[str]:
+    """Job names `run-pipeline.sh` will dispatch, from its own `JOBS_ALL`."""
+    path = repo.root / "tool" / "ci" / "run-pipeline.sh"
+    if not path.exists():
+        return []
+    m = re.search(r'^JOBS_ALL="([^"]+)"', path.read_text(encoding="utf-8"), re.M)
+    return m.group(1).split() if m else []
+
+
+def check_ci_jobs(repo: Repo) -> Result:
+    """Does the local pipeline mirror the workflow it claims to mirror?
+
+    `run-pipeline.sh` exists so that a green local run is evidence about the remote one, and
+    `docs/10` says so in those words: it copies each step onto the workflow step it copies.
+    That claim is only worth anything if the two job lists agree, and they are maintained in
+    two places by hand — which is a drift this repository had not been checking, added the
+    same day a fifth job went into both. A job in the workflow that the pipeline does not run
+    means a local green says nothing about that job; a job the pipeline runs that the workflow
+    does not means the local run is stricter than CI and a merge can still land red.
+    """
+    wf = workflow_jobs(repo)
+    pipe = pipeline_jobs(repo)
+    problems: List[str] = []
+    if not wf:
+        problems.append("no jobs could be read out of .github/workflows/ci.yml")
+    if not pipe:
+        problems.append("no JOBS_ALL could be read out of tool/ci/run-pipeline.sh")
+    for j in wf:
+        if j not in pipe:
+            problems.append(
+                f"ci.yml defines a job `{j}` that run-pipeline.sh does not mirror, so a green "
+                f"local run says nothing about it")
+    for j in pipe:
+        if j not in wf:
+            problems.append(
+                f"run-pipeline.sh runs a job `{j}` that ci.yml does not define, so the local "
+                f"pipeline is stricter than CI and a merge can still land red")
+    return Result("ci-jobs", not problems,
+                  f"{len(wf)} workflow jobs, {len(pipe)} mirrored", problems)
+
+
 CHECKS = [
+    check_ci_jobs,
     check_dart_cli_flags,
     check_media_sections,
     check_e2ee_sections,
@@ -520,6 +579,9 @@ FAULTS = [
     ("ps1-targets", "make.ps1", "    'ci'          =",
      lambda s: s.replace("    'ci'          =", "    'bogus'       = 'tool/ci/nope.sh'\n"
                                                 "    'ci'          =", 1), "bogus"),
+    # the drift this check was written for: a job added to one list and not the other
+    ("ci-jobs", "tool/ci/run-pipeline.sh", 'JOBS_ALL="checks web',
+     lambda s: s.replace('JOBS_ALL="checks web', 'JOBS_ALL="checks bogus web', 1), "bogus"),
     ("ci-script-flags", "docs/10-local-development-and-ci.md", "run-pipeline.sh --job",
      lambda s: s.replace("run-pipeline.sh --job", "run-pipeline.sh --jobs", 1), "--jobs"),
     # the real regression: a pattern that cannot see a digit hides check-ps1 from help
@@ -554,6 +616,14 @@ def self_test() -> int:
             shutil.copy2(ROOT / "README.md", tmp / "README.md")
         for sh in sorted((ROOT / "tool/ci").glob("*.sh")):
             shutil.copy2(sh, tmp / "tool/ci" / sh.name)
+        # ci-jobs compares the workflow against run-pipeline.sh, so the self-test's copy needs
+        # the workflow too. Without it the unmutated copy fails and every fault below it is
+        # meaningless — which is exactly what the guard under this block is for, and why it
+        # printed instead of quietly passing nine checks and skipping the tenth.
+        wf = ROOT / ".github" / "workflows" / "ci.yml"
+        if wf.exists():
+            (tmp / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
+            shutil.copy2(wf, tmp / ".github" / "workflows" / "ci.yml")
 
         repo = Repo(tmp)
         base = [r for r in run_checks(repo) if not r.ok]
