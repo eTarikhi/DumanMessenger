@@ -12,6 +12,14 @@
 
 - [ ] Mono-repo: `app/` Flutter + `transport/android` + `transport/ios` + `core/` Dart pure
 - [ ] Identity: Ed25519/X25519 keygen + QR add-contact (Briar-style)
+> **Implementation note (Oct 2026 — `src/crypto/identity.ts`, 87 tests across `src/crypto/`, evidence in `docs/07-e2ee-noise-xx.md` §4, §6):** the cryptographic half is built and measured.
+> `generateIdentity` produces the long-term keypair; `encodeQr`/`decodeQr` carry `pubKey + shortAuthString` exactly as `docs/04` §2 specifies, at 54 base64url characters;
+> `addContactLink`/`parseAddContactLink` implement the `duman://add?pub=...&sas=...` side channel for the not-in-person case; and the eight-character SAS is `identitySas`, Crockford-encoded so
+> it cannot be misread aloud. What is not built is everything that is not cryptography: the secure enclave or Android keystore the keys are supposed to live in, the camera that scans the QR, and
+> the contact UI. There is also **no Dart mirror and there cannot be one here** — the Dart SDK ships no X25519 or ChaCha20 and `pub.dev` was unreachable from the environment this was written in,
+> so the engine's packets are sized and sealed in TypeScript and the Dart side asserts the same sizes against shared golden vectors instead. That is a real gap in the authoritative engine and it
+> is recorded here rather than papered over.
+
 - [x] Transport abstraction `MeshTransport {advertise(), scan(), connect(), send()}`
 > **Implementation note (Oct 2026 — `sim/mesh_sim/lib/src/transport.dart`, `test/transport_test.dart`):** built. This note used to say the interface was app
   work; it is not, and the distinction matters for sequencing. The four verbs are the part of Phase 1 that does not need a phone: what `selectTransport` picks
@@ -129,6 +137,15 @@
   work — sender-key agreement, the channel list UI, persistence — is Phase 1's remaining crypto and
   storage items.
 - [ ] Foreground service (Android) + bg mode (iOS) + duty cycling NORMAL vs continuous SUPER (manual toggle first)
+> **Implementation note (Oct 2026 — `src/simulation.ts` + `sim/mesh_sim`; evidence in `docs/06-simulator-findings.md` §10.3, §24.1, §24.15):** the **duty cycling** third of this item is built,
+> measured and toggleable. `dutyCycleEnabled` with `normalScanWindowMs` 3 s / `normalScanCycleMs` 10 s and `sleepDrainFactor` 0.25 is `skills/07`'s "NORMAL scan 3s/sleep 7s, SUPER continuous"
+> literally, with `awakeRatio` and `scansSkippedAsleep` reporting how much of it actually happened; the visualiser has the toggle plus a per-node battery-saver switch, and `--duty-cycle` is a CLI
+> flag. Measured: NORMAL's 8-hour drain falls from 19-25% to **8.7-12.4%**, which is what puts it under `skills/07`'s 15% budget, and the CI gate asserts that figure in duty-cycle mode only
+> because asserting it on the always-on arm would fail on a true statement about the model. Measured `awakeRatio` is 0.333 on `campus_quad` and 0.306 on `festival_crowd`, so a NORMAL node's
+> effective rate halves while a SUPER's does not — which is most of why the SUPER:NORMAL battery ratio widens from 2.98x to 4.23x when the duty cycle is on (§24.1). §24.15 adds the caveat: the
+> battery model charges the duty-cycle *window*, not the scan events inside it, so a mitigation that works by scanning less cannot be priced here.
+> The other two thirds — the Android foreground service and iOS background mode — are platform work and are not started.
+
 - [ ] Battery/performance logging
 > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §10.5, §24; format in `docs/09-field-test-plan.md` §4):** the *logging* half is
 > built and the four series `skills/07` asks for are all reported by both engines — battery %/h per role, scans/sec, relays/sec, and wake-locks, the last of which landed with `wakeLocks`,
@@ -288,6 +305,13 @@
   **100% in all four worlds**; the app-side work (all-transports fan-out, the opt-in listen toggle) is
   still to do. `dart run bin/mesh_sim.dart --sos` prints the reach probe.
 - [ ] External audit prep + panic wipe (one-tap key zeroization)
+> **Implementation note (Oct 2026 — `src/crypto/identity.ts` `panicWipeIdentity`, `src/crypto/session.ts` `panicWipe()`, 31 session tests; evidence in `docs/07-e2ee-noise-xx.md` §7, question 4):** the
+> key-zeroization half is built, including the part that is easy to get wrong. The wipe order is
+> `[recvRatchet, sendRatchet, handshake, lastLeg, transportKeys, sas, identity]` — ratchets before the keys that derived them, identity last — and it is asserted rather than incidental, because an
+> order that leaves a live ratchet behind has not wiped anything. `docs/07` §7's fourth answer also records the two things a wipe cannot do: it cannot revoke a key somebody else still holds, and in JavaScript
+> `zeroize()` is best-effort, since the language gives no guarantee a buffer is not copied or paged. What is not built is the rest of `skills/03`'s "zero keys + overwrite DB + toast": the database
+> overwrite and the UI are app work, and external audit prep is a process rather than a component.
+
 
 **Exit criteria:** 2 phones exchange image <10 MB over WiFi Direct mesh; PTT Opus note plays in <3s 1-hop / <8s 3-hop; SOS reaches all within ttl.
 
