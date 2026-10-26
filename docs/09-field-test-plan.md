@@ -114,6 +114,29 @@ slot is load-bearing for that criterion, not a refinement — and the analyzer m
 npm run field:report -- /sdcard/duman/mpr-run.jsonl /sdcard/duman/flood-all-run.jsonl
 ```
 
+Four sections, and two of them exist because of what `docs/06` §24 measured:
+
+* **Traffic** — sent/delivered, delivery ratio, within-5-hops, latency p50/p95, relay
+  transmissions, tx per message, losses and duplicates, and overhead against the flood-all
+  baseline when one is given. Two annotations are printed inline rather than left to the
+  reader. If the capture's node count is not 20, the report says so before printing the
+  criteria, because those criteria are `skills/02`'s and `skills/08`'s and both are written
+  for a 20-node network — a FAIL on a 60-node capture is a category error before it is a
+  defect, and §24.13 has what a crowd's own floor measures. If the network split during the
+  walk, the delivery row is followed by how many samples were split and how bad the worst
+  one was.
+* **Connectivity during the walk** — topology samples, how many were in one piece, and the
+  mean and worst largest-component share. Placed directly after Traffic because it qualifies
+  it: a reach or delivery number from a walk during which the network was sometimes in two
+  pieces is a different quantity from the same number from a walk that never split, and the
+  two must not be compared with each other or with a simulator prediction without saying
+  which was which. A capture with no `topology` records is told so explicitly, with the reason
+  — §24.9 drew the wrong conclusion from a graph reconstructed after the run, because a
+  partition that has healed looks exactly like one that never happened.
+* **Election and power** — role timeline, flapping, battery drain per role.
+* **Radio model** — the calibration walk's RSSI-against-distance fit, which §3.1 exists to
+  produce and §6 says to re-fit before trusting any prediction.
+
 ---
 
 ## 4. The capture schema
