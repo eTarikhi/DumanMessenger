@@ -7,6 +7,39 @@ on:
   workflow_dispatch:
 
 jobs:
+  # First because it is the cheapest and the only job with no toolchain dependency: it needs
+  # python3 and nothing else, so it answers even when the Node or Dart setup steps fail. It is
+  # also the only job that catches a protocol constant changed in one engine and not the other,
+  # a config knob added to one engine and not the other, a statistics field missing from the
+  # Dart `toJson()`, or a document naming a command that does not exist — none of which any
+  # compiler on either side would report.
+  checks:
+    name: Toolchain-free static checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Documentation drift
+        run: python3 tool/ci/check-docs.py
+
+      - name: Dart delimiter balance
+        run: python3 tool/ci/check-dart-balance.py
+
+      - name: Cross-language parity (constants, coverage weights, type inventories)
+        run: python3 tool/ci/check-parity.py
+
+      - name: Dart declaration sites
+        run: python3 tool/ci/check-dart-sites.py
+
+      # A check that always passes is indistinguishable from a broken one. All four have found
+      # bugs in themselves, so the self-tests run in CI rather than only on request.
+      - name: Checker self-tests
+        run: |
+          python3 tool/ci/check-docs.py --self-test
+          python3 tool/ci/check-dart-balance.py --self-test
+          python3 tool/ci/check-parity.py --self-test
+          python3 tool/ci/check-dart-sites.py --self-test
+
   web:
     name: TypeScript engine + React simulator
     runs-on: ubuntu-latest

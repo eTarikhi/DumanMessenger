@@ -37,7 +37,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(repo_root)"
 DART_DIR="$ROOT/sim/mesh_sim"
 
-JOBS_ALL="web dart cli-matrix probes"
+JOBS_ALL="checks web dart cli-matrix probes"
 JOBS_FAST_WEB="typecheck test golden"
 JOBS_FAST_DART="analyze test"
 
@@ -218,6 +218,47 @@ needs_dart() {
 selected() { case " $SELECTED " in *" $1 "*) return 0 ;; *) return 1 ;; esac }
 
 # --- job: web -----------------------------------------------------------------
+
+job_checks() {
+  job_header "checks — toolchain-free static checks (docs, parity, Dart sites)"
+  local out
+  if ! have python3; then
+    skip_step out "static checks (whole job)" "python3 is not installed"
+    record_job checks missing "python3 absent"
+    return
+  fi
+  # Mirrors the workflow's `checks` job step for step. No Node and no Dart, which is the point:
+  # this job answers even when the toolchain jobs cannot, and it is the only one that catches a
+  # protocol constant changed in one engine and not the other, a config knob or statistics field
+  # present in one engine only, or a document naming a command that does not exist.
+  local failed=""
+  run_step out "Documentation drift (check-docs.py)" "checks-drift.txt" \
+           "$ROOT" python3 tool/ci/check-docs.py
+  [ "$out" = success ] || failed="$failed drift"
+
+  run_step out "Dart delimiter balance (check-dart-balance.py)" "checks-dart-balance.txt" \
+           "$ROOT" python3 tool/ci/check-dart-balance.py
+  [ "$out" = success ] || failed="$failed dart-balance"
+
+  run_step out "Cross-language parity (check-parity.py)" "checks-parity.txt" \
+           "$ROOT" python3 tool/ci/check-parity.py
+  [ "$out" = success ] || failed="$failed parity"
+
+  run_step out "Dart declaration sites (check-dart-sites.py)" "checks-dart-sites.txt" \
+           "$ROOT" python3 tool/ci/check-dart-sites.py
+  [ "$out" = success ] || failed="$failed dart-sites"
+
+  # A check that always passes is indistinguishable from a broken one, and all four have found
+  # bugs in themselves, so the self-tests are a CI step rather than an optional extra.
+  run_step out "Checker self-tests" "checks-self-test.txt" "$ROOT" bash -c \
+    'python3 tool/ci/check-docs.py --self-test &&
+     python3 tool/ci/check-dart-balance.py --self-test &&
+     python3 tool/ci/check-parity.py --self-test &&
+     python3 tool/ci/check-dart-sites.py --self-test'
+  [ "$out" = success ] || failed="$failed self-test"
+
+  if [ -n "$failed" ]; then record_job checks failure "$failed"; else record_job checks success ""; fi
+}
 
 job_web() {
   job_header "web — TypeScript engine + React simulator"
@@ -416,6 +457,7 @@ job_probes() {
 START_ALL=$(date +%s)
 for job in $SELECTED; do
   case "$job" in
+    checks)     job_checks ;;
     web)        job_web ;;
     dart)       job_dart ;;
     cli-matrix) job_cli_matrix ;;

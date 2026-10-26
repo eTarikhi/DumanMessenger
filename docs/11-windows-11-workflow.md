@@ -83,7 +83,8 @@ Dart's equivalent constraint already exists as `environment: sdk: ^3.4.0` in
 
 This is the step that gets skipped, because the TypeScript half works perfectly without it and CI
 would normally catch the gap. **CI on this repository is currently refused for billing reasons**, so
-nothing will catch it. Without Dart, `make ci` exits 1 with three of four jobs `MISSING`.
+nothing will catch it. Without Dart, `make ci` exits 1 with three of five jobs `MISSING` — the
+`checks` and `web` jobs still run, and `checks` needs no toolchain beyond python3 at all.
 
 Before installing it — or if you cannot — `make dart-balance` and `make checks` still tell you
 something about `sim/mesh_sim`. `tool/ci/check-dart-balance.py` checks delimiter balance across all

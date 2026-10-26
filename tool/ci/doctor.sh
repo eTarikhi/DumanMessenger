@@ -215,5 +215,5 @@ if [ "$WARN" -gt 0 ]; then
   warn "$WARN warning(s), nothing missing. 'make ci' should run every job."
   exit 0
 fi
-log "everything required is present. 'make ci' will verify all four jobs."
+log "everything required is present. 'make ci' will verify all five jobs."
 exit 0

@@ -152,7 +152,7 @@ re-measuring eleven others to get at it.
 ## 5. Running the CI pipeline locally
 
 ```bash
-make ci          # all four jobs
+make ci          # all five jobs
 make ci-fast     # typecheck, unit tests, dart analyze, dart test
 make web         # one job
 make dart
@@ -206,7 +206,7 @@ order it runs it — including three behaviours that are easy to drop and expens
 > call the script; if you are reading a report, the verdict is printed in it either way.
 
 **A job that could not run is a failure, never a silent skip.** On a machine without the Dart
-SDK, `make ci` fails and marks three of four jobs `MISSING` — the pipeline exits `1` and make
+SDK, `make ci` fails and marks three of five jobs `MISSING` — the pipeline exits `1` and make
 reports `2`, for the reason above. That is the single most
 important design decision in `tool/ci/`: a green local run that quietly omitted the authoritative
 engine would be worse than no local run at all, because it is the kind of thing you stop checking.
@@ -485,8 +485,8 @@ make pr-branch BRANCH=fix/your-change      # create the branch, then the whole f
 The judgement is in the merge step, and it is deliberately **not** "local validation passed, so
 merge". Local validation gates *opening* the PR: it is fast and it stops you publishing something
 broken. It is not sufficient for *merging*, because a local run is only as broad as the toolchain
-installed locally — a machine with no Dart SDK verifies one job out of four and cannot tell you the
-authoritative engine builds.
+installed locally — a machine with no Dart SDK verifies two jobs out of five (`checks` and `web`)
+and cannot tell you the authoritative engine builds.
 
 So `--merge-on` chooses what evidence a merge may rest on:
 
@@ -533,7 +533,7 @@ the analyzer errors and failing tests with real `file:line:col` locations.
 
 **It distinguishes a build failure from an infrastructure refusal.** A job can fail without ever
 running, and this repository has had exactly that. `watch.sh` checks for the billing message
-before reporting anything else, because four jobs that never started are not four failures:
+before reporting anything else, because five jobs that never started are not five failures:
 
 ```
 error: these jobs never started: GitHub Actions is refused for billing reasons.

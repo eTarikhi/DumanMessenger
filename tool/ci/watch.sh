@@ -137,7 +137,7 @@ diagnose_run() {
     done
 
   # An infrastructure refusal explains everything below it, so check for it first and stop
-  # rather than reporting four jobs that never started as four failures.
+  # rather than reporting five jobs that never started as five failures.
   local kind
   if kind="$(billing_block "$run")"; then
     echo

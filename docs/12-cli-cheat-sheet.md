@@ -198,7 +198,7 @@ Unit testing, linting, debugging tools, and error logging.
 
 | Command | Runs | Notes |
 | --- | --- | --- |
-| `make ci` | `tool/ci/run-pipeline.sh` | All four jobs: `web`, `dart`, `cli-matrix`, `probes`. |
+| `make ci` | `tool/ci/run-pipeline.sh` | All five jobs: `checks`, `web`, `dart`, `cli-matrix`, `probes`. `checks` runs first because it is the cheapest and the only one with no toolchain dependency — it needs python3 and nothing else, so it answers even when the Node or Dart setup fails. |
 | `make ci-fast` | `… --fast` | Skips the production build, the CLI matrix and the probes. |
 | `make web` / `make dart` / `make cli-matrix` / `make probes` | `… --job <name>` | One job. |
 | `./tool/ci/run-pipeline.sh --list` | prints the mapping | Every step, and the workflow step it mirrors. |
@@ -207,7 +207,7 @@ Unit testing, linting, debugging tools, and error logging.
 | `./tool/ci/run-pipeline.sh --allow-missing-dart` | accepts exit `2` | For working without a Dart SDK. **Never** turns a missing job into a pass. |
 
 A job that cannot run is a **failure**, not a silent skip: without a Dart SDK, `make ci` exits `1`
-with three of four jobs `MISSING`.
+with three of five jobs `MISSING`, the other two being `checks` and `web`.
 
 ### Every check at once
 

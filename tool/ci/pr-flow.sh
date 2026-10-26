@@ -12,7 +12,7 @@
 # so merge". Local validation is the gate for *opening* the PR: it is fast, it is on your
 # machine, and it stops you publishing something broken. It is not sufficient for *merging*,
 # because a local run is only as broad as the toolchain installed locally — a machine with no
-# Dart SDK verifies one job out of four and cannot tell you the authoritative engine builds.
+# Dart SDK verifies two jobs out of five and cannot tell you the authoritative engine builds.
 #
 # So --merge-on chooses the evidence the merge is allowed to rest on:
 #
@@ -235,7 +235,7 @@ else
   [ -n "$TITLE" ] || TITLE="$(git -C "$ROOT" log -1 --pretty=%s)"
 
   # The body states what was actually verified, including what was not. A PR description
-  # that says "tested" when one job out of four could not run is how unreviewed risk gets
+  # that says "tested" when three jobs out of five could not run is how unreviewed risk gets
   # merged, so the local verdict goes in the body rather than staying in a local artifact.
   COMMITS="$(git -C "$ROOT" log --no-merges --pretty='- `%h` %s' "origin/$BASE..HEAD" 2>/dev/null \
              || git -C "$ROOT" log --no-merges -n 20 --pretty='- `%h` %s')"
