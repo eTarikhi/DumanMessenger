@@ -168,6 +168,21 @@ auth tag: HMAC or AEAD tag (AES-GCM / ChaChaPoly)
 - Comply with **GDPR by design**: No data leaves device to server; all PII is local.
 - Export crypto note: Use standard libsodium (no custom crypto).
 - Store listing: Prepare for takedown resilience — publish **APK + F-Droid + GitHub Releases** alongside Play/App Store.
+  > **Implementation note (Oct 2026 — `PRIVACY.md`, roadmap Phase 4 "Legal"):** all three bullets are now written up as a user-facing policy at the repository root, which is where a store
+  > listing and a release artifact expect to find it, and where §11 below explains it has to stay if a store removes the app. Two things it had to correct rather than repeat:
+  >
+  > - **"No custom crypto" is true of the primitives and not of the protocol.** `src/crypto/` uses standard X25519, Ed25519, AES-GCM, HKDF and SHA-256, but the Noise_XX handshake and the
+  >   ratchet over them are hand-written, because the environment that produced them permitted no external dependency — and with `pub.dev` unreachable the shipped Dart app has not yet made
+  >   the libsodium substitution this bullet asks for. `PRIVACY.md` §10 states that plainly, because an export review will ask and a policy that claims "standard library" while shipping a
+  >   hand-rolled handshake is the kind of thing that ends a review early.
+  > - **It is a draft that cannot be published yet.** GDPR Art. 13 requires the controller's identity and contact details, and there is no legal entity behind this repository, so §2 of the
+  >   policy describes the hole instead of inventing an address to fill it. That is why the roadmap's Legal item stays open: the documents are written, the controller and the counsel review
+  >   are not, and neither is engineering work.
+  >
+  > What it covers that this section never did: what a radio-range observer can actually see — a stable 8-byte pseudonym, role, coverage score, battery level, neighbour aliases and every
+  > forward (§4.2) — and what the design does **not** protect against: traffic analysis, on the strength of §23's null result rather than on the intention in §5 above; presence; and recall
+  > of a copy already carried in a stranger's queue (§6.3). Also the field-test capture as data about volunteers, measured against `docs/09` §4's schema, which records distances and wall
+  > counts between pseudonymous devices and has a free-text `note` field that re-identifies them (§9).
 
 ---
 **Audit plan:** Cure53-style review at end of Phase 3 (after E2EE implemented, before PTT). Budget for external audit.

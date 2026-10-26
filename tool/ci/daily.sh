@@ -323,9 +323,11 @@ if [ "$HAVE_DART" = 1 ]; then DART_LINE="$(dart_sdk_version 2>/dev/null || echo 
     INCOMPLETE)
       printf 'Nothing failed, but part of the run could not execute — which is **not a pass**.\n\n'
       printf 'Almost certainly the Dart SDK: `sim/mesh_sim` is the authoritative engine and no\n'
-      printf 'check in this repository can compile it. The four static checkers stand in for part\n'
-      printf 'of that (delimiter balance, cross-language constant and config/stats parity,\n'
-      printf 'declaration-site consistency) and they are not a compiler. Install the SDK per\n'
+      printf 'check in this repository can compile it. Three static checkers stand in for part of\n'
+      printf 'that — delimiter balance, cross-language constant and config/stats parity, and\n'
+      printf 'declaration-site consistency — and none of them is a compiler. The other two scripts in\n'
+      printf 'the docs group check documentation drift and PowerShell syntax, which a Dart compiler\n'
+      printf 'would not have caught either. Install the SDK per\n'
       printf '`docs/11` §2 and re-run; until then treat every Dart result here as unknown rather\n'
       printf 'than green.\n\n' ;;
   esac

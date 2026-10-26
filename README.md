@@ -16,7 +16,12 @@
 - `docs/07-e2ee-noise-xx.md` — Noise_XX as a *mesh* protocol: measured handshake cost, when to negotiate, packet/padding sizes
 - `docs/08-media-transport-ptt.md` — What a byte costs on this mesh: chunked files, streamed push-to-talk, the retry timer, skills/05's acceptance boxes, and what one real radio changes
 - `docs/09-field-test-plan.md` — The one criterion that needs a building: capture schema, analyzer, protocol, and what the simulator predicts
+- `docs/10-local-development-and-ci.md` — The local CI mirror, every check in one report, the daily run, and §11: what a given machine cannot do
+- `docs/11-windows-11-workflow.md` — The same workflow on Windows 11: WSL2, Git Bash, `make.ps1`
+- `docs/12-cli-cheat-sheet.md` — Every command, by task
+- `PRIVACY.md` — Privacy policy draft: what leaves the device, who can see it on air, and what cannot be undone. No controller and no counsel review yet, and it says so
 - `sim/mesh_sim/` — **Dart mesh simulator** (authoritative headless engine + CLI)
+- `tool/` — the evidence probes behind every published number, the field-report analyzer, and `tool/ci/` (the local pipeline, the check collection, the daily run)
 - `src/` — **TypeScript mesh simulator** (reference engine + React visualiser)
 - `test-fixtures/golden-vectors.json` — cross-language determinism contract asserted by both engines
 
@@ -57,7 +62,7 @@ npm run dev       # canvas: watch SUPERs get elected, MPR suppress floods, bundl
                   # contact, and a split network draw a ring per component. Click a node to
                   # decline its router role, turn on battery saver, or block a peer locally
 npm run golden    # regenerate test-fixtures/golden-vectors.json after an engine change
-npm run media     # 17 sections, ~14 min: docs/08's media and radio work plus docs/06 §24's
+npm run media     # 18 sections, ~14 min: docs/08's media and radio work plus docs/06 §24's
                   # occupancy, beacon interval, reach and interval-mode measurements
 npm run history   # group-history anti-entropy, with and without repair (docs/06 §17)
 npm run e2ee      # what E2EE costs on this mesh: handshake legs, session churn, packet sizing,

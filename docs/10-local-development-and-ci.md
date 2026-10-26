@@ -780,6 +780,15 @@ half is already in `docs/04` §7. The list is regenerated on every run and delib
 transcribed into a document: a table copied by hand is stale the day a roadmap line moves, and this
 one reads the file.
 
+That one item was then written, the same day the classifier named it: `PRIVACY.md`, at the root
+where a store listing expects it. The box stays open, and the reason is in the roadmap note — a
+privacy policy needs a data controller and this repository has no legal entity behind it, so
+Article 13's identity-and-contact requirement is unmet, and it needs counsel, which is not
+engineering work. The classifier's answer was therefore right and incomplete in the useful way: it
+found the only open item whose *documents* could be produced here, and producing them exposed the
+two things that cannot be. `make blockers` still reports 28 open items; it does not know, and
+should not guess, that one of them is now waiting on a lawyer rather than on a compiler.
+
 ### Why it is not a row in `make checks`
 
 It always exits 0. "This machine has no Dart SDK" is a fact about the machine rather than a defect

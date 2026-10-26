@@ -78,6 +78,15 @@ class Repo:
         self.corpus = list(self.docs)
         self.corpus += sorted((root / "skills").glob("*.md"))
         self.corpus += sorted((root / "roadmap").glob("*.md"))
+        # PRIVACY.md sits at the root because that is where a store listing and a release
+        # artefact expect to find it, but it cites `docs/NN §M` like everything else — and an
+        # unchecked citation in a legal document is the worst place in the repository for a
+        # reference to rot. In the corpus (so doc-section-refs reads it) but not in `docs`
+        # (so it is not scanned for `make` targets or probe sections, which it does not
+        # contain and should not).
+        for extra in ("PRIVACY.md",):
+            if (root / extra).exists():
+                self.corpus.append(root / extra)
 
     def read(self, rel: str) -> str:
         return (self.root / rel).read_text(encoding="utf-8")
@@ -387,9 +396,10 @@ def check_sections(name: str, impl: Set[str], claims: List[Tuple[str, int, str]]
     `retryTimer` were documented for a probe that has `retry` and `capture` — and they are
     unambiguous, because the probe's registry is a closed list.
 
-    The reverse is not checked, and it is worth saying why rather than quietly omitting it. Nine
-    of the media probe's thirteen sections are named `file`, `voice`, `retry`, `capture`,
-    `channel`, `priority`, `contention`, `acceptance` and `serialization`: ordinary English words.
+    The reverse is not checked, and it is worth saying why rather than quietly omitting it.
+    Thirteen of the media probe's eighteen sections are named `file`, `voice`, `retry`,
+    `capture`, `channel`, `priority`, `contention`, `acceptance`, `serialization`, `beacon`,
+    `reach`, `occupancy` and `shedding`: ordinary English words.
     "Does any document mention `capture`" cannot be answered by searching for a backticked word,
     because the corpus discusses capture the phenomenon at length and the probe's own row in
     docs/12 lists all thirteen on a table line that never names the command. A first version of
@@ -405,6 +415,41 @@ def check_sections(name: str, impl: Set[str], claims: List[Tuple[str, int, str]]
     return Result(name, not problems,
                   f"{len(impl)} sections in the probe, {len(claimed & impl)} named in the docs",
                   problems)
+
+
+def check_section_counts(repo: Repo) -> Result:
+    """A documented *number* of probe sections must equal the number the probe has.
+
+    `media-sections` catches an invented name; it cannot catch a count that went stale, because
+    a count is not a name. README said "`npm run media` — 17 sections" for as long as the probe
+    had eighteen, and every check passed: the line names no section, so nothing read it. The
+    number is the part a reader acts on — it tells them how long the run takes and how much of
+    the documentation the probe covers — so it is the part worth guarding.
+
+    Scoped to a line that also names the invocation, for the same reason `section_claims` is: a
+    bare "18 sections" appears in pasted check output and in prose about other things, and
+    matching those would produce a check whose failures mean nothing.
+    """
+    probes = [
+        ("npm run media", media_sections(repo)),
+        ("npm run e2ee", e2ee_sections(repo)),
+    ]
+    pat = re.compile(r"\b(\d+)\s+sections\b")
+    problems: List[str] = []
+    seen = 0
+    for d in repo.corpus:
+        for n, line in enumerate(d.read_text(encoding="utf-8").splitlines(), 1):
+            for invoke, impl in probes:
+                if invoke not in line or not impl:
+                    continue
+                for m in pat.finditer(line):
+                    seen += 1
+                    if int(m.group(1)) != len(impl):
+                        problems.append(
+                            f"{d.name}:{n} says `{invoke}` has {m.group(1)} sections; it has "
+                            f"{len(impl)}")
+    return Result("section-counts", not problems,
+                  f"{seen} section-count claim(s) checked against the probes", problems)
 
 
 def check_media_sections(repo: Repo) -> Result:
@@ -539,6 +584,7 @@ def check_ci_jobs(repo: Repo) -> Result:
 
 CHECKS = [
     check_ci_jobs,
+    check_section_counts,
     check_dart_cli_flags,
     check_media_sections,
     check_e2ee_sections,
@@ -589,6 +635,9 @@ FAULTS = [
      lambda s: s.replace("^[a-zA-Z0-9_-]+:", "^[a-zA-Z_-]+:", 1), "check-ps1"),
     ("npm-scripts", "docs/12-cli-cheat-sheet.md", "npm run e2ee",
      lambda s: s.replace("npm run e2ee", "npm run e2ee2", 1), "e2ee2"),
+    # the real regression: a count that went stale while every name still resolved
+    ("section-counts", "README.md", "# 18 sections",
+     lambda s: s.replace("# 18 sections", "# 17 sections", 1), "17 sections"),
     # a citation to a section that does not exist: the renumbering case
     ("doc-section-refs", "docs/07-e2ee-noise-xx.md", "`docs/02` §6",
      lambda s: s.replace("`docs/02` §6", "`docs/02` §96", 1), "§96"),
