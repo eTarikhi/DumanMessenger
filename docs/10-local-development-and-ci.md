@@ -704,3 +704,121 @@ and a bug in a *reporter* should not fail an otherwise green build.
 
 `./tool/ci/run-pipeline.sh --list` prints this mapping from the script itself, so the table above
 and the runner cannot disagree for long.
+
+---
+
+## 11. What this machine cannot do
+
+`make doctor` asks whether a machine can verify this repository. `make blockers`
+(`tool/ci/blockers.sh`) asks the other question — the one that decides when work on this project
+stops: **why is it not finished?** The two overlap on the Dart SDK and nowhere else, because most
+of what stops this project is not a missing tool. It is an egress rule, a refused CI account, a
+radio that does not exist in a container, and fifteen people standing in a quad.
+
+```bash
+make blockers                              # 27 rows, about 20 s
+./tool/ci/blockers.sh --strict             # exit 3 if a row this machine *can* fix is wrong
+./tool/ci/blockers.sh --json artifacts/blockers.json
+.\make.ps1 blockers                        # Windows
+```
+
+Every row is measured when the script runs, and the measurement is printed next to the verdict,
+so a conclusion can be disputed by reading its evidence instead of trusting the prose. The one
+row that cannot be probed says so in the evidence column rather than inventing a number.
+
+### The six sections, and what they found on 2026-10-26
+
+**A · toolchain.** `dart` absent, and its SDK host unreachable — `storage.googleapis.com` →
+`curl exit 35, HTTP 000, 0 bytes`. That is the load-bearing one: `sim/mesh_sim` is the
+authoritative engine, **22 Dart files / 15 200 lines**, and not one of them has ever been
+compiled on the machine that wrote them. `flutter` absent, so the roadmap's `app/` cannot be
+built, run or screenshotted. `pub.dev` unreachable, so `pubspec.yaml` is frozen at what it
+already lists — no Opus codec, no SQLite plugin, no BLE plugin. `pwsh` absent *and not
+installable*: the release page answers (`HTTP 200`) and the asset redirects to
+`objects.githubusercontent.com`, which is outside the egress allowlist, yielding `0 bytes` — so
+`make.ps1` and the whole of `docs/11` are checked statically by `check-ps1.py` and have never
+been executed anywhere. `node v22.22.3` and `python3 3.11.2` are present, which is why the TS
+reference engine and the five stdlib-only checkers do run here.
+
+**B · egress.** Eight hosts probed, four blocked: `pub.dev`, `storage.googleapis.com`,
+`objects.githubusercontent.com`, `results-receiver.actions.githubusercontent.com`. Redirects are
+followed and the delivered byte count is read, because a 302 with nothing behind it is the exact
+shape of the failure here — a probe that stopped at the first response would report the Dart SDK
+as installable. The last of the four is why CI log download fails: `gh run view --log-failed`
+returns empty, and the only machine-readable channel left is check-run annotations
+(`make diagnose`).
+
+**C · remote CI.** The newest run is `failure … classified 'billing'` — jobs are refused before
+they start, with *"recent account payments have failed or your spending limit needs to be
+increased"*, and `gh run rerun` is refused too. The last green run was **2026-10-23T08:46:52Z**
+(`8406717`), with **82 non-success runs since**. So every verification claim after that timestamp
+is local-only: `run-pipeline.sh` mirrors the workflow step for step, but nothing has executed it.
+This is not fixable from a branch; it needs the account's billing settings.
+
+**D · hardware.** No `/sys/class/bluetooth` entries, no wireless phy under `/sys/class/net`, no
+`iw`, no `adb`, and a Linux host with no `xcrun`. That closes the BLE GATT hello, the iOS beacon,
+Wi-Fi Direct, Wi-Fi Aware, the permissions and foreground-service work, and every iOS item —
+including the v0.9 launch, because Apple's toolchain does not run on Linux at all. One row is not
+a probe and is labelled that way: a crowd of fifteen people carrying phones. `skills/08` already
+forbids claiming large-scale results without it.
+
+**E · repository.** The rollback signature, and the only section whose rows this machine can fix.
+`git-head` compares HEAD with `origin/<branch>` and separates *ahead* from *behind*, because only
+behind is drift: unpushed local commits are the normal state of a working turn, and flagging them
+would make `--strict` fail between every commit and its push. `git-worktree` is deliberately
+narrower than "is the tree dirty" — dirt is ordinary work in progress, whereas a tracked file
+whose content is **byte-identical to the base commit** is a snapshot restored from before the work
+landed, and committing it pushes a revert. Both signatures were tested by fabricating them:
+reverting `README.md` to its base content, and resetting HEAD to `origin/main`.
+
+**F · roadmap.** All 28 open items read out of `roadmap/roadmap.md` and classified by what closing
+them would take, each printed with the rule that matched it so the classification can be argued
+with row by row: **5 need people** (field test, crowd, external audit, launch, community relay),
+**2 a store account and signing key**, **10 a handset or an OS API**, **10 the Dart/Flutter
+toolchain**, and **1 can be written from here** — line 383, the privacy policy, whose crypto-export
+half is already in `docs/04` §7. The list is regenerated on every run and deliberately never
+transcribed into a document: a table copied by hand is stale the day a roadmap line moves, and this
+one reads the file.
+
+### Why it is not a row in `make checks`
+
+It always exits 0. "This machine has no Dart SDK" is a fact about the machine rather than a defect
+in the repository, and a row that can only pass would sit in a pass/fail table as a permanent pass
+— the opposite of what it is for. `--strict` is the exception: exit 3 on the three rows this
+machine can actually fix (a rolled-back HEAD, a stale working tree, no `node_modules`), which is a
+pre-push question and not a daily one.
+
+`daily.sh` runs it as **step 0**, before both halves, and it does not affect the verdict. It runs
+first for one reason: if HEAD has been rolled back to the branch point, the twenty minutes that
+follow would measure a checkout that is not the pushed one, and the report should say so before
+spending them. When that is the situation, `DAILY.md` opens its blocker section with a callout
+naming the rows, and `daily.json` records them under `blockers.driftRows` with
+`blockers.checkoutSuspect: true`.
+
+### The three reasons the work stops, in the order they cost time
+
+1. **The verification pass competes with the work for the same hours.** `npx vitest run` is 461
+   tests and took **383 s** on this machine on 2026-10-26; the collector with evidence probes is
+   about twenty minutes; the daily run about twelve without them. Re-proving what was already
+   proved is not free, so the checks are collected into one dated artifact
+   (`tool/ci/daily.sh`, `--prune N`, previous-run deltas) instead of being paid inline every round.
+2. **The sandbox is rolled back between turns, and the rollback leaves no trace in the
+   repository.** `node_modules` and `artifacts/` are wiped, and the local `.git` is reset to the
+   branch point, so pushed work is present only as uncommitted files that look exactly like new
+   work. It happened thirteen times on this branch, twice while this section was being written, and
+   each time it costs a `git fetch`, a `git reset --mixed origin/<branch>`, an `npm ci` and a
+   re-run of the suite before anything new can be written. Section E exists to detect it in about
+   two seconds instead of at the end of a twenty-minute run.
+3. **What is left is not code that can be written here.** Sections A–D are the reason, and section
+   F prices it: of 28 open roadmap items, 1 is closable from this machine and 27 need hardware, a
+   store account, a toolchain that is not installable, or a crowd. The remainder is not deferred
+   work — it is the part of this project that was never going to happen inside a container. What
+   *can* be produced here is the specification, the two engines, the checks and the measurements,
+   for whoever has the phones.
+
+### What the report deliberately does not claim
+
+It does not say the project cannot be finished; it says which parts cannot be finished *here*, and
+what each of those parts would need. On a machine with the Dart SDK, a handset and a CI account
+that pays, section A shrinks to one row, section C goes green, and section F still lists the crowd
+— because that row has no probe and never will.

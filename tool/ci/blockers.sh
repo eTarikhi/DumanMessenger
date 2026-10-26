@@ -227,6 +227,8 @@ head_ "B · egress — hosts the roadmap needs that this machine cannot reach"
 
 # The allowlist is a fact about this sandbox, not about the repository, so it is probed
 # rather than quoted: on a machine with no allowlist every row below simply comes back ok.
+# The URLs are endpoints rather than index pages on purpose — an `answer` probe downloads the
+# body, and pypi.org/simple/ is 47 MB of HTML to ask "does DNS and TLS work".
 # Field 4 is the question being asked — `answer` (does the path work at all) or `fetch` (do
 # bytes arrive). SDK archives and release assets are `fetch`, because for those a 302 that
 # ends with nothing is a failure, and calling it reachable is exactly the mistake that would
@@ -234,8 +236,8 @@ head_ "B · egress — hosts the roadmap needs that this machine cannot reach"
 for pair in \
   "github.com|https://github.com|source, issues, releases|answer" \
   "api.github.com|https://api.github.com|check-run annotations, the only machine-readable CI channel|answer" \
-  "registry.npmjs.org|https://registry.npmjs.org/vitest|npm ci|answer" \
-  "pypi.org|https://pypi.org/simple/|pip install pyyaml for the workflow parser|answer" \
+  "registry.npmjs.org|https://registry.npmjs.org/vitest/latest|npm ci|answer" \
+  "pypi.org|https://pypi.org/simple/pyyaml/|pip install pyyaml for the workflow parser|answer" \
   "pub.dev|https://pub.dev/api/packages/test|every Dart dependency|fetch" \
   "storage.googleapis.com|https://storage.googleapis.com/dart-archive/channels/stable/release/latest/VERSION|the Dart SDK itself|fetch" \
   "objects.githubusercontent.com|https://github.com/PowerShell/PowerShell/releases/download/v7.6.8/powershell-7.6.8-linux-x64.tar.gz|release assets, incl. PowerShell|fetch" \
