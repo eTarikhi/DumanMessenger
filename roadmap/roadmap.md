@@ -130,6 +130,14 @@
   storage items.
 - [ ] Foreground service (Android) + bg mode (iOS) + duty cycling NORMAL vs continuous SUPER (manual toggle first)
 - [ ] Battery/performance logging
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §10.5, §24; format in `docs/09-field-test-plan.md` §4):** the *logging* half is
+> built and the four series `skills/07` asks for are all reported by both engines — battery %/h per role, scans/sec, relays/sec, and wake-locks, the last of which landed with `wakeLocks`,
+> `wakeLockMs`, `wakeLockShareNormal`/`Super` and `radioDemandRatio`, plus per-node `wakeLocksFor`/`wakeLockMsFor` so cost can be attributed to one device. The capture format a phone would
+> write is specified and has a working analyzer: per-device `sample` records every 30 s carrying role, battery, charging, online, awake, peers and txCount, per-message `hop`, `calibration`
+> readings, and a network-wide `topology` record per sample boundary. What is *not* done is the half that needs a phone: real drain measured by Battery Historian against these series, and one
+> structural limit the simulator cannot cross — its battery model is a role-based hourly rate with a duty-cycle multiplier and **no per-event term**, so it cannot price a mitigation that works
+> by doing less of something. That has now bounded three separate measurements (the Wi-Fi Direct group-owner role, a packet on air, and a scan), and §24.14 item 8 has the argument for why the
+> missing term must be calibrated against a device rather than chosen to make a number come out.
 
 **Exit criteria:** 5 Android phones in mesh: A can message C via B relay; broadcast reaches all; airplane mode throughout; <2s 1-hop, <5s 3-hop.
 
@@ -362,8 +370,10 @@
 - [ ] Plugin API: `offline-protocol`-like SDK for other apps to join Duman mesh [3](https://www.offlineprotocol.com/guides/quickstart)
 - [ ] Mesh analytics (opt-in only, local-first): anonymous hop counts to improve scoring
 > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/09-field-test-plan.md` §4, §7`):** the format this would ship in is written down and has a working analyzer: `docs/09` §4's JSONL capture carries
-  per-message `hop`, per-device `sample` records and calibration readings, and `tool/field-report.ts` derives hop
-  distribution, latency percentiles, relay counts and an RF-model fit from it. Validated against a synthetic capture
+  per-message `hop`, per-device `sample` records, calibration readings and a network-wide `topology` record per sample boundary, and `tool/field-report.ts` derives hop
+  distribution, latency percentiles, relay counts, an RF-model fit and — since §24.10 showed a 60-node crowd splitting and re-joining inside a window — the connectivity timeline the walk
+  actually had. That last one is printed directly under Traffic rather than in its own corner, because a reach number from a walk during which the network was sometimes in two pieces is a
+  different quantity from the same number from one that never split, and the two must not be compared without saying which was which. Validated against a synthetic capture
   whose ground truth is known, where the fit recovers the model's own parameters exactly (−55.0 dBm at 1 m,
   20.0 dB/decade, 31.6 m line of sight, 0.00 dB residual). What is not built is the opt-in consent and the
   local-first store — and note that the capture deliberately carries no identities, only stable per-device labels.
