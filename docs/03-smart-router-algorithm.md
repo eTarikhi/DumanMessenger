@@ -65,6 +65,16 @@ No election; just gossip:
 
 1. Each node’s OGM (2s beacon) carries: `{nodeId, seq, score, isSuper, peerCount, batteryBucket}`
 
+> **The 2 s is measured now, not only specified (Oct 2026 — `npm run media beacon`, eight seeds; evidence in `docs/06-simulator-findings.md` §24.7, §24.11–§24.12).** It stays, and it is
+> worth saying why, because the measurement did not flatter it. Sweeping 2/5/12/25 s: at 20 nodes the interval barely matters — stretching it 12.5× cuts demanded radio time tenfold and
+> delivery never leaves 100% — while at 60 nodes **5 s beats the specified 2 s** (94.8% delivery against 92.0%) and everything longer degrades it (87.5% at 12 s, 79.2% at 25 s). So no
+> single interval serves both densities, and `ogmIntervalMode: "density"` was built to derive one per node from its peer count. It is measured and ships off: where the two modes land in
+> comparable topologies it buys no delivery and costs airtime, and where it saves 42% of the airtime the two worlds differ in connectivity so the comparison cannot be read at all
+> (§24.10 is why that matters). The reason 2 s stands is the encoding note below — with the 2-byte aliases this section already prescribes, the control plane fits inside the radio budget at
+> 60 nodes *at the specified interval*, so the pressure to change the interval was an artefact of what a beacon costs rather than of how often it is sent. One caution for anyone re-reading
+> the sweep: an earlier three-seed version of it reported a non-monotone result with 25 s "recovering", and that was the sample, not the mesh — `festival_crowd` is bimodal, and §24.8 has
+> the per-seed table that shows it.
+
 > **Implementation note (Oct 2026 — `sim/mesh_sim`, evidence in `docs/06-simulator-findings.md`):** the beacon also needs the originator's own 1-hop neighbour list —
 > `neighborIds`, capped at 30 (the `k ≤ 30` budget in §4). This is OLSR's HELLO
 > payload, and MPR **coverage** is undefined without it: a node cannot tell
