@@ -385,6 +385,20 @@ one — on a machine where nothing else can run, this group still gives an answe
    with static members are allowlisted by name; the failure message tells a maintainer to add a
    sixth deliberately rather than loosen the rule, because a permissive version of this check
    cannot see the typo it exists for.
+
+   The same reasoning was applied to a fifth question before it was added: is every type a file
+   names reachable from that file's *own* imports? Dart resolves names through `import` and
+   `export` and nothing else, so using a type from `types.dart` inside `simulation.dart` without
+   importing it is a compile error, and it is the error a cross-file feature introduces silently —
+   which is what every feature added this month was, putting a new enum in one file and using it
+   from another. Measured first, and the measurement was wrong the first time: parsing import
+   specifiers from the masked copy finds none at all, because a specifier *is* a string literal
+   and masking strings is what lets the reference check ignore prose. That reported 193 problems
+   on a clean tree and looked like a check worth abandoning; parsed from the raw text with the
+   barrel's exports followed one hop, it reports zero and is worth having. Both numbers are
+   recorded here because the difference between them is the whole judgement, and a reader who
+   only saw the second would not know the first was a bug in the measurement rather than in the
+   engine.
 5. **`checker-self-test`** — all four checkers' own `--self-test` modes. `check-docs.py` injects one
    fault per check into a copy of the tree and requires each to be caught *and named*;
    `check-dart-balance.py` runs 19 snippets, 12 of which are clean and must not alarm, and

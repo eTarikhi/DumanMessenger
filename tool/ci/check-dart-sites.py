@@ -440,6 +440,95 @@ def check_references(sources: dict[pathlib.Path, str]) -> tuple[list[str], str]:
     return problems, f"{refs} qualified references, {len(declared)} declared types"
 
 
+BARREL = "lib/mesh_sim.dart"
+
+
+def _package_files() -> dict[str, str]:
+    """Every Dart source in the package, keyed by its path relative to `sim/mesh_sim`."""
+    root = ROOT / "sim" / "mesh_sim"
+    return {
+        str(p.relative_to(root)): p.read_text(encoding="utf-8")
+        for p in sorted(root.rglob("*.dart"))
+    }
+
+
+def _resolve_import(from_rel: str, spec: str) -> str | None:
+    """An import specifier as a package-relative path, or None for something external."""
+    if spec.startswith("package:duman_mesh_sim/"):
+        return "lib/" + spec.split("package:duman_mesh_sim/", 1)[1]
+    if spec.startswith("dart:") or spec.startswith("package:"):
+        return None
+    return str(pathlib.Path(pathlib.Path(from_rel).parent, spec))
+
+
+def check_imports(sources: dict[pathlib.Path, str] | None = None) -> tuple[list[str], str]:
+    """Every type a file names is declared in that file or reachable from its imports.
+
+    Dart resolves a library's names through its own `import` and `export` lines and nothing
+    else, so using a type from `types.dart` inside `simulation.dart` without importing it is a
+    compile error — and it is the error this repository is most exposed to, because every
+    feature added this month put a new type in one file and used it from another:
+    `RadioOccupancy`, `OgmIntervalMode`, `ScanIntervalMode`, `BlockScope`. On the TypeScript
+    side `tsc` catches it in a second. Here nothing did.
+
+    Two details this got wrong before it got them right, both worth keeping visible:
+
+    * Import specifiers are parsed from the **raw** text, not the masked copy. A specifier is a
+      string literal, and masking strings is what lets the reference check ignore prose — so
+      reading imports from masked text finds none at all and reports every cross-file type as
+      unreachable. Measured that way the surface looked like 193 problems; measured correctly it
+      is zero, which is the difference between a check worth adding and one worth abandoning.
+    * Reachability follows `export` one hop, because `lib/mesh_sim.dart` is a barrel: a test or
+      a binary that imports the package gets every type behind it. Dart imports are not
+      otherwise transitive, so exactly one hop is right and more would be wrong.
+    """
+    # Start from the real package and overlay any in-memory mutations, so the self-test can
+    # break one file without writing to the tree. Reachability is a whole-package property:
+    # a check that saw only the mutated file could not tell an import from a missing one.
+    root = ROOT / "sim" / "mesh_sim"
+    raw = _package_files()
+    for path, text in (sources or {}).items():
+        try:
+            raw[str(path.relative_to(root))] = text
+        except ValueError:
+            continue
+
+    owner: dict[str, set[str]] = {}
+    for rel, text in raw.items():
+        mt = mask(text)
+        for kw in DECLARATION_KEYWORDS:
+            for name in re.findall(rf"^{kw} (\w+)", mt, re.M):
+                owner.setdefault(name, set()).add(rel)
+
+    def exported(barrel: str) -> set[str]:
+        out = set()
+        for spec in re.findall(r"^export '([^']+)'", raw.get(barrel, ""), re.M):
+            r = _resolve_import(barrel, spec)
+            if r:
+                out.add(r)
+        return out
+
+    problems: list[str] = []
+    checked = 0
+    for rel, text in raw.items():
+        specs = re.findall(r"^import '([^']+)'", text, re.M) + re.findall(
+            r"^export '([^']+)'", text, re.M
+        )
+        reach = {r for r in (_resolve_import(rel, s) for s in specs) if r}
+        for d in list(reach):
+            reach |= exported(d)
+        for name in sorted(set(re.findall(r"\b([A-Z]\w*)\b", mask(text)))):
+            if name not in owner or rel in owner[name] or (owner[name] & reach):
+                continue
+            checked += 1
+            problems.append(
+                f"{rel}: `{name}` is declared in {', '.join(sorted(owner[name]))} but this file "
+                f"imports nothing that reaches it — a compile error, and the kind that a "
+                f"cross-file feature introduces silently"
+            )
+    return problems, f"{len(owner)} declared types reachable-checked across {len(raw)} files"
+
+
 def run(sim_text: str, events_text: str) -> tuple[list[str], list[str]]:
     sim_mt = mask(sim_text)
     events_mt = mask(events_text)
@@ -450,6 +539,7 @@ def run(sim_text: str, events_text: str) -> tuple[list[str], list[str]]:
         check_sim_stats(sim_text, sim_mt),
         check_event_kinds(sim_text, sim_mt, events_text, events_mt),
         check_references(dart_sources({SIM: sim_text, EVENTS: events_text})),
+        check_imports({SIM: sim_text, EVENTS: events_text}),
     ):
         problems += found
         if note:
@@ -511,6 +601,13 @@ FAULTS: list[tuple[str, object, str]] = [
         "a reference to an enum type that does not exist",
         lambda t: t.replace("OgmIntervalMode.fixed", "OgmiIntervalMode.fixed", 1),
         "no type named `OgmiIntervalMode`",
+    ),
+    (
+        # Dart resolves names only through a file's own import and export lines, so dropping one
+        # is a compile error — the error a cross-file feature introduces and nothing else here saw.
+        "an import removed, so a type is named but not reachable",
+        lambda t: t.replace("import 'types.dart';", "", 1),
+        "imports nothing that reaches it",
     ),
     (
         "a reference to an enum member that does not exist",
