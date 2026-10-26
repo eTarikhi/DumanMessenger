@@ -2712,10 +2712,14 @@ void main() {
     test('costs a dense crowd fewer deferrals under csma, and buys it delivery', () {
       // docs/08 §12's magnitudes were measured under the flat charge, so they are
       // pessimistic here — by about ten points of delivery on three seeds.
-      final flat = run(festivalCrowd(42),
-          access: ChannelAccess.csma, occupancy: RadioOccupancy.hopLatency);
-      final sized = run(festivalCrowd(42),
-          access: ChannelAccess.csma, occupancy: RadioOccupancy.airtime);
+      final flat = MeshSimulation(festivalCrowd(42).copyWith(
+          channelAccess: ChannelAccess.csma, radioOccupancy: RadioOccupancy.hopLatency));
+      final sized = MeshSimulation(festivalCrowd(42).copyWith(
+          channelAccess: ChannelAccess.csma, radioOccupancy: RadioOccupancy.airtime));
+      flat.runFor(120000);
+      sized.runFor(120000);
+      flat.refresh();
+      sized.refresh();
       expect(sized.stats.channelDeferrals, lessThan(flat.stats.channelDeferrals));
       expect(sized.stats.channelDrops, lessThan(flat.stats.channelDrops));
       expect(sized.stats.deliveryRatio, greaterThan(flat.stats.deliveryRatio));

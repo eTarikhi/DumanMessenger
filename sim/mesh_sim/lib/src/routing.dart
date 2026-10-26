@@ -168,8 +168,8 @@ const int ogmFixedBytes = 32 + 4 + 4 + (1 + 1 + 1 + 2) + 1;
 int ogmWireBytes(int neighborCount, int bestHopCount,
         [int aliasBytes = ogmIdBytes]) =>
     ogmFixedBytes +
-    math.max(0, neighborCount) * math.max(0, aliasBytes) +
-    math.max(0, bestHopCount) * (math.max(0, aliasBytes) + 1);
+    math.max(0, neighborCount).toInt() * math.max(0, aliasBytes).toInt() +
+    math.max(0, bestHopCount).toInt() * (math.max(0, aliasBytes).toInt() + 1);
 
 /// A beacon at both advertise limits, which is what a dense mesh actually sends:
 /// `ogmWireBytes(mprNeighborAdvertiseLimit, bestHopAdvertiseLimit)`, spelled out for
