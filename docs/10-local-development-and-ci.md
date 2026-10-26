@@ -386,6 +386,18 @@ one — on a machine where nothing else can run, this group still gives an answe
    sixth deliberately rather than loosen the rule, because a permissive version of this check
    cannot see the typo it exists for.
 
+   Two things it does **not** check, both measured before being declined. It does not verify that a
+   called *function* exists: 321 distinct call sites against a regex-collected declaration set
+   leaves 13 names unresolved, of which six are `package:test` matchers, one is the `catch`
+   keyword, and six are local helpers declared inside test bodies in forms the declaration regex
+   cannot see. That is what separates it from the type and import checks, whose undeclared surfaces
+   measured five and zero — Dart's function *declaration* syntax (nested, closures bound to
+   variables, `async`, getters, extensions) is varied enough that a regex declaration set is
+   incomplete, and an incomplete declaration set produces false positives rather than misses.
+   Nor does it check argument counts or types, for the same reason plus Dart's optional,
+   positional-optional and named parameters. Six names to allowlist and six declaration forms to
+   support is a parser, and a check that needs one should not pretend otherwise.
+
    The same reasoning was applied to a fifth question before it was added: is every type a file
    names reachable from that file's *own* imports? Dart resolves names through `import` and
    `export` and nothing else, so using a type from `types.dart` inside `simulation.dart` without

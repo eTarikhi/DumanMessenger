@@ -8,7 +8,7 @@ to be repeated at several sites, where missing one is a compile error on the fir
 that *can* build, and where the sites are far enough apart that the eye does not connect
 them.
 
-Three patterns, each with provenance in this repository:
+Five patterns, each with provenance in this repository:
 
 1. `SimConfig` — a field needs a constructor parameter, and anything overridable through
    `copyWith` needs a parameter *and* a body assignment. A parameter with no body
@@ -19,6 +19,14 @@ Three patterns, each with provenance in this repository:
    reporting statistics it never emitted.
 3. `EventKind` — every enum value needs a `case` in `_handleEvent`. A switch over an enum
    that does not cover it is a Dart error, and CI runs `dart analyze`.
+4. Qualified references — every `X.y` names a type that exists and, where `X` is an enum, a
+   member that exists. Both were typed into this package for real during the week this check
+   was written: `OgmiIntervalMode` for `OgmIntervalMode`, and a stub function referencing a
+   `_Never` type. Each was caught by hand, which is luck rather than a process.
+5. Import reachability — every type a file names is declared in that file or reachable from
+   its own `import`/`export` lines, following a barrel one hop. Dart resolves names through
+   those lines and nothing else, so this is the error a cross-file feature introduces
+   silently, and every feature added that month was cross-file.
 
 Structural walking is done on a copy of the file with every comment and string character
 replaced by a space at the same offset, because doc comments in a parameter list contain
@@ -26,14 +34,30 @@ unbalanced parentheses and a naive walk drifts on them — which is how the firs
 this checker failed to find `copyWith` at all and then reported nothing about it. Extraction
 regexes run on the real text at those same offsets.
 
-This is not a Dart parser. It reads four sites by line-anchored pattern inside slices it has
-located by their declarations, so it is only as good as the repository's formatting, which
-`dart format` enforces. Where it cannot be sure it says nothing rather than guessing: a check
-with false positives is worse than no check.
+What it does **not** check, each declined on a measurement rather than on taste:
+
+* That a called *function* exists. 321 distinct call sites against a regex-collected
+  declaration set leaves 13 names unresolved: six `package:test` matchers, the `catch` keyword,
+  and six local helpers declared inside test bodies in forms the declaration regex cannot see.
+  That is what separates it from patterns 4 and 5, whose undeclared surfaces measured five and
+  zero. Dart's function *declaration* syntax — nested, closures bound to variables, `async`,
+  getters, extensions — is varied enough that a regex declaration set is incomplete, and an
+  incomplete declaration set produces false positives rather than misses.
+* Argument counts or types at call sites, for the same reason plus Dart's optional,
+  positional-optional and named parameters.
+
+Six names to allowlist and six declaration forms to support is a parser, and a check that needs
+one should not pretend otherwise.
+
+This is not a Dart parser. It reads sites by line-anchored pattern inside slices it has located
+by their declarations, so it is only as good as the repository's formatting, which `dart format`
+enforces. Where it cannot be sure it says nothing rather than guessing: a check with false
+positives is worse than no check.
 
     python3 tool/ci/check-dart-sites.py
     python3 tool/ci/check-dart-sites.py --self-test   # does it still fail when it should?
     python3 tool/ci/check-dart-sites.py --quiet       # only the verdict line
+    python3 tool/ci/check-dart-sites.py --help        # the five patterns, and the two it declines
 """
 from __future__ import annotations
 
@@ -665,6 +689,12 @@ def self_test() -> int:
 
 
 def main(argv: list[str]) -> int:
+    # Prints the module docstring rather than a separate help text, because the docstring is
+    # where the five patterns and the two declined checks are written down — and a checker whose
+    # limits live only in its source is a checker whose limits nobody reads.
+    if "--help" in argv or "-h" in argv:
+        print(__doc__)
+        return 0
     if "--self-test" in argv:
         return self_test()
     quiet = "--quiet" in argv
