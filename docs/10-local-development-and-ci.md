@@ -300,13 +300,17 @@ one — on a machine where nothing else can run, this group still gives an answe
    run actually exists, reading the answer out of the programs rather than out of the prose. It is
    here because this repository keeps making that mistake: two probe section names were once
    documented that `tool/media-probe.ts` does not have, and four real Dart CLI flags were missing
-   from the cheat sheet. `make check-docs` runs it alone. Ten checks, each with a fault injected
-   into a copy of the tree by `--self-test`, and the tenth was added the same day as the thing it
-   guards: **`ci-jobs`** asks whether `.github/workflows/ci.yml` and `run-pipeline.sh`'s
-   `JOBS_ALL` still name the same jobs. They are maintained in two places by hand, and the local
+   from the cheat sheet. `make check-docs` runs it alone. Every check has a fault injected into a
+   copy of the tree by `--self-test`, which prints its own case count, and two of them were added
+   the same day as the thing they guard. **`ci-jobs`** asks whether `.github/workflows/ci.yml` and
+   `run-pipeline.sh`'s `JOBS_ALL` still name the same jobs. They are maintained in two places by hand, and the local
    pipeline's whole claim to be evidence about the remote one rests on them agreeing — a job in the
    workflow the pipeline does not run means a green local run says nothing about it, and a job the
    pipeline runs that the workflow does not means CI is laxer than the local gate.
+   **`section-counts`** asks whether a documented *number* of probe sections equals the number the
+   probe has, and it was written for a defect found by accident: the README said `npm run media`
+   had 17 sections for as long as the probe had eighteen, and every check passed, because a count
+   is not a name and `media-sections` only reads names.
 2. **`dart-balance`** — `tool/ci/check-dart-balance.py`, delimiter balance across all 22 Dart
    sources in `sim/mesh_sim`, needing no Dart SDK. `make dart-balance` runs it alone. It is not
    `dart analyze` and does not claim to be; it exists for exactly the situation this repository is
@@ -412,10 +416,13 @@ one — on a machine where nothing else can run, this group still gives an answe
    only saw the second would not know the first was a bug in the measurement rather than in the
    engine.
 5. **`checker-self-test`** — all four checkers' own `--self-test` modes. `check-docs.py` injects one
-   fault per check into a copy of the tree and requires each to be caught *and named*;
-   `check-dart-balance.py` runs 19 snippets, 12 of which are clean and must not alarm, and
-   `check-parity.py` breaks a synthetic two-engine fixture in 11 ways; `check-dart-sites.py` breaks
-   the real engine in memory in 11 ways and requires each to be named. This row exists because all
+   fault per check into a copy of the tree and requires each to be caught *and named* (11 cases);
+   `check-dart-balance.py` runs 19 snippets, 12 of which are clean and must not alarm;
+   `check-parity.py` breaks a synthetic two-engine fixture in 12 ways; `check-dart-sites.py` breaks
+   the real engine in memory in 12 ways and requires each to be named. Every one of those four
+   numbers is printed by the tool that owns it, and all four were read off that output rather than
+   carried over from an earlier revision of this paragraph — which is how two of them came to be
+   wrong by one while every check still passed. This row exists because all
    four checkers have found bugs in themselves: `check-docs.py` caught its own
    `.sh`-stem regex and `make help`'s digit-blind grep, `check-dart-balance.py` caught itself
    holding a string delimiter beside the stack instead of in the frame, which made it report
