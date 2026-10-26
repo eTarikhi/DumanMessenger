@@ -191,18 +191,71 @@ def member_span(text: str, mt: str, lo: int, hi: int, signature: str) -> tuple[i
 
 
 def enum_values(mt: str, name: str) -> list[str]:
-    m = re.search(rf"^enum {re.escape(name)} \{{(.*?)^\}}", mt, re.M | re.S)
+    """Members of `enum NAME { ... }`, walking to the *matching* brace.
+
+    The first version of this matched to the first `}` at column zero. That is right for a
+    multi-line enum and wrong for a one-line one — `enum ChannelAccess { free, halfDuplex, csma }`
+    has no brace at column zero, so the scan ran on into the following declarations and reported
+    their keywords as members. It was harmless while the only consumer was `EventKind`, which is
+    multi-line, and it produced 265 false positives the moment a second check depended on it.
+    """
+    m = re.search(rf"^enum {re.escape(name)} \{{", mt, re.M)
     if not m:
         return []
-    out = []
-    for raw in m.group(1).split("\n"):
-        ident = re.match(r"\s*(\w+)", raw)
-        if ident:
-            out.append(ident.group(1))
+    i = mt.find("{", m.start())
+    if i < 0:
+        return []
+    depth = 0
+    for k in range(i, len(mt)):
+        if mt[k] == "{":
+            depth += 1
+        elif mt[k] == "}":
+            depth -= 1
+            if depth == 0:
+                body = mt[i + 1 : k]
+                return [
+                    ident.group(1)
+                    for ident in (re.match(r"\s*(\w+)", part) for part in body.split(","))
+                    if ident
+                ]
+    return []
+
+
+# PascalCase receivers whose static members come from the SDK rather than from this package.
+# Measured, not guessed: scanning every `X.y` in `sim/mesh_sim` produced exactly these five
+# undeclared receivers, from three `dart:` libraries. The list is short on purpose and the
+# failure message tells a maintainer what to do when it grows, because the alternative — a
+# permissive rule — is a check that cannot see the typo it was written for.
+SDK_STATIC_TYPES = {
+    "ByteData": "dart:typed_data",
+    "Endian": "dart:typed_data",
+    "Uint8List": "dart:typed_data",
+    "Future": "dart:async",
+    "JsonEncoder": "dart:convert",
+}
+
+DECLARATION_KEYWORDS = ("class", "enum", "extension", "mixin", "typedef")
+
+# Provided by the language on every enum rather than declared in the source.
+ENUM_BUILTIN_MEMBERS = ("values", "index")
+
+
+def dart_sources(overrides: dict[pathlib.Path, str] | None = None) -> dict[pathlib.Path, str]:
+    """Every Dart source in the package, with any in-memory mutations substituted.
+
+    The self-test mutates one file at a time and must not write to the tree, so the checks take
+    texts rather than paths. Declarations are collected package-wide either way, because a type
+    declared in `types.dart` is referenced from `simulation.dart` and a check that only looked at
+    one file would report every cross-file reference as undefined.
+    """
+    overrides = overrides or {}
+    out: dict[pathlib.Path, str] = {}
+    for path in sorted((ROOT / "sim" / "mesh_sim").rglob("*.dart")):
+        out[path] = overrides.get(path, path.read_text(encoding="utf-8"))
     return out
 
 
-# --- the three checks --------------------------------------------------------
+# --- the checks ------------------------------------------------------------------
 
 
 def check_sim_config(text: str, mt: str) -> tuple[list[str], str]:
@@ -332,6 +385,61 @@ def check_event_kinds(sim_text: str, sim_mt: str, events_text: str, events_mt: s
     return problems, f"{len(values)} EventKind values, {len(cases)} cases"
 
 
+def check_references(sources: dict[pathlib.Path, str]) -> tuple[list[str], str]:
+    """Every `X.y` in the package names a type that exists, and a member that exists.
+
+    Two failure modes, both of which a compiler catches instantly and neither of which anything
+    else in this repository can see — and both of which were typed into this package during the
+    week the check was written: `OgmiIntervalMode` for `OgmIntervalMode`, and a stub function
+    referencing a `_Never` type that did not exist. Each was found by hand, which is luck rather
+    than a process.
+
+    The scan runs on masked text, so a `Role.normal` inside a doc comment or a string is not a
+    reference. Receivers are PascalCase only, which excludes `math.max` and `int.parse` — the
+    import-prefix and lowercase-static cases that would otherwise need rules of their own.
+    """
+    declared: dict[str, str] = {}
+    enums: dict[str, list[str]] = {}
+    for path, text in sources.items():
+        mt = mask(text)
+        for kw in DECLARATION_KEYWORDS:
+            for name in re.findall(rf"^{kw} (\w+)", mt, re.M):
+                declared.setdefault(name, path.name)
+        for name in re.findall(r"^enum (\w+) \{", mt, re.M):
+            enums[name] = enum_values(mt, name)
+
+    problems: list[str] = []
+    refs = 0
+    for path, text in sources.items():
+        mt = mask(text)
+        for n, line in enumerate(mt.split("\n"), 1):
+            for receiver, member in re.findall(r"\b([A-Z]\w*)\.([a-z]\w*)", line):
+                refs += 1
+                if receiver in declared:
+                    # `values` and `index` exist on every Dart enum by the language's own
+                    # definition and are not declared in the source, so a check that required
+                    # them to be would report one false positive per enum the package iterates.
+                    if (
+                        receiver in enums
+                        and member not in enums[receiver]
+                        and member not in ENUM_BUILTIN_MEMBERS
+                    ):
+                        problems.append(
+                            f"{path.name}:{n} `{receiver}.{member}` — `{receiver}` has no such "
+                            f"member (it has: {', '.join(enums[receiver])})"
+                        )
+                    continue
+                if receiver in SDK_STATIC_TYPES:
+                    continue
+                problems.append(
+                    f"{path.name}:{n} `{receiver}.{member}` — no type named `{receiver}` is "
+                    f"declared anywhere in sim/mesh_sim. If it is an SDK type with static "
+                    f"members, add it to SDK_STATIC_TYPES in check-dart-sites.py with the import "
+                    f"that provides it; that list is five entries long and is meant to stay short."
+                )
+    return problems, f"{refs} qualified references, {len(declared)} declared types"
+
+
 def run(sim_text: str, events_text: str) -> tuple[list[str], list[str]]:
     sim_mt = mask(sim_text)
     events_mt = mask(events_text)
@@ -341,6 +449,7 @@ def run(sim_text: str, events_text: str) -> tuple[list[str], list[str]]:
         check_sim_config(sim_text, sim_mt),
         check_sim_stats(sim_text, sim_mt),
         check_event_kinds(sim_text, sim_mt, events_text, events_mt),
+        check_references(dart_sources({SIM: sim_text, EVENTS: events_text})),
     ):
         problems += found
         if note:
@@ -395,6 +504,24 @@ FAULTS: list[tuple[str, object, str]] = [
             "      case EventKind.cover:", "      case EventKind.coverX:", 1
         ),
         "no such enum value",
+    ),
+    # Both of these were typed into this package for real during the week this check was
+    # written, and both were caught by hand rather than by anything automatic.
+    (
+        "a reference to an enum type that does not exist",
+        lambda t: t.replace("OgmIntervalMode.fixed", "OgmiIntervalMode.fixed", 1),
+        "no type named `OgmiIntervalMode`",
+    ),
+    (
+        "a reference to an enum member that does not exist",
+        # Aimed at a use in code rather than the first occurrence in the file, which is inside a
+        # doc comment — and a masked comment is not a reference, so mutating it proves nothing.
+        lambda t: t.replace(
+            "config.radioOccupancy == RadioOccupancy.airtime",
+            "config.radioOccupancy == RadioOccupancy.airtim",
+            1,
+        ),
+        "`RadioOccupancy` has no such member",
     ),
 ]
 

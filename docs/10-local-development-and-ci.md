@@ -372,19 +372,37 @@ one — on a machine where nothing else can run, this group still gives an answe
    comment-and-string-masked copy of the file at identical offsets, because doc comments inside a
    parameter list contain unbalanced parentheses, and it understands all three member shapes Dart
    uses here: block bodies, bodyless `const` constructors, and expression bodies
-   (`copyWith({...}) => SimConfig(...)`).
+   (`copyWith({...}) => SimConfig(...)`). It also resolves **every qualified reference in the
+   package** — 748 of them against 84 declared types — so a receiver that is not a declared type
+   and an enum member that does not exist are both caught. Those are the two mistakes a compiler
+   catches instantly and nothing else here could see, and both were typed into `sim/mesh_sim` for
+   real during the week the check was written: `OgmiIntervalMode` for `OgmIntervalMode`, and a stub
+   function referencing a `_Never` type that did not exist. Each was found by hand and fixed before
+   commit, which is luck rather than a process. The scan runs on masked text, so a `Role.normal` in
+   a doc comment is not a reference — a fact the self-test depends on, since one of its faults had
+   to be re-aimed at a use in code after its first occurrence turned out to be inside a comment.
+   `values` and `index` are allowed on every enum because Dart provides them, and five SDK types
+   with static members are allowlisted by name; the failure message tells a maintainer to add a
+   sixth deliberately rather than loosen the rule, because a permissive version of this check
+   cannot see the typo it exists for.
 5. **`checker-self-test`** — all four checkers' own `--self-test` modes. `check-docs.py` injects one
    fault per check into a copy of the tree and requires each to be caught *and named*;
    `check-dart-balance.py` runs 19 snippets, 12 of which are clean and must not alarm, and
-   `check-parity.py` breaks a synthetic two-engine fixture in 8 ways; `check-dart-sites.py` breaks
-   the real engine in memory in 8 ways and requires each to be named. This row exists because all
+   `check-parity.py` breaks a synthetic two-engine fixture in 11 ways; `check-dart-sites.py` breaks
+   the real engine in memory in 11 ways and requires each to be named. This row exists because all
    four checkers have found bugs in themselves: `check-docs.py` caught its own
    `.sh`-stem regex and `make help`'s digit-blind grep, `check-dart-balance.py` caught itself
    holding a string delimiter beside the stack instead of in the frame, which made it report
    `mesh_sim.dart`'s usage text as an unterminated string, and `check-dart-sites.py` caught itself
    brace-walking into a parameter list so it never saw a body, missing expression-bodied members
-   altogether, and then reporting four correctly formatted `copyWith` assignments as broken
-   because `dart format` had wrapped them across two lines. A check that always passes is
+   altogether, then reporting four correctly formatted `copyWith` assignments as broken because
+   `dart format` had wrapped them across two lines, and — on the day the reference check was added
+   — reporting **265 false positives** because its enum parser matched to the first `}` at column
+   zero, which over-runs a one-line enum like `enum ChannelAccess { free, halfDuplex, csma }` and
+   swallows the declarations after it. That parser had been harmless while its only consumer was
+   `EventKind`, which is multi-line, and became wrong the moment a second check depended on it. A
+   check that reports 265 problems on a clean tree gets ignored, and then it is worse than no
+   check at all. A check that always passes is
    indistinguishable from a broken one, and nothing else in the pipeline would notice.
 
 Exit codes: `0` everything passed · `1` something failed **or could not run** · `64` bad usage.
