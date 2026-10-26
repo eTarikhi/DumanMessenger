@@ -103,6 +103,16 @@ DART_CONST_TYPED = re.compile(
     r"^const\s+[A-Za-z_][A-Za-z0-9_<>,?]*\s+(_?[a-zA-Z_][A-Za-z0-9_]*)\s*=\s*([^;\n]+);", re.M
 )
 DART_CONST_BARE = re.compile(r"^const\s+(_?[a-zA-Z_][A-Za-z0-9_]*)\s*=\s*([^;\n]+);", re.M)
+# A `static const` member is a constant as well, and both patterns above anchor on `^const`,
+# which a class member can never match: it is indented and prefixed. Measured before adding
+# this, because a pattern that sweeps up every field default would bury the inventory in noise —
+# the Dart engine has exactly one such constant, and it is `AdvertPayload.beaconBytes`, the size
+# of a wire format. That is the one class of number that must not differ between engines, and it
+# was invisible here while its TypeScript counterpart was being compared against nothing.
+DART_STATIC_CONST = re.compile(
+    r"^\s+static const\s+[A-Za-z_][A-Za-z0-9_<>,?]*\s+(_?[a-zA-Z_][A-Za-z0-9_]*)\s*=\s*([^;\n]+);",
+    re.M,
+)
 
 
 def collect(root: pathlib.Path) -> Tuple[Dict[str, Decl], Dict[str, Decl]]:
@@ -117,7 +127,7 @@ def collect(root: pathlib.Path) -> Tuple[Dict[str, Decl], Dict[str, Decl]]:
     dart: Dict[str, Decl] = {}
     for path in sorted(root.glob(DART_GLOB)):
         text = path.read_text(encoding="utf-8")
-        for pattern in (DART_CONST_TYPED, DART_CONST_BARE):
+        for pattern in (DART_CONST_TYPED, DART_CONST_BARE, DART_STATIC_CONST):
             for m in pattern.finditer(text):
                 raw = m.group(1)
                 name = raw.lstrip("_") or raw
@@ -396,6 +406,7 @@ export const NEIGHBOR_SCORE_TTL_MS = 30_000;
 export const PACKET_OVERHEAD_BYTES = 27 + 12 + 16 + 32 + 8;
 export const GROUP_ADDRESS = "GROUP";
 export const NORMAL_DRAIN_PER_HOUR = 0.15 / 8;
+export const BEACON_BYTES = 12;
 export function wireSizeOf(n: number): number { return n; }
 """
 FIXTURE_DART = """\
@@ -406,6 +417,10 @@ const packetOverheadBytes = 27 + 12 + 16 + 32 + 8;
 const groupAddress = 'GROUP';
 const double normalDrainPerHour = 0.15 / 8;
 int wireSizeOf(int n) => n;
+
+class AdvertPayload {
+  static const int beaconBytes = 12;
+}
 """
 
 # The SimConfig fixtures carry no `export const` and no Dart `const x = ...`, so they add
@@ -462,6 +477,9 @@ SELFTEST_FAULTS: List[Tuple[str, str, str, str, str]] = [
     ("an expression changed on one side only", "dart", "27 + 12 + 16 + 32 + 8", "27 + 12 + 16 + 32", "problem"),
     ("a string changed on one side only", "ts", '"GROUP"', '"GROUPS"', "problem"),
     ("a constant deleted from one side", "dart", "const sprayLimit = 3;\n", "", "counted"),
+    # the pattern added for AdvertPayload.beaconBytes: a class static, invisible to ^const
+    ("a class-static constant changed on one side only", "dart",
+     "static const int beaconBytes = 12", "static const int beaconBytes = 16", "problem"),
     ("a coverage weight changed on one side only", "ts-election", "rssi: 0.25", "rssi: 0.30", "problem"),
     ("a coverage weight renamed on one side only", "dart-election",
      "final double stability", "final double steadiness", "problem"),
@@ -504,7 +522,7 @@ def selftest() -> int:
         # that never finds its input reports nothing and looks exactly like a pass.
         if (
             problems
-            or counts["shared"] != 6
+            or counts["shared"] != 7
             or counts.get("config_shared") != 2
             or counts.get("stats_shared") != 1
         ):
@@ -535,11 +553,11 @@ def selftest() -> int:
                 # differ, so a one-sided name is counted and reported. What must
                 # happen is that the shared count drops — a checker that kept
                 # reporting "6 agree" after a constant vanished would be lying.
-                if problems or result["counts"]["shared"] != 5:
+                if problems or result["counts"]["shared"] != 6:
                     print(f"  FAIL {name}: shared={result['counts']['shared']} problems={problems}")
                     failed += 1
                 else:
-                    print(f"  ok   {name} -> shared drops to 5 and the name is reported, not failed")
+                    print(f"  ok   {name} -> shared drops to 6 and the name is reported, not failed")
                 continue
             if not problems:
                 print(f"  FAIL {name}: not caught")

@@ -39,10 +39,36 @@
 > **What is not built:** the platform implementations (items 20, 21, 215, 220), and the opt-in consent and local-first store that item 350's analytics needs.
   `SimulatedMeshTransport` is a reference and a test double, not a radio.
 - [ ] **BLE GATT hello:** Android GATT server + scanner + 12-byte beacon (DB hash + id)
+  > **Implementation note (Oct 2026 — `sim/mesh_sim/lib/src/transport.dart`, `src/transport.ts`; evidence in `skills/01`):** the **12-byte beacon** third of this item is built, in both
+  > engines, and byte-tested in the one that can execute. Bytes 0..7 are the database digest, big-endian; bytes 8..11 are FNV-1a/32 over the node id — the same hash `docs/06` §17's
+  > group-history anti-entropy folds, shrunk to one packet, so a device recognises a peer from four bytes and learns whether that peer holds anything it is missing by comparing eight, with
+  > no list sent in either direction. It is advertised under `DUMAN_MESH_SVC`, the UUID travels with the payload rather than being baked into the radio code, and `BEACON_BYTES` /
+  > `DUMAN_MESH_SERVICE_UUID` are paired with Dart's `beaconBytes` / `dumanMeshServiceUuid` by `tool/ci/check-parity.py`. One edge the two languages do not share was pinned rather than
+  > left to chance: Dart's `int` is 64-bit **signed**, so a digest of 2^63 or above is negative there and positive in TypeScript, and both write `8000000000000000` because each masks to
+  > unsigned at the point of writing.
+  >
+  > **What is not built is the radio.** The Android GATT server and scanner need a handset, and no machine that has run this code has a Bluetooth adapter (`make blockers`, section D), so
+  > the item's own exit criterion — two Android phones exchanging "hello" over BLE — is not reachable from here, and the Dart tests that assert the beacon have never executed anywhere
+  > because the SDK is not installable (section A). One question the format deliberately leaves open, and which the app layer has to answer: **what** a device digests into `dbHash`. Both
+  > engines take it as a parameter, refreshed as the store changes, because whether it covers the whole message store, one conversation, or the group-history buckets is a decision about
+  > what a greeting should reveal — and `PRIVACY.md` §4.2 is where that gets answered in public.
 - [ ] **iOS beacon:** CoreBluetooth peripheral + central scan
 - [ ] Simple UI: peer list + 1:1 chat (plaintext first)
 - [ ] Permissions flows (Android 12+ new BT perms, location, WiFi)
 - [ ] CI + F-Droid/Play internal track + TestFlight
+  > **Implementation note (Oct 2026 — `.github/workflows/ci.yml`, `tool/ci/`, `docs/10`, `docs/12`; state probed by `make blockers`):** the **CI** half is written and locally mirrored,
+  > and has not executed. Five jobs — `checks`, `web`, `dart`, `cli-matrix`, `probes` — with `tool/ci/run-pipeline.sh` copying each step from the workflow rather than paraphrasing it, so
+  > a green local run is evidence about the remote one; `tool/ci/collect-checks.sh` collects every check in the repository into one report and labels what could not run as `not-run` rather
+  > than passed; `tool/ci/daily.sh` composes both into one dated artifact with one verdict. `docs/10` §5 documents the mapping and `docs/12` every command.
+  >
+  > It has not run: GitHub Actions refuses every job on this account for **billing** — *"recent account payments have failed or your spending limit needs to be increased"* — with the last
+  > green run at **2026-10-23T08:46:52Z** (`8406717`) and 82 non-success runs since, and `gh run rerun` is refused too. That is an account setting, not a branch change, and no commit
+  > here can fix it; `make blockers` section C measures it on every run so the claim cannot go stale quietly.
+  >
+  > **The three store tracks are not buildable from here at all**, and for two different reasons. F-Droid, the Play internal track and TestFlight each need an account, a signing key and an
+  > artifact — and the artifact needs the toolchain this machine does not have (no Flutter, no Dart SDK, no `pub.dev`: sections A and B). TestFlight additionally needs a macOS host, and
+  > this one is Linux (section D), so the iOS track is unreachable whatever is installed. All three are downstream of item 13's mono-repo and item 382's distribution, which is where the
+  > signing and submission work belongs; what this item contributes today is the pipeline those tracks would run.
 
 **Exit criteria:** 2 Android phones exchange “hello” over BLE, no internet.
 
@@ -381,6 +407,12 @@
 - [ ] Onboarding: 3-slide explainer (no internet needed, keep Bluetooth on, this is short-range not replacement)
 - [ ] Distribution: Play + APK direct + F-Droid + GitHub Releases + TestFlight; handle GMS-less Huawei via fallback
 - [ ] Legal: privacy policy, crypto export note, takedown resilience docs
+  > **Implementation note (Oct 2026 — `PRIVACY.md`):** the three documents this item asks for are written, at the repository root where a store listing and a release artifact look for them,
+  > and each claim in them cites the engineering document behind it. The box stays open for the two parts that are not writing: there is **no data controller** — no legal entity behind this
+  > repository — so GDPR Art. 13's identity-and-contact requirement is unmet and §2 of the policy describes that hole instead of inventing an address; and there has been **no counsel
+  > review**, including of the export classification, which §10 deliberately leaves as a legal question after stating the engineering facts (standard primitives, hand-written Noise_XX over
+  > them, publicly available source). What the policy adds beyond `docs/04` §7 is the part a user needs and a threat model does not say: what every device in radio range can observe, what
+  > the design does not protect against (traffic analysis — measured and null, presence, recall), and what a field-test capture records about the volunteers carrying the phones.
 
 **Exit criteria:** Closed beta 50-100 users at university/festival; Android delivery ratio >90% at 3 hops; iOS companion usable.
 
