@@ -180,6 +180,7 @@ $ScriptTargets = [ordered]@{
     'watch-all'   = 'tool/ci/watch.sh --all'
     'follow'      = 'tool/ci/watch.sh --follow'
     'diagnose'    = 'tool/ci/watch.sh --diagnose'
+    'blockers'    = 'tool/ci/blockers.sh'
     'pr'          = 'tool/ci/pr-flow.sh'
     'daily'       = 'tool/ci/daily.sh'
     'daily-fast'  = 'tool/ci/daily.sh --fast'

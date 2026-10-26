@@ -306,6 +306,7 @@ restricted network, native `make ci` is the path that works; `act` is the path t
 | `make watch-all` | `… --all` | Every branch. |
 | `make follow` | `… --follow` | Poll until the newest run finishes, then explain it. |
 | `make diagnose` | `… --diagnose [RUN]` | Jobs, annotations, and **why** it failed — including distinguishing a billing refusal from a red build. |
+| `make blockers` | `tool/ci/blockers.sh` | Why the project is not finished *here*: 27 probed rows across toolchain, network egress, remote CI, hardware, repository state and the open roadmap. Always exits 0 — it is a report, not a gate; `--strict` exits 3 on the three rows this machine can actually fix. |
 | `gh run list --limit 8` | raw | |
 | `gh run rerun <run>` | retry | Fails with "cannot be rerun" when the account is billing-blocked. |
 | `gh pr checks <n>` | PR check status | |

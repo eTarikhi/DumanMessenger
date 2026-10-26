@@ -15,8 +15,16 @@
 #                             numbers. Exit 0 all passed, 1 failed *or* could not run — the two
 #                             are deliberately not distinguished, because neither is a pass.
 #
-# This script runs both, keeps their artifacts side by side under one dated directory, writes
-# DAILY.md across the top, and resolves the ambiguity the collector leaves: it reads the
+# Before either half this runs tool/ci/blockers.sh, a pre-flight that measures what the
+# machine cannot do — no Dart SDK and no pub.dev, CI refused for billing, no radio, no handset,
+# no crowd — and prices each of those in roadmap items. It never affects the verdict, because
+# it always exits 0: a missing toolchain is a fact about the machine, not a defect in the
+# repository. It runs *first* for one reason — if HEAD has been rolled back to the branch
+# point, which this sandbox does between turns, the twenty minutes that follow would measure a
+# checkout that is not the pushed one, and the report should say so before spending them.
+#
+# This script runs both halves, keeps their artifacts side by side under one dated directory,
+# writes DAILY.md across the top, and resolves the ambiguity the collector leaves: it reads the
 # collector's JSON to tell "something failed" from "nothing failed but the Dart SDK is
 # missing", which are opposite situations needing opposite responses.
 #
@@ -49,7 +57,10 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(repo_root)"
 
 usage() {
-  sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  # The header is printed by walking it, not by a line range. It was `sed -n '2,40p'` until
+  # the header grew by eight lines and the option list silently lost its last paragraph —
+  # a stale range in a --help is invisible until somebody reads the tail, and nobody does.
+  awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"
   cat <<USAGE
 
 Options:
@@ -127,6 +138,50 @@ if [ "$HAVE_DART" = 0 ]; then
 fi
 
 START_ALL=$SECONDS
+
+# --- 0. what this machine cannot do ---------------------------------------------
+#
+# Written to the artifact directory in full rather than summarised, because the value of the
+# probe is its evidence column: "curl exit 35, HTTP 000, 0 bytes" is what makes "the Dart SDK
+# is not installable here" a measurement instead of an excuse.
+echo
+[ "$QUIET" = 1 ] || log "0/2 · what this machine cannot do (tool/ci/blockers.sh)"
+"$HERE/blockers.sh" --json "$DIR/blockers.json" >"$DIR/blockers.txt" 2>&1
+BLOCKERS=$?
+if [ "$QUIET" != 1 ]; then
+  grep -E '^(summary|roadmap:)' "$DIR/blockers.txt" | head -2
+  [ "$BLOCKERS" = 0 ] || warn "blockers.sh exited $BLOCKERS — read ${DIR#$ROOT/}/blockers.txt"
+fi
+
+B_BLOCKED=0; B_DRIFT=0; B_OPEN=0; B_REACH=0; B_DRIFT_ROWS=""; B_CHECKOUT=0
+if [ -f "$DIR/blockers.json" ] && have python3; then
+  read -r B_BLOCKED B_DRIFT B_OPEN B_REACH B_CHECKOUT B_DRIFT_ROWS <<EOF
+$(python3 - "$DIR/blockers.json" <<'PY'
+import json, sys
+try:
+    d = json.load(open(sys.argv[1], encoding="utf-8"))
+    r = d.get("roadmap", {})
+    rows = d.get("driftRows", [])
+    # Only these two mean the run is measuring something other than the pushed checkout;
+    # a missing node_modules is repairable but does not invalidate what follows.
+    checkout = 1 if any(n in ("git-head", "git-worktree") for n in rows) else 0
+    print(d.get("blocked", 0), d.get("drift", 0), r.get("open", 0),
+          r.get("reachableFromHere", 0), checkout, ",".join(rows) or "-")
+except Exception:
+    print(0, 0, 0, 0, 0, "-")
+PY
+)
+EOF
+fi
+# Drift is the one finding here that changes what the rest of the run means, so it is the one
+# that gets a warning on stderr rather than a line in a file nobody opens until something fails.
+if [ "$B_DRIFT" -gt 0 ]; then
+  warn "$B_DRIFT blocker row(s) repairable from this machine: ${B_DRIFT_ROWS//,/ } (see ${DIR#$ROOT/}/blockers.txt)."
+  if [ "$B_CHECKOUT" = 1 ]; then
+    warn "One of them is the checkout itself, so this run may be measuring something other than"
+    warn "the pushed work. Repair it (git fetch origin && git reset --mixed origin/$BRANCH) and re-run."
+  fi
+fi
 
 # --- 1. the CI mirror -----------------------------------------------------------
 
@@ -275,6 +330,30 @@ if [ "$HAVE_DART" = 1 ]; then DART_LINE="$(dart_sdk_version 2>/dev/null || echo 
       printf 'than green.\n\n' ;;
   esac
 
+  printf '## What this machine cannot do\n\n'
+  printf '%s blocker(s) probed before the run, %s of them repairable from here.\n\n' "$B_BLOCKED" "$B_DRIFT"
+  if [ "$B_OPEN" -gt 0 ]; then
+    printf 'Of the %s open roadmap items, %s can be closed on this machine. The other %s need\n' \
+      "$B_OPEN" "$B_REACH" "$((B_OPEN - B_REACH))"
+    printf 'a handset, a store account and signing key, a Dart/Flutter toolchain that is not\n'
+    printf 'installable from here, or a crowd of people carrying phones — `blockers.txt` lists\n'
+    printf 'every item with the rule that classified it and the probe behind each row.\n\n'
+  else
+    printf 'The roadmap could not be read, so no item was classified; `blockers.txt` says why.\n\n'
+  fi
+  if [ "$B_CHECKOUT" = 1 ]; then
+    printf '> **The checkout itself is one of the %s repairable rows** (`%s`), so everything below\n' \
+      "$B_DRIFT" "${B_DRIFT_ROWS//,/ }"
+    printf '> was measured against something other than the pushed work — most likely a local\n'
+    printf '> .git rolled back to the branch point, which this sandbox does between turns. Repair it\n'
+    printf '> (`git fetch origin && git reset --mixed origin/%s`) and re-run before believing a number\n' "$BRANCH"
+    printf '> in this file.\n\n'
+  elif [ "$B_DRIFT" -gt 0 ]; then
+    printf '> %s row(s) are repairable here (`%s`); none of them is the checkout, so the results\n' \
+      "$B_DRIFT" "${B_DRIFT_ROWS//,/ }"
+    printf '> below describe the pushed work.\n\n'
+  fi
+
   printf '## The two halves\n\n'
   printf '| half | exit | reading |\n| --- | ---: | --- |\n'
   printf '| CI mirror (`run-pipeline.sh`) | %s | %s |\n' "$PIPE" \
@@ -287,6 +366,7 @@ if [ "$HAVE_DART" = 1 ]; then DART_LINE="$(dart_sdk_version 2>/dev/null || echo 
   printf '* `REPORT.md` — the check table, one row per check, with what each was verified against\n'
   printf '* `pipeline.txt`, `checks.txt` — full output of each half\n'
   printf '* `pipeline/`, `checks.json`, `pipeline.json` — per-step artifacts and machine-readable results\n'
+  printf '* `blockers.txt`, `blockers.json` — what this machine cannot do, probed before the run\n'
   if [ -d "$DIR/evidence" ] || [ "$EVIDENCE" = 1 ]; then
     printf '* `evidence-*.txt` — the probes that reproduce the numbers published in docs/06-docs/09\n'
   fi
@@ -295,17 +375,23 @@ if [ "$HAVE_DART" = 1 ]; then DART_LINE="$(dart_sdk_version 2>/dev/null || echo 
 if [ -n "$JSON_OUT" ] && have python3; then
   if python3 - "$JSON_OUT" "$SHA" "$BRANCH" "$STAMP" "$ELAPSED" "$VERDICT" \
               "$PIPE" "$CHECKS" "$CHECK_PASSED" "$CHECK_FAILED" "$CHECK_NOTRUN" \
-              "$HAVE_DART" "$DIR" <<'PY'
+              "$HAVE_DART" "$DIR" "$B_BLOCKED" "$B_DRIFT" "$B_OPEN" "$B_REACH" \
+              "$B_CHECKOUT" "$B_DRIFT_ROWS" <<'PY'
 import json, sys
 from datetime import datetime, timezone
 (out, sha, branch, stamp, secs, verdict, pipe, checks,
- npass, nfail, nnotrun, have_dart, directory) = sys.argv[1:]
+ npass, nfail, nnotrun, have_dart, directory,
+ nblocked, ndrift, nopen, nreach, ncheckout, ndriftrows) = sys.argv[1:]
+ndriftrows = [r for r in ndriftrows.split(",") if r and r != "-"]
 json.dump({
     "runId": f"daily-{stamp}", "sha": sha, "branch": branch, "stamp": stamp,
     "seconds": int(secs), "verdict": verdict,
     "pipelineExit": int(pipe), "checksExit": int(checks),
     "passed": int(npass), "failed": int(nfail), "notRun": int(nnotrun),
     "dartSdk": have_dart == "1", "directory": directory,
+    "blockers": {"blocked": int(nblocked), "drift": int(ndrift), "driftRows": ndriftrows,
+                 "checkoutSuspect": ncheckout == "1",
+                 "roadmapOpen": int(nopen), "reachableFromHere": int(nreach)},
     "generatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
 }, open(out, "w", encoding="utf-8"), indent=2)
 PY

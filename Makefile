@@ -20,7 +20,7 @@ CI    := ./tool/ci
 .PHONY: help doctor install ci ci-fast web dart cli-matrix probes \
         test typecheck build golden dev media history e2ee \
         dart-get dart-analyze dart-test dart-cli \
-        push push-dry push-force commit-push watch watch-all follow diagnose \
+        push push-dry push-force commit-push watch watch-all follow diagnose blockers \
         checks checks-list checks-evidence \
         pr pr-dry pr-open pr-local pr-branch pr-squash check-ps1 check-docs \
         dart-balance parity rate act install-hooks clean clean-artifacts
@@ -160,6 +160,13 @@ follow: ## Wait for the newest run to finish, then explain the result
 
 diagnose: ## Jobs + annotations for a run (RUN=12345, default newest), and why it failed
 	@$(CI)/watch.sh --diagnose $(RUN)
+
+# Not a check and not in `make checks`: it always exits 0, because "this machine has no Dart
+# SDK" is a fact rather than a defect, and a row that can only pass would sit in a pass/fail
+# table as a permanent pass. It answers a different question from doctor — not "can I verify
+# this repository?" but "why is the project not finished?" — and it measures the answer.
+blockers: ## Why the project is not finished here: toolchain, egress, CI, hardware, roadmap
+	@$(CI)/blockers.sh
 
 act: ## Run the real workflow YAML in Docker via act (JOB=dart to pick one)
 	@command -v act >/dev/null 2>&1 || { printf '\033[31merror:\033[0m act is not installed (needs Docker). brew install act\n'; exit 64; }
