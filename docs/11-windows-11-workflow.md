@@ -193,8 +193,18 @@ interpretable and their exit codes meant different things — `run-pipeline.sh` 
 
 Everything lands under `artifacts/ci/daily/<UTC stamp>-<sha>/`, with `DAILY.md` as the one page to
 read: the verdict, the elapsed time, which toolchain was missing, both halves' results side by
-side, and the file list. `artifacts/` is gitignored, so a daily run never dirties the tree — which
-matters if the run is scheduled.
+side, the file list — and **how this run differs from the previous one**, which is the part that
+makes a daily cadence worth having. The comparison is narrow on purpose: verdict, passed, failed,
+could-not-run, elapsed and sha, each as a delta. At this cadence the useful signal is "a check
+appeared or disappeared" or "the verdict changed", not "this number moved by 0.4", and a page that
+tried to diff every measurement would be unreadable by the time anybody wanted it.
+
+`artifacts/` is gitignored, so a daily run never dirties the tree — which matters if the run is
+scheduled. A scheduled run does accumulate directories, though, so `--prune N` deletes all but the
+N most recent, counted from the newest so the run being compared against is the last to go. Nothing
+is ever deleted without the flag: silently reclaiming artifacts is how somebody loses the run they
+wanted to compare against. From PowerShell, `./tool/ci/daily.sh --prune 14` inside the distro, or
+add it to the scheduled command below.
 
 To actually schedule it, Windows Task Scheduler wants a program and arguments, not a shell:
 

@@ -61,6 +61,10 @@ Options:
                   the production build and the CLI matrix.
   --dir DIR       artifact directory (default artifacts/ci/daily/<UTC stamp>-<sha>)
   --json PATH     also write the combined summary as JSON
+  --prune N       after a successful write, delete all but the N most recent daily
+                  directories. Nothing is ever deleted without this flag: a daily run
+                  accumulates artifacts and silently reclaiming them is how somebody loses
+                  the run they wanted to compare against
   --quiet         only the final summary and the exit code
   --help          this text
 
@@ -78,6 +82,7 @@ EVIDENCE=1
 QUIET=0
 DIR=""
 JSON_OUT=""
+PRUNE=0
 
 require_value() { [ -n "${2-}" ] || { err "option $1 needs a value"; exit 64; }; }
 
@@ -89,6 +94,8 @@ while [ $# -gt 0 ]; do
     --dir=*)        DIR="${1#*=}"; shift ;;
     --json)         require_value "$1" "${2-}"; JSON_OUT="$2"; shift 2 ;;
     --json=*)       JSON_OUT="${1#*=}"; shift ;;
+    --prune)        require_value "$1" "${2-}"; PRUNE="$2"; shift 2 ;;
+    --prune=*)      PRUNE="${1#*=}"; shift ;;
     --quiet)        QUIET=1; shift ;;
     --help|-h)      usage; exit 0 ;;
     *)              err "unknown option: $1"; usage; exit 64 ;;
@@ -192,7 +199,47 @@ else
   EXIT=0
 fi
 
-# --- 4. the one-page summary -----------------------------------------------------
+# --- 4. how this run differs from the previous one -------------------------------
+#
+# A daily run that cannot be compared with yesterday's is a daily run whose output has to be
+# read from scratch every morning. The comparison is deliberately narrow — counts, verdict and
+# elapsed time, not per-check diffs — because the useful signal at this cadence is "something
+# appeared or disappeared", not "this number moved by 0.4".
+PREV_DIR=""
+PREV_LINE="(no previous daily run to compare against)"
+if have python3; then
+  PREV_DIR="$(find "$ROOT/artifacts/ci/daily" -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
+    | grep -v -F "$DIR" | sort | tail -1)"
+  if [ -n "$PREV_DIR" ] && [ -f "$PREV_DIR/daily.json" ] && [ -f "$DIR/checks.json" ]; then
+    PREV_LINE="$(python3 - "$PREV_DIR/daily.json" "$DIR/checks.json" "$VERDICT" "$ELAPSED" <<'PY'
+import json, sys
+try:
+    prev = json.load(open(sys.argv[1], encoding="utf-8"))
+    cur = json.load(open(sys.argv[2], encoding="utf-8"))
+except Exception as exc:
+    print(f"(the previous run's record could not be read: {exc})")
+    sys.exit(0)
+verdict, elapsed = sys.argv[3], int(sys.argv[4])
+def delta(a, b):
+    d = b - a
+    return f"{b} ({'+' if d > 0 else ''}{d})" if d else f"{b} (unchanged)"
+parts = [
+    f"verdict {prev.get('verdict', '?')} → {verdict}",
+    f"passed {delta(prev.get('passed', 0), cur.get('passed', 0))}",
+    f"failed {delta(prev.get('failed', 0), cur.get('failed', 0))}",
+    f"could-not-run {delta(prev.get('notRun', 0), cur.get('notRun', 0))}",
+    f"elapsed {prev.get('seconds', '?')}s → {elapsed}s",
+    f"sha {prev.get('sha', '?')} → {cur.get('sha', '?')}",
+]
+print("; ".join(parts))
+PY
+)"
+  elif [ -n "$PREV_DIR" ]; then
+    PREV_LINE="(the previous run at ${PREV_DIR##*/} has no daily.json — it predates this comparison)"
+  fi
+fi
+
+# --- 5. the one-page summary -----------------------------------------------------
 
 DART_LINE="MISSING — install per docs/11 §2"
 if [ "$HAVE_DART" = 1 ]; then DART_LINE="$(dart_sdk_version 2>/dev/null || echo present)"; fi
@@ -207,6 +254,8 @@ if [ "$HAVE_DART" = 1 ]; then DART_LINE="$(dart_sdk_version 2>/dev/null || echo 
   printf '| dart | %s |\n' "$DART_LINE"
   printf '| node | %s |\n' "$(tool_version node 2>/dev/null || echo MISSING)"
   printf '| Verdict | **%s** (exit %s) |\n\n' "$VERDICT" "$EXIT"
+
+  printf '## Compared with the previous run\n\n%s\n\n' "$PREV_LINE"
 
   printf '## What that verdict means\n\n'
   case "$VERDICT" in
@@ -264,6 +313,22 @@ PY
     [ "$QUIET" = 1 ] || log_dim "json: ${JSON_OUT#$ROOT/}"
   else
     err "could not write the json summary to ${JSON_OUT#$ROOT/}"
+  fi
+fi
+
+# --- 6. optional reclamation ----------------------------------------------------
+#
+# Opt-in and counted from the newest, so a failed run is never the one deleted first and the
+# run being compared against survives until it is the Nth oldest rather than the second.
+if [ "$PRUNE" -gt 0 ] 2>/dev/null; then
+  mapfile -t ALL_RUNS < <(find "$ROOT/artifacts/ci/daily" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort -r)
+  if [ "${#ALL_RUNS[@]}" -gt "$PRUNE" ]; then
+    REMOVED=0
+    for old_dir in "${ALL_RUNS[@]:$PRUNE}"; do
+      [ "$old_dir" = "$DIR" ] && continue
+      rm -rf "$old_dir" && REMOVED=$((REMOVED + 1))
+    done
+    [ "$QUIET" = 1 ] || log_dim "pruned $REMOVED older daily run(s), keeping the $PRUNE most recent"
   fi
 fi
 
