@@ -52,8 +52,8 @@ footer { margin-top:56px; padding-top:18px; border-top:1px solid #1e2a3a; color:
 <header>
 <h1>Engineering remediation report</h1>
 <p class="sub">2026-10-27 &middot; branch <code>arena/ff85cb12-dumanmessenger</code> &middot;
-started at <code>d2fbba3</code> &middot; code head <code>149beec</code> &middot;
-19 commits, 32 files, +2 089 / &minus;122 (this report is most of the added lines) &middot;
+started at <code>d2fbba3</code> &middot; code head <code>462ca35</code> &middot;
+21 commits, 32 files, +2 177 / &minus;126 (this report is most of the added lines) &middot;
 <a href="https://github.com/eTarikhi/DumanMessenger/pull/3" style="color:#4de0ff">pull request #3</a></p>
 <p>Remediation of the verification and toolchain layer, plus the two engine-side defects that only
 became visible once CI executed the authoritative Dart engine for the first time in this
@@ -64,9 +64,9 @@ verified, the row says so and says why.</p>
 
 <h2>0. Summary</h2>
 <div class="grid">
-  <div class="card"><div class="k">commits</div><div class="v">19</div><div class="n">by concern, all pushed</div></div>
+  <div class="card"><div class="k">commits</div><div class="v">21</div><div class="n">by concern, all pushed</div></div>
   <div class="card"><div class="k">defects fixed</div><div class="v">17</div><div class="n">each with its evidence in &sect;1</div></div>
-  <div class="card"><div class="k">CI jobs green</div><div class="v">9 / 9</div><div class="n">run 40458960415</div></div>
+  <div class="card"><div class="k">CI jobs green</div><div class="v">9 / 9</div><div class="n">run 40460956532</div></div>
   <div class="card"><div class="k">Dart tests</div><div class="v">279</div><div class="n">0 failed; read from the notice</div></div>
   <div class="card"><div class="k">TS tests</div><div class="v">474</div><div class="n">18 files; read from the notice</div></div>
   <div class="card"><div class="k">local checks</div><div class="v">12 / 0</div><div class="n">passed / failed; 13 could not run</div></div>
@@ -855,17 +855,19 @@ directory, no radio, no handset, no store build. What exists is a specification 
 simulators and the measurements they produce. <code>skills/08</code> already forbids claiming
 large-scale results without a real-world crowd test, and nothing in this session comes close to
 one.</td></tr>
-<tr><td>"Everything is green."</td><td>The local daily run returned <strong>INCOMPLETE, exit
-2</strong>: 12 checks passed, 0 failed, 13 could not run. That is not a pass and the script says so.
-CI was green on the same commit because CI has the toolchain this machine does not.</td></tr>
+<tr><td>"Everything is green."</td><td>Three local daily runs, at <code>3911753</code>,
+<code>93a752b</code> and <code>462ca35</code>, each returned <strong>INCOMPLETE, exit 2</strong>:
+12 checks passed, 0 failed, 13 could not run (885 s, 709 s, 765 s). That is not a pass and the
+script says so in those words. CI was green on the same commits because CI has the toolchain this
+machine does not.</td></tr>
 </table>
 
 <h2>8. The change set, and what remains incomplete</h2>
-<p>Nineteen commits from <code>d2fbba3</code> to <code>149beec</code>, 32 files, +2 089 / &minus;122
+<p>Twenty-one commits from <code>d2fbba3</code> to <code>462ca35</code>, 32 files, +2 177 / &minus;126
 (this report is most of the added lines), all pushed to
 <code>arena/ff85cb12-dumanmessenger</code> and collected in
 <a href="https://github.com/eTarikhi/DumanMessenger/pull/3" style="color:#4de0ff">pull request #3</a>
-against <code>main</code>. The branch is 103 commits ahead of <code>origin/main</code> including the
+against <code>main</code>. The branch is 106 commits ahead of <code>origin/main</code> including the
 earlier merged work. <code>main</code> was not touched, nothing was force-pushed, and no history was
 rewritten &mdash; including the one commit whose message understates its contents, which is recorded
 in &sect;1 instead.</p>
@@ -918,12 +920,19 @@ the last <em>code</em> commit rather than the branch tip.</li>
 
 <footer>
 Produced 2026-10-27 on branch <code>arena/ff85cb12-dumanmessenger</code> from
-<code>d2fbba3</code> to <code>0734487</code>. Sources for every number: CI runs 40428343622,
-40429112891, 40430079404 and 40432981960 (job conclusions and check-run annotations);
-<code>artifacts/ci/daily/20261027T004508Z-3911753/</code> (daily run, 885 s, INCOMPLETE);
+<code>d2fbba3</code> to <code>462ca35</code>, and amended the same day as the addenda landed.
+Sources for every number: CI runs 40428343622, 40429112891, 40430079404, 40432981960, 40437372608,
+40443962188, 40455143525, 40455641251, 40457964023, 40458532323, 40458960415, 40460087980 and
+40460956532 (job conclusions and check-run annotations &mdash; the annotations are the only
+machine-readable channel out of a runner here, since <code>$GITHUB_STEP_SUMMARY</code> is not
+exposed by the check-runs API and log downloads are refused);
+<code>artifacts/ci/daily/20261027T004508Z-3911753/</code> (885 s),
+<code>&hellip;/20261027T053602Z-93a752b/</code> (709 s) and
+<code>&hellip;/20261027T062457Z-462ca35/</code> (765 s), all three INCOMPLETE with 12 / 0 / 13;
 <code>artifacts/blockers-final.txt</code> and <code>artifacts/blockers-final.json</code> (27 rows at
-<code>0734487</code>, 2026-10-27T01:38:21Z); <code>reports/verification-log.jsonl</code>; and the
-tool output quoted inline. The artifact directories are git-ignored and will not survive this
+<code>0734487</code>, 2026-10-27T01:38:21Z, re-measured at <code>462ca35</code> for &sect;1.4);
+<code>reports/verification-log.jsonl</code>, whose digest lines carry the counts for two of those
+daily runs and one pre-push gate; and the tool output quoted inline. The artifact directories are git-ignored and will not survive this
 machine; the digest lines and this page will.
 </footer>
 </div></body></html>
