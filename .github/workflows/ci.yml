@@ -223,10 +223,30 @@ jobs:
       # node measures 18-25% per 8 h once mobility is included (docs/06 §7), so
       # the sleep slot is load-bearing for that criterion, not a refinement.
       - name: ${{ matrix.scenario }} (${{ matrix.power }})
+        run: |
+          set -o pipefail
+          dart run bin/mesh_sim.dart --scenario ${{ matrix.scenario }} --seed 42 \
+            ${{ matrix.power == 'duty-cycle' && '--duty-cycle' || '' }} \
+            ${{ matrix.scenario == 'campus_quad' && '' || '--no-check' }} \
+            2>&1 | tee /tmp/cli.txt
+
+      # What this arm measured, as an annotation. `pipefail` above is what keeps `tee` from
+      # hiding the CLI's exit code — without it a failing gate would have exited 0.
+      #
+      # Annotations are the only readable channel out of a runner for anybody who cannot reach
+      # `results-receiver.actions.githubusercontent.com`: the log archive is not downloadable
+      # from this repository's development sandbox and `$GITHUB_STEP_SUMMARY` is not exposed by
+      # the check-runs API at all. A green run whose numbers nobody can read cannot be
+      # reconciled against the acceptance criteria in skills/02, skills/07 and skills/08, so
+      # the numbers travel as a notice. continue-on-error for the reason the dart job's
+      # reporter gives: a bug in a reporter must not fail an otherwise green build.
+      - name: Publish the numbers this arm measured
+        if: always()
+        continue-on-error: true
         run: >-
-          dart run bin/mesh_sim.dart --scenario ${{ matrix.scenario }} --seed 42
-          ${{ matrix.power == 'duty-cycle' && '--duty-cycle' || '' }}
-          ${{ matrix.scenario == 'campus_quad' && '' || '--no-check' }}
+          python3 ../../tool/ci/diagnostics.py --format github --no-summary
+          --analyze /dev/null --test /dev/null --cli /tmp/cli.txt
+          --title "${{ matrix.scenario }} (${{ matrix.power }})"
 
   probes:
     name: CLI probes (SOS, groups, media)
@@ -258,27 +278,44 @@ jobs:
       # because a probe's numbers are about the mechanism under test, not about
       # the connected-world delivery gate.
       - name: SOS flood reach (roadmap Phase 3)
-        run: >-
-          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --sos
-          --no-check
+        run: |
+          set -o pipefail
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --sos \
+            --no-check 2>&1 | tee /tmp/probe-sos.txt
 
       - name: Group delivery modes (docs/06 §14)
-        run: >-
-          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --group 5
-          --no-check
+        run: |
+          set -o pipefail
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --group 5 \
+            --no-check 2>&1 | tee /tmp/probe-group.txt
 
       # Roadmap Phase 1's "CRDT for group/broadcast history (hash beacon
       # anti-entropy)": a member that missed a whole conversation catches up, and
       # the same world with repair switched off shows it otherwise would not.
       - name: Group history anti-entropy (docs/06 §17)
-        run: >-
-          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --history
-          --no-check
+        run: |
+          set -o pipefail
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --history \
+            --no-check 2>&1 | tee /tmp/probe-history.txt
 
       # The roadmap Phase 3 media exit criteria: a <10 MB image across a Wi-Fi
       # Direct mesh, and a push-to-talk note that plays in <3 s at one hop and
       # <8 s at three (docs/08).
       - name: Media transport and push-to-talk (docs/08)
-        run: >-
-          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media
-          --no-check
+        run: |
+          set -o pipefail
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media \
+            --no-check 2>&1 | tee /tmp/probe-media.txt
+
+      # Four notices, one per probe, for the reason given in cli-matrix: this is the only way
+      # the numbers a probe measured leave a runner whose logs cannot be downloaded. The titles
+      # are the capture filenames, so `probe-media` is the media transport and PTT block.
+      - name: Publish the numbers these probes measured
+        if: always()
+        continue-on-error: true
+        run: |
+          for capture in /tmp/probe-sos.txt /tmp/probe-group.txt /tmp/probe-history.txt /tmp/probe-media.txt; do
+            python3 ../../tool/ci/diagnostics.py --format github --no-summary \
+              --analyze /dev/null --test /dev/null --cli "$capture" \
+              --title "$(basename "$capture" .txt)"
+          done
