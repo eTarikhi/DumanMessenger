@@ -105,7 +105,19 @@ jobs:
         with:
           sdk: stable
 
-      - run: dart pub get
+      # `pubspec.lock` was git-ignored until this change, so every run resolved `test: ^1.25.0`
+      # afresh against whatever pub.dev served that morning — a caret range in an application
+      # package (`publish_to: none`), which is exactly the case the Dart guidance says to pin.
+      # The lock cannot be generated where pub.dev is unreachable, so this enforces it when it
+      # exists and warns when it does not, instead of pretending either way.
+      - name: Resolve Dart dependencies
+        run: |
+          if [ -f pubspec.lock ]; then
+            dart pub get --enforce-lockfile
+          else
+            echo "::warning::pubspec.lock is not committed, so this run resolves Dart dependencies fresh; commit it (docs/11 §2) for a reproducible build"
+            dart pub get
+          fi
 
       # All three steps below run unconditionally and capture their output, so a
       # single red build reports the analyzer, the test failures *and* the CLI
@@ -192,7 +204,19 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
-      - run: dart pub get
+      # `pubspec.lock` was git-ignored until this change, so every run resolved `test: ^1.25.0`
+      # afresh against whatever pub.dev served that morning — a caret range in an application
+      # package (`publish_to: none`), which is exactly the case the Dart guidance says to pin.
+      # The lock cannot be generated where pub.dev is unreachable, so this enforces it when it
+      # exists and warns when it does not, instead of pretending either way.
+      - name: Resolve Dart dependencies
+        run: |
+          if [ -f pubspec.lock ]; then
+            dart pub get --enforce-lockfile
+          else
+            echo "::warning::pubspec.lock is not committed, so this run resolves Dart dependencies fresh; commit it (docs/11 §2) for a reproducible build"
+            dart pub get
+          fi
       # The DTN scenarios are deliberately partitioned, so they report metrics
       # without the connected-world delivery gate. The duty-cycle arm is where
       # skills/07's "<15% per 8 h" budget is asserted: an always-scanning NORMAL
@@ -216,7 +240,19 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
-      - run: dart pub get
+      # `pubspec.lock` was git-ignored until this change, so every run resolved `test: ^1.25.0`
+      # afresh against whatever pub.dev served that morning — a caret range in an application
+      # package (`publish_to: none`), which is exactly the case the Dart guidance says to pin.
+      # The lock cannot be generated where pub.dev is unreachable, so this enforces it when it
+      # exists and warns when it does not, instead of pretending either way.
+      - name: Resolve Dart dependencies
+        run: |
+          if [ -f pubspec.lock ]; then
+            dart pub get --enforce-lockfile
+          else
+            echo "::warning::pubspec.lock is not committed, so this run resolves Dart dependencies fresh; commit it (docs/11 §2) for a reproducible build"
+            dart pub get
+          fi
       # Each probe runs in its own world, so what a mechanism costs is reported
       # without contaminating the acceptance run's overhead ratio. --no-check
       # because a probe's numbers are about the mechanism under test, not about
