@@ -166,7 +166,8 @@ dart run bin/mesh_sim.dart --scenario festival_crowd --nodes 80 --json
 dart run bin/mesh_sim.dart --duty-cycle   # NORMAL scans 3 s / sleeps 7 s (skills/07)
 dart run bin/mesh_sim.dart --sos          # SOS reach probe: component-relative and raw
 dart run bin/mesh_sim.dart --media        # 10 MB image at 1/2/3 hops, BLE-only ladder, PTT budgets
-dart run bin/mesh_sim.dart --history      # group history repair, against the same world with it off
+dart run bin/mesh_sim.dart --history      # group history repair: members spread wide, and the five
+                                          # nearest, each against the same world with repair off
 dart run bin/mesh_sim.dart --trace        # per-delivery route: dBm, action and reason per hop
 dart run bin/mesh_sim.dart --capture      # pcap-like mesh log tail (--capture-ogm adds beacons)
 ```

@@ -1224,6 +1224,14 @@ Five members, 20 messages, one member out of radio range for the whole conversat
 | 5 nearest nodes | 20 of 20 links, connected | 20/20 | **yes, 8.8 s** | 4 | 60 | 15.7 KB |
 | either, with `historyBeaconMs: 0` | — | **0/20** | no | 0 | 0 | 0 |
 
+Both arms are printed by both engines: `npm run history` and
+`dart run bin/mesh_sim.dart --history` each report the spread membership and the five nearest, with
+and without repair. The Dart CLI ran only the spread arm until the authoritative engine could be
+executed at all, which meant the one engine the roadmap builds on could demonstrate a repair that
+never converges and not one that does; the table above was, at that point, a TypeScript result. The
+payload column is now the same number in both languages, to the byte, which is the encoding contract
+§17.6 describes and golden vectors v2 pins.
+
 Repair is **transitive**, which the capture log shows directly: in a three-member line a
 copy the middle member lost reaches it from the sender — `field team: Amir-0 and
 Bianca-1 disagree on bucket 1 (20 vs 19 entries) — requesting` — and then reaches the

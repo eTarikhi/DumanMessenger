@@ -144,7 +144,7 @@ lever does not mean re-measuring eleven others.
 | `... --json` | Machine-readable output. Names the arm it ran under a `radio` key. |
 | `... --sos` | SOS flood reach (roadmap Phase 3). |
 | `... --group 5` | Group delivery modes (`docs/06` §14). |
-| `... --history` | Group-history anti-entropy (`docs/06` §17). |
+| `... --history` | Group-history anti-entropy (`docs/06` §17): members spread across the world, then the five nearest, each against the same world with repair switched off. |
 | `... --media` | Media transport and push-to-talk (`docs/08`). |
 | `... --trace` / `--capture` / `--capture-ogm` | Hop routes, pcap-like log, OGM capture. |
 

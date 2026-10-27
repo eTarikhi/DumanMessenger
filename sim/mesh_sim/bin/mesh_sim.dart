@@ -140,7 +140,9 @@ Duman mesh simulator (headless)
                       world) and report what a group message costs in both
                       delivery modes -- the docs/06 §14 measurement
   --history           form a group, take one member out of range while it talks, and
-                      report whether hash-beacon anti-entropy repairs what it missed
+                      report whether hash-beacon anti-entropy repairs what it missed --
+                      once with members spread across the world and once with the five
+                      nearest, each against the same world with repair switched off
                       (roadmap Phase 1, docs/06 §17)
   --media             run the media transport in a separate world and report what
                       a 10 MB image costs at 1/2/3 hops, what a BLE-only mesh can
@@ -673,6 +675,22 @@ void main(List<String> args) {
           '-> ${history['beaconWire']} B on the wire (${history['beaconTransport']}), '
           'constant in the size of the history');
       stdout.writeln('  ${history['verdict']}');
+
+      final close = history['close'] as Map<String, Object?>?;
+      if (close != null) {
+        stdout.writeln('\nHistory probe, the same world with a membership that can hear itself '
+            '(${history['members']} nearest nodes)');
+        stdout.writeln('  ${'without repair'.padRight(22)}${close['offRecovered']} recovered, '
+            'converged=${close['offConverged']}');
+        stdout.writeln('  ${'with repair'.padRight(22)}${close['recovered']}/${close['heldBefore']} '
+            'recovered, converged=${close['converged']} in '
+            '${close['converged'] == true ? '${close['convergedSeconds']} s' : '>300 s'} '
+            '(${close['rounds']} beacon rounds)');
+        stdout.writeln('  ${'radio cost'.padRight(22)}${close['beacons']} beacons, '
+            '${close['requests']} requests, ${close['replies']} replies = '
+            '${close['syncPackets']} packets, ${close['bytes']} payload bytes');
+        stdout.writeln('  ${close['verdict']}');
+      }
     }
 
     if (media != null) {
@@ -994,7 +1012,7 @@ Map<String, Object?> _groupProbe(SimConfig config, int size) {
         (n.pos.x - cx) * (n.pos.x - cx) + (n.pos.y - cy) * (n.pos.y - cy);
     // Spread across the world by rank, so the group is not one radio cell.
     final ranked = online.toList()..sort((a, b) => d2(b).compareTo(d2(a)));
-    final step = ranked.length ~/ math.max(1, size);
+    final step = math.max(1, ranked.length ~/ size);
     final ids = <NodeId>{};
     for (var i = 0; i < ranked.length && ids.length < size; i++) {
       ids.add(ranked[(i * step) % ranked.length].id);
@@ -1603,7 +1621,7 @@ Map<String, Object?> _historyProbe(SimConfig config) {
     int replies,
     int packets,
     int bytes,
-  }) run({required bool repair}) {
+  }) run({required bool repair, bool close = false}) {
     final sim = MeshSimulation(config.copyWith(
         trafficIntervalMs: 0,
         captureLog: true,
@@ -1616,11 +1634,31 @@ Map<String, Object?> _historyProbe(SimConfig config) {
     final cy = online.fold<double>(0, (a, n) => a + n.pos.y) / online.length;
     double d2(MeshNode n) =>
         (n.pos.x - cx) * (n.pos.x - cx) + (n.pos.y - cy) * (n.pos.y - cy);
-    final ranked = online.toList()..sort((a, b) => d2(b).compareTo(d2(a)));
-    final step = ranked.length ~/ math.max(1, size);
     final ids = <NodeId>{};
-    for (var i = 0; i < ranked.length && ids.length < size; i++) {
-      ids.add(ranked[(i * step) % ranked.length].id);
+    if (close) {
+      // The most central node and its nearest neighbours: a membership that can hear itself,
+      // which is the case the protocol is actually able to converge in. docs/06 §17.4 puts the
+      // boundary at the peer graph rather than the membership list, and this arm is the evidence.
+      final byCentrality = online.toList()..sort((a, b) => d2(a).compareTo(d2(b)));
+      final centre = byCentrality.first;
+      double d2from(MeshNode n) =>
+          (n.pos.x - centre.pos.x) * (n.pos.x - centre.pos.x) +
+              (n.pos.y - centre.pos.y) * (n.pos.y - centre.pos.y);
+      ids.add(centre.id);
+      final byProximity = online.toList()..sort((a, b) => d2from(a).compareTo(d2from(b)));
+      for (final n in byProximity) {
+        if (ids.length >= size) break;
+        ids.add(n.id);
+      }
+    } else {
+      // Spread across the world: every step-th node out from the centroid. `max(1, …)` matches
+      // tool/history-probe.ts — without it, a world smaller than the membership steps by zero and
+      // picks the same node forever. Identical at 20 nodes, which is what this probe runs.
+      final ranked = online.toList()..sort((a, b) => d2(b).compareTo(d2(a)));
+      final step = math.max(1, ranked.length ~/ size);
+      for (var i = 0; i < ranked.length && ids.length < size; i++) {
+        ids.add(ranked[(i * step) % ranked.length].id);
+      }
     }
     final group = sim.createGroup('field team', ids.toList(), ids.first)!;
     final away = ids.last;
@@ -1665,12 +1703,26 @@ Map<String, Object?> _historyProbe(SimConfig config) {
   final off = run(repair: false);
   final on = run(repair: true);
 
+  // The same pair with a membership that can hear itself. The spread membership is the pessimistic
+  // case, and until now it was the only one this probe ran — so the authoritative engine could show
+  // a repair that never converges and not one that does, while tool/history-probe.ts printed both
+  // and docs/06 §17.3's "repair works, and it is transitive" rested on the reference engine alone.
+  final offClose = run(repair: false, close: true);
+  final onClose = run(repair: true, close: true);
+
   final beacon = encodeHistoryBeacon(
       'grp-1', 0, historyDigest(<HistoryEntry>[]));
   final verdict = on.converged
       ? 'anti-entropy recovered all ${on.recovered} messages the absent member missed, '
           'in ${on.rounds} bounded rounds; without it the member holds ${off.recovered}'
       : 'anti-entropy did NOT converge inside 5 minutes (${on.recovered}/${on.missed} recovered)';
+
+  final closeVerdict = onClose.converged
+      ? 'a membership that can hear itself converges in ${_round(onClose.seconds)} s over '
+          '${onClose.rounds} bounded rounds, at ${onClose.packets} packets against '
+          '${on.packets} for the spread one — the peer graph is the boundary, not the list'
+      : 'even a membership that can hear itself did NOT converge inside 5 minutes '
+          '(${onClose.recovered}/${onClose.missed} recovered)';
 
   return <String, Object?>{
     'members': size,
@@ -1692,5 +1744,21 @@ Map<String, Object?> _historyProbe(SimConfig config) {
     'beaconWire': wireSizeOfBody(beacon),
     'beaconTransport': selectTransport(wireSizeOfBody(beacon)).name,
     'verdict': verdict,
+    'close': <String, Object?>{
+      'heldBefore': onClose.held,
+      'missed': onClose.missed,
+      'offRecovered': offClose.recovered,
+      'offConverged': offClose.converged,
+      'recovered': onClose.recovered,
+      'converged': onClose.converged,
+      'convergedSeconds': onClose.seconds < 0 ? null : _round(onClose.seconds),
+      'rounds': onClose.rounds,
+      'beacons': onClose.beacons,
+      'requests': onClose.requests,
+      'replies': onClose.replies,
+      'syncPackets': onClose.packets,
+      'bytes': onClose.bytes,
+      'verdict': closeVerdict,
+    },
   };
 }
