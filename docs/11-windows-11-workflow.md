@@ -463,12 +463,38 @@ real rather than theoretical. If `dart analyze` fails, the collector's paste-bac
 `--- dart diagnostics ---` with `file:line:col` locations from `diagnostics.py` — enough to fix it
 blind, which is why it is there.
 
-**Not verified by execution:** `make.ps1`. The sandbox this was written in has no PowerShell and
-cannot install one — the release asset host is not reachable from it. So `make.ps1` was **statically
-checked only**, by `tool/ci/check-ps1.py`, which confirms balanced delimiters and the absence of
-PowerShell 7-only syntax (`??`, `?.`, the ternary, `&&`/`||` as pipeline chain operators) so that it
-runs on the Windows PowerShell 5.1 that Windows 11 actually ships. It is written defensively — every
-failure path prints an explicit reason and a fix rather than throwing — but it has not been run.
+**Executed once, and it failed:** `make.ps1`. The sandbox this was written in has no PowerShell and
+cannot install one — the release asset host is not reachable from it — so for its whole life the
+script was **statically checked only**, by `tool/ci/check-ps1.py`: balanced delimiters, no PowerShell
+7-only syntax (`??`, `?.`, the ternary, `&&`/`||` as pipeline chain operators) so that it runs on the
+Windows PowerShell 5.1 that Windows 11 actually ships. Then, on 2026-10-27, it was run on a real
+Windows 11 machine, and the invocation this document recommends in §6 failed before the dispatcher
+did any work:
+
+```
+PS> .\make.ps1 doctor
+Cannot validate argument on parameter 'Runtime'. The argument "doctor" does not belong to the set
+"auto,wsl,bash" specified by the ValidateSet attribute.
+```
+
+The parameter block declared `[Parameter(ValueFromRemainingArguments = $true)] [string[]]$Task` with
+no `Position`. PowerShell excludes a `ValueFromRemainingArguments` parameter from positional binding,
+so the first positional argument bound to the *next* parameter — `$Runtime` — and its
+`ValidateSet('auto','wsl','bash')` rejected it. Every documented form of the command was affected:
+`.\make.ps1 doctor`, `.\make.ps1 ci`, `.\make.ps1 help`. Only the named form
+`.\make.ps1 -Task doctor` worked, and no document mentioned it.
+
+Fixed by giving `$Task` `Position = 0` and turning off positional binding for the rest with
+`[CmdletBinding(PositionalBinding = $false)]`, so `-Runtime` stays a named switch and a second
+positional argument (`--job web --fast`) is forwarded to bash rather than offered to it.
+`check-ps1.py` now has a third failure class for exactly this, verified both ways: it reports the
+defect when run against the pre-fix file and is clean on the fixed one.
+
+What that first execution did **not** verify is everything after parameter binding — runtime
+detection, `wslpath` translation, the target-to-script table, quoting, and exit-code propagation.
+The script is written defensively (every failure path prints an explicit reason and a fix rather than
+throwing) but those paths are still unexercised, and a second transcript from a real machine is what
+closes them.
 Its `daily`, `daily-fast` and `daily-checks` entries are in the same position: they are three more
 rows in `$ScriptTargets` pointing at `tool/ci/daily.sh`, which *is* verified by execution on Linux,
 and `check-ps1.py` confirms every `make.ps1` target is backed by a real Makefile target (it prints

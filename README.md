@@ -64,7 +64,7 @@ dependency this repository vendors.
 | --- | --- | --- |
 | **GitHub CLI** (`gh`) 2.x, authenticated | `make watch`, `make diagnose`, `make pr` — reading CI runs, their annotations, and opening a pull request | `winget install --id GitHub.cli -e`, then `gh auth login` |
 | **Docker Desktop** + **act** | `make act` — running `.github/workflows/ci.yml` itself in a container instead of the local mirror of it | `winget install --id Docker.DockerDesktop -e`; act from [nektos/act releases](https://github.com/nektos/act/releases) |
-| **PowerShell 5.1** | already ships with Windows 11. `make.ps1` targets it, and `tool/ci/check-ps1.py` fails the build on PowerShell-7-only syntax (`??`, `?.`, the ternary, `&&`/`||` as pipeline chain operators) so that it keeps running on 5.1 | *(installed)* |
+| **PowerShell 5.1** | already ships with Windows 11. `make.ps1` targets it, and `tool/ci/check-ps1.py` fails the build on PowerShell-7-only syntax (`??`, `?.`, the ternary, `&&`/`||` as pipeline chain operators) so that it keeps running on 5.1 — and on a pass-through parameter PowerShell will not bind positionally, which is what broke `.\make.ps1 doctor` the first time anybody ran it | *(installed)* |
 | **VS Code + the WSL extension** | editing inside the distro, which is where the pipeline actually runs | [code.visualstudio.com](https://code.visualstudio.com/) |
 | **Flutter SDK** | **not needed today.** The roadmap's `app/` directory does not exist yet; Flutter becomes a requirement when roadmap item 13 (the mono-repo `app/` + `transport/android` + `transport/ios`) starts, and it needs `pub.dev` reachable | [docs.flutter.dev](https://docs.flutter.dev/) |
 
@@ -121,12 +121,22 @@ stated (`docs/10` §6, `docs/11` §9):
   acceptance run passing, all five CLI matrix arms and all four probes.
 * **Verified locally on Linux** — `npm ci`, `npm test` (**473 tests, 18 files**), `npm run build`,
   the five static checkers and their self-tests, `make doctor`, `make blockers`, `make daily-fast`.
-* **Statically checked, never executed** — `make.ps1` itself. No PowerShell exists in the
-  environment these instructions were written in and its release asset host is unreachable from it,
-  so `make.ps1` is checked by `tool/ci/check-ps1.py` (delimiter balance, no PowerShell-7-only
-  syntax) in CI's `checks` job and in `make checks`. That is not execution and is not claimed as
-  it. The `winget` and `choco` install commands are the ones `docs/11` §1–§2 documents; they have
-  not been run here either.
+* **Executed once on real Windows 11 — and it failed.** On 2026-10-27 `make.ps1` was run for the
+  first time anywhere, on Windows 11 with PowerShell 5.1, and its own documented invocation was
+  rejected before the dispatcher did any work: `.\make.ps1 doctor` &rarr; *Cannot validate argument
+  on parameter 'Runtime'. The argument "doctor" does not belong to the set "auto,wsl,bash"*. The
+  cause: a `ValueFromRemainingArguments` parameter with no `Position`, which PowerShell excludes
+  from positional binding, so the target bound to `-Runtime` and hit its `ValidateSet`. Fixed, and
+  `check-ps1.py` gained a third failure class for it — run against the pre-fix file it names the
+  defect, against the fixed file it is clean.
+* **Still not observed** — everything in `make.ps1` *after* parameter binding: runtime detection,
+  `wslpath` translation, target-to-script mapping and forwarding to bash. That is where the one real
+  run died, so it proves nothing about the rest. No PowerShell exists in the environment these
+  instructions were written in and its release asset host is unreachable from it, so the remainder is
+  checked statically by `tool/ci/check-ps1.py` (delimiter balance, no PowerShell-7-only syntax, no
+  unbindable pass-through parameter) in CI's `checks` job and in `make checks`. The `winget` and
+  `choco` install commands are the ones `docs/11` §1–§2 documents; they have not been run here
+  either.
 
 ---
 

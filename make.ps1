@@ -44,9 +44,24 @@
     Written for Windows PowerShell 5.1 (which Windows 11 ships) as well as PowerShell 7.
 #>
 
-[CmdletBinding()]
+# PositionalBinding is off and $Task declares its own position, because those two things are
+# what make `.\make.ps1 doctor` mean "run the doctor target".
+#
+# PowerShell excludes a ValueFromRemainingArguments parameter from positional binding. Without
+# `Position = 0` below, the first positional argument bound to the *next* parameter — $Runtime —
+# and its ValidateSet rejected it:
+#
+#     .\make.ps1 doctor
+#     Cannot validate argument on parameter 'Runtime'. The argument "doctor" does not belong to
+#     the set "auto,wsl,bash" specified by the ValidateSet attribute.
+#
+# which is every documented invocation of this script failing on a machine that finally ran it,
+# with an error about runtimes when the problem was the target. PositionalBinding = $false keeps
+# $Runtime named-only, so a second positional argument (`--job`, `--fast`) is forwarded to bash
+# instead of being offered to it.
+[CmdletBinding(PositionalBinding = $false)]
 param(
-    [Parameter(ValueFromRemainingArguments = $true)]
+    [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
     [string[]]$Task,
 
     [ValidateSet('auto', 'wsl', 'bash')]
@@ -199,6 +214,7 @@ if (-not $Task -or $Task[0] -in @('help', '-h', '--help', '/?')) {
     Write-Host ''
     Write-Note 'Usage:  .\make.ps1 <target> [arguments]'
     Write-Note '        .\make.ps1 run-pipeline --job web --fast     (call a script directly)'
+    Write-Note '        .\make.ps1 -Runtime wsl <target>             (force the runtime; -Task also works)'
     Write-Host ''
     Write-Note 'Targets (forwarded to make inside the runtime, or to the script below):'
     foreach ($k in $ScriptTargets.Keys) {

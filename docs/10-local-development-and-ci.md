@@ -450,11 +450,16 @@ their self-tests, which is not a sixth check so much as evidence the other five 
    engine.
 5. **`ps1`** — `tool/ci/check-ps1.py make.ps1`. The Windows entry point has 21 targets (`check-docs.py`
    prints the count, so a stale number here is detectable; a line count is not) that no Linux runner can execute and no PowerShell-less sandbox can even parse, so this is a
-   *static* check: delimiter balance, and PowerShell-7-only syntax (`??`, `?.`, the ternary,
-   `&&`/`||` as pipeline chain operators, `$PSStyle`) that fails on the Windows PowerShell 5.1 that
-   Windows 11 actually ships, with a message that does not say "your PowerShell is too old". It is
-   reported as static everywhere it appears, and a pass is never evidence the script ran — see
-   `docs/11` §3 and §9. Until it was wired into this group it had a `make` target and no automation:
+   *static* check in three classes: delimiter balance; PowerShell-7-only syntax (`??`, `?.`, the
+   ternary, `&&`/`||` as pipeline chain operators, `$PSStyle`) that fails on the Windows PowerShell
+   5.1 that Windows 11 actually ships, with a message that does not say "your PowerShell is too old";
+   and a pass-through parameter PowerShell cannot bind positionally — a `ValueFromRemainingArguments`
+   parameter with no `Position`, or one whose siblings stay positionally bindable. The third class is
+   not theoretical: it is what made `.\make.ps1 doctor`, the invocation every document here
+   recommends, fail with *Cannot validate argument on parameter 'Runtime'* the first time the script
+   was executed on a real Windows 11 machine (2026-10-27). A pass is still never evidence the script
+   ran, and the one time it ran, this check did not yet cover the reason it failed — see `docs/11`
+   §3 and §9. Until it was wired into this group it had a `make` target and no automation:
    the workflow, the CI mirror and the collector all skipped it, so the front door was checked only
    when a human typed `make check-ps1`.
 6. **`checker-self-test`** — the `--self-test` modes of the four checkers that have one
@@ -690,9 +695,9 @@ prints the job count from the workflow so a new job is at least visible.
 returns the pipeline's exit code. It deliberately contains no pipeline logic. A second
 implementation of the same policy — in PowerShell, or anywhere else — is a second thing that can
 drift from the workflow while still looking green, which is the failure this section exists to
-prevent. `tool/ci/check-ps1.py` statically checks it (delimiter balance, and PowerShell-7-only
-syntax that fails on the Windows PowerShell 5.1 Windows 11 ships) because it cannot be executed on a
-Linux runner. That check runs in the workflow's `checks` job, in `run-pipeline.sh --job checks` and
+prevent. `tool/ci/check-ps1.py` statically checks it (delimiter balance, PowerShell-7-only syntax
+that fails on the Windows PowerShell 5.1 Windows 11 ships, and parameter binding that would make the
+documented invocation fail) because it cannot be executed on a Linux runner. That check runs in the workflow's `checks` job, in `run-pipeline.sh --job checks` and
 in `make checks`; it used to run in none of them, which is the drift `ci-checkers` in §5 now exists
 to catch. See `docs/11-windows-11-workflow.md`.
 
@@ -805,8 +810,9 @@ resolves `test: ^1.25.0` afresh and publishes a warning annotation saying so unt
 a lock (§2, `docs/11` §2). `pwsh` absent *and not
 installable*: the release page answers (`HTTP 200`) and the asset redirects to
 `objects.githubusercontent.com`, which is outside the egress allowlist, yielding `0 bytes` — so
-`make.ps1` and the whole of `docs/11` are checked statically by `check-ps1.py` and have never
-been executed anywhere. That static check is now part of all three entry points rather than
+`make.ps1` and the whole of `docs/11` are checked statically by `check-ps1.py`; the one execution
+anywhere — Windows 11, 2026-10-27 — failed at parameter binding before the dispatcher ran, which is
+the defect `check-ps1.py`'s third class now catches. That static check is now part of all three entry points rather than
 something a person had to remember to run. `node v22.22.3` and `python3 3.11.2` are present, which is why the TS
 reference engine and the five stdlib-only checkers do run here.
 

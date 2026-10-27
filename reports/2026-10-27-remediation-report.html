@@ -235,6 +235,36 @@ was already pushed, so the history was left alone and the misfiling is recorded 
 <code>0d38edd</code>'s message. Staging is by explicit path from now on;
 <code>git add -A</code> has now caused two mislabelled commits on this branch.</div>
 
+<h3>1.1 Addendum &mdash; the same day, after this report was written: <code>make.ps1</code> ran, and failed</h3>
+<p>Action 6 in &sect;5.1 was completed by the owner within the hour, on a real Windows 11 machine with
+PowerShell 5.1, and it found a defect no static check in this repository could see:</p>
+<pre>PS C:\Users\Administrator\Desktop\Git-Clones\DumanMessenger&gt; .\make.ps1 doctor
+Cannot validate argument on parameter 'Runtime'. The argument "doctor" does not belong to the set
+"auto,wsl,bash" specified by the ValidateSet attribute.</pre>
+<p>The parameter block declared <code>[Parameter(ValueFromRemainingArguments = $true)]
+[string[]]$Task</code> with no <code>Position</code>. PowerShell excludes a
+<code>ValueFromRemainingArguments</code> parameter from positional binding, so the first positional
+argument bound to the <em>next</em> parameter &mdash; <code>$Runtime</code> &mdash; and its
+<code>ValidateSet</code> rejected it. Every documented invocation was affected
+(<code>.\make.ps1 doctor</code>, <code>ci</code>, <code>help</code>); only the named form
+<code>-Task doctor</code> worked, and nothing documented it. The script's own
+<code>.EXAMPLE</code> block, its help text, <code>docs/11</code> &sect;6, <code>docs/12</code> and the
+README quick start all told the reader to type the form that could not work.</p>
+<p>Fixed by giving <code>$Task</code> <code>Position = 0</code> and setting
+<code>[CmdletBinding(PositionalBinding = $false)]</code> so <code>-Runtime</code> stays a named
+switch and a second positional argument (<code>--job web --fast</code>) is forwarded to bash instead
+of being offered to it. <code>check-ps1.py</code> gained a third failure class for this pattern, and
+it was verified both ways rather than assumed: against the pre-fix file it reports
+<em>"a ValueFromRemainingArguments parameter has no Position&hellip;"</em> and exits 1; against the
+fixed file it is clean. Five synthetic variants confirm it neither over- nor under-fires &mdash; a
+script with no param block, one with a single positioned pass-through parameter, the corrected
+two-parameter form, the defective form, and a PowerShell-7 syntax case.</p>
+<div class="note warn"><strong>What this does and does not prove.</strong> It proves the front door
+was broken and is now guarded. It does <em>not</em> prove <code>make.ps1</code> works: the run died at
+parameter binding, so runtime detection, <code>wslpath</code> translation, the target-to-script table,
+quoting and exit-code propagation are all still unexercised anywhere. That is the honest remainder of
+action 6, and it needs one more transcript from a real machine.</div>
+
 <h2>2. What was verified, and how</h2>
 
 <h3>2.1 Remote CI &mdash; executed, on this branch</h3>
@@ -519,11 +549,15 @@ controller and no review, which makes it unpublishable as a store listing.</td><
 line 488, the one item classified as reachable from here, and unblocks store submission (lines 94 and
 479).</td><td>A named controller, a dated review, and the draft label removed.</td></tr>
 <tr><td>6</td><td><strong>Run <code>make.ps1</code> once on a real Windows 11 machine</strong> and
-paste the transcript.</td><td>It is the documented front door for the platform the project targets
-and it has never been executed anywhere; <code>check-ps1.py</code> is a static check and is recorded
-as one.</td><td>Upgrades <code>docs/11</code> &sect;9 from "statically checked only" to verified, or
-produces the first real bug list.</td><td>A transcript of <code>.\make.ps1 doctor</code> and
-<code>.\make.ps1 checks</code> from PowerShell 5.1.</td></tr>
+paste the transcript. <span class="pass">DONE 2026-10-27 &mdash; and it found a defect</span>; see
+&sect;1.1. Still outstanding: a second transcript that gets past parameter binding.</td><td>It is the
+documented front door for the platform the project targets and it had never been executed anywhere;
+<code>check-ps1.py</code> is a static check and is recorded as one. The first execution showed
+exactly what that gap cost: every documented invocation failed.</td><td>Already produced the first
+real bug list (one defect, fixed and now statically guarded) and upgraded <code>docs/11</code>
+&sect;9 from "statically checked only" to "executed once, and it failed".</td><td>A transcript of
+<code>.\make.ps1 doctor</code> and <code>.\make.ps1 checks</code> that reaches the bash runtime,
+which is what verifies detection, path translation and forwarding.</td></tr>
 </table>
 
 <h3>5.2 Optional, in the order they pay</h3>
@@ -625,10 +659,13 @@ than a disclaimer.</p>
 been compiled on the machine that wrote it, and no Dart file was executed locally at any point in
 this session. Every Dart fix here was reasoned about statically, checked with
 <code>check-dart-balance</code> and <code>check-dart-sites</code>, and then verified by pushing.</td></tr>
-<tr><td>"<code>make.ps1</code> works on Windows 11."</td><td>It is <strong>statically checked</strong>
-&mdash; delimiter balance and no PowerShell-7-only syntax &mdash; in CI and in both local pipelines.
-It has never been executed anywhere. No PowerShell exists in this environment and its release asset
-is served from a host outside the egress allowlist.</td></tr>
+<tr><td>"<code>make.ps1</code> works on Windows 11."</td><td>It has been executed exactly once, on
+Windows 11 with PowerShell 5.1, and <strong>that invocation failed</strong> before the dispatcher ran
+(&sect;1.1). The defect is fixed and statically guarded, but the claim still cannot be made: runtime
+detection, path translation, forwarding and exit-code propagation have never been exercised anywhere,
+and no PowerShell exists in the environment that wrote them. What is checked in CI and both local
+pipelines is delimiter balance, PowerShell-7-only syntax, and parameter binding &mdash; three static
+classes, not execution.</td></tr>
 <tr><td>"The concurrency group prevents duplicate runs."</td><td>The YAML parses, the expression is
 the standard form, and the pile-up it addresses is documented from the run list. Its behaviour has
 <strong>not been observed</strong>, because no two runs have overlapped since it was added.</td></tr>
