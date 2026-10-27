@@ -31,6 +31,105 @@
 
 ---
 
+## Quick start (Windows 11 x64)
+
+What a clean Windows 11 machine needs to develop, build and verify this repository, in the order it
+needs it. `docs/11-windows-11-workflow.md` is the long form — WSL2 versus Git Bash, `make.ps1`,
+line endings, long paths, Task Scheduler; `docs/10-local-development-and-ci.md` is the same
+pipeline on Linux and macOS; `docs/12-cli-cheat-sheet.md` is every command by task.
+
+### 1. Required
+
+| Tool | Version this repository pins | What it is needed for | Install |
+| --- | --- | --- | --- |
+| **Git for Windows** | 2.30+ | everything — and it supplies Git Bash, one of the two runtimes `make.ps1` forwards to | `winget install --id Git.Git -e` |
+| **Node.js** | **22.x** — `package.json` declares `engines: { "node": ">=22" }` and CI pins `node-version: 22` | the TypeScript reference engine, the React visualiser, `npm test`, the cross-language golden vectors, the production build | `winget install --id OpenJS.NodeJS.LTS -e` |
+| **npm** | 10.x, ships with Node | `npm ci` against the committed `package-lock.json` — the reproducible install both CI and the local pipeline use | *(with Node)* |
+| **Dart SDK** | **stable ≥ 3.4.0** — `sim/mesh_sim/pubspec.yaml` declares `sdk: ^3.4.0` | the **authoritative** engine: `dart analyze`, `dart test`, and the CLI acceptance runs behind `skills/02`, `skills/07` and `skills/08` | `choco install dart-sdk -y`, or the zip route in `docs/11` §2 |
+| **Python 3** | 3.9+ | the five static checkers in `tool/ci/` (`check-docs`, `check-parity`, `check-dart-balance`, `check-dart-sites`, `check-ps1`) and `tool/ci/diagnostics.py`. **Standard library only — no pip packages, no virtualenv** | `winget install --id Python.Python.3.12 -e` |
+| **A bash runtime** | WSL2 + Ubuntu (recommended) or Git Bash | `tool/ci/*.sh`, the `Makefile` and the pre-push hook are bash. `make.ps1` is a *dispatcher*: it finds one of these, translates the path and forwards your arguments | `wsl --install -d Ubuntu` |
+| **GNU Make** | 4.x | every `make …` target. Git Bash does **not** ship it, which is the usual reason `make` "does not work" on Windows | inside WSL: `sudo apt install make` |
+| **curl** | any | `make doctor` and `make blockers` probe egress, CI and the toolchain with it | present in WSL; natively `winget install --id curl.curl -e` |
+| **jq** | 1.6+ | `tool/ci/blockers.sh --json` and the daily run's previous-run comparison | inside WSL: `sudo apt install jq` |
+
+Runtime dependencies install themselves from the committed lockfiles: `npm ci` pulls
+`react` + `react-dom` and the dev set (`typescript`, `vite`, `vitest`, `@vitejs/plugin-react`,
+`@types/*`) from `package-lock.json`; `dart pub get` pulls the single dev dependency
+`package:test` from `sim/mesh_sim/pubspec.yaml`. There is nothing to install by hand and no
+dependency this repository vendors.
+
+### 2. Optional, and what each one unlocks
+
+| Tool | Unlocks | Install |
+| --- | --- | --- |
+| **GitHub CLI** (`gh`) 2.x, authenticated | `make watch`, `make diagnose`, `make pr` — reading CI runs, their annotations, and opening a pull request | `winget install --id GitHub.cli -e`, then `gh auth login` |
+| **Docker Desktop** + **act** | `make act` — running `.github/workflows/ci.yml` itself in a container instead of the local mirror of it | `winget install --id Docker.DockerDesktop -e`; act from [nektos/act releases](https://github.com/nektos/act/releases) |
+| **PowerShell 5.1** | already ships with Windows 11. `make.ps1` targets it, and `tool/ci/check-ps1.py` fails the build on PowerShell-7-only syntax (`??`, `?.`, the ternary, `&&`/`||` as pipeline chain operators) so that it keeps running on 5.1 | *(installed)* |
+| **VS Code + the WSL extension** | editing inside the distro, which is where the pipeline actually runs | [code.visualstudio.com](https://code.visualstudio.com/) |
+| **Flutter SDK** | **not needed today.** The roadmap's `app/` directory does not exist yet; Flutter becomes a requirement when roadmap item 13 (the mono-repo `app/` + `transport/android` + `transport/ios`) starts, and it needs `pub.dev` reachable | [docs.flutter.dev](https://docs.flutter.dev/) |
+
+### 3. Two Windows settings that are not optional
+
+```powershell
+git config --system core.longpaths true    # elevated shell: node_modules exceeds the 260-character
+                                           # limit, and npm ci fails partway with ENOENT without it
+git config core.autocrlf false             # .gitattributes already pins eol=lf on *.sh, Makefile,
+                                           # .githooks/* and *.py; this stops a CRLF checkout from
+                                           # breaking bash and from making an unchanged golden
+                                           # vector look modified
+```
+
+Cloned before `.gitattributes` existed? Renormalise once: `git add --renormalize .` and check that
+`git status` lists only files whose endings actually changed.
+
+### 4. First run
+
+```powershell
+git clone https://github.com/eTarikhi/DumanMessenger.git
+cd DumanMessenger
+.\make.ps1 doctor      # this machine against what CI pins — read this first, it names every gap
+.\make.ps1 install     # npm ci + dart pub get (skips Dart with a warning if the SDK is absent)
+.\make.ps1 checks      # every check in one report; the five static ones need no Node and no Dart
+.\make.ps1 ci          # the whole workflow, job for job, mirroring ci.yml
+```
+
+The same four from inside WSL or Git Bash, where `make` exists: `make doctor && make install &&
+make checks && make ci`. `npm ci` also activates the pre-push gate — `package.json`'s `prepare`
+script runs `git config core.hooksPath .githooks`, so the fast pipeline runs before every push
+without a separate `make install-hooks`. Bypass one push with `git push --no-verify`.
+
+Budget roughly 12 minutes for `make daily-fast` and about 27 for `make daily` on a machine without
+the Dart SDK; both are longer with it, because the Dart jobs then actually run.
+
+### 5. What "deploy" means for this repository today
+
+| Artefact | Command | Output |
+| --- | --- | --- |
+| The simulator web app | `npm run build` (`tsc -b && vite build`) | `dist/` — static files, host anywhere. `npm run preview` serves it locally |
+| The authoritative engine, headless | `cd sim/mesh_sim && dart run bin/mesh_sim.dart --scenario campus_quad --seed 42` | metrics on stdout; **exits non-zero if the acceptance criteria fail**, which is what CI gates on |
+| A Windows executable of that CLI | `dart compile exe sim/mesh_sim/bin/mesh_sim.dart -o mesh_sim.exe` | plausible — `lib/` imports only `dart:async`, `dart:convert`, `dart:math` and `dart:typed_data`, and only `bin/` imports `dart:io` — but **not exercised by CI or by any test here**, so try it before relying on it |
+| The messenger app itself | — | **does not exist yet.** There is no `app/` directory: store distribution (Play, F-Droid, TestFlight) is roadmap items 94 and 479, gated on signing keys and store accounts, not on anything installable |
+
+### 6. What is verified about these instructions
+
+Recorded rather than implied, because this repository's own rule is that partial verification is
+stated (`docs/10` §6, `docs/11` §9):
+
+* **Verified by execution in CI** — every `dart` and `npm` command above. Run
+  [`40430079404`](https://github.com/eTarikhi/DumanMessenger/actions/runs/40430079404) was green
+  on all nine jobs: `dart analyze` clean, **278 Dart tests passed**, the gated `campus_quad`
+  acceptance run passing, all five CLI matrix arms and all four probes.
+* **Verified locally on Linux** — `npm ci`, `npm test` (**473 tests, 18 files**), `npm run build`,
+  the five static checkers and their self-tests, `make doctor`, `make blockers`, `make daily-fast`.
+* **Statically checked, never executed** — `make.ps1` itself. No PowerShell exists in the
+  environment these instructions were written in and its release asset host is unreachable from it,
+  so `make.ps1` is checked by `tool/ci/check-ps1.py` (delimiter balance, no PowerShell-7-only
+  syntax) in CI's `checks` job and in `make checks`. That is not execution and is not claimed as
+  it. The `winget` and `choco` install commands are the ones `docs/11` §1–§2 documents; they have
+  not been run here either.
+
+---
+
 ## Mesh simulator
 
 Two engines, one set of golden vectors. Both are deterministic discrete-event
@@ -56,7 +155,7 @@ dart run bin/mesh_sim.dart --capture      # pcap-like mesh log tail (--capture-o
 
 ```bash
 npm ci
-npm test          # 451 tests: RF, election, routing, DTN, power, SOS, hop traces, abuse limits,
+npm test          # 473 tests: RF, election, routing, DTN, power, SOS, hop traces, abuse limits,
                   # blocks, wake-locks, radio occupancy, connectivity, acceptance, UI renders
 npm run dev       # canvas: watch SUPERs get elected, MPR suppress floods, bundles wait for a
                   # contact, and a split network draw a ring per component. Click a node to

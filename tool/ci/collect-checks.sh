@@ -105,7 +105,7 @@ REGISTRY_TS=(
 REGISTRY_DART=(
   "pub-get|dart pub get|no|the package resolving at all — this has never been run on this tree"
   "analyze|dart analyze (errors and warnings fail)|no|whether the radio-model and byte-counting mirrors COMPILE at all"
-  "test|dart test --reporter expanded|no|the 197 Dart cases, including 3 that have never run"
+  "test|dart test --reporter expanded|yes|the Dart suite — 278 cases passed in CI on 2026-10-27, the first run this repository ever had"
   "cli|CLI acceptance: campus_quad, seed 42, gated|no|the skills/02 and skills/08 criteria"
 )
 REGISTRY_CLI=(

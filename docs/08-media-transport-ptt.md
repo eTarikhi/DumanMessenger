@@ -1326,7 +1326,7 @@ npm run media                                            # TypeScript probe, eve
 npm run media -- backoff                                 # one section; also `shedding`, `captureEffect`, `captureMargin`. The whole probe is minutes of simulation
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media --no-check
 npm test                                                 # 276 TS tests, incl. 18 media cases and the 29-case §12 radio block
-cd sim/mesh_sim && dart test                             # 197 Dart cases, incl. 18 media and test/channel_test.dart
+cd sim/mesh_sim && dart test                             # the Dart suite, incl. 18 media cases and test/channel_test.dart
 ```
 
 Engine surface: `sendFile(from, to, bytes, {chunkBytes, window, transport})`,

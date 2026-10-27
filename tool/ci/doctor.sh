@@ -60,8 +60,8 @@ have npm && ok "npm $(npm --version)" "npm ci needs package-lock.json (present)"
 have git && ok "git $(git --version | awk '{print $3}')" "" \
          || bad "git" "MISSING."
 
-have python3 && ok "python3 $(python3 --version | awk '{print $2}')" "tool/ci/diagnostics.py" \
-             || bad "python3" "MISSING — the CI diagnostics step needs it."
+have python3 && ok "python3 $(python3 --version | awk '{print $2}')" "the five checkers in tool/ci/ and diagnostics.py" \
+             || bad "python3" "MISSING — the whole checks job needs it: five static checkers and diagnostics.py."
 
 if have dart; then
   DART_V="$(dart --version 2>&1 | awk '{print $NF}')"

@@ -32,7 +32,7 @@ front doors.
 | **Git for Windows** | 2.30+ | `winget install --id Git.Git -e` | everything; also supplies Git Bash |
 | **Node.js** | **22.x LTS** | `winget install --id OpenJS.NodeJS.LTS -e` | the `web` job |
 | **Dart SDK** | **stable ≥ 3.4.0** | `choco install dart-sdk -y`, or the zip in §2 | the `dart`, `cli-matrix` and `probes` jobs |
-| **Python 3** | 3.9+ | `winget install --id Python.Python.3.12 -e` | `tool/ci/diagnostics.py` |
+| **Python 3** | 3.9+ | `winget install --id Python.Python.3.12 -e` | the five checkers in `tool/ci/` and `diagnostics.py` — stdlib only, no pip packages |
 | **GitHub CLI** | 2.x | `winget install --id GitHub.cli -e` | `make watch`, `make diagnose`, `make pr` |
 | **GNU Make** | 4.x | in WSL: `sudo apt install make`; Git Bash does **not** ship it | the `make` targets |
 | **WSL2 + Ubuntu** | current | `wsl --install -d Ubuntu` | the recommended runtime |
@@ -59,7 +59,7 @@ The Node requirement is declared in `package.json` as well as documented here, s
 manager enforces it and not just the reader:
 
 ```json
-"engines": { "node": ">=22 <23" }
+"engines": { "node": ">=22" }
 ```
 
 On a mismatched Node, `npm ci` prints `npm warn EBADENGINE` naming both the required and the
