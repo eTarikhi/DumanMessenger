@@ -282,7 +282,7 @@ if selected docs; then
     add_row docs dart-sites "$o" "$SECONDS" ""
     [ "$o" = success ] || add_fail docs dart-sites docs-dart-sites.txt
 
-    # make.ps1 is the Windows entry point: 280 lines and 21 targets that no Linux runner and no
+    # make.ps1 is the Windows entry point: 21 targets that no Linux runner and no
     # PowerShell-less sandbox can execute. `make check-ps1` existed and nothing automated called
     # it, which is how a repository ships a broken front door — the check was there, the habit
     # was not. Static only, and reported as static only (docs/11 §3): a pass here is never

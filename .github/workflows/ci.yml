@@ -40,7 +40,7 @@ jobs:
       - name: Dart declaration sites
         run: python3 tool/ci/check-dart-sites.py
 
-      # make.ps1 is the Windows entry point — 280 lines, 21 targets — and no runner here can
+      # make.ps1 is the Windows entry point — 21 targets — and no runner here can
       # execute it: PowerShell is not installed, and its release asset is served from a host
       # this sandbox cannot reach. Until now the checker existed (`make check-ps1`) and no
       # pipeline called it, so neither the workflow nor the local mirror ever looked at the

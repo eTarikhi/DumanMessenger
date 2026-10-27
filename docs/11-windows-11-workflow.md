@@ -122,6 +122,16 @@ dart pub get
 The only dependency is `package:test`. If `pub.dev` is unreachable from your network, this fails and
 the Dart jobs cannot run; `doctor` probes it and tells you before you find out the slow way.
 
+**Then commit `sim\mesh_sim\pubspec.lock`.** It used to be git-ignored, so every CI run resolved
+`test: ^1.25.0` against whatever pub.dev served that morning — a caret range in an application
+package (`pubspec.yaml` says `publish_to: none`), which is the case the Dart guidance says to pin.
+It is un-ignored now, and both the workflow and `run-pipeline.sh` resolve with
+`dart pub get --enforce-lockfile` when the lock exists. Until somebody who can reach pub.dev commits
+one, every Dart job publishes a warning annotation saying that the run resolved dependencies fresh;
+that warning is the acceptance gate, and it disappears on the commit that adds the file. Do not
+hand-write the lock: it carries content hashes, and a wrong one fails `--enforce-lockfile` for
+everybody.
+
 **Under WSL** the SDK must be installed *inside* the distro, not shared from Windows: a Windows
 `dart.exe` invoked from WSL works, but resolves paths differently and confuses `dart pub get`. Use
 the Linux instructions in `docs/10` §2.
@@ -461,8 +471,10 @@ runs on the Windows PowerShell 5.1 that Windows 11 actually ships. It is written
 failure path prints an explicit reason and a fix rather than throwing — but it has not been run.
 Its `daily`, `daily-fast` and `daily-checks` entries are in the same position: they are three more
 rows in `$ScriptTargets` pointing at `tool/ci/daily.sh`, which *is* verified by execution on Linux,
-and `check-ps1.py` confirms all twenty targets are backed by real Makefile targets — but the
-forwarding itself has not been exercised.
+and `check-ps1.py` confirms every `make.ps1` target is backed by a real Makefile target (it prints
+the count; this sentence used to carry a number that went stale) — but the forwarding itself has not
+been exercised. That static check now runs in CI's `checks` job and in both local pipelines, so the
+front door is looked at on every run instead of only when somebody types `make check-ps1`.
 
 The Task Scheduler snippet in §3 is in the same category and worth calling out separately, because
 it is the one command in this document that is neither run nor statically checked: `wsl.exe` with
