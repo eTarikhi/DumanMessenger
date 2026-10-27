@@ -52,8 +52,8 @@ footer { margin-top:56px; padding-top:18px; border-top:1px solid #1e2a3a; color:
 <header>
 <h1>Engineering remediation report</h1>
 <p class="sub">2026-10-27 &middot; branch <code>arena/ff85cb12-dumanmessenger</code> &middot;
-started at <code>d2fbba3</code> &middot; code head <code>4e7b412</code> &middot;
-16 commits, 32 files, +1 925 / &minus;113 (this report is most of the added lines) &middot;
+started at <code>d2fbba3</code> &middot; code head <code>149beec</code> &middot;
+19 commits, 32 files, +2 089 / &minus;122 (this report is most of the added lines) &middot;
 <a href="https://github.com/eTarikhi/DumanMessenger/pull/3" style="color:#4de0ff">pull request #3</a></p>
 <p>Remediation of the verification and toolchain layer, plus the two engine-side defects that only
 became visible once CI executed the authoritative Dart engine for the first time in this
@@ -64,13 +64,13 @@ verified, the row says so and says why.</p>
 
 <h2>0. Summary</h2>
 <div class="grid">
-  <div class="card"><div class="k">commits</div><div class="v">16</div><div class="n">by concern, all pushed</div></div>
+  <div class="card"><div class="k">commits</div><div class="v">19</div><div class="n">by concern, all pushed</div></div>
   <div class="card"><div class="k">defects fixed</div><div class="v">16</div><div class="n">each with its evidence in &sect;1</div></div>
-  <div class="card"><div class="k">CI jobs green</div><div class="v">9 / 9</div><div class="n">run 40455641251</div></div>
+  <div class="card"><div class="k">CI jobs green</div><div class="v">9 / 9</div><div class="n">run 40458960415</div></div>
   <div class="card"><div class="k">Dart tests</div><div class="v">279</div><div class="n">0 failed; read from the notice</div></div>
   <div class="card"><div class="k">TS tests</div><div class="v">474</div><div class="n">18 files; read from the notice</div></div>
   <div class="card"><div class="k">local checks</div><div class="v">12 / 0</div><div class="n">passed / failed; 13 could not run</div></div>
-  <div class="card"><div class="k">still blocked</div><div class="v">16</div><div class="n">of 27 probed rows, all external</div></div>
+  <div class="card"><div class="k">still blocked</div><div class="v">15</div><div class="n">of 27 probed rows, all external</div></div>
   <div class="card"><div class="k">roadmap open</div><div class="v">28</div><div class="n">16 closed; none closable here</div></div>
 </div>
 
@@ -379,9 +379,27 @@ reference, and the golden vectors' new <code>history</code> section passes in bo
 cases).</td></tr>
 <tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40455641251" style="color:#4de0ff">40455641251</a></td>
 <td><code>4e7b412</code></td><td class="pass">success</td>
-<td>Branch head. Both tallies now leave the runner as annotations: <code>npm test: Test Files 18
+<td>Both tallies now leave the runner as annotations: <code>npm test: Test Files 18
 passed (18) Tests 474 passed (474)</code> and <code>dart test: 279 passed, 0 failed, 0
 skipped</code>.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40457964023" style="color:#4de0ff">40457964023</a></td>
+<td><code>9b8434e</code></td><td class="pass">success</td>
+<td>The commit that carries the first batched daily artifact and its digest line in
+<code>reports/verification-log.jsonl</code>. Its own push went through the live
+<code>.githooks/pre-push</code> gate: 340 s, verdict PARTIAL, push allowed &mdash; the end-to-end
+evidence that the <code>prepare</code> hook works.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40458532323" style="color:#4de0ff">40458532323</a></td>
+<td><code>56fa3fe</code></td><td class="pass">success</td>
+<td><strong>The prediction registered for finding F4, confirmed:</strong> the Dart history probe's new
+close-membership arm prints <strong>60 packets, 15 656 payload bytes, converged in 8.75 s over 4
+beacon rounds</strong> &mdash; the figures <code>docs/06</code> &sect;17.3 had carried from the
+reference engine, matched exactly. Spread arm unchanged at 171 / 29 750.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40458960415" style="color:#4de0ff">40458960415</a></td>
+<td><code>149beec</code></td><td class="pass">success</td>
+<td>Branch head. The one residual difference that confirmation exposed &mdash; the same convergence
+time printed as <code>8.75 s</code> in Dart and <code>8.8 s</code> in the reference &mdash; is gone;
+both probes and both blocks now read <code>8.8 s</code>, and <code>dart test</code> is still
+279 / 0 / 0.</td></tr>
 </table>
 
 <h3>2.2 What the authoritative engine measured, for the first time</h3>
@@ -666,12 +684,14 @@ which is what verifies detection, path translation and forwarding.</td></tr>
 GREEN instead of INCOMPLETE and a push can be gated on the authoritative engine rather than on
 CI.</td><td><code>make doctor</code> reporting <code>dart</code> present and satisfying
 <code>^3.4.0</code>; a daily run with 0 not-run.</td></tr>
-<tr><td>Port the history probe's second arm (finding F4).</td><td>The Dart probe can only reproduce
-the arm that does <em>not</em> converge; the TypeScript probe's second arm &mdash; five members close
-enough to hear each other &mdash; converges in 8.8 s with 60 packets instead of 171. The
-authoritative engine cannot currently show the case where repair works quickly.</td><td>A
-<code>--history</code> run printing both arms, matching the TypeScript probe's two
-blocks.</td></tr>
+<tr><td><strong>DONE</strong> &mdash; Port the history probe's second arm (finding F4).</td>
+<td>Ported in <code>56fa3fe</code>: <code>--history</code> now runs both memberships and prints both
+blocks, with a close-membership arm selected as the most central node plus its nearest neighbours.
+Verified in CI run 40458532323 against the numbers <code>docs/06</code> &sect;17.3 had already
+published &mdash; 60 packets, 15 656 payload bytes, converged over 4 beacon rounds &mdash; and
+followed by <code>149beec</code>, which aligns the seconds' precision so both engines print
+<code>8.8 s</code>. See &sect;6.</td><td>A <code>--history</code> run printing both arms, matching the
+TypeScript probe's two blocks &mdash; measured, not only printed.</td></tr>
 <tr><td>Start roadmap line 13 (the mono-repo <code>app/</code>) with Flutter.</td><td>It is the
 prerequisite for all ten toolchain items and for every device item. <code>sim/mesh_sim/lib/</code>
 imports only <code>dart:async</code>, <code>dart:convert</code>, <code>dart:math</code> and
@@ -733,14 +753,39 @@ have never run". CI measured <strong>278 passed, 0 failed, 0 skipped</strong>. T
 <code>NEVER RUN</code> to <code>verified before</code> &mdash; which is the bookkeeping the collector
 exists to keep, changing state for the first time in this repository's history.</p>
 
-<h3>F4 &mdash; the authoritative engine can only show the repair case that fails</h3>
+<h3>F4 &mdash; RESOLVED in <code>56fa3fe</code> and <code>149beec</code>: the authoritative engine now shows both arms</h3>
 <p><code>tool/history-probe.ts</code> runs two arms: five members spread across the world, and five
 nearest members who can hear each other. The first does not converge inside 300 s (171 packets); the
-second converges in <strong>8.8 s</strong> with <strong>60 packets</strong>. The Dart CLI implements
-only the first, so its verdict line reads "anti-entropy did NOT converge inside 5 minutes" and the
-authoritative engine has no way to show the case where repair is cheap and fast. Recorded rather than
-ported: adding an arm means choosing the membership layout in Dart and re-measuring, and the result
-would be a new published number that nobody has reviewed.</p>
+second converges in <strong>8.8 s</strong> with <strong>60 packets</strong>. The Dart CLI implemented
+only the first, so its verdict line read "anti-entropy did NOT converge inside 5 minutes" and the
+authoritative engine had no way to show the case where repair is cheap and fast.</p>
+<p>It was recorded rather than ported because porting it means choosing the membership layout in Dart
+and re-measuring, and the result would be a new published number that nobody had reviewed. That
+objection is now answerable: <code>docs/06</code> &sect;17.3 had <em>already</em> published the close
+arm's figures from the reference engine, so the port came with a pre-registered prediction rather
+than an open one. The Dart probe now selects the most central node plus its nearest neighbours,
+runs both memberships, and prints both blocks. CI run
+<a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40458532323" style="color:#4de0ff">40458532323</a>
+returned, in the <code>probe-history</code> annotation:</p>
+<table>
+<tr><th>arm</th><th class="num">beacons</th><th class="num">requests</th><th class="num">replies</th>
+<th class="num">packets</th><th class="num">payload bytes</th><th>converged</th><th class="num">rounds</th></tr>
+<tr><td>spread (existing)</td><td class="num">166</td><td class="num">3</td><td class="num">2</td>
+<td class="num">171</td><td class="num">29 750</td><td>no, &gt;300 s</td><td class="num">2</td></tr>
+<tr><td>close (new)</td><td class="num">52</td><td class="num">4</td><td class="num">4</td>
+<td class="num">60</td><td class="num">15 656</td><td>yes, 8.8 s</td><td class="num">4</td></tr>
+</table>
+<p>Predicted 60 packets, 15 656 payload bytes, convergence in 8.8 s over 4 rounds; measured exactly
+that, with the spread arm unchanged. The two engines therefore agree on the <em>whole</em>
+anti-entropy protocol &mdash; membership selection, beacon arming, the bounded request/reply
+exchange, convergence detection and its cost &mdash; and not merely on the reply encoding that
+<code>b67c1c7</code> aligned. Confirmation exposed one residual difference: the same convergence time
+printed as <code>8.75 s</code> in Dart (via <code>_round</code>, two decimals) and <code>8.8 s</code>
+in the reference (<code>toFixed(1)</code>), which is also what &sect;17.3's table carries.
+<code>149beec</code> formats the history probe's seconds with <code>toStringAsFixed(1)</code>, leaving
+<code>_round</code> alone where the extra decimal is the point; run
+<a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40458960415" style="color:#4de0ff">40458960415</a>
+prints <code>8.8 s</code> in both blocks and keeps <code>dart test</code> at 279 / 0 / 0.</p>
 
 <h3>F5 &mdash; the always-on battery number exceeds the skills/07 budget, as documented</h3>
 <p><code>campus_quad</code> always-on measures <strong>20.49 %/8 h</strong> for a NORMAL node against
@@ -788,11 +833,11 @@ CI was green on the same commit because CI has the toolchain this machine does n
 </table>
 
 <h2>8. The change set, and what remains incomplete</h2>
-<p>Sixteen commits from <code>d2fbba3</code> to <code>4e7b412</code>, 32 files, +1 925 / &minus;113
+<p>Nineteen commits from <code>d2fbba3</code> to <code>149beec</code>, 32 files, +2 089 / &minus;122
 (this report is most of the added lines), all pushed to
 <code>arena/ff85cb12-dumanmessenger</code> and collected in
 <a href="https://github.com/eTarikhi/DumanMessenger/pull/3" style="color:#4de0ff">pull request #3</a>
-against <code>main</code>. The branch is 99 commits ahead of <code>origin/main</code> including the
+against <code>main</code>. The branch is 103 commits ahead of <code>origin/main</code> including the
 earlier merged work. <code>main</code> was not touched, nothing was force-pushed, and no history was
 rewritten &mdash; including the one commit whose message understates its contents, which is recorded
 in &sect;1 instead.</p>
