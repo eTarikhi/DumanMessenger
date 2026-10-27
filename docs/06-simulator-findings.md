@@ -1286,6 +1286,19 @@ excluded from `deliveryRatio` and from the chat log, and reported on the dashboa
 node with no groups arms no beacon chain, so a run that never creates a group consumes no
 extra randomness: **the golden vectors are byte-identical** in both languages.
 
+That promise covered the RNG, the spawn geometry and a groupless run — which is to say it did not
+cover the one thing a repair actually puts on air. The first CI run that compiled the Dart engine
+made the gap measurable: both engines reported the same 166 beacons, 3 requests, 2 replies and 171
+packets for the same history probe, and different payload bytes, **30 430 against 29 750**. Two
+encoding details, worth seventeen bytes an entry across forty entries: Dart emitted `"synced":false`
+for every entry, where the reference's `synced?: boolean` is `undefined` until a copy arrives by
+repair and `JSON.stringify` drops it — fifteen bytes to say nothing the receiver does not already
+know, since it sets the flag itself; and an integral `at` went out as `1200.0` from a Dart `double`
+where a JS `number` writes `1200`. Golden vectors **v2** added a `history` section carrying those
+entries and the exact reply body, asserted by `src/__tests__/acceptance.test.ts` and
+`sim/mesh_sim/test/golden_test.dart` from either side, so the next divergence is a failing test in
+whichever language moved rather than a difference in probe output.
+
 ---
 
 ## 18. The atrium does become a router — if it is charged

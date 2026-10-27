@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { MeshSimulation, createNodes, type SimConfig } from "../simulation";
 import { buildScenario, campusQuad, festivalCrowd, scenarioNames, sparseVillage } from "../scenarios";
 import { createRng } from "../rng";
+import type { HistoryEntry } from "../types";
 
 /**
  * Acceptance criteria, transcribed from the repo's own targets:
@@ -352,6 +353,7 @@ describe("golden vectors shared with sim/mesh_sim (Dart)", () => {
     rng: { seed: number; fixedPointScale: number; values: number[] };
     spawn: { scenario: string; seed: number; nodes: Array<Record<string, unknown>> };
     run: { scenario: string; seed: number; messages: number; gapMs: number; expect: Record<string, number> };
+    history: { note: string; entries: HistoryEntry[]; replyBody: string; replyBytes: number };
   };
 
   it("reproduces the mulberry32 stream bit-for-bit", () => {
@@ -379,6 +381,37 @@ describe("golden vectors shared with sim/mesh_sim (Dart)", () => {
       expect(node.stationary).toBe(g.stationary);
       expect(node.charging).toBe(g.charging);
     });
+  });
+
+  it("serialises an anti-entropy reply exactly as the fixture says", () => {
+    // Built here rather than read back out of the fixture, so a change to HistoryEntry's shape
+    // moves this assertion instead of moving the fixture and the assertion together. This is the
+    // TypeScript half of the contract sim/mesh_sim/test/golden_test.dart asserts from the other
+    // side: the same three entries must serialise to the same bytes in both languages, because a
+    // repair that costs different bytes on the two engines is two protocols.
+    //
+    // The two rules being pinned are the ones that diverged when CI first ran the Dart engine:
+    // no `synced` key unless it is true (JSON.stringify drops undefined, so `synced?: boolean`
+    // costs nothing until a copy actually arrives by repair), and no decimal point on an integral
+    // `at` (a JS number writes 1200 where a Dart double writes 1200.0).
+    const entries: HistoryEntry[] = [
+      { msgId: "grp-1:0:node-3", groupId: "grp-1", from: "node-3", at: 1200, body: "first", epoch: 0 },
+      { msgId: "grp-1:1:node-7", groupId: "grp-1", from: "node-7", at: 1500.5, body: "second", epoch: 0 },
+      {
+        msgId: "grp-1:2:node-3",
+        groupId: "grp-1",
+        from: "node-3",
+        at: 2400,
+        body: "repaired copy",
+        epoch: 1,
+        synced: true,
+      },
+    ];
+    const body = JSON.stringify(entries);
+    expect(body).toBe(fixture.history.replyBody);
+    expect(body.length).toBe(fixture.history.replyBytes);
+    expect(body).not.toContain('"synced":false');
+    expect(body).not.toContain("1200.0");
   });
 
   it("reproduces the reference run", () => {

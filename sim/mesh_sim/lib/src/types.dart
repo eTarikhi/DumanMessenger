@@ -693,14 +693,32 @@ class HistoryEntry {
   /// True once this copy arrived by anti-entropy rather than by the original flood.
   final bool synced;
 
+  /// The wire form of one entry, as it goes into an anti-entropy reply (`RS|group|epoch|[…]`).
+  ///
+  /// Two details here are load-bearing for cross-engine parity, because the TypeScript reference
+  /// engine's `JSON.stringify` decides both and the two engines have to put the same bytes on air
+  /// for the same repair:
+  ///
+  ///  * `synced` is omitted when false. It is a *local* flag — "this copy arrived by repair rather
+  ///    than by the original flood" — and the receiver sets it itself with [withSynced], so sending
+  ///    `"synced":false` costs 15 bytes an entry to say nothing. TypeScript declares it
+  ///    `synced?: boolean`, which is `undefined` until set, and `JSON.stringify` drops undefined
+  ///    keys; emitting it unconditionally made every Dart reply heavier than the reference's.
+  ///  * an integral `at` is written without a decimal point. `at` is a `double` here and a `number`
+  ///    there, and Dart writes `1200.0` where TypeScript writes `1200` — two more bytes an entry.
+  ///
+  /// Those two were 680 bytes across the history probe's two replies: 30 430 measured here against
+  /// 29 750 from the reference, for identical 166 beacons / 3 requests / 2 replies / 171 packets.
+  /// `test-fixtures/golden-vectors.json`'s `history` section pins the encoding in both languages, so
+  /// the next divergence is a failing test rather than a difference in probe output.
   Map<String, dynamic> toJson() => <String, dynamic>{
         'msgId': msgId,
         'groupId': groupId,
         'from': from,
-        'at': at,
+        'at': at == at.roundToDouble() ? at.toInt() : at,
         'body': body,
         'epoch': epoch,
-        'synced': synced,
+        if (synced) 'synced': true,
       };
 
   HistoryEntry withSynced() => HistoryEntry(

@@ -114,5 +114,34 @@ void main() {
       expect(s.p95LatencyMs,
           closeTo((expect_['p95LatencyMs'] as num).toDouble(), 1e-2));
     });
+
+    test('serialises an anti-entropy reply exactly as the reference engine does', () {
+      // The other half of the contract `src/__tests__/acceptance.test.ts` asserts from the
+      // TypeScript side. Both engines rebuild these entries and must produce byte-identical JSON,
+      // because a repair that costs different bytes on the two engines is two protocols — and
+      // `docs/06` §17.6 accounts sync bytes separately, so the number is one somebody reads.
+      //
+      // This is not a hypothetical. The first CI run that compiled this engine reported the same
+      // 166 beacons, 3 requests, 2 replies and 171 packets as the reference for the same history
+      // probe, and 30 430 payload bytes against its 29 750: `"synced":false` was emitted for every
+      // entry (15 bytes to say nothing the receiver does not already know, since it sets the flag
+      // itself) and an integral `at` was written as `1200.0` rather than `1200` (2 more). Seventeen
+      // bytes an entry, twenty entries, two replies.
+      final spec = fixture['history'] as Map<String, dynamic>;
+      final entries = (spec['entries'] as List<dynamic>)
+          .map((e) => HistoryEntry.fromJson(e as Map<String, dynamic>))
+          .toList();
+      expect(entries, hasLength(3));
+
+      final body = jsonEncode(entries.map((e) => e.toJson()).toList());
+      expect(body, equals(spec['replyBody']),
+          reason: 'the history reply body diverged from the TypeScript engine');
+      expect(body.length, equals(spec['replyBytes']),
+          reason: 'the reply costs a different number of bytes than the reference engine');
+      expect(body.contains('"synced":false'), isFalse,
+          reason: 'a false synced flag costs 15 bytes an entry and tells the receiver nothing');
+      expect(body.contains('1200.0'), isFalse,
+          reason: 'an integral timestamp must not carry a decimal point');
+    });
   });
 }
