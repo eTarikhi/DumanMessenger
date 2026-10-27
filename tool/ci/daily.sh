@@ -374,6 +374,61 @@ if [ "$HAVE_DART" = 1 ]; then DART_LINE="$(dart_sdk_version 2>/dev/null || echo 
   fi
 } > "$DIR/DAILY.md"
 
+# --- 5b. one committed line, because artifacts/ is not -------------------------
+#
+# Everything above lands under artifacts/, which .gitignore excludes: the record of what a given
+# sha actually verified is destroyed by exactly the event it exists to explain. Fourteen rollbacks
+# in one week made that concrete — each one erased every earlier run's captures, and "which
+# commits were verified, and how" survived only in a conversation nobody can grep. So each run
+# appends one line to a *tracked* file, reports/verification-log.jsonl.
+#
+# It is a digest and not a log: verdict, exit codes, counts, tool versions, the artifact directory
+# name. No captured output, ~300 bytes a run, append-only. The line describing this run is
+# uncommitted when it is written, because the sha it describes is already committed — the script
+# says so and names the file, rather than committing on your behalf.
+DIGEST="$ROOT/reports/verification-log.jsonl"
+if have python3; then
+  if python3 - "$DIGEST" "$SHA" "$BRANCH" "$STAMP" "$ELAPSED" "$VERDICT" "$EXIT" \
+               "$CHECK_PASSED" "$CHECK_FAILED" "$CHECK_NOTRUN" "$PIPE" "$EVIDENCE" "$FAST" \
+               "$DART_LINE" "$(tool_version node 2>/dev/null || echo MISSING)" \
+               "${DIR#$ROOT/}" <<'PY'
+import json, sys
+from datetime import datetime, timezone
+
+(out, sha, branch, stamp, elapsed, verdict, exit_code, passed, failed, notrun,
+ pipe, evidence, fast, dart, node, artifacts) = sys.argv[1:17]
+
+
+def num(text):
+    return int(text) if text.lstrip("-").isdigit() else None
+
+
+line = {
+    "sha": sha,
+    "branch": branch,
+    "runStamp": stamp,
+    "generatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "mode": "fast" if fast == "1" else ("full+evidence" if evidence == "1" else "full"),
+    "verdict": verdict,
+    "exit": num(exit_code),
+    "elapsedSec": num(elapsed),
+    "checks": {"passed": num(passed), "failed": num(failed), "notRun": num(notrun)},
+    "pipeline": {"exit": num(pipe),
+                 "meaning": {0: "green", 1: "failed", 2: "partial"}.get(num(pipe), "unknown")},
+    "tools": {"node": node, "dart": dart},
+    "artifacts": artifacts,
+    "note": "counts only; the captured output behind this line is in artifacts/, which is git-ignored",
+}
+with open(out, "a", encoding="utf-8") as fh:
+    fh.write(json.dumps(line, ensure_ascii=False) + "\n")
+PY
+  then
+    [ "$QUIET" = 1 ] || log_dim "digest: ${DIGEST#$ROOT/} — tracked, and uncommitted: git add ${DIGEST#$ROOT/}"
+  else
+    err "could not append the digest line to ${DIGEST#$ROOT/}"
+  fi
+fi
+
 if [ -n "$JSON_OUT" ] && have python3; then
   if python3 - "$JSON_OUT" "$SHA" "$BRANCH" "$STAMP" "$ELAPSED" "$VERDICT" \
               "$PIPE" "$CHECKS" "$CHECK_PASSED" "$CHECK_FAILED" "$CHECK_NOTRUN" \
