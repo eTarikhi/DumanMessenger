@@ -76,9 +76,37 @@ jobs:
         run: npx tsc --noEmit -p tsconfig.json
 
       # Includes the skills/02 + skills/08 acceptance criteria and the golden
-      # vectors that the Dart job asserts against too.
+      # vectors that the Dart job asserts against too. `pipefail` is what keeps `tee` from
+      # masking a failing suite's exit code, which would make this gate vacuous.
       - name: Unit + acceptance tests
-        run: npm test
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee /tmp/vitest.txt
+
+      # The tally, as an annotation, for the reason the dart job's reporter gives: this
+      # repository's development sandbox cannot download a log archive
+      # (results-receiver.actions.githubusercontent.com is outside its egress allowlist) and
+      # $GITHUB_STEP_SUMMARY is not exposed by the check-runs API, so a green run's numbers are
+      # otherwise unreadable. Until this step existed, the TypeScript count quoted in the docs was
+      # whatever somebody last measured locally — which is how "451 tests" survived being wrong by
+      # twenty-two.
+      - name: Publish the test tally
+        if: always()
+        continue-on-error: true
+        run: |
+          # ANSI escapes are stripped first: vitest colours its summary when it thinks it has a
+          # terminal, and a colour code between "Tests" and its count makes the grep below find
+          # nothing and publish an empty notice — measured with a coloured capture, not guessed.
+          # The % escape is the one workflow commands require, so a summary containing a percent
+          # sign cannot truncate the annotation.
+          summary="$(sed -e 's/\x1b\[[0-9;]*[mK]//g' /tmp/vitest.txt 2>/dev/null \
+            | grep -E '(Test Files|Tests)[[:space:]]' \
+            | tr -s '[:space:]' ' ' | paste -sd'; ' - | sed -e 's/%/%25/g' || true)"
+          if [ -n "$summary" ]; then
+            echo "::notice title=npm test::$summary"
+          else
+            echo "::warning::no vitest summary in the capture, so the tally is not published"
+          fi
 
       - name: Golden vectors are up to date
         run: |
