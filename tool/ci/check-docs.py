@@ -582,8 +582,87 @@ def check_ci_jobs(repo: Repo) -> Result:
                   f"{len(wf)} workflow jobs, {len(pipe)} mirrored", problems)
 
 
+def _checker_invocations(text: str) -> Set[str]:
+    """Names of the `tool/ci/check-*.py` scripts a block of shell or YAML actually runs.
+
+    Two refinements, both of them earned the hard way in this check's own self-test:
+
+    * Only a line that names an interpreter counts. Every entry point labels its step with the
+      script name (`run_step o "Cross-language parity (check-parity.py)" …`), and counting bare
+      mentions made a label look like an invocation — so deleting the real invocation and
+      leaving the label in place passed the check, which is precisely the false pass the first
+      self-test fault was injected to find. The limitation is that a direct `./tool/ci/check-x.py`
+      would not count; all five are invoked through `python3` in all three lists.
+    * A `--self-test` run does not count: it exercises the checker's own fixtures, not the
+      repository. The window is character-based rather than a pattern because the three entry
+      points spell it differently (`check-x.py --self-test`, `"$1/check-x.py" --self-test`).
+    """
+    out: Set[str] = set()
+    for line in text.splitlines():
+        if "python3" not in line and "python " not in line:
+            continue
+        for m in re.finditer(r"(check-[\w-]+\.py)(.{0,24})", line):
+            if "--self-test" in m.group(2):
+                continue
+            out.add(m.group(1))
+    return out
+
+
+def _between(text: str, start: str, stop: str) -> str:
+    """The block between two column-anchored lines, or '' if either is missing."""
+    m = re.search(re.escape(start) + r"\n(.*?)" + stop, text, re.S | re.M)
+    return m.group(1) if m else ""
+
+
+def check_ci_checkers(repo: Repo) -> Result:
+    """Do all three entry points run the same static checkers?
+
+    `ci.yml`'s `checks` job, `run-pipeline.sh`'s `job_checks` and `collect-checks.sh`'s `docs`
+    group are three hand-maintained lists of the same five scripts, and the claim they exist to
+    support — "a green local run is evidence about the remote one" (`docs/10` §10), "every check
+    in the repository, one pass" (`docs/12`) — is only true while the three agree. `ci-jobs`
+    compares the *job* names and cannot see a step missing inside one of them, which is how
+    `check-ps1.py` came to be run by nothing automated at all: it had a `make` target, three
+    lists that did not mention it, and a Windows entry point nobody was checking.
+    """
+    wf = repo.root / ".github" / "workflows" / "ci.yml"
+    pipe = repo.root / "tool" / "ci" / "run-pipeline.sh"
+    coll = repo.root / "tool" / "ci" / "collect-checks.sh"
+    blocks = {
+        "ci.yml's checks job": _between(repo.read(".github/workflows/ci.yml"), "  checks:",
+                                        r"^  [a-z][a-z0-9-]*:$") if wf.exists() else "",
+        "run-pipeline.sh's job_checks": _between(pipe.read_text(encoding="utf-8"),
+                                                 "job_checks() {", r"^}$") if pipe.exists() else "",
+        "collect-checks.sh's docs group": _between(coll.read_text(encoding="utf-8"),
+                                                   "if selected docs; then", r"^fi$")
+                                          if coll.exists() else "",
+    }
+    problems: List[str] = []
+    sets = {name: _checker_invocations(text) for name, text in blocks.items()}
+    for name, found in sets.items():
+        if not found:
+            problems.append(f"no checker invocations could be read out of {name}, so its "
+                            f"agreement with the other two is unverifiable")
+    union: Set[str] = set().union(*sets.values()) if sets else set()
+    for name, found in sets.items():
+        for c in sorted(union - found):
+            problems.append(
+                f"{name} does not run tool/ci/{c}, which the other entry points do: the three "
+                f"lists are hand-maintained and this one has drifted, so a green run of it "
+                f"says less than docs/10 §10 and docs/12 claim")
+    on_disk = {f.name for f in (repo.root / "tool" / "ci").glob("check-*.py")}
+    for c in sorted(on_disk - union):
+        problems.append(
+            f"tool/ci/{c} exists but no entry point runs it — the check-ps1.py case: a checker "
+            f"with a make target and no automation, which is indistinguishable from no checker")
+    return Result("ci-checkers", not problems,
+                  f"{len(union & on_disk) if on_disk else len(union)} checkers run by all three "
+                  f"entry points", problems)
+
+
 CHECKS = [
     check_ci_jobs,
+    check_ci_checkers,
     check_section_counts,
     check_dart_cli_flags,
     check_media_sections,
@@ -628,6 +707,13 @@ FAULTS = [
     # the drift this check was written for: a job added to one list and not the other
     ("ci-jobs", "tool/ci/run-pipeline.sh", 'JOBS_ALL="checks web',
      lambda s: s.replace('JOBS_ALL="checks web', 'JOBS_ALL="checks bogus web', 1), "bogus"),
+    # the real regression: a checker with a make target that no pipeline called, so the
+    # Windows entry point was validated only when a human remembered to type the command
+    ("ci-checkers", "tool/ci/run-pipeline.sh", '"$ROOT" python3 tool/ci/check-ps1.py make.ps1',
+     lambda s: s.replace('"$ROOT" python3 tool/ci/check-ps1.py make.ps1', '"$ROOT" true', 1),
+     "check-ps1.py"),
+    ("ci-checkers", "tool/ci/collect-checks.sh", 'python3 "$HERE/check-parity.py"',
+     lambda s: s.replace('python3 "$HERE/check-parity.py"', "true", 1), "check-parity.py"),
     ("ci-script-flags", "docs/10-local-development-and-ci.md", "run-pipeline.sh --job",
      lambda s: s.replace("run-pipeline.sh --job", "run-pipeline.sh --jobs", 1), "--jobs"),
     # the real regression: a pattern that cannot see a digit hides check-ps1 from help
@@ -665,6 +751,10 @@ def self_test() -> int:
             shutil.copy2(ROOT / "README.md", tmp / "README.md")
         for sh in sorted((ROOT / "tool/ci").glob("*.sh")):
             shutil.copy2(sh, tmp / "tool/ci" / sh.name)
+        # ci-checkers also asks whether every `check-*.py` on disk is run by something, so the
+        # copy needs the checkers themselves or that half of the rule is vacuous in the fixture.
+        for py in sorted((ROOT / "tool/ci").glob("check-*.py")):
+            shutil.copy2(py, tmp / "tool/ci" / py.name)
         # ci-jobs compares the workflow against run-pipeline.sh, so the self-test's copy needs
         # the workflow too. Without it the unmutated copy fails and every fault below it is
         # meaningless — which is exactly what the guard under this block is for, and why it

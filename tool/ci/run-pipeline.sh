@@ -51,7 +51,12 @@ LIST_ONLY=0
 LABEL="run"
 
 usage() {
-  sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  # Walk the leading `#` block instead of a hard-coded line range. Four of these scripts had
+  # drifted past their own range and were printing their source code as help text — measured, not
+  # suspected: `run-pipeline.sh --help` emitted eleven lines of `set -uo pipefail`, `HERE=…`,
+  # `. "$HERE/lib.sh"`. Re-tuning six magic numbers would leave the same trap for the next edit;
+  # this is the pattern `daily.sh` already uses.
+  awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"
   cat <<USAGE
 
 Options:
@@ -106,7 +111,7 @@ web        TypeScript engine + React simulator
              npm run golden && git diff --quiet -- test-fixtures/golden-vectors.json
              npm run build
 dart       Dart mesh_sim (authoritative engine)      [runs all three, then gates]
-             dart pub get
+             dart pub get (--enforce-lockfile once pubspec.lock is committed)
              dart analyze
              dart test --reporter expanded
              dart run bin/mesh_sim.dart --scenario campus_quad --seed 42
@@ -248,6 +253,13 @@ job_checks() {
            "$ROOT" python3 tool/ci/check-dart-sites.py
   [ "$out" = success ] || failed="$failed dart-sites"
 
+  # make.ps1 cannot be executed here and could not be executed on the runner either, so both
+  # sides check it statically and both say so. The workflow gained the same step; before that
+  # the checker existed and no pipeline called it.
+  run_step out "PowerShell static check (check-ps1.py)" "checks-ps1.txt" \
+           "$ROOT" python3 tool/ci/check-ps1.py make.ps1
+  [ "$out" = success ] || failed="$failed ps1"
+
   # A check that always passes is indistinguishable from a broken one, and all four have found
   # bugs in themselves, so the self-tests are a CI step rather than an optional extra.
   run_step out "Checker self-tests" "checks-self-test.txt" "$ROOT" bash -c \
@@ -317,8 +329,13 @@ job_dart() {
     return
   fi
 
+  # Mirrors the workflow: enforce the lockfile when one is committed, and say so plainly when
+  # there is none, because `test: ^1.25.0` resolved afresh is not a reproducible build.
   local pubout
-  run_step pubout "dart pub get" "dart-pub-get.txt" "$DART_DIR" dart pub get
+  run_step pubout "dart pub get" "dart-pub-get.txt" "$DART_DIR" bash -c \
+    'if [ -f pubspec.lock ]; then dart pub get --enforce-lockfile; else
+       echo "note: pubspec.lock is not committed, so this resolves dependencies fresh" >&2
+       dart pub get; fi'
   if [ "$pubout" != success ]; then record_job dart failure "pub get"; return; fi
 
   # These three run unconditionally and are gated afterwards, exactly as the workflow does

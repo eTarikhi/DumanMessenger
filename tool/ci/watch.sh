@@ -36,7 +36,14 @@ CLASSIFY_RUN=""
 RUN_ID=""
 INTERVAL=30
 
-usage() { sed -n '2,26p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() {
+  # Walk the leading `#` block instead of a hard-coded line range. Four of these scripts had
+  # drifted past their own range and were printing their source code as help text — measured, not
+  # suspected: `run-pipeline.sh --help` emitted eleven lines of `set -uo pipefail`, `HERE=…`,
+  # `. "$HERE/lib.sh"`. Re-tuning six magic numbers would leave the same trap for the next edit;
+  # this is the pattern `daily.sh` already uses.
+  awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"
+}
 
 while [ $# -gt 0 ]; do
   case "$1" in

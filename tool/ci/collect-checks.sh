@@ -49,7 +49,14 @@ JSON_OUT=""
 
 require_value() { [ -n "${2-}" ] || { err "option $1 needs a value"; exit 64; }; }
 
-usage() { sed -n '2,32p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() {
+  # Walk the leading `#` block instead of a hard-coded line range. Four of these scripts had
+  # drifted past their own range and were printing their source code as help text — measured, not
+  # suspected: `run-pipeline.sh --help` emitted eleven lines of `set -uo pipefail`, `HERE=…`,
+  # `. "$HERE/lib.sh"`. Re-tuning six magic numbers would leave the same trap for the next edit;
+  # this is the pattern `daily.sh` already uses.
+  awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"
+}
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -83,6 +90,7 @@ REGISTRY_DOCS=(
   "dart-balance|Dart delimiter balance, with no Dart SDK present|yes|an unclosed brace, string or interpolation in sim/mesh_sim"
   "parity|do the two engines agree on their constants?|yes|a protocol constant changed in src/ or sim/mesh_sim only"
   "dart-sites|Dart declaration sites consistent, with no Dart SDK present|yes|a stats field missing from toJson, a config field with no constructor parameter, an EventKind with no case"
+  "ps1|PowerShell entry point checked statically, never executed|yes|an unbalanced brace or string in make.ps1, and PowerShell-7-only syntax that fails on the 5.1 Windows 11 ships"
   "checker-self-test|do the four checkers still catch what they claim?|yes|a checker that always passes, which is indistinguishable from a broken one"
 )
 
@@ -129,7 +137,7 @@ REGISTRY_EVIDENCE=(
 
 describe_group() {
   case "$1" in
-    docs)     printf 'Toolchain-free static checks — documentation drift, Dart balance, Dart declaration sites, cross-language parity, checker self-tests' ;;
+    docs)     printf 'Toolchain-free static checks — documentation drift, Dart balance, Dart declaration sites, cross-language parity, PowerShell entry point, checker self-tests' ;;
     ts)       printf 'TypeScript engine + React visualiser — verified locally many times' ;;
     dart)     printf 'Dart authoritative engine — NEVER COMPILED on the current tree' ;;
     cli)      printf 'CLI acceptance across scenarios — never run on the current tree' ;;
@@ -273,6 +281,16 @@ if selected docs; then
              python3 "$HERE/check-dart-sites.py"
     add_row docs dart-sites "$o" "$SECONDS" ""
     [ "$o" = success ] || add_fail docs dart-sites docs-dart-sites.txt
+
+    # make.ps1 is the Windows entry point: 280 lines and 21 targets that no Linux runner and no
+    # PowerShell-less sandbox can execute. `make check-ps1` existed and nothing automated called
+    # it, which is how a repository ships a broken front door — the check was there, the habit
+    # was not. Static only, and reported as static only (docs/11 §3): a pass here is never
+    # evidence that the script ran.
+    run_step o "PowerShell entry point (check-ps1.py make.ps1)" "docs-ps1.txt" "$ROOT" \
+             python3 "$HERE/check-ps1.py" make.ps1
+    add_row docs ps1 "$o" "$SECONDS" ""
+    [ "$o" = success ] || add_fail docs ps1 docs-ps1.txt
 
     run_step o "Checker self-tests (do they still fail when they should?)" "docs-checker-self-test.txt" \
              "$ROOT" bash -c 'python3 "$1/check-docs.py" --self-test && python3 "$1/check-dart-balance.py" --self-test && python3 "$1/check-parity.py" --self-test && python3 "$1/check-dart-sites.py" --self-test' \
