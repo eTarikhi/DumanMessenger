@@ -658,8 +658,14 @@ void main(List<String> args) {
           '(missed ${history['missed']})');
       stdout.writeln('  ${'without repair'.padRight(22)}${history['offRecovered']} recovered, '
           'converged=${history['offConverged']} — a missed flood is missed for good');
-      stdout.writeln('  ${'with repair'.padRight(22)}${history['recovered']} recovered in '
-          '${history['convergedSeconds']} s (${history['rounds']} beacon rounds)');
+      // `convergedSeconds` is null when the run did not converge inside the window, and
+      // printing it raw read as `recovered in null s` — a line that looks like a broken probe
+      // rather than a measured negative result. This is the TypeScript probe's wording
+      // (tool/history-probe.ts), which says what the null means.
+      stdout.writeln('  ${'with repair'.padRight(22)}${history['recovered']}/${history['heldBefore']} '
+          'recovered, converged=${history['converged']} in '
+          '${history['converged'] == true ? '${history['convergedSeconds']} s' : '>300 s'} '
+          '(${history['rounds']} beacon rounds)');
       stdout.writeln('  ${'radio cost'.padRight(22)}${history['beacons']} beacons, '
           '${history['requests']} requests, ${history['replies']} replies = '
           '${history['syncPackets']} packets, ${history['bytes']} payload bytes');
