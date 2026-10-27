@@ -903,8 +903,12 @@ naming the rows, and `daily.json` records them under `blockers.driftRows` with
    `reports/verification-log.jsonl` (§5): counts and verdicts rather than captures, so "which shas
    were verified, and what was missing when they were" still has an answer afterwards.
 3. **What is left is not code that can be written here.** Sections A–D are the reason, and section
-   F prices it: of 28 open roadmap items, 1 is closable from this machine and 27 need hardware, a
-   store account, a toolchain that is not installable, or a crowd. The remainder is not deferred
+   F prices it: of 28 open roadmap items, **none** is closable from this machine and all 28 need
+   hardware, a store account, a toolchain that is not installable, a legal entity, or a crowd.
+   Section F said 1 until 2026-10-27, when the row it counted — line 488, the legal documents —
+   was reclassified from `sandbox` to `people`: `PRIVACY.md` had been written after the rule, and
+   its own note keeps the box open for a data controller and counsel review, which is not writing.
+   A classifier that contradicts the note it classifies is worse than none, so the count is 0. The remainder is not deferred
    work — it is the part of this project that was never going to happen inside a container. What
    *can* be produced here is the specification, the two engines, the checks and the measurements,
    for whoever has the phones.

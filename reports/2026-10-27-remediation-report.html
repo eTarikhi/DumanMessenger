@@ -65,7 +65,7 @@ verified, the row says so and says why.</p>
 <h2>0. Summary</h2>
 <div class="grid">
   <div class="card"><div class="k">commits</div><div class="v">19</div><div class="n">by concern, all pushed</div></div>
-  <div class="card"><div class="k">defects fixed</div><div class="v">16</div><div class="n">each with its evidence in &sect;1</div></div>
+  <div class="card"><div class="k">defects fixed</div><div class="v">17</div><div class="n">each with its evidence in &sect;1</div></div>
   <div class="card"><div class="k">CI jobs green</div><div class="v">9 / 9</div><div class="n">run 40458960415</div></div>
   <div class="card"><div class="k">Dart tests</div><div class="v">279</div><div class="n">0 failed; read from the notice</div></div>
   <div class="card"><div class="k">TS tests</div><div class="v">474</div><div class="n">18 files; read from the notice</div></div>
@@ -342,6 +342,30 @@ YAML, against five capture shapes: coloured, plain, one containing a percent sig
 <code>%25</code>), one with no summary, and a missing file &mdash; the last two taking the warning
 branch rather than publishing nothing at all.</p>
 
+<h3>1.4 Addendum &mdash; the classifier contradicted the note it was classifying</h3>
+<p><code>blockers.sh</code> section F prices every open roadmap item by matching its checkbox text
+against six ordered rules, and it printed <strong>"28 open, 16 closed, 1 closable from here"</strong>
+for most of this session. The one closable row was line 488, <em>"Legal: privacy policy, crypto
+export note, takedown resilience docs"</em>, matched by a rule written before those documents existed
+and classified <code>sandbox</code> with the reason <em>"a privacy policy can be written and reviewed
+here"</em>.</p>
+<p>That reason is now false in the only way that matters: <code>PRIVACY.md</code> <em>was</em>
+written, and the implementation note the roadmap carries under that very checkbox says the box stays
+open for the two parts that are not writing &mdash; <strong>no data controller</strong>, so GDPR
+Art. 13's identity-and-contact requirement is unmet, and <strong>no counsel review</strong> of the
+export classification. So the script told its reader that one item could be closed from a branch
+while the item's own note said it could not, and this report repeated the number in two places while
+its summary card said "none closable here" &mdash; the contradiction was inside one document.</p>
+<p>The rule's class is <code>people</code> now, its reason names the two missing parts, and the
+ordering comment records why the row moved rather than silently changing. Measured after the change:
+<code>28 open, 16 closed, 0 closable from here</code>, breakdown device 10 / toolchain 10 /
+people 6 / store 2 / reachable-from-here 0, and the blocked/ok summary is unchanged at
+<strong>15 blocked &middot; 12 ok &middot; 0 unknown</strong> because the roadmap row was already
+<code>BLOCKED</code> either way. <code>docs/10</code> &sect;11's closing paragraph quoted the old
+count and now quotes the new one with the reason. This is the seventeenth defect, and the cheapest
+kind to miss: nothing failed, every check was green, and the number was simply wrong in the
+direction that flatters the work.</p>
+
 <h2>2. What was verified, and how</h2>
 
 <h3>2.1 Remote CI &mdash; executed, on this branch</h3>
@@ -457,7 +481,9 @@ transfer reaches 0.9487 delivery and does not finish.</td></tr>
 line of <code>reports/verification-log.jsonl</code>.</td></tr>
 <tr><td><code>./tool/ci/blockers.sh --json artifacts/blockers-final.json</code></td>
 <td>exit 0 by design &mdash; <strong>16 blocked, 0 repairable-here, 11 ok, 0 unknown</strong> of 27
-rows at <code>0734487</code>; 0 drift rows; roadmap 28 open / 16 closed / 1 closable from here.</td></tr>
+rows at <code>0734487</code>; 0 drift rows; roadmap 28 open / 16 closed / 1 closable from here at
+that sha, and <strong>0 closable</strong> at <code>f01c32a</code> once &sect;1.4's reclassification
+landed.</td></tr>
 <tr><td><code>python3 tool/ci/check-docs.py</code> and <code>--self-test</code></td>
 <td>12 checks pass, 409 section citations resolve, 53 make targets, 21 <code>make.ps1</code>
 targets, 15 npm scripts. Self-test: <strong>14 faults, all caught and named</strong>, tree restored
@@ -573,11 +599,13 @@ tracked had reverted to base content, only the local ref had moved.</td></tr>
 <td>Was: every artifact git-ignored, so a rollback erased the record of what had been verified. Now:
 <code>reports/verification-log.jsonl</code> is tracked and carries four lines, one of them written by
 <code>daily.sh</code> itself during this session.</td></tr>
-<tr><td><strong>F</strong> roadmap, 28 open items</td><td class="blocked">27 externally blocked,
-1 partially resolved</td><td>Classification re-read from <code>roadmap/roadmap.md</code> at
-<code>0734487</code>: device 10, toolchain 10, people 5, store 2, reachable-from-here 1. Nothing was
-closed this session, because no open item's acceptance criterion can be satisfied without a device, a
-store account, a toolchain this machine lacks, or people. See &sect;4.</td></tr>
+<tr><td><strong>F</strong> roadmap, 28 open items</td><td class="blocked">all 28 externally blocked</td>
+<td>Classification re-read from <code>roadmap/roadmap.md</code>: at <code>0734487</code> it read
+device 10, toolchain 10, people 5, store 2, reachable-from-here 1; at <code>f01c32a</code> it reads
+<strong>device 10, toolchain 10, people 6, store 2, reachable-from-here 0</strong>, because the one
+"reachable" row was misclassified and &sect;1.4 corrects it. Nothing was closed this session, because
+no open item's acceptance criterion can be satisfied without a device, a store account, a toolchain
+this machine lacks, a legal entity, or people. See &sect;4.</td></tr>
 </table>
 
 <h2>4. Roadmap reconciliation</h2>

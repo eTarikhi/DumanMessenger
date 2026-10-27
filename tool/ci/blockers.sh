@@ -468,6 +468,13 @@ head_ "F · roadmap — what each open item would take to close"
 # test needs radios *and* a crowd, and the crowd is the part that cannot be provisioned;
 # `toolchain` precedes `device` because "Mono-repo: app/ Flutter + transport/android" names a
 # phone only as a build target, and what it actually needs is an SDK.
+#
+# The legal item used to be classified `sandbox` — "a privacy policy can be written and reviewed
+# here" — and that was true when the rule was written. It stopped being true when PRIVACY.md was
+# written: the documents exist, and the item's own implementation note keeps the box open for the
+# two parts that are not writing, a data controller to name under GDPR Art. 13 and counsel review
+# of the export classification. A classifier that disagrees with the note it is classifying is
+# worse than no classifier, so the row is `people` now and this script reports 0 of 28 closable.
 RULE_RE=(
   'Identity:|QR add-contact'
   'Legal:|privacy policy'
@@ -476,10 +483,10 @@ RULE_RE=(
   'Flutter|Mono-repo|UI:|SDK|E2EE|panic wipe|Group UX|Onboarding|maps|Plugin API|analytics'
   'BLE|GATT|CoreBluetooth|WiFi Direct|WifiP2p|Multipeer|WiFi Aware|foreground service|Permissions|iOS|Android|Opus|Battery/performance'
 )
-RULE_CLS=(toolchain sandbox people store toolchain device)
+RULE_CLS=(toolchain people people store toolchain device)
 RULE_WHY=(
   'the cryptography is built and tested in the TS reference (src/crypto/identity.ts); what remains is Dart and Flutter, which this machine cannot compile'
-  'documents: the crypto-export note is already in docs/04 §7, and a privacy policy can be written and reviewed here'
+  'the documents this asks for are written (PRIVACY.md, and the crypto-export note in docs/04 §7); what is left is a legal entity to name as data controller under GDPR Art. 13 and counsel review, neither of which a branch can produce'
   'needs people in a physical place (a field test, a crowd, an auditor, a launch)'
   'needs a store account and a signing key (Play, F-Droid, TestFlight) and CI minutes this account is refused'
   'needs the Flutter/Dart toolchain — and pub.dev — to build and test'
