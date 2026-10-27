@@ -60,7 +60,7 @@ usage() {
   cat <<USAGE
 
 Options:
-  --job LIST             comma-separated: web, dart, cli-matrix, probes (default: all)
+  --job LIST             comma-separated: checks, web, dart, cli-matrix, probes (default: all)
   --fast                 the quick subset: typecheck, unit tests, analyze, dart test.
                          Skips the production build, the CLI acceptance matrix and the
                          probes. Good before a commit; not good before a push.
@@ -104,6 +104,13 @@ done
 
 describe_jobs() {
   cat <<'PLAN'
+checks     Toolchain-free static checks              [no Node, no Dart — python3 only]
+             python3 tool/ci/check-docs.py
+             python3 tool/ci/check-dart-balance.py
+             python3 tool/ci/check-parity.py
+             python3 tool/ci/check-dart-sites.py
+             python3 tool/ci/check-ps1.py make.ps1
+             the four checkers' --self-test modes
 web        TypeScript engine + React simulator
              npm ci
              npx tsc --noEmit -p tsconfig.json

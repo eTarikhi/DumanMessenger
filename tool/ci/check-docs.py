@@ -568,6 +568,29 @@ def check_ci_jobs(repo: Repo) -> Result:
         problems.append("no jobs could be read out of .github/workflows/ci.yml")
     if not pipe:
         problems.append("no JOBS_ALL could be read out of tool/ci/run-pipeline.sh")
+
+    # `--list` is the mapping docs/10 §10 tells a reader to trust ("prints this mapping from the
+    # script itself, so the table above and the runner cannot disagree for long"), and `--job`'s
+    # help line is how anybody learns the job names exist. Both are hand-written text in the same
+    # file as JOBS_ALL, and both had silently lost a job: `checks` ran, was gated on, and appeared
+    # in neither — so the reference table in the docs omitted the one job whose whole purpose is
+    # catching drift, and `--job checks` looked like a typo rather than the default first job.
+    src = (repo.root / "tool" / "ci" / "run-pipeline.sh").read_text(encoding="utf-8") \
+        if (repo.root / "tool" / "ci" / "run-pipeline.sh").exists() else ""
+    # One space, not two: the label column is ten characters wide and `cli-matrix` fills it, so
+    # a `\s{2,}` separator reported a job that is plainly described. Measured before shipping.
+    described = set(re.findall(r"^([a-z][a-z0-9-]*)\s+\S", _between(src, "describe_jobs() {", r"^}$"), re.M))
+    m = re.search(r"--job LIST\s+comma-separated: ([^(]+)", src)
+    advertised = {t.strip() for t in m.group(1).split(",")} if m else set()
+    for j in pipe:
+        if j not in described:
+            problems.append(
+                f"run-pipeline.sh runs a job `{j}` that its own --list plan does not describe, so "
+                f"the mapping docs/10 §10 tells readers to trust omits it")
+        if j not in advertised:
+            problems.append(
+                f"run-pipeline.sh runs a job `{j}` that the --job LIST help line does not name, so "
+                f"`--job {j}` reads as a typo instead of a supported selection")
     for j in wf:
         if j not in pipe:
             problems.append(
@@ -707,6 +730,9 @@ FAULTS = [
     # the drift this check was written for: a job added to one list and not the other
     ("ci-jobs", "tool/ci/run-pipeline.sh", 'JOBS_ALL="checks web',
      lambda s: s.replace('JOBS_ALL="checks web', 'JOBS_ALL="checks bogus web', 1), "bogus"),
+    # the real regression: a job that ran and was gated on, but that --list and --job both forgot
+    ("ci-jobs", "tool/ci/run-pipeline.sh", "checks     Toolchain-free static checks",
+     lambda s: re.sub(r"^checks\s+Toolchain-free.*\n", "", s, count=1, flags=re.M), "checks"),
     # the real regression: a checker with a make target that no pipeline called, so the
     # Windows entry point was validated only when a human remembered to type the command
     ("ci-checkers", "tool/ci/run-pipeline.sh", '"$ROOT" python3 tool/ci/check-ps1.py make.ps1',
