@@ -684,7 +684,7 @@ void main(List<String> args) {
             'converged=${close['offConverged']}');
         stdout.writeln('  ${'with repair'.padRight(22)}${close['recovered']}/${close['heldBefore']} '
             'recovered, converged=${close['converged']} in '
-            '${close['converged'] == true ? '${close['convergedSeconds']} s' : '>300 s'} '
+            '${close['converged'] == true ? '${(close['convergedSeconds'] as num).toStringAsFixed(1)} s' : '>300 s'} '
             '(${close['rounds']} beacon rounds)');
         stdout.writeln('  ${'radio cost'.padRight(22)}${close['beacons']} beacons, '
             '${close['requests']} requests, ${close['replies']} replies = '
@@ -1717,8 +1717,11 @@ Map<String, Object?> _historyProbe(SimConfig config) {
           'in ${on.rounds} bounded rounds; without it the member holds ${off.recovered}'
       : 'anti-entropy did NOT converge inside 5 minutes (${on.recovered}/${on.missed} recovered)';
 
+  // One decimal place, because that is what tool/history-probe.ts prints and what docs/06 §17.3's
+  // table carries: the same 8.75 s read as "8.8 s" there and "8.75 s" here, which is the kind of
+  // difference that makes a reader check whether the engines agree rather than the rounding.
   final closeVerdict = onClose.converged
-      ? 'a membership that can hear itself converges in ${_round(onClose.seconds)} s over '
+      ? 'a membership that can hear itself converges in ${onClose.seconds.toStringAsFixed(1)} s over '
           '${onClose.rounds} bounded rounds, at ${onClose.packets} packets against '
           '${on.packets} for the spread one — the peer graph is the boundary, not the list'
       : 'even a membership that can hear itself did NOT converge inside 5 minutes '
