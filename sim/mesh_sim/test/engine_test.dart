@@ -2659,7 +2659,8 @@ void main() {
   });
 
   group('density-derived beacon interval (docs/06 §24.11)', () {
-    // Mirrors the second describe in `src/__tests__/connectivity.test.ts`. §24.7 argued for
+    // The first two tests mirror the second describe in `src/__tests__/connectivity.test.ts`;
+    // the third mirrors `src/__tests__/radio-occupancy.test.ts`. §24.7 argued for
     // deriving the interval per node because no single interval served both densities; §24.11
     // measures it and rejects it, so these tests pin the default and the direction that made
     // it lose rather than any benefit.
@@ -2710,16 +2711,32 @@ void main() {
     });
 
     test('costs a dense crowd fewer deferrals under csma, and buys it delivery', () {
-      // docs/08 §12's magnitudes were measured under the flat charge, so they are
-      // pessimistic here — by about ten points of delivery on three seeds.
-      final flat = MeshSimulation(festivalCrowd(42).copyWith(
+      // Mirrors `costs a dense crowd fewer deferrals and buys it delivery, once contention is
+      // modelled` in src/__tests__/radio-occupancy.test.ts — a different file from the two tests
+      // above, which mirror connectivity.test.ts — so it has to use the same harness, and it did
+      // not. It hand-rolled a shorter sequence: 120 s of warm-up, no `clearRecords()` and no
+      // `injectTraffic()`, which measures a crowd with nothing to send. Both arms recorded zero
+      // deferrals and zero drops, and `expect(0, lessThan(0))` failed on the first Dart run this
+      // repository has ever had (2026-10-27, run 40428343622). The failure is the good outcome:
+      // the same mistake with a `greaterThanOrEqual` in it would have passed for ever while
+      // measuring nothing.
+      //
+      // The magnitudes quoted for this comparison are the TypeScript mirror's, about six points
+      // of delivery; docs/08 §12's published contention numbers were measured under the flat
+      // charge and are pessimistic here. No Dart magnitude is published anywhere, because until
+      // that run no Dart SDK existed in this pipeline to measure one with. The direction is what
+      // this test pins.
+      final flat = world(festivalCrowd(42).copyWith(
           channelAccess: ChannelAccess.csma, radioOccupancy: RadioOccupancy.hopLatency));
-      final sized = MeshSimulation(festivalCrowd(42).copyWith(
+      final sized = world(festivalCrowd(42).copyWith(
           channelAccess: ChannelAccess.csma, radioOccupancy: RadioOccupancy.airtime));
-      flat.runFor(120000);
-      sized.runFor(120000);
-      flat.refresh();
-      sized.refresh();
+      // The guard that makes the comparison non-vacuous: a world that never contends has nothing
+      // to defer, and 0 < 0 is not a measurement. Implied by the assertions below, stated because
+      // the version without it failed for exactly this reason.
+      expect(flat.stats.channelDeferrals, greaterThan(0),
+          reason: 'the flat arm must actually contend, or nothing below is measured');
+      expect(flat.stats.channelDrops, greaterThan(0),
+          reason: 'the flat arm must actually drop, or nothing below is measured');
       expect(sized.stats.channelDeferrals, lessThan(flat.stats.channelDeferrals));
       expect(sized.stats.channelDrops, lessThan(flat.stats.channelDrops));
       expect(sized.stats.deliveryRatio, greaterThan(flat.stats.deliveryRatio));

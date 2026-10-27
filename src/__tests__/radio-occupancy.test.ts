@@ -199,6 +199,11 @@ describe("radioOccupancy", () => {
     // pessimistic in the dense arm — by about 6 points of delivery here.
     const flat = run({ channelAccess: "csma", radioOccupancy: "hop-latency" }, festivalCrowd);
     const sized = run({ channelAccess: "csma", radioOccupancy: "airtime" }, festivalCrowd);
+    // Stated rather than implied: a harness that starves the world of traffic makes both arms
+    // zero and the two comparisons below meaningless. The Dart mirror of this test failed for
+    // exactly that reason on the first Dart run this repository ever had.
+    expect(flat.stats.channelDeferrals).toBeGreaterThan(0);
+    expect(flat.stats.channelDrops).toBeGreaterThan(0);
     expect(sized.stats.channelDeferrals).toBeLessThan(flat.stats.channelDeferrals);
     expect(sized.stats.channelDrops).toBeLessThan(flat.stats.channelDrops);
     expect(sized.stats.deliveryRatio).toBeGreaterThan(flat.stats.deliveryRatio);
@@ -225,6 +230,7 @@ describe("radioOccupancy", () => {
     const sized = run({ channelAccess: "csma", radioOccupancy: "airtime" });
     expect(flat.stats.deliveryRatio).toBe(1);
     expect(sized.stats.deliveryRatio).toBe(1);
+    expect(flat.stats.channelDeferrals).toBeGreaterThan(0);
     expect(sized.stats.channelDeferrals).toBeLessThan(flat.stats.channelDeferrals);
   });
 });
