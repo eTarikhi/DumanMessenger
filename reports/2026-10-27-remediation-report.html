@@ -260,10 +260,50 @@ fixed file it is clean. Five synthetic variants confirm it neither over- nor und
 script with no param block, one with a single positioned pass-through parameter, the corrected
 two-parameter form, the defective form, and a PowerShell-7 syntax case.</p>
 <div class="note warn"><strong>What this does and does not prove.</strong> It proves the front door
-was broken and is now guarded. It does <em>not</em> prove <code>make.ps1</code> works: the run died at
+was broken and is now guarded. It does <em>not</em> prove <code>make.ps1</code> works: that run died at
 parameter binding, so runtime detection, <code>wslpath</code> translation, the target-to-script table,
-quoting and exit-code propagation are all still unexercised anywhere. That is the honest remainder of
-action 6, and it needs one more transcript from a real machine.</div>
+quoting and exit-code propagation were all still unexercised anywhere. It needed one more transcript
+from a real machine, and got one within the hour.</div>
+
+<h3>1.2 Addendum &mdash; the second transcript: the dispatcher worked, and the arithmetic did not</h3>
+<p>The same machine, minutes later, on <code>ffc2d19</code>:</p>
+<pre>PS&gt; .\make.ps1 -Task doctor
+PS&gt; .\make.ps1 doctor          # both forms now bind correctly
+warning: the repo is on the Windows drive (/mnt/...), so WSL file I/O is slow.
+bash: line 1: /mnt/c/Users/Administrator/Desktop/Git-Clones/tool/ci/doctor.sh: No such file or directory
+error: the wsl runtime exited with 127, which is not a pipeline verdict.</pre>
+<p>The path in that message is the <em>parent</em> of the clone, which is the whole diagnosis.
+<code>make.ps1</code> is committed at the top of the repository &mdash; a sibling of
+<code>Makefile</code>, <code>tool/</code> and <code>sim/</code> &mdash; so <code>$PSScriptRoot</code>
+is the repo root, but the script computed <code>Split-Path -Parent $PSScriptRoot</code> under a comment
+that asserted the opposite ("the repo root is its parent"). That comment is why it survived: it read
+like a documented fact rather than an untested assumption, and no static check in the repository could
+see a wrong path three layers away from the arithmetic that produced it.</p>
+<p>Fixed to <code>$RepoRoot = $PSScriptRoot</code>, with a startup guard that fails in PowerShell with
+a reason instead of in bash with a path, and a 127/126 explanation that names the likeliest cause
+inside WSL (<code>make</code> is not installed by default; the 21 script targets do not need it).
+<code>check-ps1.py</code> gained a fourth class for the assumption itself, verified both ways and with
+its boundary pinned: against <code>ffc2d19</code>'s <code>make.ps1</code> placed where
+<code>tool/</code> is a sibling it reports the climb and exits 1; against the fixed file it is clean;
+against the same defective file with no <code>tool/</code> sibling it says nothing, because there the
+parent might genuinely be the root.</p>
+<p>Two failures on a real machine bought a real verification list, which is worth recording because it
+is larger than what a static check could ever claim. Now <strong>verified by execution on Windows 11 /
+PowerShell 5.1 / WSL2</strong>: parameter binding in both the positional and the named form; WSL2
+detection against a real installed distro; <code>wslpath -u</code> translation; the
+<code>/mnt/c</code> performance warning firing on the right condition; the single-quote-only quoting
+policy surviving the PowerShell &rarr; <code>wsl.exe</code> &rarr; <code>bash -lc</code> layers
+(bash parsed the command and resolved the path, which is the part quoting exists to protect);
+exit-code propagation; and the defensive branch that refuses to report 127 as a pipeline verdict and
+says so in terms. Still unverified anywhere: <strong>a target completing</strong>. No doctor output, no
+<code>make</code> target and no script target has ever reached a verdict of 0, 1 or 2 through this
+dispatcher.</p>
+<div class="note"><strong>Also worth recording:</strong> the fifteenth rollback of this branch landed
+mid-turn, between the two transcripts, resetting local <code>.git</code> to the merge base while the
+working tree kept every edit. It was repaired with <code>git fetch</code> +
+<code>git reset --mixed origin/arena/&hellip;</code> in one command and cost one verification run
+(a check that had to be repeated against the right <code>HEAD</code>). Section E's detector reported 0
+drift rows afterwards, which is correct: nothing tracked had reverted, only the local ref had.</div>
 
 <h2>2. What was verified, and how</h2>
 
@@ -453,9 +493,10 @@ script.</td></tr>
 <tr><td><strong>E</strong> <code>git-head</code>, <code>git-worktree</code></td>
 <td class="pass">not reproducible &mdash; clean</td><td>0 drift rows at <code>0734487</code>: HEAD
 equals <code>origin/arena/ff85cb12-dumanmessenger</code>, no tracked file reverted to base content.
-The fourteenth rollback of the branch happened at the start of this session and was repaired with
-<code>git fetch</code> + <code>git reset --mixed</code>; the detector did not fire because there was
-nothing to fire on.</td></tr>
+The fourteenth rollback of the branch happened at the start of this session and the fifteenth landed
+mid-turn, between two Windows transcripts; both were repaired with <code>git fetch</code> +
+<code>git reset --mixed</code> (&sect;1.2). The detector did not fire on either, correctly: nothing
+tracked had reverted to base content, only the local ref had moved.</td></tr>
 <tr><td><strong>E</strong> evidence durability</td><td class="pass">resolved</td>
 <td>Was: every artifact git-ignored, so a rollback erased the record of what had been verified. Now:
 <code>reports/verification-log.jsonl</code> is tracked and carries four lines, one of them written by
@@ -549,8 +590,8 @@ controller and no review, which makes it unpublishable as a store listing.</td><
 line 488, the one item classified as reachable from here, and unblocks store submission (lines 94 and
 479).</td><td>A named controller, a dated review, and the draft label removed.</td></tr>
 <tr><td>6</td><td><strong>Run <code>make.ps1</code> once on a real Windows 11 machine</strong> and
-paste the transcript. <span class="pass">DONE 2026-10-27 &mdash; and it found a defect</span>; see
-&sect;1.1. Still outstanding: a second transcript that gets past parameter binding.</td><td>It is the
+paste the transcript. <span class="pass">DONE 2026-10-27 &mdash; twice, and it found two defects</span>; see &sect;1.1 and
+&sect;1.2. Still outstanding: one transcript in which a target <em>completes</em>.</td><td>It is the
 documented front door for the platform the project targets and it had never been executed anywhere;
 <code>check-ps1.py</code> is a static check and is recorded as one. The first execution showed
 exactly what that gap cost: every documented invocation failed.</td><td>Already produced the first
@@ -659,13 +700,14 @@ than a disclaimer.</p>
 been compiled on the machine that wrote it, and no Dart file was executed locally at any point in
 this session. Every Dart fix here was reasoned about statically, checked with
 <code>check-dart-balance</code> and <code>check-dart-sites</code>, and then verified by pushing.</td></tr>
-<tr><td>"<code>make.ps1</code> works on Windows 11."</td><td>It has been executed exactly once, on
-Windows 11 with PowerShell 5.1, and <strong>that invocation failed</strong> before the dispatcher ran
-(&sect;1.1). The defect is fixed and statically guarded, but the claim still cannot be made: runtime
-detection, path translation, forwarding and exit-code propagation have never been exercised anywhere,
-and no PowerShell exists in the environment that wrote them. What is checked in CI and both local
-pipelines is delimiter balance, PowerShell-7-only syntax, and parameter binding &mdash; three static
-classes, not execution.</td></tr>
+<tr><td>"<code>make.ps1</code> works on Windows 11."</td><td>It has been executed twice, on Windows 11
+with PowerShell 5.1, and <strong>both invocations failed</strong> &mdash; first at parameter binding
+(&sect;1.1), then on a repository root computed one directory too high (&sect;1.2). Both defects are fixed and statically guarded, and the second run did verify runtime detection, path
+translation, quoting, forwarding and exit-code propagation &mdash; but the claim still cannot be made,
+because no target has ever completed through the dispatcher and no PowerShell exists in the
+environment that wrote it. What is checked in CI and both local pipelines is delimiter balance,
+PowerShell-7-only syntax, parameter binding and repo-root arithmetic &mdash; four static classes, not
+execution.</td></tr>
 <tr><td>"The concurrency group prevents duplicate runs."</td><td>The YAML parses, the expression is
 the standard form, and the pile-up it addresses is documented from the run list. Its behaviour has
 <strong>not been observed</strong>, because no two runs have overlapped since it was added.</td></tr>

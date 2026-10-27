@@ -77,8 +77,27 @@ function Write-Warn2([string]$m) { Write-Host "warning: $m" -ForegroundColor Yel
 function Write-Err2([string]$m) { Write-Host "error: $m" -ForegroundColor Red }
 
 # --- where am I ----------------------------------------------------------------
-# $PSScriptRoot is the directory holding this script; the repo root is its parent.
-$RepoRoot = Split-Path -Parent $PSScriptRoot
+# $PSScriptRoot is the directory holding this script, and this script is committed at the top of
+# the repository — a sibling of Makefile, tool/ and sim/ — so that directory *is* the repo root.
+#
+# It used to take the parent, on the strength of a comment that asserted the opposite, and every
+# forwarded command then ran one directory too high. On the first real Windows 11 execution that
+# looked like a runtime failure rather than an arithmetic one:
+#
+#     bash: line 1: /mnt/c/Users/.../Git-Clones/tool/ci/doctor.sh: No such file or directory
+#     error: the wsl runtime exited with 127, which is not a pipeline verdict.
+#
+# The path in that message is the parent of the clone, which is the whole diagnosis.
+$RepoRoot = $PSScriptRoot
+
+# Fail here rather than in bash, because "No such file or directory" from a runtime does not say
+# which of the three layers disagreed — the script's location, the path translation, or the repo.
+if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot 'tool/ci/doctor.sh'))) {
+    Write-Err2 "this does not look like the repository root: $RepoRoot"
+    Write-Note 'make.ps1 has to sit at the top of a DumanMessenger clone, next to tool/ and sim/.'
+    Write-Note 'If you copied it somewhere else, put it back and run it from there.'
+    exit 64
+}
 
 function ConvertTo-MsysPath([string]$WindowsPath) {
     # C:\Users\me\repo  ->  /c/Users/me/repo
@@ -290,7 +309,11 @@ if ($null -eq $code) { $code = 0 }
 # reporting it as the pipeline's verdict would be a lie in either direction.
 if ($code -notin 0, 1, 2, 64) {
     Write-Err2 "the $Chosen runtime exited with $code, which is not a pipeline verdict."
-    Write-Note 'That usually means the shell or the path failed, not the build.'
+    Write-Note 'That usually means the shell or the path failed, not the build. In order of likelihood:'
+    Write-Note '  127  a command was not found — inside WSL, `make` is not installed by default'
+    Write-Note '         sudo apt install make      (the targets in the help list do not need it)'
+    Write-Note '       ...or bash could not start, or the translated path is wrong'
+    Write-Note '  126  the file was found but is not executable — `git update-index --chmod=+x tool/ci/*.sh`'
     Write-Note 'Re-run with $env:DUMAN_CI_VERBOSE = 1 to see the exact command.'
 }
 

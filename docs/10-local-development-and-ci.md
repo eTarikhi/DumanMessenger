@@ -450,16 +450,18 @@ their self-tests, which is not a sixth check so much as evidence the other five 
    engine.
 5. **`ps1`** — `tool/ci/check-ps1.py make.ps1`. The Windows entry point has 21 targets (`check-docs.py`
    prints the count, so a stale number here is detectable; a line count is not) that no Linux runner can execute and no PowerShell-less sandbox can even parse, so this is a
-   *static* check in three classes: delimiter balance; PowerShell-7-only syntax (`??`, `?.`, the
+   *static* check in four classes: delimiter balance; PowerShell-7-only syntax (`??`, `?.`, the
    ternary, `&&`/`||` as pipeline chain operators, `$PSStyle`) that fails on the Windows PowerShell
    5.1 that Windows 11 actually ships, with a message that does not say "your PowerShell is too old";
-   and a pass-through parameter PowerShell cannot bind positionally — a `ValueFromRemainingArguments`
-   parameter with no `Position`, or one whose siblings stay positionally bindable. The third class is
-   not theoretical: it is what made `.\make.ps1 doctor`, the invocation every document here
-   recommends, fail with *Cannot validate argument on parameter 'Runtime'* the first time the script
-   was executed on a real Windows 11 machine (2026-10-27). A pass is still never evidence the script
-   ran, and the one time it ran, this check did not yet cover the reason it failed — see `docs/11`
-   §3 and §9. Until it was wired into this group it had a `make` target and no automation:
+   a pass-through parameter PowerShell cannot bind positionally — a `ValueFromRemainingArguments`
+   parameter with no `Position`, or one whose siblings stay positionally bindable; and a repository
+   root computed by climbing above the directory that holds the script. Neither of the last two is
+   theoretical. On 2026-10-27 the first real Windows 11 execution of `.\make.ps1 doctor` failed with
+   *Cannot validate argument on parameter 'Runtime'*, and the second — after that was fixed, on the
+   same machine, minutes later — failed with `bash: /mnt/c/Users/…/Git-Clones/tool/ci/doctor.sh: No
+   such file or directory`, because the script took the parent of its own directory as the repository
+   root. A pass is still never evidence the script ran, and both times it ran the reason it failed was
+   something this check did not yet cover; each failure became a class. See `docs/11` §3 and §9. Until it was wired into this group it had a `make` target and no automation:
    the workflow, the CI mirror and the collector all skipped it, so the front door was checked only
    when a human typed `make check-ps1`.
 6. **`checker-self-test`** — the `--self-test` modes of the four checkers that have one
@@ -696,8 +698,10 @@ returns the pipeline's exit code. It deliberately contains no pipeline logic. A 
 implementation of the same policy — in PowerShell, or anywhere else — is a second thing that can
 drift from the workflow while still looking green, which is the failure this section exists to
 prevent. `tool/ci/check-ps1.py` statically checks it (delimiter balance, PowerShell-7-only syntax
-that fails on the Windows PowerShell 5.1 Windows 11 ships, and parameter binding that would make the
-documented invocation fail) because it cannot be executed on a Linux runner. That check runs in the workflow's `checks` job, in `run-pipeline.sh --job checks` and
+that fails on the Windows PowerShell 5.1 Windows 11 ships, parameter binding that would make the
+documented invocation fail, and a repo root computed from a false assumption about where the script
+lives — the last two each found by a real Windows execution) because it cannot be executed on a Linux
+runner. That check runs in the workflow's `checks` job, in `run-pipeline.sh --job checks` and
 in `make checks`; it used to run in none of them, which is the drift `ci-checkers` in §5 now exists
 to catch. See `docs/11-windows-11-workflow.md`.
 
@@ -810,9 +814,10 @@ resolves `test: ^1.25.0` afresh and publishes a warning annotation saying so unt
 a lock (§2, `docs/11` §2). `pwsh` absent *and not
 installable*: the release page answers (`HTTP 200`) and the asset redirects to
 `objects.githubusercontent.com`, which is outside the egress allowlist, yielding `0 bytes` — so
-`make.ps1` and the whole of `docs/11` are checked statically by `check-ps1.py`; the one execution
-anywhere — Windows 11, 2026-10-27 — failed at parameter binding before the dispatcher ran, which is
-the defect `check-ps1.py`'s third class now catches. That static check is now part of all three entry points rather than
+`make.ps1` and the whole of `docs/11` are checked statically by `check-ps1.py`; the two executions
+anywhere — both on Windows 11, 2026-10-27 — failed, first at parameter binding and then on a repo
+root computed one directory too high, which are the defects `check-ps1.py`'s third and fourth classes
+now catch. That static check is now part of all three entry points rather than
 something a person had to remember to run. `node v22.22.3` and `python3 3.11.2` are present, which is why the TS
 reference engine and the five stdlib-only checkers do run here.
 
@@ -890,7 +895,8 @@ naming the rows, and `daily.json` records them under `blockers.driftRows` with
 2. **The sandbox is rolled back between turns, and the rollback leaves no trace in the
    repository.** `node_modules` and `artifacts/` are wiped, and the local `.git` is reset to the
    branch point, so pushed work is present only as uncommitted files that look exactly like new
-   work. It happened fourteen times on this branch, twice while this section was being written, and
+   work. It happened fifteen times on this branch by 2026-10-27 — twice while this section was being
+   written, once while a Windows transcript was being answered — and
    each time it costs a `git fetch`, a `git reset --mixed origin/<branch>`, an `npm ci` and a
    re-run of the suite before anything new can be written. Section E exists to detect it in about
    two seconds instead of at the end of a twenty-minute run. What a rollback cannot erase is

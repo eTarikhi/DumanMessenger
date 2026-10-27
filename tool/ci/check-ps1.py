@@ -6,7 +6,7 @@ Why this exists
 The Windows entry point (make.ps1) cannot be executed on a Linux CI runner or in a
 sandbox without PowerShell, and shipping a script nobody has run is how a repository
 ends up with a broken front door. This is not a parser and does not pretend to be one:
-it catches the three failure classes that account for almost all hand-written PowerShell
+it catches the four failure classes that account for almost all hand-written PowerShell
 bugs found late, and it does so with no dependencies.
 
   1. Unbalanced delimiters. A missing brace in PowerShell often does not fail at the
@@ -28,7 +28,16 @@ bugs found late, and it does so with no dependencies.
      and its siblings are either explicitly positioned too or excluded by
      `[CmdletBinding(PositionalBinding = $false)]`.
 
-All three run on *code only*: strings and comments are stripped by a character walk
+  4. A repository root computed from a false assumption about where the script lives.
+     `make.ps1` is committed beside `Makefile`, `tool/` and `sim/`, so `$PSScriptRoot` *is* the
+     root; the script took its parent instead, and every forwarded command ran one directory too
+     high. On the first real Windows 11 execution that surfaced as
+     `bash: /mnt/c/Users/…/Git-Clones/tool/ci/doctor.sh: No such file or directory` with exit 127 —
+     a runtime error three layers away from the arithmetic that caused it. This check only fires for
+     a script whose own directory really does contain `tool/`, so a script that legitimately lives
+     in a subdirectory is not accused of anything.
+
+All four run on *code only*: strings and comments are stripped by a character walk
 first, because a regex over raw source mis-pairs apostrophes in prose ("the
 repository's intent") with real string delimiters and reports braces that are not
 there. That false positive is the reason this is a walk and not a one-liner.
@@ -73,6 +82,27 @@ def _balanced(text: str, start: int) -> str:
             if depth == 0:
                 return text[start + 1 : i]
     return ""
+
+
+def repo_root_problems(code: str, path: Path) -> list[str]:
+    """Failure class 4: a repo root that climbs above the directory holding the script.
+
+    Only asserted when that directory really is a repository root — `tool/` sits in it — because
+    for a script in a subdirectory, taking the parent is correct and accusing it is a false positive.
+    """
+    if not (path.parent / "tool").is_dir():
+        return []
+    m = re.search(r"\$RepoRoot\s*=\s*(.+)$", code, re.M)
+    if not m:
+        return []
+    expr = m.group(1).strip()
+    if "Split-Path" in expr and "$PSScriptRoot" in expr:
+        return [
+            "$RepoRoot = %s climbs above the directory holding this script, but that directory is "
+            "the repository root (tool/ is its sibling) — use $PSScriptRoot, or every forwarded "
+            "command runs one level too high and fails as a missing file" % expr
+        ]
+    return []
 
 
 def param_binding_problems(code: str) -> list[str]:
@@ -208,6 +238,7 @@ def check(path: Path, allow_ps7: bool) -> list[str]:
                     )
 
     problems.extend(param_binding_problems(code))
+    problems.extend(repo_root_problems(code, path))
 
     if source.count("\ufeff"):
         problems.append("file contains a byte-order mark; PowerShell tolerates it but git diffs do not")

@@ -121,7 +121,7 @@ stated (`docs/10` §6, `docs/11` §9):
   acceptance run passing, all five CLI matrix arms and all four probes.
 * **Verified locally on Linux** — `npm ci`, `npm test` (**473 tests, 18 files**), `npm run build`,
   the five static checkers and their self-tests, `make doctor`, `make blockers`, `make daily-fast`.
-* **Executed once on real Windows 11 — and it failed.** On 2026-10-27 `make.ps1` was run for the
+* **Executed on real Windows 11 — twice, and it failed twice.** On 2026-10-27 `make.ps1` was run for the
   first time anywhere, on Windows 11 with PowerShell 5.1, and its own documented invocation was
   rejected before the dispatcher did any work: `.\make.ps1 doctor` &rarr; *Cannot validate argument
   on parameter 'Runtime'. The argument "doctor" does not belong to the set "auto,wsl,bash"*. The
@@ -129,12 +129,20 @@ stated (`docs/10` §6, `docs/11` §9):
   from positional binding, so the target bound to `-Runtime` and hit its `ValidateSet`. Fixed, and
   `check-ps1.py` gained a third failure class for it — run against the pre-fix file it names the
   defect, against the fixed file it is clean.
-* **Still not observed** — everything in `make.ps1` *after* parameter binding: runtime detection,
-  `wslpath` translation, target-to-script mapping and forwarding to bash. That is where the one real
-  run died, so it proves nothing about the rest. No PowerShell exists in the environment these
-  instructions were written in and its release asset host is unreachable from it, so the remainder is
-  checked statically by `tool/ci/check-ps1.py` (delimiter balance, no PowerShell-7-only syntax, no
-  unbindable pass-through parameter) in CI's `checks` job and in `make checks`. The `winget` and
+* **What the second execution then verified** — WSL2 detection with a real distro, `wslpath -u`
+  translation, the `/mnt/c` performance warning, single-quote-only quoting surviving the PowerShell
+  &rarr; `wsl.exe` &rarr; `bash -lc` layers, exit-code propagation, and the branch that refuses to
+  report 127 as a pipeline verdict. That run failed too, on arithmetic rather than plumbing: the
+  script took the *parent* of its own directory as the repository root, so every forwarded command ran
+  one level too high — `bash: /mnt/c/Users/…/Git-Clones/tool/ci/doctor.sh: No such file or
+  directory`. Fixed to `$PSScriptRoot`, guarded at startup so it fails in PowerShell with a reason
+  instead of in bash with a path, and now a fourth `check-ps1.py` class.
+* **Still not observed** — a target completing. No doctor output, no `make` target and no script
+  target has ever run through this dispatcher to a verdict of 0, 1 or 2. No PowerShell exists in the
+  environment these instructions were written in and its release asset host is unreachable from it, so
+  the remainder is checked statically by `tool/ci/check-ps1.py` (delimiter balance, no
+  PowerShell-7-only syntax, no unbindable pass-through parameter, no repo root computed from a false
+  assumption about where the script lives) in CI's `checks` job and in `make checks`. The `winget` and
   `choco` install commands are the ones `docs/11` §1–§2 documents; they have not been run here
   either.
 

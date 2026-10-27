@@ -463,7 +463,7 @@ real rather than theoretical. If `dart analyze` fails, the collector's paste-bac
 `--- dart diagnostics ---` with `file:line:col` locations from `diagnostics.py` — enough to fix it
 blind, which is why it is there.
 
-**Executed once, and it failed:** `make.ps1`. The sandbox this was written in has no PowerShell and
+**Executed twice, and it failed twice:** `make.ps1`. The sandbox this was written in has no PowerShell and
 cannot install one — the release asset host is not reachable from it — so for its whole life the
 script was **statically checked only**, by `tool/ci/check-ps1.py`: balanced delimiters, no PowerShell
 7-only syntax (`??`, `?.`, the ternary, `&&`/`||` as pipeline chain operators) so that it runs on the
@@ -490,11 +490,33 @@ positional argument (`--job web --fast`) is forwarded to bash rather than offere
 `check-ps1.py` now has a third failure class for exactly this, verified both ways: it reports the
 defect when run against the pre-fix file and is clean on the fixed one.
 
-What that first execution did **not** verify is everything after parameter binding — runtime
-detection, `wslpath` translation, the target-to-script table, quoting, and exit-code propagation.
-The script is written defensively (every failure path prints an explicit reason and a fix rather than
-throwing) but those paths are still unexercised, and a second transcript from a real machine is what
-closes them.
+The second execution, minutes later on the same machine, got past binding with both forms
+(`.\make.ps1 -Task doctor` and `.\make.ps1 doctor`), detected WSL2, translated the path, built the
+command and ran it — and failed one directory too high:
+
+```
+bash: line 1: /mnt/c/Users/Administrator/Desktop/Git-Clones/tool/ci/doctor.sh: No such file or directory
+error: the wsl runtime exited with 127, which is not a pipeline verdict.
+```
+
+The path in that message is the *parent* of the clone. `make.ps1` is committed at the top of the
+repository, a sibling of `Makefile`, `tool/` and `sim/`, so `$PSScriptRoot` is the repo root — but the
+script computed `$RepoRoot = Split-Path -Parent $PSScriptRoot`, under a comment that asserted the
+opposite ("the repo root is its parent"), which is why it read like a fact and survived every review.
+Fixed to `$PSScriptRoot`, with a startup guard that fails in PowerShell rather than in bash when the
+directory does not look like a clone, and a 127/126 explanation that names the likeliest cause inside
+WSL (`make` is not installed by default; the targets in the help list do not need it).
+`check-ps1.py` gained a fourth failure class for the repo-root assumption, verified both ways: run
+against `ffc2d19`'s `make.ps1` in a directory where `tool/` is a sibling it reports the climb and
+exits 1; against the fixed file it is clean; against the same file with no `tool/` sibling it says
+nothing, because there the parent might genuinely be the root.
+
+What the two executions together have now **verified on real Windows 11**: parameter binding in both
+forms, WSL2 detection with a real distro, `wslpath -u` translation, the `/mnt/c` performance warning,
+single-quote-only quoting surviving the PowerShell &rarr; `wsl.exe` &rarr; `bash -lc` layers, exit-code
+propagation, and the defensive branch that refuses to report 127 as a pipeline verdict. What is still
+unverified anywhere is a target actually completing: no doctor output, no `make` target, no script
+target has ever run through this dispatcher to a verdict of 0, 1 or 2.
 Its `daily`, `daily-fast` and `daily-checks` entries are in the same position: they are three more
 rows in `$ScriptTargets` pointing at `tool/ci/daily.sh`, which *is* verified by execution on Linux,
 and `check-ps1.py` confirms every `make.ps1` target is backed by a real Makefile target (it prints
