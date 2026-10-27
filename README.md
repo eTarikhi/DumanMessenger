@@ -115,11 +115,13 @@ the Dart SDK; both are longer with it, because the Dart jobs then actually run.
 Recorded rather than implied, because this repository's own rule is that partial verification is
 stated (`docs/10` §6, `docs/11` §9):
 
-* **Verified by execution in CI** — every `dart` and `npm` command above. Run
-  [`40430079404`](https://github.com/eTarikhi/DumanMessenger/actions/runs/40430079404) was green
-  on all nine jobs: `dart analyze` clean, **278 Dart tests passed**, the gated `campus_quad`
-  acceptance run passing, all five CLI matrix arms and all four probes.
-* **Verified locally on Linux** — `npm ci`, `npm test` (**473 tests, 18 files**), `npm run build`,
+* **Verified by execution in CI** — every `dart` and `npm` command above. The branch head is green on
+  all nine jobs: `dart analyze` clean, the gated `campus_quad` acceptance run passing, all five CLI
+  matrix arms and all four probes. Both suites' tallies are published as notice annotations
+  (`dart test`, `npm test`) so the counts never have to be remembered — at the time of writing,
+  [run 40455641251](https://github.com/eTarikhi/DumanMessenger/actions/runs/40455641251) reported
+  **279 Dart cases** and **474 TypeScript cases in 18 files**, 0 failed.
+* **Verified locally on Linux** — `npm ci`, `npm test` (18 files), `npm run build`,
   the five static checkers and their self-tests, `make doctor`, `make blockers`, `make daily-fast`.
 * **Executed on real Windows 11 — twice, and it failed twice.** On 2026-10-27 `make.ps1` was run for the
   first time anywhere, on Windows 11 with PowerShell 5.1, and its own documented invocation was
@@ -173,7 +175,7 @@ dart run bin/mesh_sim.dart --capture      # pcap-like mesh log tail (--capture-o
 
 ```bash
 npm ci
-npm test          # 473 tests: RF, election, routing, DTN, power, SOS, hop traces, abuse limits,
+npm test          # the whole suite: RF, election, routing, DTN, power, SOS, hop traces, abuse limits,
                   # blocks, wake-locks, radio occupancy, connectivity, acceptance, UI renders
 npm run dev       # canvas: watch SUPERs get elected, MPR suppress floods, bundles wait for a
                   # contact, and a split network draw a ring per component. Click a node to

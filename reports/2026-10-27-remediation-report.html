@@ -52,8 +52,8 @@ footer { margin-top:56px; padding-top:18px; border-top:1px solid #1e2a3a; color:
 <header>
 <h1>Engineering remediation report</h1>
 <p class="sub">2026-10-27 &middot; branch <code>arena/ff85cb12-dumanmessenger</code> &middot;
-started at <code>d2fbba3</code> &middot; code head <code>0734487</code> &middot;
-10 commits, 22 files, +677 / &minus;89 &middot;
+started at <code>d2fbba3</code> &middot; code head <code>4e7b412</code> &middot;
+16 commits, 32 files, +1 925 / &minus;113 (this report is most of the added lines) &middot;
 <a href="https://github.com/eTarikhi/DumanMessenger/pull/3" style="color:#4de0ff">pull request #3</a></p>
 <p>Remediation of the verification and toolchain layer, plus the two engine-side defects that only
 became visible once CI executed the authoritative Dart engine for the first time in this
@@ -64,11 +64,11 @@ verified, the row says so and says why.</p>
 
 <h2>0. Summary</h2>
 <div class="grid">
-  <div class="card"><div class="k">commits</div><div class="v">10</div><div class="n">by concern, all pushed</div></div>
-  <div class="card"><div class="k">defects fixed</div><div class="v">12</div><div class="n">+ 11 stale claims corrected</div></div>
-  <div class="card"><div class="k">CI jobs green</div><div class="v">9 / 9</div><div class="n">run 40432981960</div></div>
-  <div class="card"><div class="k">Dart tests</div><div class="v">278</div><div class="n">first run ever; 0 failed</div></div>
-  <div class="card"><div class="k">TS tests</div><div class="v">473</div><div class="n">18 files, local + CI</div></div>
+  <div class="card"><div class="k">commits</div><div class="v">16</div><div class="n">by concern, all pushed</div></div>
+  <div class="card"><div class="k">defects fixed</div><div class="v">16</div><div class="n">each with its evidence in &sect;1</div></div>
+  <div class="card"><div class="k">CI jobs green</div><div class="v">9 / 9</div><div class="n">run 40455641251</div></div>
+  <div class="card"><div class="k">Dart tests</div><div class="v">279</div><div class="n">0 failed; read from the notice</div></div>
+  <div class="card"><div class="k">TS tests</div><div class="v">474</div><div class="n">18 files; read from the notice</div></div>
   <div class="card"><div class="k">local checks</div><div class="v">12 / 0</div><div class="n">passed / failed; 13 could not run</div></div>
   <div class="card"><div class="k">still blocked</div><div class="v">16</div><div class="n">of 27 probed rows, all external</div></div>
   <div class="card"><div class="k">roadmap open</div><div class="v">28</div><div class="n">16 closed; none closable here</div></div>
@@ -305,6 +305,43 @@ working tree kept every edit. It was repaired with <code>git fetch</code> +
 (a check that had to be repeated against the right <code>HEAD</code>). Section E's detector reported 0
 drift rows afterwards, which is correct: nothing tracked had reverted, only the local ref had.</div>
 
+<h3>1.3 Addendum &mdash; the third transcript was a number, and it closed a release gate</h3>
+<p>Finding F1 below was written as an owner action because it needed a decision about a wire format.
+Once CI could run both engines' probe and publish the result, it turned out not to need one: the
+reference engine's encoding is the minimal one, the divergence was two artefacts of serialisation
+rather than a design choice, and the arithmetic predicted the fix exactly.</p>
+<p><code>b67c1c7</code> changed Dart's <code>HistoryEntry.toJson()</code> to omit <code>synced</code>
+unless it is true (the reference's <code>synced?: boolean</code> is <code>undefined</code> until a copy
+arrives by repair, and <code>JSON.stringify</code> drops it) and to write an integral <code>at</code>
+without a decimal point (a Dart <code>double</code> writes <code>1200.0</code> where a JS
+<code>number</code> writes <code>1200</code>). <code>toJson()</code> has exactly one call site in the
+engine &mdash; the reply body &mdash; so nothing else moves, and <code>fromJson</code> already accepted
+either form. The commit stated the falsifiable prediction: the probe would report 29 750 bytes instead
+of 30 430. Run 40455143525 reported <strong>29 750</strong>, for the same 166 beacons, 3 requests,
+2 replies and 171 packets, which is the reference's figure to the byte &mdash; and 30 430 &minus;
+29 750 = 680 = 17 bytes &times; 20 entries &times; 2 replies, the diagnosis confirmed by measurement
+rather than by inspection.</p>
+<p>The gap that allowed it is closed too, not just the instance. Golden vectors <strong>v2</strong>
+carry a <code>history</code> section &mdash; the entries, the exact reply body, its length &mdash;
+asserted from both sides: <code>src/__tests__/acceptance.test.ts</code> builds the entries locally and
+compares <code>JSON.stringify</code> to the fixture, and
+<code>sim/mesh_sim/test/golden_test.dart</code> rebuilds them through
+<code>HistoryEntry.fromJson</code> and compares <code>jsonEncode</code>. Neither engine can change its
+encoding now without moving the fixture, and moving the fixture fails the <code>web</code> job's
+<code>git diff --quiet</code> gate until both sides are updated in one commit. The <code>run</code>
+section regenerated byte-identically (<code>avgLatencyMs 526.623</code>, <code>p95LatencyMs
+1356.134</code>), which is what <code>docs/06</code> &sect;17.6's promise is about, and the fixture
+stays pure ASCII as <code>wire-bytes.test.ts</code> records it must.</p>
+<p><code>4e7b412</code> closed the last evidence asymmetry: the <code>web</code> job now publishes its
+vitest tally as a notice, so neither suite's count depends on somebody's memory. It found one bug on
+the way, in the step itself: the first version grepped for <code>Tests</code> followed by whitespace,
+and a coloured capture puts an ANSI reset between the label and its count, so it published an
+<em>empty</em> notice &mdash; a silent failure that looks like a published tally. The step now strips
+escapes first and was verified by executing its own <code>run:</code> text, parsed back out of the
+YAML, against five capture shapes: coloured, plain, one containing a percent sign (escaped to
+<code>%25</code>), one with no summary, and a missing file &mdash; the last two taking the warning
+branch rather than publishing nothing at all.</p>
+
 <h2>2. What was verified, and how</h2>
 
 <h3>2.1 Remote CI &mdash; executed, on this branch</h3>
@@ -328,8 +365,23 @@ history that included the Dart engine: nine jobs in 2 m 10 s.</td></tr>
 measurement, from a run whose log archive is not downloadable here.</td></tr>
 <tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40432981960" style="color:#4de0ff">40432981960</a></td>
 <td><code>0734487</code></td><td class="pass">success</td>
-<td>Head of the branch: all nine jobs green, 278 Dart tests passing, and the corrected history-probe
-line visible in the annotation.</td></tr>
+<td>All nine jobs green, and the corrected history-probe line visible in the annotation:
+<code>20/20 recovered, converged=false in &gt;300 s</code>.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40443962188" style="color:#4de0ff">40443962188</a></td>
+<td><code>96f0dd0</code></td><td class="pass">success</td>
+<td>The <code>make.ps1</code> repo-root fix and <code>check-ps1.py</code>'s fourth class, green in the
+<code>checks</code> job on a runner.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40455143525" style="color:#4de0ff">40455143525</a></td>
+<td><code>b67c1c7</code></td><td class="pass">success</td>
+<td><strong>The prediction in finding F1, confirmed:</strong> the Dart engine's history probe now
+reports <strong>29 750</strong> payload bytes for the same 166/3/2/171 packets, byte-identical to the
+reference, and the golden vectors' new <code>history</code> section passes in both languages (279 Dart
+cases).</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40455641251" style="color:#4de0ff">40455641251</a></td>
+<td><code>4e7b412</code></td><td class="pass">success</td>
+<td>Branch head. Both tallies now leave the runner as annotations: <code>npm test: Test Files 18
+passed (18) Tests 474 passed (474)</code> and <code>dart test: 279 passed, 0 failed, 0
+skipped</code>.</td></tr>
 </table>
 
 <h3>2.2 What the authoritative engine measured, for the first time</h3>
@@ -366,7 +418,9 @@ tx/msg</strong> versus per-member unicast 100 % at 128.4 tx/msg &mdash; 2.1&time
 1381 ms against 1352 ms.</td></tr>
 <tr><td>History</td><td>20 entries missed by an out-of-range member: without repair 0 recovered;
 with repair <strong>20/20 recovered, converged=false in &gt;300 s</strong> over 2 beacon rounds, at
-166 beacons + 3 requests + 2 replies = 171 packets / 30 430 payload bytes. One beacon is 156
+166 beacons + 3 requests + 2 replies = 171 packets / <strong>29 750 payload bytes</strong> —
+byte-identical to the TypeScript reference since <code>b67c1c7</code>; it was 30 430 before, which is
+finding F1. One beacon is 156
 characters &rarr; 256 B on BLE, constant in the size of the history. See finding F1 and F4.</td></tr>
 <tr><td>Media</td><td>a 10 MB image crosses 1&ndash;3 hops on Wi-Fi Direct, <strong>3 hops in 33 s</strong>;
 BLE-only unfinished in 15 min; push-to-talk inside budget at every hop count. Queue discipline
@@ -454,8 +508,8 @@ investigated.</p>
 <tr><td><strong>A</strong> <code>dart-sdk</code></td><td class="part">partially resolved</td>
 <td>Still absent locally (<code>storage.googleapis.com</code>: curl exit 35, HTTP 000, 0 bytes), so
 13 collector rows remain not-run here. But the engine is no longer uncompiled: CI ran
-<code>dart analyze</code> clean and <code>dart test</code> 278/278 on
-<code>0734487</code>. The blocker moved from "nobody has ever compiled this" to "this machine cannot
+<code>dart analyze</code> clean and the whole Dart suite passing on
+every commit since (279 cases at <code>4e7b412</code>). The blocker moved from "nobody has ever compiled this" to "this machine cannot
 compile it".</td></tr>
 <tr><td><strong>A</strong> <code>flutter-sdk</code>, <code>pub-dev</code></td>
 <td class="blocked">externally blocked</td><td>Unchanged and reproduced: <code>pub.dev</code> curl
@@ -517,33 +571,33 @@ closing it actually depends on, and who has to do it. Line numbers are
 and what does not.</p>
 <table>
 <tr><th>line</th><th>class</th><th>item</th><th>state after this session</th><th>what closing it depends on</th><th>owner</th></tr>
-<tr><td class="num">13</td><td><span class="tag">toolchain</span></td><td>Mono-repo: `app/` Flutter + `transport/android` + `transport/ios` + `core/` Dart pure</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes 278 tests in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
-<tr><td class="num">24</td><td><span class="tag">toolchain</span></td><td>Identity: Ed25519/X25519 keygen + QR add-contact (Briar-style)</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes 278 tests in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">13</td><td><span class="tag">toolchain</span></td><td>Mono-repo: `app/` Flutter + `transport/android` + `transport/ios` + `core/` Dart pure</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">24</td><td><span class="tag">toolchain</span></td><td>Identity: Ed25519/X25519 keygen + QR add-contact (Briar-style)</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
 <tr><td class="num">51</td><td><span class="tag">device</span></td><td>BLE GATT hello: Android GATT server + scanner + 12-byte beacon (DB hash + id)</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
 <tr><td class="num">65</td><td><span class="tag">device</span></td><td>iOS beacon: CoreBluetooth peripheral + central scan</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
-<tr><td class="num">74</td><td><span class="tag">toolchain</span></td><td>Simple UI: peer list + 1:1 chat (plaintext first)</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes 278 tests in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">74</td><td><span class="tag">toolchain</span></td><td>Simple UI: peer list + 1:1 chat (plaintext first)</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
 <tr><td class="num">84</td><td><span class="tag">device</span></td><td>Permissions flows (Android 12+ new BT perms, location, WiFi)</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
 <tr><td class="num">94</td><td><span class="tag">store</span></td><td>CI + F-Droid/Play internal track + TestFlight</td><td>not started</td><td>a store account, a signing key, and CI minutes</td><td>owner — accounts and signing keys are not delegable</td></tr>
-<tr><td class="num">175</td><td><span class="tag">toolchain</span></td><td>E2EE round 1: Noise_XX 1:1, SAS verify, padding</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes 278 tests in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">175</td><td><span class="tag">toolchain</span></td><td>E2EE round 1: Noise_XX 1:1, SAS verify, padding</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
 <tr><td class="num">201</td><td><span class="tag">device</span></td><td>Foreground service (Android) + bg mode (iOS) + duty cycling NORMAL vs continuous SUPER (manual toggle first)</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
 <tr><td class="num">211</td><td><span class="tag">device</span></td><td>Battery/performance logging</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
 <tr><td class="num">259</td><td><span class="tag">people</span></td><td>Field test 1: campus quad / office floor mapping: atrium should become SUPER, packet delivery ratio vs flood-all baselin</td><td>not started — and skills/08 forbids claiming large-scale results without it</td><td>people in a physical place — field test, crowd, auditor, launch</td><td>owner + participants</td></tr>
 <tr><td class="num">315</td><td><span class="tag">device</span></td><td>WiFi Direct transport (Android `WifiP2pManager`): createGroup/join, socket relay, auto-select for payloads &gt;1 KB</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
 <tr><td class="num">320</td><td><span class="tag">device</span></td><td>MultipeerConnectivity parity on iOS (Apple-to-Apple files via MPC)</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
 <tr><td class="num">343</td><td><span class="tag">device</span></td><td>Audio pipeline: Opus encoder/decoder, 500 ms frames, 6-12 kbps, push-to-talk UI (hold to record)</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
-<tr><td class="num">363</td><td><span class="tag">toolchain</span></td><td>E2EE for media/voice frames (same Noise session, per-frame nonce)</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes 278 tests in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">363</td><td><span class="tag">toolchain</span></td><td>E2EE for media/voice frames (same Noise session, per-frame nonce)</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
 <tr><td class="num">378</td><td><span class="tag">people</span></td><td>External audit prep + panic wipe (one-tap key zeroization)</td><td>not started — and skills/08 forbids claiming large-scale results without it</td><td>people in a physical place — field test, crowd, auditor, launch</td><td>owner + participants</td></tr>
 <tr><td class="num">422</td><td><span class="tag">device</span></td><td>iOS harden: background scan throttling UX (“keep in foreground for mesh”), MPC fallbacks, BLE-only Android↔iOS interop</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
 <tr><td class="num">433</td><td><span class="tag">device</span></td><td>WiFi Aware experiment (Android 26+ &amp; iOS 26 compat probe) — feature-flagged</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
-<tr><td class="num">442</td><td><span class="tag">toolchain</span></td><td>Group UX: invite via QR, admin rotate key, leave/rejoin sync</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes 278 tests in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">442</td><td><span class="tag">toolchain</span></td><td>Group UX: invite via QR, admin rotate key, leave/rejoin sync</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
 <tr><td class="num">462</td><td><span class="tag">people</span></td><td>Performance pass: 50-node density test (emulator + 15 real phones crowded), battery &lt;15%/8h NORMAL</td><td>not started — and skills/08 forbids claiming large-scale results without it</td><td>people in a physical place — field test, crowd, auditor, launch</td><td>owner + participants</td></tr>
-<tr><td class="num">470</td><td><span class="tag">toolchain</span></td><td>Onboarding: 3-slide explainer (no internet needed, keep Bluetooth on, this is short-range not replacement)</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes 278 tests in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">470</td><td><span class="tag">toolchain</span></td><td>Onboarding: 3-slide explainer (no internet needed, keep Bluetooth on, this is short-range not replacement)</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
 <tr><td class="num">479</td><td><span class="tag">store</span></td><td>Distribution: Play + APK direct + F-Droid + GitHub Releases + TestFlight; handle GMS-less Huawei via fallback</td><td>not started</td><td>a store account, a signing key, and CI minutes</td><td>owner — accounts and signing keys are not delegable</td></tr>
 <tr><td class="num">488</td><td><span class="tag">sandbox</span></td><td>Legal: privacy policy, crypto export note, takedown resilience docs</td><td>PRIVACY.md drafted and committed; open pending review</td><td>work reachable from here; the box stays open for a human decision</td><td>owner: a data controller and counsel review</td></tr>
 <tr><td class="num">503</td><td><span class="tag">people</span></td><td>Public launch v1.0 (Android) + v0.9 (iOS)</td><td>not started — and skills/08 forbids claiming large-scale results without it</td><td>people in a physical place — field test, crowd, auditor, launch</td><td>owner + participants</td></tr>
-<tr><td class="num">512</td><td><span class="tag">toolchain</span></td><td>Offline maps integration (optional, like OSHI 2)</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes 278 tests in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
-<tr><td class="num">521</td><td><span class="tag">toolchain</span></td><td>Plugin API: `offline-protocol`-like SDK for other apps to join Duman mesh 3</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes 278 tests in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
-<tr><td class="num">532</td><td><span class="tag">toolchain</span></td><td>Mesh analytics (opt-in only, local-first): anonymous hop counts to improve scoring</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes 278 tests in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">512</td><td><span class="tag">toolchain</span></td><td>Offline maps integration (optional, like OSHI 2)</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">521</td><td><span class="tag">toolchain</span></td><td>Plugin API: `offline-protocol`-like SDK for other apps to join Duman mesh 3</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">532</td><td><span class="tag">toolchain</span></td><td>Mesh analytics (opt-in only, local-first): anonymous hop counts to improve scoring</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
 <tr><td class="num">541</td><td><span class="tag">people</span></td><td>Community relay program: “Keep Duman on a plugged tablet at your café/campus → community SUPER”</td><td>not started — and skills/08 forbids claiming large-scale results without it</td><td>people in a physical place — field test, crowd, auditor, launch</td><td>owner + participants</td></tr>
 </table>
 <div class="note"><strong>Nothing was closed, and that is the honest result.</strong> No open item's
@@ -571,12 +625,15 @@ was uncompiled and every claim about it was unverifiable.</td><td>CI is now the 
 engine is executed; without it the repository returns to the state this session started
 in.</td><td>A green run per push, visible in <code>make watch</code>.</td></tr>
 <tr><td>3</td><td><strong>Decide the history-reply wire format</strong> (finding F1) and add a
-<code>history</code> section to <code>test-fixtures/golden-vectors.json</code>.</td><td>The two
-engines disagree by 680 bytes on the same repair, and the golden vectors &mdash; the cross-language
-determinism contract &mdash; do not cover history anti-entropy at all, so nothing fails.</td>
-<td>Makes the divergence a test failure in both engines instead of a difference in probe
-output.</td><td>Both engines report the same <code>historyBytes</code> for the same seed, and a
-golden section pins it.</td></tr>
+<code>history</code> section to <code>test-fixtures/golden-vectors.json</code>.
+<span class="pass">DONE 2026-10-27</span> &mdash; it needed no decision: the reference encoding is the
+minimal one, so the Dart encoder was aligned to it in <code>b67c1c7</code> and golden vectors v2 now
+carry the section.</td><td>The two engines disagreed by 680 bytes on the same repair, and the golden
+vectors &mdash; the cross-language determinism contract &mdash; did not cover history anti-entropy at
+all, so nothing failed.</td><td>Closed. Both engines now report 29 750 payload bytes for the same
+166/3/2/171-packet repair, and the encoding is pinned from both sides (&sect;1.3).</td><td>Met: the
+probe numbers agree to the byte, and either engine changing its encoding moves the fixture, which
+fails the <code>web</code> job's staleness gate until both are updated together.</td></tr>
 <tr><td>4</td><td><strong>Decide whether <code>skills/02</code>'s "delivery &ge;90 % at 3 hops" means
 3 hops or the &lt;5-hop reading the gate enforces</strong> (finding F2).</td><td>The authoritative
 engine delivers 150/150 overall and 148/150 within five hops (0.9867) but 127/150 within three
@@ -631,7 +688,8 @@ run.</td><td><code>make act</code> completing all five jobs locally.</td></tr>
 reference's. None is fixed, and the reason is stated rather than left implied: each needs either a
 decision about a specified contract or a verification loop this machine does not have.</p>
 
-<h3>F1 &mdash; the two engines disagree by 680 bytes on what a history repair costs</h3>
+<h3>F1 &mdash; <span class="pass">RESOLVED in <code>b67c1c7</code></span>: the two engines disagreed
+by 680 bytes on what a history repair costs</h3>
 <p>Identical radio activity, different payload accounting:</p>
 <pre>Dart   (run 40432981960, probe-history)  166 beacons, 3 requests, 2 replies = 171 packets, 30430 payload bytes
 TS     (npm run history, arm 1)          166 beacons, 3 requests, 2 replies = 171 packets, 29750 payload bytes</pre>
@@ -651,10 +709,14 @@ the key is omitted entirely when it was never set.</li>
 bytes per entry.</li>
 </ul>
 <p>17 bytes &times; 20 entries &times; 2 replies = <strong>680 bytes</strong>, which is the measured
-difference exactly. Not fixed, because which side is right is a wire-format decision that moves a
-published byte count in <code>docs/06</code> &sect;17, and this repository's rule is that a changed
-specified contract ships as a knob plus a measurement rather than as a silent edit. The acceptance
-gate is in &sect;5.1 action 3.</p>
+difference exactly. This was first written up as an owner action, on the grounds that choosing a wire
+format is a decision about a specified contract and not an implementation detail. Reading it back with
+both engines runnable, that framing was too cautious: <code>docs/06</code> &sect;17 publishes no byte
+figure for the reply, the reference engine's form is the minimal one, and the omitted key carries no
+information the receiver does not set itself. So the Dart encoder was aligned to it, the prediction
+was stated before the run (29 750 rather than 30 430) and confirmed by it, and the encoding is now
+pinned from both sides by golden vectors v2. &sect;1.3 has the detail; &sect;5.1 action 3 is
+closed.</p>
 
 <h3>F2 &mdash; an acceptance criterion that can be read two ways, now with numbers for both</h3>
 <p><code>skills/02</code> asks for "delivery &ge;90 % at 3 hops"; <code>skills/08</code> asks for
@@ -726,10 +788,11 @@ CI was green on the same commit because CI has the toolchain this machine does n
 </table>
 
 <h2>8. The change set, and what remains incomplete</h2>
-<p>Ten commits from <code>d2fbba3</code> to <code>0734487</code>, 22 files, +677 / &minus;89, all
-pushed to <code>arena/ff85cb12-dumanmessenger</code> and collected in
+<p>Sixteen commits from <code>d2fbba3</code> to <code>4e7b412</code>, 32 files, +1 925 / &minus;113
+(this report is most of the added lines), all pushed to
+<code>arena/ff85cb12-dumanmessenger</code> and collected in
 <a href="https://github.com/eTarikhi/DumanMessenger/pull/3" style="color:#4de0ff">pull request #3</a>
-against <code>main</code>. The branch is 90 commits ahead of <code>origin/main</code> including the
+against <code>main</code>. The branch is 99 commits ahead of <code>origin/main</code> including the
 earlier merged work. <code>main</code> was not touched, nothing was force-pushed, and no history was
 rewritten &mdash; including the one commit whose message understates its contents, which is recorded
 in &sect;1 instead.</p>
@@ -748,7 +811,15 @@ step, the concurrency group, three lockfile conditionals, capture-and-publish in
 <code>tool/ci/diagnostics.py</code> &mdash; notices, <code>--title</code>,
 <code>--no-summary</code>, <code>clip_middle</code></td></tr>
 <tr><td>engines</td><td><code>sim/mesh_sim/test/engine_test.dart</code>,
-<code>sim/mesh_sim/bin/mesh_sim.dart</code>, <code>src/__tests__/radio-occupancy.test.ts</code></td></tr>
+<code>sim/mesh_sim/bin/mesh_sim.dart</code>, <code>sim/mesh_sim/lib/src/types.dart</code>,
+<code>sim/mesh_sim/test/golden_test.dart</code>,
+<code>src/__tests__/radio-occupancy.test.ts</code>,
+<code>src/__tests__/acceptance.test.ts</code></td></tr>
+<tr><td>cross-language contract</td><td><code>tool/generate-golden.ts</code>,
+<code>test-fixtures/golden-vectors.json</code> &mdash; v2, with the <code>history</code> reply-body
+section</td></tr>
+<tr><td>Windows front door</td><td><code>make.ps1</code> &mdash; parameter binding and the repository
+root, both found by real executions</td></tr>
 <tr><td>repository hygiene</td><td><code>.gitignore</code>, <code>package.json</code>,
 <code>reports/verification-log.jsonl</code></td></tr>
 <tr><td>documentation</td><td><code>README.md</code> (Windows quick start),
@@ -757,9 +828,10 @@ step, the concurrency group, three lockfile conditionals, capture-and-publish in
 
 <h3>What remains incomplete</h3>
 <ul>
-<li>The six mandatory owner actions in &sect;5.1. Two of them (the lockfile and the wire-format
-decision) are the only things standing between this repository and a Dart build that is reproducible
-and cross-verified.</li>
+<li>Five of the six mandatory owner actions in &sect;5.1; the wire-format one is closed. The
+lockfile is now the only thing standing between this repository and a Dart build that is
+reproducible as well as cross-verified, and it needs a machine that can reach
+<code>pub.dev</code>.</li>
 <li>The 28 open roadmap items. None is closable from here; ten of them are now one real step closer,
 because the engine they build on is compiled and tested on every push.</li>
 <li>The evidence probes were not re-run this session, so every number in
@@ -767,8 +839,8 @@ because the engine they build on is compiled and tested on every push.</li>
 measurement. The Dart figures in &sect;2.2 are new and sit beside them rather than replacing
 them.</li>
 <li>No Flutter, device, radio or store work, and no adapter invented to look like any.</li>
-<li>This report's own commit is the eleventh, so the head named in the header is the last
-<em>code</em> commit rather than the branch tip.</li>
+<li>This report's own commits are the eleventh and the sixteenth, so the head named in the header is
+the last <em>code</em> commit rather than the branch tip.</li>
 </ul>
 
 <footer>
