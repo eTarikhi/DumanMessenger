@@ -1492,6 +1492,7 @@ export class MeshSimulation {
   private readonly peerObservedAt = new Map<string,number>();
   rollbackRoutingSelector(): void { for(const c of this.routingSelectors.values()) c.rollback(); }
   readonly selectorDiagnostics: SelectorDecision[] = [];
+  readonly selectorDecisionCounts: Record<string,number> = {};
 
   constructor(config: SimConfig = DEFAULT_CONFIG, selectorOptions?: SelectorOptions, motionSeed?: number) {
     // Copy/validate into per-node immutable controllers before time starts.
@@ -2720,6 +2721,7 @@ export class MeshSimulation {
       if(this.selectorOptions && node && controller) {
         const decision=controller.decide({neighbors:node.peerCount,queue:node.oppQueue.length,
           duty:this.config.dutyCycleEnabled?1:0,battery:node.battery,saver:node.batterySaver,observedAt:this.peerObservedAt.get(node.id) ?? -Infinity},this.now);
+        this.selectorDecisionCounts[decision.reason]=(this.selectorDecisionCounts[decision.reason]??0)+1;
         this.selectorDiagnostics.push(decision);
         if(this.selectorDiagnostics.length>256) this.selectorDiagnostics.shift();
       }

@@ -61,11 +61,12 @@ export class RoutingSelector {
     if(this.mode==="baseline") return answer("baseline-mode");
     if(this.latched) return answer("latched-baseline");
     if(!["shadow","canary"].includes(this.mode)||!this.model) {this.rollback();return answer("invalid-model");}
-    if(!normalizeContext(c,now)||now<this.lastNow) {this.rollback();return answer("invalid-context");}
+    const normalized=normalizeContext(c,now);
+    if(!normalized||now<this.lastNow) {this.rollback();return answer("invalid-context");}
     this.lastNow=now;
     if(c.saver||c.battery<.25||c.duty===1) {this.current="baseline-v1";this.votes=0;this.pending="baseline-v1";return answer("power-override");}
     if(this.model.confidence<.6) return answer("low-confidence");
-    const proposal=c.neighbors<=this.model.threshold?this.model.left:this.model.right;
+    const proposal=normalized[0]<=this.model.threshold/128?this.model.left:this.model.right;
     if(c.observedAt>this.lastVoteAt) {
       if(proposal!==this.pending) {this.pending=proposal;this.votes=1;} else this.votes++;
       this.lastVoteAt=c.observedAt;

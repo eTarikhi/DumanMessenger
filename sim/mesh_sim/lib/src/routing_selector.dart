@@ -66,11 +66,12 @@ class RoutingSelector {
     if(_latched) return _answer('latched-baseline');
     final model=options.model;
     if(!['shadow','canary'].contains(options.mode)||model==null) {rollback();return _answer('invalid-model');}
-    if(normalizeRoutingContext(c,now)==null||now<_lastNow) {rollback();return _answer('invalid-context');}
+    final normalized=normalizeRoutingContext(c,now);
+    if(normalized==null||now<_lastNow) {rollback();return _answer('invalid-context');}
     _lastNow=now;
     if(c.saver||c.battery<.25||c.duty==1) {_current='baseline-v1';_votes=0;_pending='baseline-v1';return _answer('power-override');}
     if(model.confidence<.6) return _answer('low-confidence');
-    final proposal=c.neighbors<=model.threshold?model.left:model.right;
+    final proposal=normalized[0]<=model.threshold/128?model.left:model.right;
     if(c.observedAt>_lastVoteAt) {
       if(proposal!=_pending) {_pending=proposal;_votes=1;} else {_votes++;}
       _lastVoteAt=c.observedAt;

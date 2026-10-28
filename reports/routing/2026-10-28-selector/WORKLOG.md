@@ -21,3 +21,6 @@
    in BOTH leaves, confidence0: there is no positive training gain for either eligible neighbor
    partition. Model hash ef63fbf524cb9ad056a0bd91fb1360330ad87c2518b64af74a748b47b4319c95.
    This is an experimental degenerate learned policy, not evidence of successful optimization.
+8. First selector CI failed honestly: new Dart import was before the library directive,
+   a compile error not caught by delimiter/declaration checks. Moved it after library;
+   do not count run40642147624 as passed. Subsequent CI is required.

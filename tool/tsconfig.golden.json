@@ -27,7 +27,8 @@
     "capture-json.ts",
     "field-report.ts",
     "routing-benchmark.ts",
-    "routing-targeted.ts"
+    "routing-targeted.ts",
+    "routing-shadow.ts"
   ],
   "exclude": [
     "../src/**/*.tsx",

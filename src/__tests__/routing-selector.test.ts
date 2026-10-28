@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 import { describe,it,expect } from "vitest";
 import { RoutingSelector, normalizeContext, validateModel, type SelectorMode } from "../routing-selector";
 import { MeshSimulation } from "../simulation";
@@ -28,6 +30,18 @@ describe("shadow routing deployment safety",()=>{
     for(let t=0;t<=2;t++)s.decide({...context,observedAt:t},t);
     expect(s.decide({...context,observedAt:3},3).proposed).toBe("ack-6000-v1");
     s.rollback();expect(s.decide(context,3).proposed).toBe("baseline-v1");
+  });
+  it("verifies artifact integrity before parsing and bounds load size",()=>{
+    const dir=mkdtempSync(`${tmpdir()}/selector-`),path=`${dir}/model.json`;
+    try {
+      const raw=JSON.stringify(model);writeFileSync(path,raw);
+      const hash=createHash("sha256").update(raw).digest("hex");
+      expect(loadSelector(path,hash)).toEqual(model);
+      writeFileSync(path,JSON.stringify({...model,right:"flood-all"}));
+      expect(loadSelector(path,hash)).toBeNull();
+      writeFileSync(path," ".repeat(4097));
+      expect(loadSelector(path,createHash("sha256").update(" ".repeat(4097)).digest("hex"))).toBeNull();
+    } finally { rmSync(dir,{recursive:true,force:true}); }
   });
   it("normalizes boundaries and fails model load closed",()=>{
     expect(normalizeContext({...context,neighbors:128,queue:500,duty:1,battery:0},0)).toEqual([1,1,1]);

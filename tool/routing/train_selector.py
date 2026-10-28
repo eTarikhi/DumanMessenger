@@ -3,6 +3,7 @@
 import hashlib
 import json
 import sys
+import subprocess
 from pathlib import Path
 
 
@@ -66,6 +67,8 @@ def main():
     (out/'model.experimental.json').write_bytes(encoded)
     metadata=dict(status='shadow-only-not-approved',datasetSHA256=hashlib.sha256(raw).hexdigest(),
                   modelSHA256=hashlib.sha256(encoded).hexdigest(),sourceSha=dataset['sourceSha'],
+                  trainingCodeSHA256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                  trainingGitRevision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
                   api=1,featureSchema=1,features=['neighbors/128','duty (0 or 1)','queue/500 (guard only)'],
                   trainingSeeds=[101,202,303],tuningSeeds=[404],validationSeeds=[505],exposedAuditSeeds=[606],finalHoldoutSeeds=[909],
                   trainGainCount=gain,confidenceMeaning='fraction of training seed blocks with positive estimated gain, not calibrated',

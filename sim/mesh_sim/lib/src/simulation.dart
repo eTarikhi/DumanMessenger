@@ -1,4 +1,3 @@
-import 'routing_selector.dart';
 /// Discrete-event mesh simulation, mirroring `src/simulation.ts`.
 ///
 /// Time is virtual (`now`), so TTLs, the 300 ms MPR wait, OGM expiry and latency
@@ -6,6 +5,8 @@ import 'routing_selector.dart';
 /// here touches wall-clock time or an unseeded random source, which is what makes
 /// a CI run reproduce a field test exactly.
 library;
+
+import 'routing_selector.dart';
 
 import 'dart:convert';
 import 'dart:math' as math;
@@ -1597,6 +1598,7 @@ class MeshSimulation {
   final Map<String, RoutingSelector> _routingSelectors = {};
   final Map<String, double> _peerObservedAt = {};
   final List<SelectorDecision> selectorDiagnostics = [];
+  final Map<String,int> selectorDecisionCounts = {};
   void rollbackRoutingSelector() { for(final c in _routingSelectors.values) {c.rollback();} }
   late List<MeshNode> nodes;
   SimConfig config;
@@ -2558,9 +2560,11 @@ class MeshSimulation {
     if (id == null) {
       final node=_byId(msg.from), controller=_routingSelectors[msg.from];
       if(_selectorOptions!=null && node!=null && controller!=null) {
-        selectorDiagnostics.add(controller.decide(LocalRoutingContext(node.peerCount.toDouble(),
+        final decision=controller.decide(LocalRoutingContext(node.peerCount.toDouble(),
           node.oppQueue.length.toDouble(),config.dutyCycleEnabled?1:0,node.battery,node.batterySaver,
-          _peerObservedAt[node.id]??double.negativeInfinity),now));
+          _peerObservedAt[node.id]??double.negativeInfinity),now);
+        selectorDecisionCounts[decision.reason]=(selectorDecisionCounts[decision.reason]??0)+1;
+        selectorDiagnostics.add(decision);
         if(selectorDiagnostics.length>256) selectorDiagnostics.removeAt(0);
       }
       return config.ackTimeoutMs;
