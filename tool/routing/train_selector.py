@@ -64,7 +64,10 @@ def main():
     raw=source.read_bytes(); dataset=json.loads(raw)
     model,gain=fit(dataset['rows'])
     encoded=(json.dumps(model,sort_keys=True,separators=(',',':'))+'\n').encode()
-    (out/'model.experimental.json').write_bytes(encoded)
+    model_path=out/'model.experimental.json'
+    if model_path.exists() and model_path.read_bytes()!=encoded:
+        raise ValueError('Refusing to replace a different frozen model; choose a new artifact directory')
+    model_path.write_bytes(encoded)
     metadata=dict(status='shadow-only-not-approved',datasetSHA256=hashlib.sha256(raw).hexdigest(),
                   modelSHA256=hashlib.sha256(encoded).hexdigest(),sourceSha=dataset['sourceSha'],
                   trainingCodeSHA256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),

@@ -1,21 +1,33 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync } from "node:fs";
 import { MeshSimulation } from "../src/simulation";
 import { buildScenario, scenarioNames } from "../src/scenarios";
 import { createRng } from "../src/rng";
 import { applyStrategy, trafficPlan, percentile } from "./routing/strategies";
-const out = process.argv[2] ?? "reports/routing/2026-10-28-selector";
+const out = process.argv[2] ?? "artifacts/selector/reproduce";
 mkdirSync(out, {recursive:true});
 const sourceSha = execFileSync("git", ["rev-parse", "HEAD"], {encoding:"utf8"}).trim();
 const prior = JSON.parse(readFileSync("reports/routing/2026-10-28/benchmark.json", "utf8"));
 const rows: any[] = [];
 const exogenous=process.argv.includes("--exogenous");
 const finalHoldout=process.argv.includes("--holdout");
+const checkpoint=`${out}/${exogenous?"exogenous":finalHoldout?"final-holdout":"targeted"}.json`;
+const runnerSHA256=createHash("sha256").update(readFileSync(__filename)).digest("hex");
+const engineSHA256=createHash("sha256").update(["simulation","routing","election","rf","rng","scenarios","types","events"]
+  .map(n=>readFileSync(`src/${n}.ts`,"utf8")).join("\n")).digest("hex");
+if(existsSync(checkpoint)&&!process.argv.includes("--resume")) throw Error("Existing checkpoint: use --resume or a new directory");
+if(process.argv.includes("--resume")) {
+  const old=JSON.parse(readFileSync(checkpoint,"utf8"));
+  if(old.runnerSHA256!==runnerSHA256||old.engineSHA256!==engineSHA256||old.node!==process.version)
+    throw Error("Checkpoint source/toolchain mismatch; preserve prior evidence and use a new directory");
+  rows.push(...old.rows);
+}
 function run(split:string, scenario:string, seed:number, duty:boolean, staticWorld=false) {
   const base = {...buildScenario(scenario, seed), dutyCycleEnabled:duty};
   if(staticWorld) base.enableMobility=false;
   for(const strategy of ["baseline-v1","ack-6000-v1"]) {
+    if(rows.some(r=>r.split===split&&r.scenario===scenario&&r.seed===seed&&r.duty===duty&&r.staticWorld===staticWorld&&r.strategy===strategy)) continue;
     const config=applyStrategy(base,strategy,true), sim=new MeshSimulation(config,undefined,exogenous?31415:undefined);
     const features=sim.nodes.map(n=>({neighbors:n.peerCount,duty:duty?1:0}));
     const origins=sim.nodes.map(()=>({sent:0,five:0}));
@@ -50,7 +62,8 @@ function run(split:string, scenario:string, seed:number, duty:boolean, staticWor
         throw Error("Historical reproduction failed");
     }
     rows.push(row);
-    writeFileSync(`${out}/${exogenous?"exogenous":finalHoldout?"final-holdout":"targeted"}.json`,JSON.stringify({sourceSha,node:process.version,featureSchema:1,rows}));
+    writeFileSync(`${checkpoint}.tmp`,JSON.stringify({sourceSha,runnerSHA256,engineSHA256,node:process.version,featureSchema:1,rows}));
+    renameSync(`${checkpoint}.tmp`,checkpoint);
     console.error(`${split} ${scenario} ${seed} duty=${duty} static=${staticWorld} ${strategy} ${five}/${sent}`);
   }
 }

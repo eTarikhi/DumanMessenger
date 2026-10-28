@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { MeshSimulation } from "../src/simulation";
 import { buildScenario, scenarioNames } from "../src/scenarios";
 import { createRng } from "../src/rng";
 import { RoutingSelector } from "../src/routing-selector";
 import { loadSelector } from "./routing/load-selector";
 import { trafficPlan, percentile } from "./routing/strategies";
-const dir="reports/routing/2026-10-28-selector", path=`${dir}/model/model.experimental.json`;
+const dir=process.argv[2]??"reports/routing/2026-10-28-selector", path=`${dir}/model/model.experimental.json`;
 const raw=readFileSync(path), hash=createHash("sha256").update(raw).digest("hex");
 const loadStart=performance.now(),model=loadSelector(path,hash),loadMs=performance.now()-loadStart;
 if(!model)throw Error("Model load failed");
@@ -27,7 +28,9 @@ for(const scenario of scenarioNames())for(const duty of [false,true]) {
   rows.push({scenario,duty,seed:505,exactStatsAndDeliveriesEqual:true,stats:b.stats,
     decisionCounts:b.selectorDecisionCounts,tailDecisions:b.selectorDiagnostics.length});
 }
-writeFileSync(`${dir}/shadow.json`,JSON.stringify({modelSHA256:hash,modelBytes:raw.length,loadMs,
+const output=process.argv[3]??"artifacts/selector/shadow.json";
+mkdirSync(dirname(output),{recursive:true});
+writeFileSync(output,JSON.stringify({modelSHA256:hash,modelBytes:raw.length,loadMs,
   inferenceSamples:times.length,inferenceP50Ms:percentile(times,.5),inferenceP95Ms:percentile(times,.95),
   hardware:"shared sandbox Node "+process.version, memory:"artifact bytes measured, heap/phone footprint not isolated",
   rows},null,2)+'\n');
