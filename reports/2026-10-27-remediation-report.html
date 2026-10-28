@@ -52,9 +52,9 @@ footer { margin-top:56px; padding-top:18px; border-top:1px solid #1e2a3a; color:
 <header>
 <h1>Engineering remediation report</h1>
 <p class="sub">2026-10-27 &middot; branch <code>arena/ff85cb12-dumanmessenger</code> &middot;
-started at <code>d2fbba3</code> &middot; code head <code>4b760e2</code> &middot;
-28 commits in the range &mdash; 27 from this session and one (<code>991d11c</code>) from the owner
-&mdash; 37 files, +2 830 / &minus;153 (this report is most of the added lines) &middot;
+started at <code>d2fbba3</code> &middot; code head <code>e5bc87b</code> &middot;
+30 commits in the range &mdash; 29 from this session and one (<code>991d11c</code>) from the owner
+&mdash; 38 files, +2 975 / &minus;172 (this report is most of the added lines) &middot;
 <a href="https://github.com/eTarikhi/DumanMessenger/pull/3" style="color:#4de0ff">pull request #3</a></p>
 <p>Remediation of the verification and toolchain layer, plus the two engine-side defects that only
 became visible once CI executed the authoritative Dart engine for the first time in this
@@ -65,9 +65,9 @@ verified, the row says so and says why.</p>
 
 <h2>0. Summary</h2>
 <div class="grid">
-  <div class="card"><div class="k">commits</div><div class="v">28</div><div class="n">by concern, all pushed</div></div>
+  <div class="card"><div class="k">commits</div><div class="v">30</div><div class="n">by concern, all pushed</div></div>
   <div class="card"><div class="k">defects fixed</div><div class="v">20</div><div class="n">each with its evidence in &sect;1</div></div>
-  <div class="card"><div class="k">CI jobs green</div><div class="v">9 / 9</div><div class="n">run 40617596690</div></div>
+  <div class="card"><div class="k">CI jobs green</div><div class="v">9 / 9</div><div class="n">run 40618882207</div></div>
   <div class="card"><div class="k">Dart tests</div><div class="v">279</div><div class="n">0 failed; read from the notice</div></div>
   <div class="card"><div class="k">TS tests</div><div class="v">480</div><div class="n">18 files; read from the notice</div></div>
   <div class="card"><div class="k">local checks</div><div class="v">12 / 0</div><div class="n">passed / failed; 13 could not run</div></div>
@@ -456,6 +456,57 @@ claim generalised too far from a check of the new prose only. It is recorded her
 message is part of the ledger, and this branch does not force-push, so the correction lives in the
 report instead of in an amended message.</p>
 
+<h3>1.7 Addendum &mdash; the crowd was checked too, and it reproduced exactly where it mattered</h3>
+<p>Finding one stale table raises the obvious question about the other headline evidence, so the
+crowd was re-measured with the same harness: nine seeds, 150 messages, shipped configuration. Its
+numbers are quoted in the README, <code>docs/05</code>, <code>docs/06</code>, <code>docs/09</code> and
+<code>skills/08</code>, and in the suite they are guarded only by floors and ceilings &mdash; so a
+drifted figure sitting in a comment would never fail a test, which is the same exposure &sect;1.6
+had.</p>
+<table>
+<tr><th>published figure</th><th class="num">as published</th><th class="num">re-measured</th><th>verdict</th></tr>
+<tr><td>delivery, nine seeds</td><td class="num">85.3&ndash;98.7 %</td><td class="num">85.3&ndash;98.7 %</td>
+<td class="pass">reproduced seed for seed, to a tenth of a point</td></tr>
+<tr><td>SUPER ratio</td><td class="num">15.0&ndash;21.7 %</td><td class="num">15.0&ndash;21.7 %</td>
+<td class="pass">reproduced</td></tr>
+<tr><td>average hops</td><td class="num">2.49&ndash;3.08</td><td class="num">2.49&ndash;3.08</td>
+<td class="pass">reproduced</td></tr>
+<tr><td>role changes / node / min</td><td class="num">0.07&ndash;0.16</td><td class="num">0.07&ndash;0.16</td>
+<td class="pass">reproduced</td></tr>
+<tr><td>overhead vs naive flood</td><td class="num">12&ndash;14 %</td><td class="num">10.6&ndash;12.8 %</td>
+<td class="blocked">drifted &mdash; cheaper than published</td></tr>
+<tr><td>flood-all relays &divide; MPR relays</td><td class="num">7&ndash;9&times;</td><td class="num">7.8&ndash;9.5&times;</td>
+<td class="blocked">drifted</td></tr>
+<tr><td>MPR's marginal cut over routing</td><td class="num">42&ndash;50 %</td><td class="num">45&ndash;55 %</td>
+<td class="blocked">drifted</td></tr>
+<tr><td>mean delivery gap vs route-flood</td><td class="num">&minus;0.9 points</td><td class="num">&minus;0.2 points</td>
+<td class="blocked">drifted &mdash; the bound that survived is the assertion, not the figure</td></tr>
+<tr><td>within five hops</td><td class="num">82.7&ndash;89.3 %</td><td class="num">77.3&ndash;92.3 %</td>
+<td class="blocked">drifted, and wider</td></tr>
+</table>
+<p>The pattern is the useful part. <strong>The drift is not uniform, and it is not random:</strong> the
+nine-seed delivery readings were written into the test's own comment later than <code>docs/06</code>
+&sect;2's table, and they reproduce exactly, while the overhead figures around them moved. Delivery in
+this crowd did not change with those fifteen engine commits; what changed is how cheaply it is
+achieved &mdash; the overhead numbers all moved in the engine's favour, which is the direction a
+stale figure is least likely to be noticed in. Had they moved the other way, a reviewer would have
+had a reason to look.</p>
+<p>Two figures are published that nobody had measured: the crowd within <strong>three</strong> hops is
+56.7&ndash;68.0 % (mean 63.3 %) against 77.3&ndash;92.3 % within five, which is the crowd's row in
+&sect;6's F2 table read across nine seeds instead of one. And seed 42 gives 85 of 150 within three
+hops and 128 within five in the local TypeScript measurement <em>and</em> in CI run 40616278770's
+Dart annotation &mdash; agreement to the message, which is what makes that table more than one
+engine's opinion.</p>
+<p>What was <em>not</em> re-measured is marked in place rather than quietly kept: the tail
+decomposition beside the crowd's five-hop range (9&ndash;12 messages arriving at exactly six hops,
+7&ndash;11 expired) still describes the engine as of <code>82d967a</code> and now says so; the
+before/after in <code>docs/06</code> &sect;11 keeps its own numbers under a dated note; and
+<code>docs/09</code>'s crowd prediction row keeps the 91.3&ndash;95.3 % delivery figure whose
+definition lives in &sect;24.8 and &sect;24.13, with only its overhead number corrected. Correcting a
+number you have measured and labelling one you have not is the whole discipline; doing the first
+without the second is how a document comes to look uniformly fresh while carrying one stale figure
+that everybody now trusts.</p>
+
 <h2>2. What was verified, and how</h2>
 
 <h3>2.1 Remote CI &mdash; executed, on this branch</h3>
@@ -556,8 +607,15 @@ new golden assertions pass in Dart, so both engines agree on the pinned hop coun
 annotation now carries <code>deliveredWithinThreeHops</code> beside
 <code>deliveredWithinFiveHops</code>.</td></tr>
 <tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40617596690" style="color:#4de0ff">40617596690</a></td>
-<td><code>4b760e2</code></td><td class="pass">success</td><td>Branch head, 9 / 9. The re-measured
+<td><code>4b760e2</code></td><td class="pass">success</td><td>9 / 9. The re-measured
 acceptance table of &sect;1.6; its seed-42 row agrees with this run's annotation to the unit.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40617971721" style="color:#4de0ff">40617971721</a></td>
+<td><code>757c134</code></td><td class="pass">success</td><td>9 / 9. This report revision: F2 with the
+right population, &sect;1.6, owner action 1 closed.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40618882207" style="color:#4de0ff">40618882207</a></td>
+<td><code>e5bc87b</code></td><td class="pass">success</td><td>Branch head, 9 / 9. The crowd
+re-measurement of &sect;1.7; its seed-42 hop counts (85 within three, 128 within five) are the same
+in this run's Dart annotation and in the local TypeScript measurement.</td></tr>
 </table>
 
 <h3>2.2 What the authoritative engine measured, for the first time</h3>
@@ -957,7 +1015,11 @@ engine, all five scenarios and both campus arms, 150 messages each:</p>
 <code>measure()</code> and cross-checked against the Dart engine to the unit: <strong>three hops
 89.3&ndash;96.0 % (mean 92.6 %), meeting &ge;90 % on four of six seeds</strong>; five hops
 98.7&ndash;100 %, meeting it on all six. The two seeds that fall short at three hops fall short by
-<strong>one message</strong> (134 of 150 against the 135 that would pass).</p>
+<strong>one message</strong> (134 of 150 against the 135 that would pass). The crowd, over the nine
+seeds &sect;1.7 re-measured, reads <strong>56.7&ndash;68.0 % within three hops</strong> against
+77.3&ndash;92.3 % within five &mdash; so the choice of reading moves the crowd from failing a
+<code>--no-check</code> bar to failing it by twice as much, and moves the campus from passing to
+failing by one message on two seeds of six.</p>
 <p>So the decision costs this, and no more: adopting <code>skills/02</code>'s wording literally turns
 the flagship scenario's gate red on two of six seeds by one message each, and the crowd's
 <code>--no-check</code> arms move from 0.85 to 0.57 against the same bar. Keeping the five-hop
@@ -1060,12 +1122,12 @@ machine does not.</td></tr>
 </table>
 
 <h2>8. The change set, and what remains incomplete</h2>
-<p>Twenty-eight commits from <code>d2fbba3</code> to <code>4b760e2</code> &mdash; 27 of them this
-session's and one, <code>991d11c</code>, the owner's &mdash; 37 files, +2 830 / &minus;153
+<p>Thirty commits from <code>d2fbba3</code> to <code>e5bc87b</code> &mdash; 29 of them this
+session's and one, <code>991d11c</code>, the owner's &mdash; 38 files, +2 975 / &minus;172
 (this report is most of the added lines), all pushed to
 <code>arena/ff85cb12-dumanmessenger</code> and collected in
 <a href="https://github.com/eTarikhi/DumanMessenger/pull/3" style="color:#4de0ff">pull request #3</a>
-against <code>main</code>. The branch is 112 commits ahead of <code>origin/main</code> including the
+against <code>main</code>. The branch is 114 commits ahead of <code>origin/main</code> including the
 earlier merged work. <code>main</code> was not touched, nothing was force-pushed, and no history was
 rewritten &mdash; including the one commit whose message understates its contents, which is recorded
 in &sect;1 instead.</p>
@@ -1122,7 +1184,8 @@ Produced 2026-10-27 on branch <code>arena/ff85cb12-dumanmessenger</code> from
 again on 2026-10-28 after the owner's <code>991d11c</code>.
 Sources for every number: CI runs 40428343622, 40429112891, 40430079404, 40432981960, 40437372608,
 40443962188, 40455143525, 40455641251, 40457964023, 40458532323, 40458960415, 40460087980,
-40460956532, 40463387905, 40463393423, 40614770959, 40616278770 and 40617596690, plus the owner's
+40460956532, 40463387905, 40463393423, 40614770959, 40616278770, 40617596690, 40617971721 and
+40618882207, plus the owner's
 40610830053 and 40610835443 and the cancelled pair 40613897925 and 40613903311 (job conclusions and
 check-run annotations &mdash; the annotations are the only
 machine-readable channel out of a runner here, since <code>$GITHUB_STEP_SUMMARY</code> is not
