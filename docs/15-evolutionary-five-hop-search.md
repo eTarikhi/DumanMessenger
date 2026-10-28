@@ -121,7 +121,9 @@ The search and two contact bounds ran successfully; all80 rows passed sent/dupli
 Tool compilation/typecheck and five new targeted regression tests passed; seven Python tests
 passed. CI40676513246 at84f26b1 passed9/9 jobs (TypeScript506 tests; existing Dart suite remains
 separate from new-profile measurements). The final artifact-consistency tests add three tests;
-their final-tree CI status is recorded in the verification file rather than assumed from that run.
+final code CI [40677434446](https://github.com/eTarikhi/DumanMessenger/actions/runs/40677434446)
+at **abf154f passed 9/9 jobs**: **22 TypeScript files / 509 tests**, and **344 Dart tests
+(0 failed, 0 skipped)**. Later evidence/report commits change no runtime, tool or test source.
 
 Local Dart is unavailable. New profile outcomes have **not** been run in authoritative Dart.
 No deployment or positive generalized learned-routing result is claimed. Full inputs, raw results,
