@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "abf154f",
+  "defaultRoutingChanged": false,
+  "local": {
+    "toolCompilation": "passed",
+    "typecheck": "passed",
+    "productionBuild": "passed",
+    "newRegressionTests": {
+      "files": 2,
+      "passed": 5
+    },
+    "pythonTestsPassed": 7,
+    "docChecks": "passed",
+    "parity": "passed",
+    "dartSites": "passed",
+    "dartBalance": "passed",
+    "localDart": "not-run: SDK unavailable"
+  },
+  "tools": {
+    "node": "v22.22.3",
+    "python": "Python 3.11.2"
+  },
+  "experiments": {
+    "newWorlds": 80,
+    "messagesPerWorld": 150,
+    "newPlannedMessages": 12000,
+    "trainingWorlds": 32,
+    "validationAndHoldoutWorlds": 24,
+    "protectedWorlds": 24,
+    "optimisticContactDiagnostics": 2,
+    "fiveHopTargetAchieved": false,
+    "denominatorOrGateChanged": false,
+    "modelSelectionUsedValidationOrHoldout": false
+  },
+  "historicalCIThisIteration": {
+    "run": 40676513246,
+    "revision": "84f26b1",
+    "conclusion": "success",
+    "jobsPassed": 9,
+    "typescriptPassed": 506
+  },
+  "finalCodeCI": {
+    "run": 40677434446,
+    "revision": "abf154f",
+    "conclusion": "success",
+    "jobsPassed": 9,
+    "typescriptPassed": 509,
+    "typescriptFiles": 22,
+    "dartPassed": 344,
+    "dartFailed": 0,
+    "dartSkipped": 0,
+    "annotationJobs": [
+      122779317558,
+      122779318019
+    ]
+  },
+  "notVerified": [
+    "New learned profile delivery outcomes in authoritative Dart",
+    "New profile release flood-relative overhead acceptance",
+    "Physical devices, mobile power, learned profile live actuation",
+    "A statistically resolved generalized five-hop improvement"
+  ],
+  "checksums": {
+    "runs.json": "f423a7398eb8544fbe785725b394ea3cf9a8a0a19a5c8715d40335b65381f1c2",
+    "policy.json": "11681ad6ace68d43dd3cdf7034d819d324f07e521f9d2f3b70f00c52a8305285",
+    "per-seed.csv": "bfba9eaab784d8559eeee2b412ae5182ed2eed5962a4b392a27400a9a509e3d3"
+  }
+}
