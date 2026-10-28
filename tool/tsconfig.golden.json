@@ -28,7 +28,9 @@
     "field-report.ts",
     "routing-benchmark.ts",
     "routing-targeted.ts",
-    "routing-shadow.ts"
+    "routing-shadow.ts",
+    "routing-evolve.ts",
+    "routing-contact-bound.ts"
   ],
   "exclude": [
     "../src/**/*.tsx",
