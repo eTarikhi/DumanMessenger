@@ -1,3 +1,4 @@
+import { RoutingSelector, type SelectorOptions, type SelectorDecision } from "./routing-selector";
 import {
   HISTORY_BUCKETS,
   GROUP_ADDRESS,
@@ -1485,8 +1486,21 @@ export class MeshSimulation {
   private retriesExhausted = 0;
   private acksReceived = 0;
 
-  constructor(config: SimConfig = DEFAULT_CONFIG) {
+  private readonly motionRng?: Rng;
+  private readonly selectorOptions?: SelectorOptions;
+  private readonly routingSelectors = new Map<string, RoutingSelector>();
+  private readonly peerObservedAt = new Map<string,number>();
+  rollbackRoutingSelector(): void { for(const c of this.routingSelectors.values()) c.rollback(); }
+  readonly selectorDiagnostics: SelectorDecision[] = [];
+
+  constructor(config: SimConfig = DEFAULT_CONFIG, selectorOptions?: SelectorOptions, motionSeed?: number) {
+    // Copy/validate into per-node immutable controllers before time starts.
+    if (selectorOptions) {
+      this.selectorOptions = {mode: selectorOptions.mode};
+
+    }
     this.config = config;
+    this.motionRng = motionSeed === undefined ? undefined : createRng(motionSeed);
     this.rng = createRng(config.seed);
     this.rf = {
       txPowerDbm: config.txPowerDbm,
@@ -1495,6 +1509,7 @@ export class MeshSimulation {
       obstacles: config.obstacles,
     };
     this.nodes = createNodes(this.rng, config);
+    if(selectorOptions) for(const n of this.nodes) this.routingSelectors.set(n.id,new RoutingSelector(selectorOptions));
     this.schedule();
     this.runFor(config.warmupMs);
     this.clearRecords();
@@ -1751,7 +1766,7 @@ export class MeshSimulation {
       if (!node.isOnline) continue;
       integrateMotion(
         node,
-        this.rng,
+        this.motionRng ?? this.rng,
         dtSec,
         this.config.areaWidth,
         this.config.areaHeight,
@@ -2043,6 +2058,7 @@ export class MeshSimulation {
    *  MPR set are deterministic across runs and across both language engines. */
   private refreshPeerList(node: MeshNode): MeshNode[] {
     const peers = peersInRange(node, this.nodes, this.rf);
+    if(this.selectorOptions) this.peerObservedAt.set(node.id,this.now);
     node.peerCount = peers.length;
     node.peerIds = peers.map((p) => p.id).sort();
     return peers;
@@ -2699,7 +2715,16 @@ export class MeshSimulation {
   /** The ACK timeout that applies to this message: media retries far sooner than text,
    *  and by default on a timer measured from the path rather than a constant. */
   private ackTimeoutFor(msg: MeshMessage): number {
-    if (!msg.transferId) return this.config.ackTimeoutMs;
+    if (!msg.transferId) {
+      const node=this.byId(msg.from), controller=this.routingSelectors.get(msg.from);
+      if(this.selectorOptions && node && controller) {
+        const decision=controller.decide({neighbors:node.peerCount,queue:node.oppQueue.length,
+          duty:this.config.dutyCycleEnabled?1:0,battery:node.battery,saver:node.batterySaver,observedAt:this.peerObservedAt.get(node.id) ?? -Infinity},this.now);
+        this.selectorDiagnostics.push(decision);
+        if(this.selectorDiagnostics.length>256) this.selectorDiagnostics.shift();
+      }
+      return this.config.ackTimeoutMs; // Shadow/canary cannot mutate any timer.
+    }
     const t = this.transfers.get(msg.transferId);
     return t ? this.transferTimeoutMs(t) : this.config.mediaAckTimeoutMs;
   }

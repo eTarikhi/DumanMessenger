@@ -26,7 +26,8 @@
     "cover-probe.ts",
     "capture-json.ts",
     "field-report.ts",
-    "routing-benchmark.ts"
+    "routing-benchmark.ts",
+    "routing-targeted.ts"
   ],
   "exclude": [
     "../src/**/*.tsx",

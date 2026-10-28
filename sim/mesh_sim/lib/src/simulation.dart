@@ -1,3 +1,4 @@
+import 'routing_selector.dart';
 /// Discrete-event mesh simulation, mirroring `src/simulation.ts`.
 ///
 /// Time is virtual (`now`), so TTLs, the 300 ms MPR wait, OGM expiry and latency
@@ -1574,19 +1575,29 @@ class _PendingAck {
 }
 
 class MeshSimulation {
-  MeshSimulation([SimConfig config = defaultConfig])
-      : config = config,
+  MeshSimulation([SimConfig config = defaultConfig, RoutingSelectorOptions? selectorOptions, int? motionSeed])
+      : _motionRng = motionSeed == null ? null : createRng(motionSeed),
+        _selectorOptions = selectorOptions, config = config,
         rng = createRng(config.seed),
         rf = config.rf {
     // `nodes` is built from the *same* stream as every later draw, so the spawn
     // order is part of the cross-language determinism contract.
     nodes = createNodes(rng, this.config);
+    if(selectorOptions!=null) {
+      for(final n in nodes) { _routingSelectors[n.id]=RoutingSelector(selectorOptions); }
+    }
     _schedule();
     runFor(this.config.warmupMs);
     clearRecords();
     stats = _computeStats();
   }
 
+  final Rng? _motionRng;
+  final RoutingSelectorOptions? _selectorOptions;
+  final Map<String, RoutingSelector> _routingSelectors = {};
+  final Map<String, double> _peerObservedAt = {};
+  final List<SelectorDecision> selectorDiagnostics = [];
+  void rollbackRoutingSelector() { for(final c in _routingSelectors.values) {c.rollback();} }
   late List<MeshNode> nodes;
   SimConfig config;
   RfParams rf;
@@ -1952,7 +1963,7 @@ class MeshSimulation {
     final dtSec = config.physicsIntervalMs / 1000;
     for (final node in nodes) {
       if (!node.isOnline) continue;
-      integrateMotion(node, rng, dtSec, config.areaWidth, config.areaHeight,
+      integrateMotion(node, _motionRng ?? rng, dtSec, config.areaWidth, config.areaHeight,
           config.enableMobility);
       // A duty-cycling node with its scanner off burns less: skills/07's whole
       // argument is that the sleep slot is what keeps NORMAL under 15%/8h.
@@ -2240,6 +2251,7 @@ class MeshSimulation {
   /// MPR set are deterministic across runs and across both language engines.
   List<MeshNode> _refreshPeerList(MeshNode node) {
     final peers = peersInRange(node, nodes, rf);
+    if(_selectorOptions!=null) _peerObservedAt[node.id]=now;
     node.peerCount = peers.length;
     node.peerIds = peers.map((p) => p.id).toList()..sort();
     return peers;
@@ -2543,7 +2555,16 @@ class MeshSimulation {
   /// and optionally on a timer measured from the path rather than a constant.
   double _ackTimeoutFor(MeshMessage msg) {
     final id = msg.transferId;
-    if (id == null) return config.ackTimeoutMs;
+    if (id == null) {
+      final node=_byId(msg.from), controller=_routingSelectors[msg.from];
+      if(_selectorOptions!=null && node!=null && controller!=null) {
+        selectorDiagnostics.add(controller.decide(LocalRoutingContext(node.peerCount.toDouble(),
+          node.oppQueue.length.toDouble(),config.dutyCycleEnabled?1:0,node.battery,node.batterySaver,
+          _peerObservedAt[node.id]??double.negativeInfinity),now));
+        if(selectorDiagnostics.length>256) selectorDiagnostics.removeAt(0);
+      }
+      return config.ackTimeoutMs;
+    }
     final t = transfers[id];
     return t == null ? config.mediaAckTimeoutMs : _transferTimeoutMs(t);
   }
