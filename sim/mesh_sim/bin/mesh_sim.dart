@@ -515,6 +515,11 @@ void main(List<String> args) {
       .where((d) => d.type != MsgType.ack && d.type != MsgType.broadcast)
       .toList();
   final withinFive = unicast.where((d) => d.hops <= 5).length;
+  // skills/02 writes the criterion at three hops ("delivery >=90% at 3 hops") and skills/08 at five;
+  // the gate below enforces the five-hop reading, and whether that is the right reading is finding
+  // F2 — an owner decision, so this is published and never asserted. Both counts are over
+  // the gate's own population — every unicast delivery, retries and DTN bundles included. Do not derive either reading from latencyByHop: that table is scoped to first-attempt routed unicast, so it omits exactly the deliveries that make the two numbers differ (campus_quad seed 42: 148 within five hops, 140 in the table).
+  final withinThree = unicast.where((d) => d.hops <= 3).length;
   final overheadVsFlood =
       s.totalForwarded / math.max(1, baseline.stats.totalForwarded);
 
@@ -554,6 +559,8 @@ void main(List<String> args) {
     'deliveryRatio': _round(s.deliveryRatio),
     'deliveredWithinFiveHops': withinFive,
     'withinFiveRatio': _round(withinFive / math.max(1, sent)),
+    'deliveredWithinThreeHops': withinThree,
+    'withinThreeRatio': _round(withinThree / math.max(1, sent)),
     'superNodes': s.superNodes,
     'superRatio': _round(s.superRatio),
     'timeAvgSuperRatio': _round(sim.timeAvgSuperRatio),

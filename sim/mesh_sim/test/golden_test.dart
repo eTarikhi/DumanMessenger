@@ -103,6 +103,17 @@ void main() {
       expect(s.totalQueued, equals(expect_['totalQueued']));
       expect(unicast.fold<int>(0, (sum, d) => sum + d.hops),
           equals(expect_['sumHopCounts']));
+      // Both readings of the hop criterion, pinned from the other side of the same fixture. Finding
+      // F2 is an owner decision about which one the suite enforces; neither engine gets to drift on
+      // the numbers that decision is made from. Counted over every unicast delivery, retries and
+      // DTN bundles included — not over latencyByHop, which is scoped to first-attempt routed
+      // unicast and so counts a different set.
+      expect(unicast.where((d) => d.hops <= 5).length,
+          equals(expect_['deliveredWithinFiveHops']),
+          reason: 'the five-hop reading diverged from the reference engine');
+      expect(unicast.where((d) => d.hops <= 3).length,
+          equals(expect_['deliveredWithinThreeHops']),
+          reason: 'the three-hop reading diverged from the reference engine');
 
       // Floating aggregates carry a tolerance so a last-ULP difference between
       // the JS and Dart libm implementations cannot fail the build.

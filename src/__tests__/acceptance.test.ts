@@ -75,8 +75,12 @@ interface RunResult {
   deliveredUnicast: number;
   withinFiveHops: number;
   overFiveHops: number;
+  /** `skills/02`'s reading of the same criterion, over the same population. */
+  withinThreeHops: number;
+  overThreeHops: number;
   deliveryRatio: number;
   withinFiveRatio: number;
+  withinThreeRatio: number;
   superRatio: number;
   relayTx: number;
   overheadVsFlood: number;
@@ -102,6 +106,10 @@ function measure(cfg: SimConfig, withFloodBaseline = true): RunResult {
 
   const uni = sim.deliveries.filter((d) => d.type !== "ack" && d.type !== "broadcast");
   const withinFiveHops = uni.filter((d) => d.hops <= 5).length;
+  // The three-hop reading is measured but never asserted against a threshold, because which of the
+  // two readings the suite enforces is finding F2 and that is an owner decision. It is counted over
+  // the gate's own population — every unicast delivery, retries and DTN bundles included. Do not derive either reading from `latencyByHop`: that table is scoped to first-attempt routed unicast, so it omits exactly the deliveries that make the two numbers differ (campus_quad seed 42: 148 within five hops, 140 in the table).
+  const withinThreeHops = uni.filter((d) => d.hops <= 3).length;
 
   let baselineRelays = sim.stats.totalForwarded;
   let routeFloodRelays = sim.stats.totalForwarded;
@@ -144,8 +152,11 @@ function measure(cfg: SimConfig, withFloodBaseline = true): RunResult {
     deliveredUnicast: uni.length,
     withinFiveHops,
     overFiveHops: uni.length - withinFiveHops,
+    withinThreeHops,
+    overThreeHops: uni.length - withinThreeHops,
     deliveryRatio: uni.length / Math.max(1, sent),
     withinFiveRatio: withinFiveHops / Math.max(1, sent),
+    withinThreeRatio: withinThreeHops / Math.max(1, sent),
     superRatio: sim.stats.superRatio,
     relayTx: sim.stats.totalForwarded,
     overheadVsFlood: sim.stats.totalForwarded / Math.max(1, baselineRelays),
@@ -183,6 +194,20 @@ describe("skills/02 + skills/08 acceptance — campus quad, 20 nodes", () => {
     expect(r.withinFiveRatio).toBeGreaterThanOrEqual(0.9);
     // Paths stay short: the doc target is a ~3 hop network.
     expect(r.avgHops).toBeLessThanOrEqual(3);
+  });
+
+  it.each(SEEDS)("seed %i reports the three-hop reading without gating on it", (seed) => {
+    const r = results.get(seed)!;
+    // Deliberately not a threshold. `skills/02` asks for "delivery >=90% at 3 hops" and `skills/08`
+    // for ">=90% <5 hops"; the suite enforces the five-hop reading, and whether that is the right
+    // reading of the same criterion is finding F2 — an owner decision, not a test. What is asserted
+    // is that both readings come from one population and cannot contradict each other, so the
+    // decision gets made from published numbers instead of from a derivation over `latencyByHop`,
+    // which is scoped to first-attempt routed unicast and so counts a different set of deliveries.
+    expect(r.withinThreeHops).toBeLessThanOrEqual(r.withinFiveHops);
+    expect(r.withinFiveHops).toBeLessThanOrEqual(r.deliveredUnicast);
+    expect(r.overThreeHops).toBe(r.deliveredUnicast - r.withinThreeHops);
+    expect(r.withinThreeRatio).toBeCloseTo(r.withinThreeHops / Math.max(1, r.sent), 12);
   });
 
   it.each(SEEDS)("seed %i uses <=70% of the naive flood-all relay budget", (seed) => {
@@ -446,6 +471,8 @@ describe("golden vectors shared with sim/mesh_sim (Dart)", () => {
     expect(transitions).toBe(e.roleTransitions);
     expect(sim.stats.totalQueued).toBe(e.totalQueued);
     expect(uni.reduce((s, d) => s + d.hops, 0)).toBe(e.sumHopCounts);
+    expect(uni.filter((d) => d.hops <= 5).length).toBe(e.deliveredWithinFiveHops);
+    expect(uni.filter((d) => d.hops <= 3).length).toBe(e.deliveredWithinThreeHops);
 
     // Floating aggregates: tolerance absorbs last-ULP differences between the
     // JS and Dart libm implementations of log10/sin/cos/sqrt.

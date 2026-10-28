@@ -267,6 +267,8 @@
       "roleTransitions": 5,
       "totalQueued": 0,
       "sumHopCounts": 33,
+      "deliveredWithinFiveHops": 20,
+      "deliveredWithinThreeHops": 19,
       "simTimeMs": 38000,
       "avgScore": 0.627662,
       "avgHops": 1.65,

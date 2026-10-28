@@ -83,6 +83,11 @@ function runVectors(config: SimConfig) {
       roleTransitions: transitions,
       totalQueued: sim.stats.totalQueued,
       sumHopCounts: unicast.reduce((s, d) => s + d.hops, 0),
+      // Both readings of the hop criterion, pinned so the two engines cannot drift on a number an
+      // owner decision rests on (finding F2: skills/02 writes it at three hops, skills/08 at five).
+      // Counted over the gate's own population — every unicast delivery, retries and DTN bundles included. Do not derive either reading from `latencyByHop`: that table is scoped to first-attempt routed unicast, so it omits exactly the deliveries that make the two numbers differ (campus_quad seed 42: 148 within five hops, 140 in the table).
+      deliveredWithinFiveHops: unicast.filter((d) => d.hops <= 5).length,
+      deliveredWithinThreeHops: unicast.filter((d) => d.hops <= 3).length,
       simTimeMs: fp(sim.now, 1),
       avgScore: Number(sim.stats.avgScore.toFixed(6)),
       avgHops: Number(sim.stats.avgHops.toFixed(6)),
