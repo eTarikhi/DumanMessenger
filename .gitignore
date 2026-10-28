@@ -33,3 +33,12 @@ artifacts/
 # Python bytecode (created by py_compile / imports; never a deliverable)
 __pycache__/
 *.py[cod]
+
+# wget's own log files, and the archives it fetches. `wget` writes ./wget-log when it runs
+# without a terminal, so an unattended SDK download leaves one behind in whatever directory it
+# was started from — a 4 184-line progress log for a 228 MB zip was committed here on
+# 2026-10-28 (991d11c) exactly that way. Neither the download nor its progress output is a
+# deliverable; the fact it happened belongs in docs/11 §2, which is where it now is.
+wget-log
+wget-log.*
+*.zip
