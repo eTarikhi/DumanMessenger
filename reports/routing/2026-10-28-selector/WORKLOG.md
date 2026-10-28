@@ -24,3 +24,15 @@
 8. First selector CI failed honestly: new Dart import was before the library directive,
    a compile error not caught by delimiter/declaration checks. Moved it after library;
    do not count run40642147624 as passed. Subsequent CI is required.
+9. Frozen final909 evaluated once after fit: actual crowd always116/125 baseline/ACK,
+   duty122/118. The model remains baseline/baseline; no holdout-based refit or activation.
+   The exposed606 split is excluded from final statistics and renamed exposed-audit in flat
+   summaries (raw original labels retained to preserve training dataset hash).
+10. Shadow validation: eight scenario/power pairs, 150 messages each, exact full stats and
+    delivery equality. Measured artifact115 bytes and sandbox-only timing; no phone memory claim.
+11. Completed full local TS suite: 20 files/504 passed, 361.08 s atadac00d; focused final
+    selector20 and Python7 passed. CI40642776402 at19024ab passed9/9: TS504 and Dart344/0/0.
+    Source runtime/tool tree is unchanged since19024ab; final changes are retained evidence/docs.
+12. Default and canary remain baseline-only. No main merge, online learning, paid dependency,
+    phone deployment or production-approved model. Resume future work from the protocol, hashes
+    and gates, not by repeating the historical360-run grid.

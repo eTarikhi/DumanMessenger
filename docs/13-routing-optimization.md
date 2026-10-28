@@ -1,5 +1,7 @@
 # 13 — Five-hop routing optimization laboratory
 
+> Follow-up: [report14](14-learned-routing-selector.md) implements an integrated shadow selector and targeted ACK-6000 experiments; this report describes the earlier bounded search.
+
 Date: 2026-10-28. **Research implementation, not deployment approval.**
 
 ## 1. Decision and scope

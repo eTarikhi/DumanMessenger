@@ -321,3 +321,8 @@ The 2026-10-28 owner decision makes five-hop delivery primary and three-hop deli
 Six bounded strategy variants were evaluated on training, unseen validation and adverse model combinations.
 No candidate demonstrated a sufficiently robust improvement to replace the current MPR default;
 automatic switching and learned routing remain disabled, not silently promoted from a pooled average.
+
+The follow-up [learned-selector implementation and rollback guide](docs/14-learned-routing-selector.md)
+adds a bounded, immutable controller in both simulators. The fitted experimental model selects
+baseline; shadow and canary requests cannot activate unapproved strategies. No phone deployment
+or generalized delivery improvement is claimed.
