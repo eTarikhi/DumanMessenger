@@ -21,7 +21,8 @@
     "rate": "tsc -p tool/tsconfig.golden.json && node -e \"require('fs').writeFileSync('tool/.build/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\" && node tool/.build/tool/rate-probe.js",
     "cover": "tsc -p tool/tsconfig.golden.json && node -e \"require('fs').writeFileSync('tool/.build/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\" && node tool/.build/tool/cover-probe.js",
     "field:capture": "tsc -p tool/tsconfig.golden.json && node -e \"require('fs').writeFileSync('tool/.build/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\" && node tool/.build/tool/capture-json.js",
-    "field:report": "tsc -p tool/tsconfig.golden.json && node -e \"require('fs').writeFileSync('tool/.build/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\" && node tool/.build/tool/field-report.js"
+    "field:report": "tsc -p tool/tsconfig.golden.json && node -e \"require('fs').writeFileSync('tool/.build/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\" && node tool/.build/tool/field-report.js",
+    "routing:benchmark": "tsc -p tool/tsconfig.golden.json && node -e \"require('fs').writeFileSync('tool/.build/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\" && node tool/.build/tool/routing-benchmark.js"
   },
   "dependencies": {
     "react": "^18.3.1",

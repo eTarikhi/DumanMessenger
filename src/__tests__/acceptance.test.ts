@@ -23,11 +23,9 @@ import type { HistoryEntry } from "../types";
  *   docs/03-smart-router-algorithm.md §5 (election)
  *     "hysteresis: prevent SUPER flapping"
  *
- * Reading of the two delivery clauses: "delivery >=90% <5 hops" means at least
- * 90% of *sent* messages arrive within five radio hops, and "delivery >=90% at
- * 3 hops" means the 90% bar holds in a network whose typical path is ~3 hops
- * (asserted separately via avgHops). Both are measured on unicast traffic;
- * ACKs and broadcasts are excluded so control traffic cannot inflate the ratio.
+ * Owner decision (2026-10-28): five-hop delivery is the primary objective;
+ * three-hop delivery is diagnostic. The existing five-hop gate is unchanged.
+ * The denominator is successful unicast sends, excluding control traffic.
  */
 
 const SEEDS = [42, 7, 1234, 99, 2026, 555];
@@ -106,9 +104,8 @@ function measure(cfg: SimConfig, withFloodBaseline = true): RunResult {
 
   const uni = sim.deliveries.filter((d) => d.type !== "ack" && d.type !== "broadcast");
   const withinFiveHops = uni.filter((d) => d.hops <= 5).length;
-  // The three-hop reading is measured but never asserted against a threshold, because which of the
-  // two readings the suite enforces is finding F2 and that is an owner decision. It is counted over
-  // the gate's own population — every unicast delivery, retries and DTN bundles included. Do not derive either reading from `latencyByHop`: that table is scoped to first-attempt routed unicast, so it omits exactly the deliveries that make the two numbers differ (campus_quad seed 42: 148 within five hops, 140 in the table).
+  // Same gate population, including retries and DTN. Three hops is diagnostic
+  // by owner decision, not a threshold or the first-attempt latency population.
   const withinThreeHops = uni.filter((d) => d.hops <= 3).length;
 
   let baselineRelays = sim.stats.totalForwarded;
@@ -198,12 +195,7 @@ describe("skills/02 + skills/08 acceptance — campus quad, 20 nodes", () => {
 
   it.each(SEEDS)("seed %i reports the three-hop reading without gating on it", (seed) => {
     const r = results.get(seed)!;
-    // Deliberately not a threshold. `skills/02` asks for "delivery >=90% at 3 hops" and `skills/08`
-    // for ">=90% <5 hops"; the suite enforces the five-hop reading, and whether that is the right
-    // reading of the same criterion is finding F2 — an owner decision, not a test. What is asserted
-    // is that both readings come from one population and cannot contradict each other, so the
-    // decision gets made from published numbers instead of from a derivation over `latencyByHop`,
-    // which is scoped to first-attempt routed unicast and so counts a different set of deliveries.
+    // Owner selected five hops as primary; retain consistency checks for three.
     expect(r.withinThreeHops).toBeLessThanOrEqual(r.withinFiveHops);
     expect(r.withinFiveHops).toBeLessThanOrEqual(r.deliveredUnicast);
     expect(r.overThreeHops).toBe(r.deliveredUnicast - r.withinThreeHops);
