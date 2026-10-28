@@ -197,9 +197,11 @@ Scenarios: `campus_quad` (20 nodes — the `skills/02` + `skills/08` acceptance
 case), `sparse_village` and `partitioned_pair` (store-carry-forward DTN),
 `festival_crowd` (60 nodes, the `docs/02` §6 density target).
 
-Measured on `campus_quad` across six seeds: **SUPER ratio 20-25%, delivery
-97.3-100%, 97.3-100% of messages within 5 hops, 7-9% of the naive flood-all
-relay budget, ≤0.22 role changes per node per minute.** In the 60-node crowd the
+Measured on `campus_quad` across six seeds (re-measured 2026-10-28; the two engines agree to the
+unit): **SUPER ratio 20-25%, delivery 99.3-100%, 98.7-100% of messages within 5 hops and 89.3-96.0%
+within 3, 8-10% of the naive flood-all relay budget, ≤0.14 role changes per node per minute.** The
+three-hop figure is published beside the five-hop one because `skills/02` words its criterion "at 3
+hops" while both suites enforce five — an owner decision, recorded as finding F2, not a test. In the 60-node crowd the
 engine delivers **85.3-98.7% over nine seeds** at 12-14% of naive flood's relays — naive
 flooding does reach 100% there, for 7-9× the relays (`docs/06` §6, §16).
 

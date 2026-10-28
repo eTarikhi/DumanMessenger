@@ -223,9 +223,10 @@ whole, which is why that scenario's three-seed numbers were sound and the crowd'
 
 | criterion | prediction | source | if the field disagrees |
 |---|---|---|---|
-| delivery ratio | **99.7%** (97.3-100% over six seeds) | §6 | below 90% → look at the loss records first: the model's margin-based loss is the most likely thing to be wrong |
-| overhead vs flood-all | **9.3%** of naive flood's relays (7-9% over six seeds); flood-all reaches 100% for 7-9× the transmissions | §6 | above 70% → suppression is not firing; check `decision` records for the MPR reason |
-| within 5 hops | 99.7% of sent | §6 | — |
+| delivery ratio | **99.9%** (99.3-100% over six seeds) | §6 | below 90% → look at the loss records first: the model's margin-based loss is the most likely thing to be wrong |
+| overhead vs flood-all | **9.3%** of naive flood's relays (8-10% over six seeds); flood-all reaches 100% for 10-12× the transmissions | §6 | above 70% → suppression is not firing; check `decision` records for the MPR reason |
+| within 5 hops | **99.6%** of sent (98.7-100% over six seeds) | §6 | — |
+| within 3 hops | **92.6%** of sent (89.3-96.0% over six seeds) | §6 | below 85% → the topology being walked is not the campus the simulator builds; compare the hop histogram before blaming routing. Which of the two readings the criterion means is finding F2, an owner decision — the analyzer reports both, and `(hop ?? 0) + 1` matches the engines' `hops: msg.hopCount + 1` (§5) |
 | SUPER ratio | **20-25%** of nodes, 0.06-0.22 role changes per node per minute | §5 | outside 15-25% → the coverage weights need this building's numbers |
 | atrium node | SUPER within **2 election cycles** (60 s) **if it is also healthy** — full battery, long uptime, low packet loss. Verified in all four simulated worlds | §18.1 | it does not → read its battery and uptime before reading its position: a drained phone at 199 peers (0.688) still loses to a healthy one at nine (0.708), because the peer term saturates logarithmically (§18) |
 | atrium node, drained | **NORMAL**, in three of four worlds — health carries 0.45 of the score and position only 0.55 of a compressed term | §18 | if a drained atrium phone *is* elected, something is inflating the position terms: check the RSSI normalization against the calibration fit |

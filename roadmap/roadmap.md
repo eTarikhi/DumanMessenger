@@ -254,7 +254,8 @@
   which cut transmissions **67%/86%/76%** at 50/100/200 nodes and left the 20- and 60-node evidence untouched.
 - [x] Mesh simulator `mesh_sim.dart` (virtual nodes, walls, random walk) → tune weights w1..w5
   - Delivered at `sim/mesh_sim/` (+ TypeScript reference engine and visualiser in `src/`), wired into CI with cross-language golden vectors.
-  - Weights w1..w5 verified as specified (0.30/0.25/0.20/0.15/0.10): `campus_quad` over six seeds gives SUPER 20-25%, delivery 97.3-100%, 97.3-100% within 5 hops, 7-9% of the naive flood-all relay budget, ≤0.22 elections/node/min.
+  - Weights w1..w5 verified as specified (0.30/0.25/0.20/0.15/0.10): `campus_quad` over six seeds gives SUPER 20-25%, delivery 99.3-100%, 98.7-100% within 5 hops and 89.3-96.0% within 3, 8-10% of the naive flood-all relay budget, ≤0.14 elections/node/min, 1.84-2.03 average hops.
+  > Re-measured 2026-10-28 at `3fdc638`, both engines agreeing to the unit against CI run 40616278770. The ranges this line carried before were published at `82d967a` and fifteen commits to the engine had overtaken them. Which of the two hop readings the criterion means is finding F2 — an owner decision, published side by side rather than chosen in code.
   - Three spec defects found while tuning and corrected in `docs/03`: the proximity guard's hard-coded −60 dBm; MPR suppression gated on "heard a SUPER" instead of on coverage (cost 16-29 delivery points in a 60-node crowd); and tq kept per route entry instead of per link, which made the `tq > 0.6` gate reject nearly every route and silently disabled multi-hop unicast. Evidence: `docs/06-simulator-findings.md`.
 - [ ] Field test 1: campus quad / office floor mapping: atrium should become SUPER, packet delivery ratio vs flood-all baseline
 > **Instrumentation note (Oct 2026 — `tool/capture-json.ts` + `tool/field-report.ts`, plan in `docs/09-field-test-plan.md`):** still blocked on

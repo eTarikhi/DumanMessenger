@@ -55,20 +55,42 @@ which is the baseline both criteria name.
 
 ### Measured — `campus_quad`, 20 nodes, 150 messages
 
-| seed | SUPER | delivery | ≤5 hops | relays: mpr / route-flood / flood-all | vs naive | vs route-only | flap/node·min | p95 |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 42 | 25% | 97.3% | 146/150 | 4 239 / 6 902 / 46 104 | **9%** | 61% | 0.06 | 1257 ms |
-| 7 | 25% | 98.7% | 148/150 | 3 315 / 4 638 / 47 998 | **7%** | 71% | 0.06 | 4537 ms |
-| 1234 | 25% | 100% | 150/150 | 4 959 / 7 408 / 52 770 | **9%** | 67% | 0.12 | 1141 ms |
-| 99 | 20% | 100% | 149/150 | 4 621 / 7 317 / 50 391 | **9%** | 63% | 0.08 | 4307 ms |
-| 2026 | 25% | 99.3% | 149/150 | 3 855 / 4 949 / 49 918 | **8%** | 78% | 0.22 | 1450 ms |
-| 555 | 25% | 97.3% | 146/150 | 4 168 / 7 065 / 47 538 | **9%** | 59% | 0.09 | 4536 ms |
+| seed | SUPER | delivery | ≤3 hops | ≤5 hops | relays: mpr / route-flood / flood-all | vs naive | vs route-only | flap/node·min | avg hops | p95 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 42 | 20% | 100% | 134/150 | 148/150 | 3 652 / 5 574 / 44 654 | **8%** | 66% | 0.08 | 2.03 | 4191 ms |
+| 7 | 25% | 99.3% | 139/150 | 149/150 | 4 271 / 5 071 / 46 018 | **9%** | 84% | 0.06 | 1.84 | 4395 ms |
+| 1234 | 25% | 100% | 144/150 | 150/150 | 4 755 / 7 357 / 50 877 | **9%** | 65% | 0.09 | 1.91 | 1114 ms |
+| 99 | 20% | 100% | 142/150 | 149/150 | 4 923 / 6 971 / 47 676 | **10%** | 71% | 0.08 | 1.94 | 4318 ms |
+| 2026 | 25% | 100% | 134/150 | 150/150 | 4 131 / 6 269 / 46 896 | **9%** | 66% | 0.14 | 2.01 | 1468 ms |
+| 555 | 20% | 100% | 140/150 | 150/150 | 4 444 / 6 334 / 45 242 | **10%** | 70% | 0.05 | 1.89 | 1226 ms |
 
-All four criteria hold on all six seeds: delivery ≥90%, ≥90% within five hops,
-SUPER 15-25%, no flapping — and **7-9% of the naive flood relay budget**, a
-91-93% reduction against the 30% required. MPR suppression is worth a further
-22-41% on top of routing (the "vs route-only" column). Most of the total saving
-is the routing layer, which is exactly why both columns are published (§6).
+*Provenance: re-measured 2026-10-28 at `3fdc638` with the acceptance suite's own `measure()` — six
+seeds, 150 messages, `channelAccess: "free"`, `channelCapture: "none"` — and cross-checked against
+the authoritative engine: CI run 40616278770's annotation for `campus_quad` seed 42 reports `relayTx` 3652, `routeFloodRelayTx` 5574,
+`floodAllRelayTx` 44654 and `latencyP95Ms` 4190.9395, the same numbers to the unit. It replaces a
+table published at `82d967a` that fifteen commits to `src/simulation.ts`, `src/routing.ts` and
+`src/election.ts` had overtaken: that one read delivery 97.3-100%, 146-150 within five hops and
+4 239 relays on seed 42. Nothing detects a stale measurement automatically — `check-docs.py`
+verifies that a citation resolves, not that the number behind it is current — so this table was
+wrong for four days in the direction that made the engine look worse than it is.*
+
+All four criteria hold on all six seeds: delivery ≥90% (**99.3-100%**, mean 99.9%), ≥90% within five
+hops (**98.7-100%**, mean 99.6%), SUPER 15-25% (**20-25%**), no flapping (**≤0.14** role changes per
+node per minute) — and **8-10% of the naive flood relay budget** (mean 9.3%), a 91% reduction
+against the 30% required. MPR suppression is worth a further **16-35%** on top of routing (the
+"vs route-only" column, mean 70%). Most of the total saving is the routing layer, which is exactly
+why both columns are published (§6).
+
+**Read at three hops — the wording `skills/02`'s acceptance box actually uses — the same six seeds
+give 89.3-96.0% (mean 92.6%), and two of the six fall short of 90% by one to two messages.** At five
+hops all six pass. Both readings are published per run (`deliveredWithinThreeHops` /
+`deliveredWithinFiveHops` in the Dart CLI's report, `withinThreeRatio` / `withinFiveRatio` in the
+acceptance suite) and pinned in `test-fixtures/golden-vectors.json`, so which one the criterion means
+is a decision to make, not a measurement to commission: finding **F2**,
+`reports/2026-10-27-remediation-report.html` §6. Do not derive either reading from `latencyByHop` —
+that table is scoped to first-attempt routed unicast (§17, and the comment in `simulation.ts` that
+builds it), so on seed 42 it holds 140 deliveries within five hops against the gate's 148, the eight
+missing being retries and DTN bundles.
 
 These are the numbers *after* the coverage gate in §5 and the tq fix in §6; the
 earlier "heard a SUPER" rule scored better on overhead only because it was
@@ -299,7 +321,7 @@ in §2, because quoting only the 7-9% would hide that most of it is routing.
 ### Still open
 
 In the 60-node crowd **82.7-89.3%** of sent messages arrive within five hops
-(average 2.6-3.0, p95 4.8-6.4 s), against 97.3-100% in the 20-node case the
+(average 2.6-3.0, p95 4.8-6.4 s), against 99.3-100% in the 20-node case the
 criteria actually name. The tail is 9-12 messages arriving at exactly six hops —
 the ceiling a data `ttl` of 5 allows — plus 7-11 that expire.
 
@@ -733,7 +755,10 @@ Dart job compares against the same fixture, so agreement is checked, not assumed
 - The per-seed `mpr / route-flood ≤ 0.85` pin measured **0.947** on seed 42 after
   the guard. Cause, from the cold-start A/B: `route-flood` is the arm that floods
   most, so it was the arm most inflated by the amplifier — on that seed its
-  transmissions fell 37% (6 902 → 4 315) while MPR's fell 4% (4 239 → 4 087).
+  transmissions fell 37% (6 902 → 4 315) while MPR's fell 4% (4 239 → 4 087). *(Those two ratios are
+  that A/B's, on the engine as it stood at `82d967a`; the same seed on the current engine gives
+  3 652 mpr / 5 574 route-flood, a ratio of 0.655, and the six-seed mean is 0.70 against the ≤0.80
+  pin. What is quoted here is history, and the pin that survived is the mean-based one.)*
   Part of the previously measured advantage was *the amplifier being proportional
   to how much you flood*. Six-seed means: `mpr/route-flood` 0.752 → **0.736**,
   `mpr/flood-all` 0.085 → 0.093. The cut is now pinned on the **mean** (≤ 0.80)
