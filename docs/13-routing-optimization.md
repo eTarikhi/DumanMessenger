@@ -109,14 +109,78 @@ For a smaller parity workload: `npm run routing:benchmark -- artifacts/routing/s
 * Six arms × four scenarios × two power modes × six seeds = **288** main runs; six arms × two OOD combinations × two power modes × three seeds = **72** adverse runs.
 * Traffic pairs come from the existing acceptance-plan PRNG seed salt, independent of simulation event ordering. Full effective config and engine stats are captured per row, not just a strategy nickname. The baseline's seed-42 campus five-hop count must reproduce **148/150**, not the 140 first-attempt latency-table count.
 * **Important limitation:** the engine shares one PRNG between mobility, packet loss and event jitter. Changing routing can consume random numbers differently; initial topology and mobility *rules* match, but mobile trajectories need not remain identical across policies. Paired comparisons estimate the complete seeded simulator effect, not an isolated effect under a fixed movement trace. Static-crowd OOD removes the movement confound, not all RNG coupling. Split independent exogenous mobility/link streams or replay recorded traces before stronger causal claims.
+* Summary latency/hop p95 columns are means of per-seed percentiles, not percentiles pooled across runs.
 * The analyzer reports per-context means and paired five-hop differences with Student-t 95% intervals over **seeds** (three per split; df=2), not falsely independent packet-level binomial intervals. They are unadjusted, low-power and exploratory across multiple comparisons. No confidence interval establishes a global optimum or device-level generalization.
 * All-delivery mean/p95 latency and mean/p95 hops are separate from the engine's first-attempt transport budget. Each row retains relay counts, node transmission counts, retries, exhausted retries, remaining queue, role changes, NORMAL/SUPER battery estimates and the rest of `SimulationStats`. Wall time is whole-run timing, **not inference latency**. Model memory and inference costs are not measured because no model is deployed.
 
 ## 6. Results and recommendation
 
-The retained result tables and measured recommendation are generated after the experiments complete; see the companion results section below. A candidate is not successful merely because a pooled average rises. Per-scenario worst-seed regressions and resource costs determine whether it can advance.
+**Outcome: no candidate earns promotion.** The finite search found small average gains but no statistically resolved, regression-free improvement. Keep the current MPR default. This does **not** establish impossibility under the existing constraints.
+
+Retained evidence: [main comparison](../reports/routing/2026-10-28/summary.md), [OOD comparison](../reports/routing/2026-10-28/ood-summary.md), [all 360 per-seed rows](../reports/routing/2026-10-28/per-seed.csv), [full main configurations/stats](../reports/routing/2026-10-28/benchmark.json), [full OOD configurations/stats](../reports/routing/2026-10-28/ood.json), [provenance/reproduction](../reports/routing/2026-10-28/README.md).
+
+### Held-out aggregate (equal weight to eight scenario/power contexts)
+
+The low pooled percentage is not failure of the campus release gate: sparse and partitioned scenarios include unreachable pairs. Conversely, a high campus ratio must not hide those contexts.
+
+| Strategy | Train ≤5 % | Validation ≤5 % | Validation Δ pp [95% seed-block CI] | Validation relay change | Worst held-out seed/context Δ pp |
+|---|---:|---:|---|---:|---:|
+| baseline-v1 | 64.14 | 61.31 | +0.00 [+0.00, +0.00] | +0.00% | +0.00 |
+| ack-2000-v1 | 63.69 | 62.25 | +0.94 [-1.18, +3.07] | +28.58% | -1.33 |
+| ack-6000-v1 | 64.53 | 61.61 | +0.31 [-2.20, +2.81] | -0.90% | -8.67 |
+| super-carrier-v1 | 63.69 | 60.61 | -0.69 [-6.82, +5.43] | +8.77% | -23.33 |
+| community-carrier-v1 | 64.17 | 60.69 | -0.61 [-2.73, +1.50] | +2.99% | -12.67 |
+| route-flood-v1 | 64.39 | 61.08 | -0.22 [-6.38, +5.93] | +151.00% | -21.33 |
+
+
+Training's strongest mean candidate is `ack-6000-v1` (+0.39 percentage points). Selecting `ack-2000-v1` just because it has the highest held-out average would reuse validation as tuning. The latter's +0.94-point held-out mean has a CI spanning zero and uses more relay transmissions. Neither earns deployment.
+
+### Baseline versus training-selected ACK-6000 on unseen seeds
+
+| Scenario | Power | Baseline ≤5 % | ACK-6000 ≤5 % | Paired Δ pp [95% CI] | Candidate/baseline relays (mean paired ratio) |
+|---|---|---:|---:|---|---:|
+| campus_quad | always | 99.33 | 99.78 | +0.44 [-2.09, +2.97] | 0.869 |
+| campus_quad | duty | 100.00 | 99.33 | -0.67 [-3.54, +2.20] | 1.050 |
+| sparse_village | always | 25.11 | 25.11 | +0.00 [+0.00, +0.00] | 0.993 |
+| sparse_village | duty | 25.11 | 25.11 | +0.00 [+0.00, +0.00] | 0.993 |
+| festival_crowd | always | 81.33 | 84.89 | +3.56 [-8.98, +16.10] | 1.033 |
+| festival_crowd | duty | 75.11 | 74.22 | -0.89 [-21.73, +19.95] | 0.977 |
+| partitioned_pair | always | 42.22 | 42.22 | +0.00 [+0.00, +0.00] | 0.991 |
+| partitioned_pair | duty | 42.22 | 42.22 | +0.00 [+0.00, +0.00] | 0.991 |
+
+
+Important findings:
+
+* Baseline seed-42 campus reproduces **148/150 within five hops**, confirming the audited gate rather than the latency-table population. Baseline campus validation is **99.33% always-on, 100% duty-cycle**. Dense mobile crowd is the more informative optimization target.
+* ACK-6000 improves the always-on crowd mean from **81.33% to 84.89%** on unseen seeds, but loses **8.67 points on one duty-cycle crowd seed**. Its always-on crowd confidence interval still spans zero. It is a targeted hypothesis, not a justified automatic switching rule.
+* Sparse and partitioned delivery remains unchanged across these parameter arms: carrier preference is no substitute for a physical meeting. End-of-window queues are not seven-day expiration evidence.
+* SUPER-biased custody has a **23.33-point worst held-out regression**. This intuitive heuristic is unsafe as a blanket default.
+* Routing-without-MPR costs **151.00% more validation relay transmissions**, reduces mean five-hop delivery by **0.22 points**, and loses **21.33 points** in its worst held-out context. Turning off suppression is not a generic reliability fix.
+* OOD ACK-6000 averages **+0.94 points**, with **95% CI [-2.05,+3.94] points**, and loses up to **2 points** on an adverse seed/context. Even this modest change is not a verified generalized improvement.
+* Campus and crowd seed-42 five-hop counts reproduce the previous documentation. The lower **unseen** crowd results are new generalization evidence, not replacement estimates for the old nine-seed population. Full tables retain all latency, transmission, role and energy measurements for every arm.
+
+### Deployment and learning decision
+
+| Capability | Evidence this iteration | Decision |
+|---|---|---|
+| Current routing | Regenerated across training, held-out and adverse contexts | Retain default |
+| Best train-tuned heuristic (ACK-6000) | Small gains; duty-cycle/adverse-seed regressions; wide intervals | Offline candidate only |
+| Automatic strategy selector | No safe context-to-policy advantage established; no causal local-feature dataset | Not implemented in forwarding loop |
+| Learned classifier/contextual bandit | No model trained/evaluated; delayed credit and decision-feature collection unresolved | Cannot claim superiority or inference timings |
+| Policy generation | Bounded Level-1 enumeration, provenance and rejection implemented | Foundation only; no promoted candidate |
+| Deep RL / policy gradients | No measured Duman advantage over simpler alternatives | No model/dependency by default |
+
+This iteration does **not** meet the mission's positive generalized-improvement criterion. It supplies an executable negative result over the declared search space, not a proof of infeasibility. Next experiments: larger independent seed samples, replayed exogenous traces, focused bounded timing/route-cost search, and local decision-feature logging before training a selector. No model is presented as “best” without measurements.
 
 ## 7. Verification and owner decisions
+
+### Executed verification
+
+* Local full TypeScript regression: **19 files, 484 tests passed**, 806.80 seconds while experiments shared the machine. Focused strategy safety suite: **4 passed**. Analyzer regression tests: **3 passed**.
+* Production web build, tool TypeScript compilation, documentation checks, cross-language constant/config parity, Dart declaration-site checks, Dart delimiter checks, and `git diff --check`: **passed**.
+* Authoritative CI [40638583664](https://github.com/eTarikhi/DumanMessenger/actions/runs/40638583664) at `0082fd5`: **9/9 jobs passed**; Dart job **329 passed / 0 failed / 0 skipped**, including **48 new exact strategy/scenario/power comparisons** against the retained TypeScript fixture. No existing golden vector was changed.
+* Local Dart execution: **not-run**, SDK unavailable. The full 360-run candidate matrix has **not** been rerun in Dart; the 48-case parity fixture and existing baseline acceptance runs are the verified subset. Device energy, model inference and online selector performance are **not measured**.
+* Machine-readable evidence and CI IDs: [verification.json](../reports/routing/2026-10-28/verification.json). Baseline TypeScript engine source hashes are retained there. Earlier lab commits `6418cd8` and `9b90713` passed all nine CI jobs.
 
 No merge to main. New behavior must remain off until validated in authoritative Dart, unseen seeds, adverse models, existing release gates and real devices. The cross-language fixture pins all six policies, four scenarios and both power modes on seed 42; it is parity evidence, not held-out evidence or automatic approval. Golden vectors for existing routing are not regenerated.
 

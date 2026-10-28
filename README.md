@@ -312,3 +312,12 @@ latency by hop (`docs/06-simulator-findings.md` §10).
 
 ---
 **Quick verdict:** Buildable — but NOT as a single “Bluetooth-call-everywhere” app. Feasible as a **hybrid mesh**: `BLE (discovery + text) + Wi-Fi Direct/Aware (media + voice) + store-and-forward + opportunistic routing`. Voice = push-to-talk walkie-talkie, not cellular-grade full duplex. See analysis inside.
+
+## Five-hop routing optimization laboratory
+
+The 2026-10-28 owner decision makes five-hop delivery primary and three-hop delivery diagnostic.
+[Research, metric audit and recommendation](docs/13-routing-optimization.md) accompany
+[360 retained paired experiment rows and reproduction commands](reports/routing/2026-10-28/README.md).
+Six bounded strategy variants were evaluated on training, unseen validation and adverse model combinations.
+No candidate demonstrated a sufficiently robust improvement to replace the current MPR default;
+automatic switching and learned routing remain disabled, not silently promoted from a pooled average.
