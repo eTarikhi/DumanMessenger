@@ -37,3 +37,12 @@ for key, arms in groups.items():
 print('\n## Promotion screen\n')
 for d in summary['decisions']:
     print(f"* **{d['strategy']}: {d['status']}** — " + '; '.join(d['reasons']) + '.')
+
+print('\n## Equal-context aggregate (never substitutes for per-scenario safety)\n')
+print('| Split | Strategy | Mean ≤5 % | Worst context % | Worst paired Δ pp | Mean Δ pp [95% seed-block CI] | Relay sum |')
+print('|---|---|---:|---:|---:|---|---:|')
+for a in summary['aggregate']:
+    ci = a['pairedCI95']
+    interval = 'not estimated' if ci is None else f'{100*ci[0]:+.2f}, {100*ci[1]:+.2f}'
+    print(f"| {a['split']} | {a['strategy']} | {100*a['fiveMean']:.2f} | {100*a['worstContextMean']:.2f} | "
+          f"{100*a['worstPairedDelta']:+.2f} | {100*a['pairedDeltaMean']:+.2f} [{interval}] | {a['relays']} |")

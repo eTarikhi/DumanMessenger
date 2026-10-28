@@ -59,7 +59,30 @@ def summarize(data):
         # Never automatically approve: Dart, OOD, acceptance and battery verification are separate gates.
         reasons.append('authoritative Dart candidate/OOD/release gate verification required')
         decisions.append(dict(strategy=strategy, status='not-promoted', reasons=reasons))
-    return dict(schemaVersion=1, sourceSha=data['sourceSha'], summaries=summaries, decisions=decisions,
+    aggregates = []
+    for split in sorted({r['split'] for r in rows}):
+        for strategy in sorted({r['strategy'] for r in rows}):
+            contexts = [s for s in summaries if s['split'] == split and s['strategy'] == strategy]
+            arm = [r for r in rows if r['split'] == split and r['strategy'] == strategy]
+            bases = {(r['scenario'], r['duty'], r['seed']): r for r in rows
+                     if r['split'] == split and r['strategy'] == 'baseline-v1'}
+            seed_deltas = []
+            for seed in sorted({r['seed'] for r in arm}):
+                seed_deltas.append(st.mean(r['fiveRatio'] - bases[(r['scenario'], r['duty'], seed)]['fiveRatio']
+                                          for r in arm if r['seed'] == seed))
+            half = 4.30265273 * st.stdev(seed_deltas) / len(seed_deltas)**.5 if len(seed_deltas) == 3 else None
+            mean = st.mean(seed_deltas)
+            aggregates.append(dict(split=split, strategy=strategy,
+                                   fiveMean=st.mean(r['fiveRatio'] for r in arm),
+                                   fiveSeedStd=st.stdev([st.mean(r['fiveRatio'] for r in arm if r['seed'] == seed)
+                                                       for seed in sorted({r['seed'] for r in arm})]) if len(seed_deltas) > 1 else None,
+                                   worstContextMean=min(s['metrics']['fiveRatio'] for s in contexts),
+                                   worstPairedDelta=min(s['worstPairedFiveDelta'] for s in contexts),
+                                   pairedDeltaMean=mean, pairedCI95=None if half is None else [mean-half, mean+half],
+                                   relays=sum(r['stats']['totalForwarded'] for r in arm),
+                                   wallMs=sum(r['wallMs'] for r in arm)))
+    return dict(schemaVersion=1, sourceSha=data['sourceSha'], summaries=summaries,
+                aggregate=aggregates, decisions=decisions,
                 warning='Unadjusted seed-level t intervals; three seeds give low power. Not packet-level CIs. No deployment authorization.')
 
 

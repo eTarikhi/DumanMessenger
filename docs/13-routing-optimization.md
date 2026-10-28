@@ -16,7 +16,7 @@ This iteration implements a bounded offline strategy library, reproducible paire
 | OGM route learning and next-hop lookup | `receiveOGM`, `getNextHop` in election module | same functions in Dart election module |
 | Initial/relay forwarding decision | `src/routing.ts`: `decideForward` | `lib/src/routing.dart`: `decideForward` |
 | Two-hop coverage suppression, bounded dense fanout | `resolveMprWait`, `selectMprSet`, `relaysCoverPeers` | routing/election modules |
-| Scheduling, RF reception, radio queues, forwarding | `src/simulation.ts`: `applyDecision`, `transmit`, `onReceive` | `lib/src/simulation.dart` |
+| Scheduling, RF reception, radio queues, forwarding | `src/simulation.ts`: `applyDecision`, `transmit`, `onMsgReceive` | `lib/src/simulation.dart` |
 | Retry and delivery bookkeeping | `onAckTimeout`, `recordDelivery`, `deliverToInbox` | simulation/routing modules |
 | DTN handoff and custody | `scanOppQueue`, `enqueueOpp`, `pruneAcked` | routing module |
 | Gate population | `src/__tests__/acceptance.test.ts`: `measure` | `bin/mesh_sim.dart`: unicast/withinFive report and gate |

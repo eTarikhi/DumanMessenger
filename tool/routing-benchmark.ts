@@ -16,6 +16,8 @@ const ood = args.includes("--ood");
 const smoke = process.argv.includes("--smoke");
 const partitions = ood ? { ood: [424242, 8675309, 65537] } :
   smoke ? { smoke: [42] } : { train: [42, 7, 1234], validation: [31415, 27182, 16180] };
+const sourceSha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const dirtyAtStart = execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim();
 const rows: object[] = [];
 for (const [split, seeds] of Object.entries(partitions)) for (const seed of seeds)
 for (const scenario of (ood ? ["festival_crowd", "campus_quad"] : scenarioNames()))
@@ -63,7 +65,7 @@ for (const duty of [false, true]) {
 }
 mkdirSync(dirname(output), { recursive: true });
 writeFileSync(output, JSON.stringify({ schemaVersion: 1,
-  sourceSha: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+  sourceSha, dirtyAtStart,
   engine: "typescript-reference", node: process.version,
   protocol: { messages: 150, gapMs: 1500, drainMs: 0, primary: "unicast deliveries with hops<=5 / successful sends", partitions },
   strategies: STRATEGIES, rows }, null, 2) + "\n");

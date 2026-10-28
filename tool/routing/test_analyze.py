@@ -8,7 +8,7 @@ class PromotionTests(unittest.TestCase):
                     seed=seed, strategy=strategy, fiveRatio=ratio, deliveryRatio=ratio,
                     threeRatio=ratio, hopsMean=1, hopsP95=1, latencyMeanMs=10,
                     latencyP95Ms=10, totalTx=20, undeliveredAtHorizon=10,
-                    stats=dict(totalForwarded=10, retriesSent=1, retriesExhausted=1,
+                    wallMs=1, stats=dict(totalForwarded=10, retriesSent=1, retriesExhausted=1,
                                totalQueued=1, batteryPercentPerHourNormal=1,
                                batteryPercentPerHourSuper=1, roleChangesPerNodeMin=0))
 
