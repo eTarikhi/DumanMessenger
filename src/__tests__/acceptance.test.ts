@@ -213,7 +213,7 @@ describe("skills/02 + skills/08 acceptance — campus quad, 20 nodes", () => {
   it.each(SEEDS)("seed %i uses <=70% of the naive flood-all relay budget", (seed) => {
     const r = results.get(seed)!;
     // The documented bar is 70%. Measured against a genuinely naive baseline
-    // (no route table, no suppression) the engine sits at 7-9%, so the real
+    // (no route table, no suppression) the engine sits at 8-10%, so the real
     // margin is pinned separately from the loose bar: a regression that doubles
     // the relay count should fail here instead of hiding inside 70%.
     expect(r.overheadVsFlood).toBeLessThanOrEqual(0.7);
@@ -313,19 +313,20 @@ describe("dense crowd (docs/02 §6: 50+ nodes)", () => {
     // here, because a SUPER three clusters away still silenced this node.
     //
     // The yardstick is `route-flood`, not `flood-all`. Naive epidemic flooding
-    // does reach 100% in this crowd — by spending 7-9x the relays — so
+    // does reach 100% in this crowd — by spending 7.8-9.5x the relays — so
     // "within 5 points of flood-all" would demand epidemic redundancy from a
     // routing engine and measure nothing about MPR. And the bound is on the
     // mean across seeds: 150 messages through a chaotic 60-node world carries
     // several points of run-to-run variance, which a per-seed bound mistakes
-    // for a regression. Measured mean gap: -0.9 points.
+    // for a regression. Measured mean gap: -0.2 points (re-measured 2026-10-28; it was -0.9 when this
+    // comment was written, and the bound below is what survived the drift).
     const gaps: number[] = [];
     for (const seed of [42, 7, 1234]) {
       const r = measure(festivalCrowd(seed));
       gaps.push(r.deliveryRatio - r.routeFloodDeliveryRatio);
-      // 12-14% of the naive flood budget; the documented bar is 70%.
+      // 10.6-12.8% of the naive flood budget (was 12-14% at `82d967a`); the documented bar is 70%.
       expect(r.overheadVsFlood).toBeLessThanOrEqual(0.2);
-      // MPR's own marginal cut on top of routing: 42-50% measured.
+      // MPR's own marginal cut on top of routing: 45-55% measured (42-50% at `82d967a`).
       expect(r.overheadVsRouteFlood).toBeLessThanOrEqual(0.7);
       expect(r.sim.stats.mprSuppressed).toBeGreaterThan(1000);
       expect(r.deliveryRatio).toBeGreaterThanOrEqual(0.85);

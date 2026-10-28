@@ -202,8 +202,10 @@ unit): **SUPER ratio 20-25%, delivery 99.3-100%, 98.7-100% of messages within 5 
 within 3, 8-10% of the naive flood-all relay budget, ≤0.14 role changes per node per minute.** The
 three-hop figure is published beside the five-hop one because `skills/02` words its criterion "at 3
 hops" while both suites enforce five — an owner decision, recorded as finding F2, not a test. In the 60-node crowd the
-engine delivers **85.3-98.7% over nine seeds** at 12-14% of naive flood's relays — naive
-flooding does reach 100% there, for 7-9× the relays (`docs/06` §6, §16).
+engine delivers **85.3-98.7% over nine seeds** at 10.6-12.8% of naive flood's relays — naive
+flooding does reach 100% there, for 7.8-9.5× the relays (`docs/06` §6, §16). The nine-seed delivery
+readings reproduce seed for seed against the current engine; the two overhead figures were re-measured 2026-10-28 at `757c134`,
+because they had drifted with it.
 
 That crowd range is wide because the crowd is **bimodal**, and quoting it without saying so
 would be the mistake this repository spent a week unwinding: 60 mobile nodes spawned in clusters

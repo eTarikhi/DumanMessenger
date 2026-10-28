@@ -6,7 +6,7 @@
 
 **Status:** engine implemented in two languages and executed in CI; every
 `skills/02` + `skills/08` simulator criterion met on the 20-node case they name,
-at **7-9%** of the naive-flood relay budget (§2). Power policy, the duty cycle and
+at **8-10%** of the naive-flood relay budget (§2). Power policy, the duty cycle and
 the Phase 2 telemetry are implemented and measured (§10) — the duty cycle is what
 brings NORMAL inside `skills/07`'s 15%-per-8h budget. SOS mode (roadmap Phase 3),
 hop transparency (roadmap Phase 4) and group channels (roadmap Phase 1) are
@@ -107,7 +107,7 @@ docs/02 §6 asks for, measured with the same three arms.
 | 7 | 18% | 95.3% | 134/150 | 37 400 / 74 574 / 286 597 | **13%** | 50% | 2.74 | 4756 ms |
 | 1234 | 22% | 91.3% | 124/150 | 35 737 / 84 841 / 299 466 | **12%** | 42% | 2.99 | 6352 ms |
 
-Naive flooding does reach 100% delivery here — for **7-9× the relays**. That
+Naive flooding does reach 100% delivery here — for **7.8-9.5× the relays**. That
 trade is the whole argument for a routing layer, and it is why the crowd's
 suppression test measures MPR against `route-flood` instead of demanding
 epidemic-level redundancy from a routing engine (§7).
@@ -306,7 +306,10 @@ still be fresh for a neighbour we have not heard it from.
 **Effect on the reference run** (golden vectors — `campus_quad`, seed 42, 20
 messages): delivery 18/20 → **20/20**, relays 383 → **253**, p95 latency
 1363 → **950 ms**. In the crowd: delivery 88.7-93.3% → **91.3-95.3%**,
-within-5-hops 80-85% → **82.7-89.3%**.
+within-5-hops 80-85% → **82.7-89.3%**. *(That is this fix's before/after, measured when it landed;
+the crowd re-measured 2026-10-28 reads 85.3-98.7% delivery over nine seeds and 77.3-92.3% within
+five hops — see "Still open" below, which carries the current figures and says which of them were
+re-measured and which were not.)*
 
 ### The baseline this exposed
 
@@ -316,14 +319,19 @@ arm began using the route table too, and the campus overhead ratio climbed to
 71-78%: the baseline had got better, not the engine worse. `flood-all` is now
 naive by construction — consulted before the route table — and `route-flood`
 exists so MPR's marginal contribution can be quoted separately. Both columns are
-in §2, because quoting only the 7-9% would hide that most of it is routing.
+in §2, because quoting only the 8-10% would hide that most of it is routing.
 
 ### Still open
 
-In the 60-node crowd **82.7-89.3%** of sent messages arrive within five hops
-(average 2.6-3.0, p95 4.8-6.4 s), against 99.3-100% in the 20-node case the
-criteria actually name. The tail is 9-12 messages arriving at exactly six hops —
-the ceiling a data `ttl` of 5 allows — plus 7-11 that expire.
+In the 60-node crowd **77.3-92.3%** of sent messages arrive within five hops (mean 86.0%) and
+**56.7-68.0%** within three (mean 63.3%), over the nine seeds the acceptance suite measures, at
+2.49-3.08 average hops — against 98.7-100% within five and 89.3-96.0% within three in the 20-node
+case the criteria actually name. Seed 42 reads 128 of 150 within five hops and 85 within three in
+both engines: the TypeScript measurement locally and CI run 40616278770's Dart annotation agree to
+the message, which is the cross-check §2's table now carries for the campus. *This paragraph
+previously read 82.7-89.3% within five hops, measured at `82d967a`; the range above is re-measured 2026-10-28 at `757c134`.* The tail decomposition beside it — 9-12 messages arriving at exactly six hops, the ceiling a data
+`ttl` of 5 allows, plus 7-11 that expire — was **not** re-measured and still describes the engine as
+of `82d967a`; §16 below is the analysis that supersedes it.
 
 **§16 takes this apart and closes the investigation.** Over six seeds the figure is
 84.1%, and the tail decomposes into 2.2% geometric (BFS distance ≥ 6 at send time),
@@ -375,7 +383,7 @@ Two rules follow, both learned the hard way (§6). A baseline must not silently
 share the mechanism under test — `flood-all` consulting the route table made the
 overhead ratio meaningless the moment routing started working. And a suppression
 mechanism must be judged against the arm that differs from it by suppression
-only: naive epidemic flooding reaches 100% delivery in the crowd by spending 7-9×
+only: naive epidemic flooding reaches 100% delivery in the crowd by spending 7.8-9.5×
 the relays, so "within 5 points of flood-all" is not a test of MPR, it is a
 demand for epidemic redundancy. That comparison is also made on the **mean across
 seeds**, because 150 messages through a chaotic 60-node world carries several
