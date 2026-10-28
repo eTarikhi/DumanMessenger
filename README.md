@@ -119,8 +119,8 @@ stated (`docs/10` §6, `docs/11` §9):
   all nine jobs: `dart analyze` clean, the gated `campus_quad` acceptance run passing, all five CLI
   matrix arms and all four probes. Both suites' tallies are published as notice annotations
   (`dart test`, `npm test`) so the counts never have to be remembered — at the time of writing,
-  [run 40455641251](https://github.com/eTarikhi/DumanMessenger/actions/runs/40455641251) reported
-  **279 Dart cases** and **474 TypeScript cases in 18 files**, 0 failed.
+  [run 40617596690](https://github.com/eTarikhi/DumanMessenger/actions/runs/40617596690) reported
+  **279 Dart cases** and **480 TypeScript cases in 18 files**, 0 failed.
 * **Verified locally on Linux** — `npm ci`, `npm test` (18 files), `npm run build`,
   the five static checkers and their self-tests, `make doctor`, `make blockers`, `make daily-fast`.
 * **Executed on real Windows 11 — twice, and it failed twice.** On 2026-10-27 `make.ps1` was run for the

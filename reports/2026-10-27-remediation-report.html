@@ -52,9 +52,9 @@ footer { margin-top:56px; padding-top:18px; border-top:1px solid #1e2a3a; color:
 <header>
 <h1>Engineering remediation report</h1>
 <p class="sub">2026-10-27 &middot; branch <code>arena/ff85cb12-dumanmessenger</code> &middot;
-started at <code>d2fbba3</code> &middot; code head <code>4b81270</code> &middot;
-25 commits in the range &mdash; 24 from this session and one (<code>991d11c</code>) from the owner
-&mdash; 33 files, +2 637 / &minus;128 (this report is most of the added lines) &middot;
+started at <code>d2fbba3</code> &middot; code head <code>4b760e2</code> &middot;
+28 commits in the range &mdash; 27 from this session and one (<code>991d11c</code>) from the owner
+&mdash; 37 files, +2 830 / &minus;153 (this report is most of the added lines) &middot;
 <a href="https://github.com/eTarikhi/DumanMessenger/pull/3" style="color:#4de0ff">pull request #3</a></p>
 <p>Remediation of the verification and toolchain layer, plus the two engine-side defects that only
 became visible once CI executed the authoritative Dart engine for the first time in this
@@ -65,11 +65,11 @@ verified, the row says so and says why.</p>
 
 <h2>0. Summary</h2>
 <div class="grid">
-  <div class="card"><div class="k">commits</div><div class="v">25</div><div class="n">by concern, all pushed</div></div>
-  <div class="card"><div class="k">defects fixed</div><div class="v">18</div><div class="n">each with its evidence in &sect;1</div></div>
-  <div class="card"><div class="k">CI jobs green</div><div class="v">9 / 9</div><div class="n">run 40614121740</div></div>
+  <div class="card"><div class="k">commits</div><div class="v">28</div><div class="n">by concern, all pushed</div></div>
+  <div class="card"><div class="k">defects fixed</div><div class="v">20</div><div class="n">each with its evidence in &sect;1</div></div>
+  <div class="card"><div class="k">CI jobs green</div><div class="v">9 / 9</div><div class="n">run 40617596690</div></div>
   <div class="card"><div class="k">Dart tests</div><div class="v">279</div><div class="n">0 failed; read from the notice</div></div>
-  <div class="card"><div class="k">TS tests</div><div class="v">474</div><div class="n">18 files; read from the notice</div></div>
+  <div class="card"><div class="k">TS tests</div><div class="v">480</div><div class="n">18 files; read from the notice</div></div>
   <div class="card"><div class="k">local checks</div><div class="v">12 / 0</div><div class="n">passed / failed; 13 could not run</div></div>
   <div class="card"><div class="k">still blocked</div><div class="v">15</div><div class="n">of 27 probed rows, all external</div></div>
   <div class="card"><div class="k">roadmap open</div><div class="v">28</div><div class="n">16 closed; none closable here</div></div>
@@ -402,6 +402,60 @@ verified transitively, by a successor that contains it and is green twice over; 
 only because it touched two files no job reads. A sha whose content <em>was</em> read by a job would
 need its own run.</p>
 
+<h3>1.6 Addendum &mdash; the acceptance evidence was stale, and F2's number came from the wrong population</h3>
+<p>Looking for the three-hop reading F2 needs meant reading two published numbers side by side inside
+one CI annotation, and they did not agree: <code>deliveredWithinFiveHops</code> said
+<strong>148</strong> for <code>campus_quad</code> seed 42 while the <code>latencyByHop</code> table
+beside it summed to <strong>140</strong> at five hops or fewer. Neither is wrong. Both engines scope
+that table, with the reason in a comment where it is built: first-attempt routed unicast only, so a
+retry (which adds a whole ACK timeout) and a DTN bundle (which measures a meeting time, not
+transport) cannot smear the latency distribution. The gate counts a different population &mdash; every
+unicast delivery &mdash; and the eight-message difference is exactly the retries and bundles.</p>
+<p>The consequence is that <strong>the 84.7 % this report quoted for F2 was 127/150 taken from the
+latency table</strong>: first-attempt routed unicast, not the gate's population. The correct reading
+is <strong>134/150 = 89.3 %</strong> on that seed, and 89.3&ndash;96.0 % across the six seeds the
+suite enforces. An owner decision was being handed a number measured over a population nobody had
+stated out loud, seven points away from the one it needed. That is defect nineteen, and the fix is
+structural rather than a corrected figure: <code>deliveredWithinThreeHops</code> and
+<code>withinThreeRatio</code> are now published beside their five-hop twins by the Dart CLI, computed
+in the TypeScript acceptance suite, and pinned from both sides in the golden vectors
+(<code>3fdc638</code>) &mdash; the mechanism that closed F1, applied to a number a decision rests on.
+No gate changed and no threshold was added; the new test asserts that the two readings cannot
+contradict each other, because a suite that quietly picked one would be the worst place for that
+decision to hide.</p>
+<p>Re-measuring to get the six-seed range then found defect twenty, which is larger. <strong>The
+per-seed acceptance table in <code>docs/06</code> &sect;2 had been overtaken by fifteen commits to the
+engine</strong> &mdash; <code>src/simulation.ts</code>, <code>src/routing.ts</code>,
+<code>src/election.ts</code>: adaptive scan intervals, in-window connectivity sampling, the beacon
+encoding and its derived size, the broadcast cap's scope. Published at <code>82d967a</code> on
+2026-10-24 and never re-run, it said delivery 97.3&ndash;100 %, 146&ndash;150 of 150 within five hops,
+4 239 relays on seed 42, &le;0.22 role changes per node per minute. The current engine gives
+99.3&ndash;100 %, 148&ndash;150, 3 652 relays and &le;0.14 &mdash; and CI run 40616278770's annotation
+for the same seed reports <code>relayTx</code> 3652, <code>routeFloodRelayTx</code> 5574,
+<code>floodAllRelayTx</code> 44654 and <code>latencyP95Ms</code> 4190.9395, so the two engines agree
+to the unit and the table disagreed with both. Stale in the direction that made the engine look worse
+than it is, except for seed 42's p95, where it looked four times better than it is.</p>
+<p>Those ranges were quoted in <strong>seven places</strong>, not one: the table itself, the crowd
+comparison two sections later, a historical A/B in &sect;11, <code>docs/09</code> &sect;8's field-test
+predictions (which a volunteer with real phones would have been told to compare against), the README's
+measured summary, roadmap line 257's evidence for the weight-tuning item, and the acceptance lines of
+<em>both</em> skills documents &mdash; the two lines that say the headline criteria are
+<strong>Met</strong>. All seven are corrected in <code>4b760e2</code>, with the provenance inline in
+the table rather than implied by it. The historical A/B keeps its own numbers under a dated note,
+because re-running somebody else's experiment is not the same as re-measuring a table.</p>
+<p>Nothing detects this class of defect automatically, which is worth stating plainly:
+<code>check-docs.py</code> verifies that a citation resolves and that a target exists, not that the
+number behind it is current, and no checker can. The only instrument that finds a stale measurement
+is re-running the measurement. Two of the twenty defects in this report are that class
+(&sect;1.4's classifier, this one), and both were found by reading a published figure next to the
+artifact that contradicted it rather than by any gate going red.</p>
+<p>One correction to this session's own record: the commit message on <code>4b760e2</code> claims "No
+line over 110 columns in the six files touched". That is false &mdash; <code>docs/06</code> has 27
+such lines, including markdown table rows that cannot wrap and prose that predates this session. The
+claim generalised too far from a check of the new prose only. It is recorded here because a commit
+message is part of the ledger, and this branch does not force-push, so the correction lives in the
+report instead of in an amended message.</p>
+
 <h2>2. What was verified, and how</h2>
 
 <h3>2.1 Remote CI &mdash; executed, on this branch</h3>
@@ -488,9 +542,22 @@ later, which is what it is for. <strong>This sha therefore has no completed run 
 it is verified transitively by its successor, which is sound only because it touched two files no job
 reads: a deleted <code>wget-log</code> and <code>.gitignore</code>.</td></tr>
 <tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40614121740" style="color:#4de0ff">40614121740</a></td>
-<td><code>4b81270</code></td><td class="pass">success</td><td>Branch head, 9 / 9 on the push event
+<td><code>4b81270</code></td><td class="pass">success</td><td>9 / 9 on the push event
 and 9 / 9 on the <code>pull_request</code> event (40614127531). The six stale conditionals about the
 lock, corrected; <code>doctor.sh</code> reading the lock's own contents.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40614770959" style="color:#4de0ff">40614770959</a></td>
+<td><code>a34f1eb</code></td><td class="pass">success</td><td>9 / 9. Owner action 1 recorded as closed
+in &sect;5.1, with the warning annotation's disappearance measured on both sides.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40616278770" style="color:#4de0ff">40616278770</a></td>
+<td><code>3fdc638</code></td><td class="pass">success</td><td>9 / 9, and the run the F2 decision pack
+was read out of: <code>npm test</code> <strong>18 files / 480 tests</strong> (six new, from the
+consistency test over six seeds), <code>dart test</code> 279 / 0 / 0 &mdash; which also means the two
+new golden assertions pass in Dart, so both engines agree on the pinned hop counts. Every scenario's
+annotation now carries <code>deliveredWithinThreeHops</code> beside
+<code>deliveredWithinFiveHops</code>.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40617596690" style="color:#4de0ff">40617596690</a></td>
+<td><code>4b760e2</code></td><td class="pass">success</td><td>Branch head, 9 / 9. The re-measured
+acceptance table of &sect;1.6; its seed-42 row agrees with this run's annotation to the unit.</td></tr>
 </table>
 
 <h3>2.2 What the authoritative engine measured, for the first time</h3>
@@ -754,12 +821,18 @@ all, so nothing failed.</td><td>Closed. Both engines now report 29 750 payload b
 probe numbers agree to the byte, and either engine changing its encoding moves the fixture, which
 fails the <code>web</code> job's staleness gate until both are updated together.</td></tr>
 <tr><td>4</td><td><strong>Decide whether <code>skills/02</code>'s "delivery &ge;90 % at 3 hops" means
-3 hops or the &lt;5-hop reading the gate enforces</strong> (finding F2).</td><td>The authoritative
-engine delivers 150/150 overall and 148/150 within five hops (0.9867) but 127/150 within three
-(84.7 %). One reading passes and one does not, and the criterion is quoted in two
-skills documents.</td><td>Removes an acceptance criterion that can be reported either way.</td>
-<td>An amended criterion in <code>skills/02</code>, or a changed gate in the CLI &mdash; either with
-the measurement recorded beside it.</td></tr>
+3 hops or the &lt;5-hop reading the gate enforces</strong> (finding F2).</td><td>Measured on the
+authoritative engine over all five scenarios and over the six enforced seeds: three hops gives
+<strong>89.3&ndash;96.0 %</strong> and passes on four seeds of six; five hops gives
+98.7&ndash;100 % and passes on all six. The two seeds that fail at three hops fail by one message.
+The criterion is quoted in two skills documents and enforced in neither reading's name.</td>
+<td>Removes an acceptance criterion that can be reported either way.</td>
+<td><strong>The decision pack is measured and needs no further work to decide from</strong>:
+&sect;6's five-scenario table, the six-seed ranges in <code>docs/06</code> &sect;2, both readings
+published per run by both engines (<code>deliveredWithinThreeHops</code> /
+<code>withinThreeRatio</code>) and pinned in <code>test-fixtures/golden-vectors.json</code>. What
+closes it is one line: an amended criterion in <code>skills/02</code>, or a changed gate in the CLI
+and both acceptance suites.</td></tr>
 <tr><td>5</td><td><strong>Name a data controller and get counsel review of
 <code>PRIVACY.md</code>.</strong></td><td>&sect;2 of the draft says in terms that there is no
 controller and no review, which makes it unpublishable as a store listing.</td><td>Closes roadmap
@@ -848,13 +921,54 @@ was stated before the run (29 750 rather than 30 430) and confirmed by it, and t
 pinned from both sides by golden vectors v2. &sect;1.3 has the detail; &sect;5.1 action 3 is
 closed.</p>
 
-<h3>F2 &mdash; an acceptance criterion that can be read two ways, now with numbers for both</h3>
+<h3>F2 &mdash; an acceptance criterion that can be read two ways, now with measured numbers for both</h3>
 <p><code>skills/02</code> asks for "delivery &ge;90 % at 3 hops"; <code>skills/08</code> asks for
-"delivery &ge;90 % &lt;5 hops"; the CLI gate implements the second. Measured on the authoritative
-engine at <code>campus_quad</code>, seed 42: 150/150 delivered (1.000), 148/150 within five hops
-(0.9867), and from the per-hop latency table 62 + 38 + 27 = 127 of 150 within three
-(<strong>84.7 %</strong>). Under the first reading the criterion fails; under the second it passes
-with 8.7 points of margin. Left as an owner decision, with both numbers recorded.</p>
+"delivery &ge;90 % &lt;5 hops"; the CLI gate implements the second. This section used to answer the
+question with <strong>84.7 %</strong>, derived by summing the per-hop latency table's buckets
+(62 + 38 + 27 = 127 of 150). That derivation was over the wrong population, and &sect;1.6 records how
+it was found. <code>latencyByHop</code> is scoped in both engines to first-attempt routed unicast, so
+it excludes retries and DTN bundles, while the gate's <code>deliveredWithinFiveHops</code> counts
+every unicast delivery: on seed 42 the same annotation says 148 within five hops and its latency
+table sums to 140. The three-hop metric is now first-class, counted over the gate's population,
+published by both engines per run and pinned in the golden vectors.</p>
+<p>Measured at <code>3fdc638</code> and read out of CI run 40616278770 &mdash; the authoritative
+engine, all five scenarios and both campus arms, 150 messages each:</p>
+<table>
+<tr><th>scenario</th><th class="num">sent</th><th class="num">delivered</th>
+<th class="num">&le;3 hops</th><th class="num">3-hop ratio</th><th class="num">&le;5 hops</th>
+<th class="num">5-hop ratio</th><th class="num">avg hops</th><th>gate as written (&lt;5)</th></tr>
+<tr><td><code>campus_quad</code></td><td class="num">150</td><td class="num">150</td>
+<td class="num">134</td><td class="num">0.8933</td><td class="num">148</td><td class="num">0.9867</td>
+<td class="num">2.03</td><td class="pass">PASS</td></tr>
+<tr><td><code>campus_quad</code> duty-cycle</td><td class="num">150</td><td class="num">148</td>
+<td class="num">134</td><td class="num">0.8933</td><td class="num">148</td><td class="num">0.9867</td>
+<td class="num">1.99</td><td class="pass">PASS</td></tr>
+<tr><td><code>festival_crowd</code></td><td class="num">150</td><td class="num">142</td>
+<td class="num">85</td><td class="num">0.5667</td><td class="num">128</td><td class="num">0.8533</td>
+<td class="num">3.01</td><td class="blocked">fail (<code>--no-check</code>)</td></tr>
+<tr><td><code>partitioned_pair</code></td><td class="num">150</td><td class="num">66</td>
+<td class="num">66</td><td class="num">0.4400</td><td class="num">66</td><td class="num">0.4400</td>
+<td class="num">1.00</td><td class="blocked">fail (<code>--no-check</code>)</td></tr>
+<tr><td><code>sparse_village</code></td><td class="num">150</td><td class="num">42</td>
+<td class="num">42</td><td class="num">0.2800</td><td class="num">42</td><td class="num">0.2800</td>
+<td class="num">1.00</td><td class="blocked">fail (<code>--no-check</code>)</td></tr>
+</table>
+<p>And over the six seeds the acceptance suite actually enforces, measured by its own
+<code>measure()</code> and cross-checked against the Dart engine to the unit: <strong>three hops
+89.3&ndash;96.0 % (mean 92.6 %), meeting &ge;90 % on four of six seeds</strong>; five hops
+98.7&ndash;100 %, meeting it on all six. The two seeds that fall short at three hops fall short by
+<strong>one message</strong> (134 of 150 against the 135 that would pass).</p>
+<p>So the decision costs this, and no more: adopting <code>skills/02</code>'s wording literally turns
+the flagship scenario's gate red on two of six seeds by one message each, and the crowd's
+<code>--no-check</code> arms move from 0.85 to 0.57 against the same bar. Keeping the five-hop
+reading leaves <code>skills/02</code>'s text describing a criterion nothing enforces, which is what
+<code>skills/08</code> already resolved by writing "&lt;5 hops" and saying in terms how to read it. A
+third option exists and is the cheapest: amend <code>skills/02</code>'s wording to match the gate it
+has always had, and keep the three-hop figure published beside it as a design target rather than an
+acceptance bar &mdash; <code>avgHops</code> is 1.84&ndash;2.03, so the network really is a
+three-hop network; the tail is what the criterion's wording trips over. Nothing here is asserted in
+code, deliberately: the new TypeScript test checks that the two readings cannot contradict each
+other, not that either one passes.</p>
 
 <h3>F3 &mdash; "3 Dart tests that have never run" is no longer a category</h3>
 <p>The collector's registry row for <code>dart test</code> said "the 197 Dart cases, including 3 that
@@ -946,12 +1060,12 @@ machine does not.</td></tr>
 </table>
 
 <h2>8. The change set, and what remains incomplete</h2>
-<p>Twenty-five commits from <code>d2fbba3</code> to <code>4b81270</code> &mdash; 24 of them this
-session's and one, <code>991d11c</code>, the owner's &mdash; 33 files, +2 637 / &minus;128
+<p>Twenty-eight commits from <code>d2fbba3</code> to <code>4b760e2</code> &mdash; 27 of them this
+session's and one, <code>991d11c</code>, the owner's &mdash; 37 files, +2 830 / &minus;153
 (this report is most of the added lines), all pushed to
 <code>arena/ff85cb12-dumanmessenger</code> and collected in
 <a href="https://github.com/eTarikhi/DumanMessenger/pull/3" style="color:#4de0ff">pull request #3</a>
-against <code>main</code>. The branch is 109 commits ahead of <code>origin/main</code> including the
+against <code>main</code>. The branch is 112 commits ahead of <code>origin/main</code> including the
 earlier merged work. <code>main</code> was not touched, nothing was force-pushed, and no history was
 rewritten &mdash; including the one commit whose message understates its contents, which is recorded
 in &sect;1 instead.</p>
@@ -1008,8 +1122,9 @@ Produced 2026-10-27 on branch <code>arena/ff85cb12-dumanmessenger</code> from
 again on 2026-10-28 after the owner's <code>991d11c</code>.
 Sources for every number: CI runs 40428343622, 40429112891, 40430079404, 40432981960, 40437372608,
 40443962188, 40455143525, 40455641251, 40457964023, 40458532323, 40458960415, 40460087980,
-40460956532, 40463387905 and 40463393423, plus the owner's 40610830053 and 40610835443 and the
-cancelled pair 40613897925 and 40613903311 (job conclusions and check-run annotations &mdash; the annotations are the only
+40460956532, 40463387905, 40463393423, 40614770959, 40616278770 and 40617596690, plus the owner's
+40610830053 and 40610835443 and the cancelled pair 40613897925 and 40613903311 (job conclusions and
+check-run annotations &mdash; the annotations are the only
 machine-readable channel out of a runner here, since <code>$GITHUB_STEP_SUMMARY</code> is not
 exposed by the check-runs API and log downloads are refused);
 <code>artifacts/ci/daily/20261027T004508Z-3911753/</code> (885 s),
