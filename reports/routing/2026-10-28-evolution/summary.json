@@ -1,0 +1,578 @@
+{
+  "status": "offline-only-not-promoted",
+  "policySHA256": "11681ad6ace68d43dd3cdf7034d819d324f07e521f9d2f3b70f00c52a8305285",
+  "worlds": 80,
+  "targetMeasured": false,
+  "summaries": [
+    {
+      "split": "validation",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "n": 3,
+      "baselineFive": 0.6933333333333334,
+      "five": 0.7111111111111111,
+      "worstFive": 0.6066666666666667,
+      "delta": 0.01777777777777782,
+      "worstPairedDelta": -0.006666666666666599,
+      "deltaCI95": [
+        -0.04038225512650957,
+        0.07593781068206522
+      ],
+      "overall": 0.7844444444444444,
+      "three": 0.5444444444444445,
+      "p95": 42170.482448375165,
+      "p95DeltaMax": 15406.418510421645,
+      "totalTxRatioMax": 1.0675379795870246,
+      "stats": {
+        "totalForwarded": {
+          "mean": 35109.666666666664,
+          "maxPairedIncrease": 2005
+        },
+        "controlOverhead": {
+          "mean": 499230,
+          "maxPairedIncrease": -234415
+        },
+        "retriesSent": {
+          "mean": 141.66666666666666,
+          "maxPairedIncrease": 8
+        },
+        "retriesExhausted": {
+          "mean": 54.666666666666664,
+          "maxPairedIncrease": 2
+        },
+        "totalQueued": {
+          "mean": 73.33333333333333,
+          "maxPairedIncrease": 2
+        },
+        "batteryPercentPerHourNormal": {
+          "mean": 2.8997119818296575,
+          "maxPairedIncrease": 0.031249999999261036
+        },
+        "batteryPercentPerHourSuper": {
+          "mean": 6.7673275723283375,
+          "maxPairedIncrease": 0.16666666666035734
+        },
+        "roleChangesPerNodeMin": {
+          "mean": 0.11158798283261803,
+          "maxPairedIncrease": 0.025751072961373397
+        },
+        "radioDemandRatio": {
+          "mean": 5.484552868918816,
+          "maxPairedIncrease": -2.0884788701190846
+        }
+      }
+    },
+    {
+      "split": "validation",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "n": 3,
+      "baselineFive": 0.6911111111111111,
+      "five": 0.7088888888888889,
+      "worstFive": 0.5733333333333334,
+      "delta": 0.01777777777777782,
+      "worstPairedDelta": -0.006666666666666599,
+      "deltaCI95": [
+        -0.0873981778444443,
+        0.12295373339999995
+      ],
+      "overall": 0.7622222222222222,
+      "three": 0.5555555555555556,
+      "p95": 67284.22605341377,
+      "p95DeltaMax": 45472.64229950961,
+      "totalTxRatioMax": 1.1229652669777086,
+      "stats": {
+        "totalForwarded": {
+          "mean": 37670.666666666664,
+          "maxPairedIncrease": 3558
+        },
+        "controlOverhead": {
+          "mean": 1496262.3333333333,
+          "maxPairedIncrease": 829189
+        },
+        "retriesSent": {
+          "mean": 145,
+          "maxPairedIncrease": 5
+        },
+        "retriesExhausted": {
+          "mean": 61,
+          "maxPairedIncrease": 9
+        },
+        "totalQueued": {
+          "mean": 84.33333333333333,
+          "maxPairedIncrease": 10
+        },
+        "batteryPercentPerHourNormal": {
+          "mean": 1.46116014491704,
+          "maxPairedIncrease": 0.04552198488388548
+        },
+        "batteryPercentPerHourSuper": {
+          "mean": 6.385028169808293,
+          "maxPairedIncrease": -0.1796533338196582
+        },
+        "roleChangesPerNodeMin": {
+          "mean": 0.11301859799713877,
+          "maxPairedIncrease": 0.042918454935622324
+        },
+        "radioDemandRatio": {
+          "mean": 14.654350315759393,
+          "maxPairedIncrease": 7.600251781148897
+        }
+      }
+    },
+    {
+      "split": "holdout",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "n": 3,
+      "baselineFive": 0.7977777777777778,
+      "five": 0.7977777777777778,
+      "worstFive": 0.78,
+      "delta": 0.0,
+      "worstPairedDelta": -0.033333333333333326,
+      "deltaCI95": [
+        -0.08280459039649926,
+        0.08280459039649926
+      ],
+      "overall": 0.8666666666666667,
+      "three": 0.5933333333333334,
+      "p95": 28193.223161694284,
+      "p95DeltaMax": 8328.784329455812,
+      "totalTxRatioMax": 1.0539079433890093,
+      "stats": {
+        "totalForwarded": {
+          "mean": 41181.666666666664,
+          "maxPairedIncrease": 2114
+        },
+        "controlOverhead": {
+          "mean": 514630,
+          "maxPairedIncrease": -244906
+        },
+        "retriesSent": {
+          "mean": 128.33333333333334,
+          "maxPairedIncrease": 6
+        },
+        "retriesExhausted": {
+          "mean": 47.333333333333336,
+          "maxPairedIncrease": 0
+        },
+        "totalQueued": {
+          "mean": 64.66666666666667,
+          "maxPairedIncrease": -1
+        },
+        "batteryPercentPerHourNormal": {
+          "mean": 2.974278156392416,
+          "maxPairedIncrease": -0.02806537434386902
+        },
+        "batteryPercentPerHourSuper": {
+          "mean": 6.577050641035081,
+          "maxPairedIncrease": 0.4868733135308547
+        },
+        "roleChangesPerNodeMin": {
+          "mean": 0.1359084406294707,
+          "maxPairedIncrease": 0.004291845493562235
+        },
+        "radioDemandRatio": {
+          "mean": 5.776919473310915,
+          "maxPairedIncrease": -2.178380461480508
+        }
+      }
+    },
+    {
+      "split": "holdout",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "n": 3,
+      "baselineFive": 0.7911111111111111,
+      "five": 0.8044444444444444,
+      "worstFive": 0.7866666666666666,
+      "delta": 0.013333333333333345,
+      "worstPairedDelta": -0.006666666666666599,
+      "deltaCI95": [
+        -0.046377905970340895,
+        0.07304457263700759
+      ],
+      "overall": 0.8622222222222222,
+      "three": 0.6022222222222222,
+      "p95": 51302.374228990324,
+      "p95DeltaMax": 42596.244868505746,
+      "totalTxRatioMax": 1.0567191935010276,
+      "stats": {
+        "totalForwarded": {
+          "mean": 41494.333333333336,
+          "maxPairedIncrease": 2318
+        },
+        "controlOverhead": {
+          "mean": 1545670.6666666667,
+          "maxPairedIncrease": 792228
+        },
+        "retriesSent": {
+          "mean": 132.66666666666666,
+          "maxPairedIncrease": 6
+        },
+        "retriesExhausted": {
+          "mean": 54.666666666666664,
+          "maxPairedIncrease": 7
+        },
+        "totalQueued": {
+          "mean": 80.33333333333333,
+          "maxPairedIncrease": 7
+        },
+        "batteryPercentPerHourNormal": {
+          "mean": 1.6122823717482504,
+          "maxPairedIncrease": 0.13919602323554336
+        },
+        "batteryPercentPerHourSuper": {
+          "mean": 6.300490786972797,
+          "maxPairedIncrease": 0.07289880861249376
+        },
+        "roleChangesPerNodeMin": {
+          "mean": 0.14306151645207438,
+          "maxPairedIncrease": 0.017167381974248913
+        },
+        "radioDemandRatio": {
+          "mean": 15.18035760071039,
+          "maxPairedIncrease": 7.220876099364686
+        }
+      }
+    },
+    {
+      "split": "protected",
+      "scenario": "campus_quad",
+      "duty": false,
+      "n": 2,
+      "baselineFive": 0.9933333333333334,
+      "five": 1,
+      "worstFive": 1,
+      "delta": 0.006666666666666654,
+      "worstPairedDelta": 0,
+      "deltaCI95": null,
+      "overall": 1.0,
+      "three": 0.9033333333333333,
+      "p95": 4095.8304917195346,
+      "p95DeltaMax": 2142.2286861389875,
+      "totalTxRatioMax": 0.8842203548085901,
+      "stats": {
+        "totalForwarded": {
+          "mean": 3968,
+          "maxPairedIncrease": -372
+        },
+        "controlOverhead": {
+          "mean": 79640.5,
+          "maxPairedIncrease": -39272
+        },
+        "retriesSent": {
+          "mean": 21,
+          "maxPairedIncrease": -3
+        },
+        "retriesExhausted": {
+          "mean": 1,
+          "maxPairedIncrease": -3
+        },
+        "totalQueued": {
+          "mean": 1.5,
+          "maxPairedIncrease": -5
+        },
+        "batteryPercentPerHourNormal": {
+          "mean": 2.4393097159701895,
+          "maxPairedIncrease": 0.0
+        },
+        "batteryPercentPerHourSuper": {
+          "mean": 6.206249999959823,
+          "maxPairedIncrease": 0.0
+        },
+        "roleChangesPerNodeMin": {
+          "mean": 0.13519313304721028,
+          "maxPairedIncrease": 0.0
+        },
+        "radioDemandRatio": {
+          "mean": 2.674740326518317,
+          "maxPairedIncrease": -1.2102854578823905
+        }
+      }
+    },
+    {
+      "split": "protected",
+      "scenario": "campus_quad",
+      "duty": true,
+      "n": 2,
+      "baselineFive": 0.9966666666666666,
+      "five": 1,
+      "worstFive": 1,
+      "delta": 0.003333333333333355,
+      "worstPairedDelta": 0,
+      "deltaCI95": null,
+      "overall": 1.0,
+      "three": 0.92,
+      "p95": 2536.761170307873,
+      "p95DeltaMax": 1901.4860378438607,
+      "totalTxRatioMax": 1.127449115465094,
+      "stats": {
+        "totalForwarded": {
+          "mean": 4551.5,
+          "maxPairedIncrease": 670
+        },
+        "controlOverhead": {
+          "mean": 239007.5,
+          "maxPairedIncrease": 122850
+        },
+        "retriesSent": {
+          "mean": 23.5,
+          "maxPairedIncrease": 5
+        },
+        "retriesExhausted": {
+          "mean": 2.5,
+          "maxPairedIncrease": 0
+        },
+        "totalQueued": {
+          "mean": 2,
+          "maxPairedIncrease": -2
+        },
+        "batteryPercentPerHourNormal": {
+          "mean": 1.2081412307327903,
+          "maxPairedIncrease": 0.0
+        },
+        "batteryPercentPerHourSuper": {
+          "mean": 5.980859374939529,
+          "maxPairedIncrease": 0.0
+        },
+        "roleChangesPerNodeMin": {
+          "mean": 0.148068669527897,
+          "maxPairedIncrease": 0.0
+        },
+        "radioDemandRatio": {
+          "mean": 7.442985461374132,
+          "maxPairedIncrease": 3.6447902573218154
+        }
+      }
+    },
+    {
+      "split": "protected",
+      "scenario": "partitioned_pair",
+      "duty": false,
+      "n": 2,
+      "baselineFive": 0.45,
+      "five": 0.45,
+      "worstFive": 0.41333333333333333,
+      "delta": 0.0,
+      "worstPairedDelta": 0.0,
+      "deltaCI95": null,
+      "overall": 0.45,
+      "three": 0.45,
+      "p95": 310.14559441129677,
+      "p95DeltaMax": -0.39897827664390206,
+      "totalTxRatioMax": 0.9935934769947583,
+      "stats": {
+        "totalForwarded": {
+          "mean": 1752.5,
+          "maxPairedIncrease": -11
+        },
+        "controlOverhead": {
+          "mean": 12000,
+          "maxPairedIncrease": -6016
+        },
+        "retriesSent": {
+          "mean": 164.5,
+          "maxPairedIncrease": 3
+        },
+        "retriesExhausted": {
+          "mean": 77.5,
+          "maxPairedIncrease": -2
+        },
+        "totalQueued": {
+          "mean": 77.5,
+          "maxPairedIncrease": -2
+        },
+        "batteryPercentPerHourNormal": {
+          "mean": 2.3197869349127807,
+          "maxPairedIncrease": 0.0
+        },
+        "batteryPercentPerHourSuper": {
+          "mean": 2.728124999988779,
+          "maxPairedIncrease": 1.4999999999645297
+        },
+        "roleChangesPerNodeMin": {
+          "mean": 0.12875536480686695,
+          "maxPairedIncrease": 0.0
+        },
+        "radioDemandRatio": {
+          "mean": 1.1123177501747272,
+          "maxPairedIncrease": -0.41734270913188554
+        }
+      }
+    },
+    {
+      "split": "protected",
+      "scenario": "partitioned_pair",
+      "duty": true,
+      "n": 2,
+      "baselineFive": 0.45,
+      "five": 0.45,
+      "worstFive": 0.41333333333333333,
+      "delta": 0.0,
+      "worstPairedDelta": 0.0,
+      "deltaCI95": null,
+      "overall": 0.45,
+      "three": 0.45,
+      "p95": 314.54801563406363,
+      "p95DeltaMax": 14.55816978123039,
+      "totalTxRatioMax": 0.9983991462113126,
+      "stats": {
+        "totalForwarded": {
+          "mean": 1789,
+          "maxPairedIncrease": -3
+        },
+        "controlOverhead": {
+          "mean": 35984,
+          "maxPairedIncrease": 18032
+        },
+        "retriesSent": {
+          "mean": 165.5,
+          "maxPairedIncrease": 4
+        },
+        "retriesExhausted": {
+          "mean": 80,
+          "maxPairedIncrease": 0
+        },
+        "totalQueued": {
+          "mean": 80,
+          "maxPairedIncrease": 0
+        },
+        "batteryPercentPerHourNormal": {
+          "mean": 1.102853452731237,
+          "maxPairedIncrease": 0.0
+        },
+        "batteryPercentPerHourSuper": {
+          "mean": 2.1070312499754884,
+          "maxPairedIncrease": 0.8812499999940826
+        },
+        "roleChangesPerNodeMin": {
+          "mean": 0.10300429184549356,
+          "maxPairedIncrease": 0.0
+        },
+        "radioDemandRatio": {
+          "mean": 2.7792947060705493,
+          "maxPairedIncrease": 1.2458297727959742
+        }
+      }
+    },
+    {
+      "split": "protected",
+      "scenario": "sparse_village",
+      "duty": false,
+      "n": 2,
+      "baselineFive": 0.2666666666666667,
+      "five": 0.2666666666666667,
+      "worstFive": 0.25333333333333335,
+      "delta": 0.0,
+      "worstPairedDelta": 0.0,
+      "deltaCI95": null,
+      "overall": 0.2666666666666667,
+      "three": 0.2666666666666667,
+      "p95": 3251.6454527550377,
+      "p95DeltaMax": 5872.712070029229,
+      "totalTxRatioMax": 1.0,
+      "stats": {
+        "totalForwarded": {
+          "mean": 1289,
+          "maxPairedIncrease": 0
+        },
+        "controlOverhead": {
+          "mean": 8070.5,
+          "maxPairedIncrease": -4046
+        },
+        "retriesSent": {
+          "mean": 215.5,
+          "maxPairedIncrease": 0
+        },
+        "retriesExhausted": {
+          "mean": 101.5,
+          "maxPairedIncrease": -4
+        },
+        "totalQueued": {
+          "mean": 101.5,
+          "maxPairedIncrease": -4
+        },
+        "batteryPercentPerHourNormal": {
+          "mean": 2.682911516767432,
+          "maxPairedIncrease": 0.0
+        },
+        "batteryPercentPerHourSuper": {
+          "mean": 3.478124999971044,
+          "maxPairedIncrease": 0.0
+        },
+        "roleChangesPerNodeMin": {
+          "mean": 0.02145922746781116,
+          "maxPairedIncrease": 0.0
+        },
+        "radioDemandRatio": {
+          "mean": 0.6840627711862066,
+          "maxPairedIncrease": -0.25649130160797606
+        }
+      }
+    },
+    {
+      "split": "protected",
+      "scenario": "sparse_village",
+      "duty": true,
+      "n": 2,
+      "baselineFive": 0.2666666666666667,
+      "five": 0.2666666666666667,
+      "worstFive": 0.25333333333333335,
+      "delta": 0.0,
+      "worstPairedDelta": 0.0,
+      "deltaCI95": null,
+      "overall": 0.2666666666666667,
+      "three": 0.2666666666666667,
+      "p95": 312.1465074934531,
+      "p95DeltaMax": 1.6673924401402473,
+      "totalTxRatioMax": 1.006859756097561,
+      "stats": {
+        "totalForwarded": {
+          "mean": 1294,
+          "maxPairedIncrease": 9
+        },
+        "controlOverhead": {
+          "mean": 24268.5,
+          "maxPairedIncrease": 12150
+        },
+        "retriesSent": {
+          "mean": 218,
+          "maxPairedIncrease": 2
+        },
+        "retriesExhausted": {
+          "mean": 107,
+          "maxPairedIncrease": 3
+        },
+        "totalQueued": {
+          "mean": 106.5,
+          "maxPairedIncrease": 2
+        },
+        "batteryPercentPerHourNormal": {
+          "mean": 1.2733740722211282,
+          "maxPairedIncrease": 0.0
+        },
+        "batteryPercentPerHourSuper": {
+          "mean": 3.4335937499670344,
+          "maxPairedIncrease": 0.0
+        },
+        "roleChangesPerNodeMin": {
+          "mean": 0.02145922746781116,
+          "maxPairedIncrease": 0.0
+        },
+        "radioDemandRatio": {
+          "mean": 1.714517878455607,
+          "maxPairedIncrease": 0.7724314390778757
+        }
+      }
+    }
+  ],
+  "reasons": [
+    "not strictly above 90% on every final seed/power context",
+    "positive seed-paired improvement lower bound not established",
+    "a held-out/protected context regresses",
+    "resource or latency increase requires review, not a free improvement",
+    "owner-approved tolerances and release approval still absent",
+    "authoritative Dart evaluation of new profiles not completed"
+  ]
+}

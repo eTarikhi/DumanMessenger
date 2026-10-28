@@ -11,11 +11,11 @@ type Row={split:string;scenario:string;seed:number;duty:boolean;policy:Policy;se
   delivered:number;three:number;hopsMean:number|null;hopsP95:number|null;p95:number|null;totalTx:number;config:object;configHash:string;
   motionSeed:number;stats:MeshSimulation['stats'];wallMs:number};
 const out=process.argv[2]??"artifacts/evolution";mkdirSync(out,{recursive:true});
-const file=`${out}/runs.json`,sourceSha=execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim();
+const file=`${out}/runs.json`;let sourceSha=execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim();
 const codeHash=createHash("sha256").update(readFileSync(__filename)).update(
   ["simulation","routing","election","rf","rng","scenarios","events","types"].map(n=>readFileSync(`src/${n}.ts`,"utf8")).join("\n")).digest("hex");
 const rows:Row[]=[];
-if(existsSync(file)) {const old=JSON.parse(readFileSync(file,"utf8"));if(old.codeHash!==codeHash||old.node!==process.version)throw Error("Checkpoint version mismatch");rows.push(...old.rows);}
+if(existsSync(file)) {const old=JSON.parse(readFileSync(file,"utf8"));if(old.codeHash!==codeHash||old.node!==process.version)throw Error("Checkpoint version mismatch");sourceSha=old.sourceSha;rows.push(...old.rows);}
 const baseline:Policy={beacon:2000,ack:4000};
 const id=(p:Policy)=>`${p.beacon}/${p.ack}`;
 function save(){writeFileSync(`${file}.tmp`,JSON.stringify({sourceSha,codeHash,node:process.version,rows}));renameSync(`${file}.tmp`,file);}
