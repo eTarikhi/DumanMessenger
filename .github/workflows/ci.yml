@@ -133,11 +133,15 @@ jobs:
         with:
           sdk: stable
 
-      # `pubspec.lock` was git-ignored until this change, so every run resolved `test: ^1.25.0`
-      # afresh against whatever pub.dev served that morning — a caret range in an application
-      # package (`publish_to: none`), which is exactly the case the Dart guidance says to pin.
-      # The lock cannot be generated where pub.dev is unreachable, so this enforces it when it
-      # exists and warns when it does not, instead of pretending either way.
+      # `pubspec.lock` was git-ignored until 5d408cd, so every run resolved `test: ^1.25.0` afresh
+      # against whatever pub.dev served that morning — a caret range in an application package
+      # (`publish_to: none`), which is exactly the case the Dart guidance says to pin. It is
+      # committed as of 991d11c, generated on a machine that could reach pub.dev, so the enforced
+      # branch below is the live one: 49 packages pinned, and `--enforce-lockfile` fails the build
+      # if the lock ever stops matching `pubspec.yaml`. The warning branch is not decoration — it
+      # fired on all seven Dart-resolving jobs of every run before 991d11c, and it stays for a
+      # checkout that has no lock, because a lock cannot be generated where pub.dev is unreachable
+      # (`docs/11` §2 measured both sides of that gate).
       - name: Resolve Dart dependencies
         run: |
           if [ -f pubspec.lock ]; then
@@ -232,11 +236,15 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
-      # `pubspec.lock` was git-ignored until this change, so every run resolved `test: ^1.25.0`
-      # afresh against whatever pub.dev served that morning — a caret range in an application
-      # package (`publish_to: none`), which is exactly the case the Dart guidance says to pin.
-      # The lock cannot be generated where pub.dev is unreachable, so this enforces it when it
-      # exists and warns when it does not, instead of pretending either way.
+      # `pubspec.lock` was git-ignored until 5d408cd, so every run resolved `test: ^1.25.0` afresh
+      # against whatever pub.dev served that morning — a caret range in an application package
+      # (`publish_to: none`), which is exactly the case the Dart guidance says to pin. It is
+      # committed as of 991d11c, generated on a machine that could reach pub.dev, so the enforced
+      # branch below is the live one: 49 packages pinned, and `--enforce-lockfile` fails the build
+      # if the lock ever stops matching `pubspec.yaml`. The warning branch is not decoration — it
+      # fired on all seven Dart-resolving jobs of every run before 991d11c, and it stays for a
+      # checkout that has no lock, because a lock cannot be generated where pub.dev is unreachable
+      # (`docs/11` §2 measured both sides of that gate).
       - name: Resolve Dart dependencies
         run: |
           if [ -f pubspec.lock ]; then
@@ -288,11 +296,15 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
-      # `pubspec.lock` was git-ignored until this change, so every run resolved `test: ^1.25.0`
-      # afresh against whatever pub.dev served that morning — a caret range in an application
-      # package (`publish_to: none`), which is exactly the case the Dart guidance says to pin.
-      # The lock cannot be generated where pub.dev is unreachable, so this enforces it when it
-      # exists and warns when it does not, instead of pretending either way.
+      # `pubspec.lock` was git-ignored until 5d408cd, so every run resolved `test: ^1.25.0` afresh
+      # against whatever pub.dev served that morning — a caret range in an application package
+      # (`publish_to: none`), which is exactly the case the Dart guidance says to pin. It is
+      # committed as of 991d11c, generated on a machine that could reach pub.dev, so the enforced
+      # branch below is the live one: 49 packages pinned, and `--enforce-lockfile` fails the build
+      # if the lock ever stops matching `pubspec.yaml`. The warning branch is not decoration — it
+      # fired on all seven Dart-resolving jobs of every run before 991d11c, and it stays for a
+      # checkout that has no lock, because a lock cannot be generated where pub.dev is unreachable
+      # (`docs/11` §2 measured both sides of that gate).
       - name: Resolve Dart dependencies
         run: |
           if [ -f pubspec.lock ]; then

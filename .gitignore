@@ -21,8 +21,10 @@ tool/.build/
 # dart
 sim/mesh_sim/.dart_tool/
 # pubspec.lock is deliberately NOT ignored: this package is an application (`publish_to: none`),
-# not a library, so the Dart guidance is to commit the lock and resolve against it. It cannot be
-# generated where pub.dev is unreachable — see docs/11 §2 and `make doctor`.
+# not a library, so the Dart guidance is to commit the lock and resolve against it. It is committed
+# as of 991d11c — 49 packages, resolved for Dart >=3.13.0 <4.0.0 on a machine that could reach
+# pub.dev. Where pub.dev is unreachable it still cannot be regenerated, only enforced, so a failed
+# re-resolution is not licence to delete it; see docs/11 §2 and `make doctor`.
 sim/mesh_sim/build/
 
 # local CI run artifacts (tool/ci/): captures, not deliverables

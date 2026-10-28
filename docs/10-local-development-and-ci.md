@@ -768,7 +768,7 @@ and a bug in a *reporter* should not fail an otherwise green build.
 | | Unit + acceptance tests | `npm test` |
 | | Golden vectors are up to date | `npm run golden` + `git diff --quiet -- test-fixtures/golden-vectors.json` |
 | | Production build | `npm run build` |
-| `dart` | Resolve Dart dependencies | `cd sim/mesh_sim && dart pub get --enforce-lockfile` once `pubspec.lock` is committed; plain `dart pub get` with a warning until then |
+| `dart` | Resolve Dart dependencies | `cd sim/mesh_sim && dart pub get --enforce-lockfile` — the lock is committed (`991d11c`), so this is the branch every run takes; plain `dart pub get` plus a warning annotation is the fallback for a checkout with no lock |
 | | Analyze *(continue-on-error)* | `dart analyze` → `artifacts/…/dart-analyze.txt` |
 | | Tests *(continue-on-error)* | `dart test --reporter expanded` → `dart-test.txt` |
 | | CLI acceptance *(continue-on-error)* | `dart run bin/mesh_sim.dart --scenario campus_quad --seed 42` → `dart-cli.txt` |
@@ -808,10 +808,13 @@ row that cannot be probed says so in the evidence column rather than inventing a
 authoritative engine, **22 Dart files / 15 200 lines**, and not one of them has ever been
 compiled on the machine that wrote them. `flutter` absent, so the roadmap's `app/` cannot be
 built, run or screenshotted. `pub.dev` unreachable, so `pubspec.yaml` is frozen at what it
-already lists — no Opus codec, no SQLite plugin, no BLE plugin — and `pubspec.lock` cannot be
-generated here either, so Dart dependency resolution is not reproducible from this machine: CI
-resolves `test: ^1.25.0` afresh and publishes a warning annotation saying so until somebody commits
-a lock (§2, `docs/11` §2). `pwsh` absent *and not
+already lists — no Opus codec, no SQLite plugin, no BLE plugin — and `pubspec.lock` still cannot be
+*generated* here. Since `991d11c` it no longer has to be: the owner committed one, resolved on a
+machine that could reach pub.dev (49 packages, `sdks: dart >=3.13.0 <4.0.0`), so CI resolves with
+`--enforce-lockfile` and Dart dependency resolution is reproducible from anywhere that has the SDK,
+not only from a machine that can reach pub.dev. The warning annotation that used to say otherwise
+fired on seven of nine jobs — every job that resolves Dart dependencies — at `e894ff0`, and on none
+at `991d11c`; that before/after is the acceptance gate `docs/11` §2 wrote for this in advance. `pwsh` absent *and not
 installable*: the release page answers (`HTTP 200`) and the asset redirects to
 `objects.githubusercontent.com`, which is outside the egress allowlist, yielding `0 bytes` — so
 `make.ps1` and the whole of `docs/11` are checked statically by `check-ps1.py`; the two executions

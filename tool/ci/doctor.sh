@@ -115,9 +115,17 @@ else
 fi
 
 if [ -f "$DART_DIR/pubspec.lock" ]; then
-  ok "sim/mesh_sim/pubspec.lock" "dart pub get has run"
+  # The lock is a committed artifact (991d11c), so report what it pins rather than only that it
+  # exists: the package count and the SDK range it was resolved under are the two facts that decide
+  # whether `dart pub get --enforce-lockfile` will work on this machine. Both are read out of the
+  # file, never hard-coded — a re-resolved lock changes them and this line should follow.
+  lock_pkgs=$(grep -cE '^  [A-Za-z0-9_]+:$' "$DART_DIR/pubspec.lock" 2>/dev/null) || lock_pkgs='?'
+  lock_sdk=$(awk '/^sdks:/{f=1;next} f&&/^[[:space:]]+dart:/{sub(/^[[:space:]]*dart:[[:space:]]*/,"");gsub(/"/,"");print;exit}' \
+             "$DART_DIR/pubspec.lock" 2>/dev/null) || lock_sdk=''
+  ok "sim/mesh_sim/pubspec.lock" \
+     "committed: ${lock_pkgs} packages, resolved for Dart ${lock_sdk:-an unrecorded SDK range}"
 else
-  meh "sim/mesh_sim/pubspec.lock" "absent — run: cd sim/mesh_sim && dart pub get"
+  meh "sim/mesh_sim/pubspec.lock" "absent — run: cd sim/mesh_sim && dart pub get, then commit it (docs/11 §2)"
 fi
 
 if [ -f "$ROOT/test-fixtures/golden-vectors.json" ]; then

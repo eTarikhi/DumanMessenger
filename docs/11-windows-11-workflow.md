@@ -122,15 +122,32 @@ dart pub get
 The only dependency is `package:test`. If `pub.dev` is unreachable from your network, this fails and
 the Dart jobs cannot run; `doctor` probes it and tells you before you find out the slow way.
 
-**Then commit `sim\mesh_sim\pubspec.lock`.** It used to be git-ignored, so every CI run resolved
-`test: ^1.25.0` against whatever pub.dev served that morning — a caret range in an application
-package (`pubspec.yaml` says `publish_to: none`), which is the case the Dart guidance says to pin.
-It is un-ignored now, and both the workflow and `run-pipeline.sh` resolve with
-`dart pub get --enforce-lockfile` when the lock exists. Until somebody who can reach pub.dev commits
-one, every Dart job publishes a warning annotation saying that the run resolved dependencies fresh;
-that warning is the acceptance gate, and it disappears on the commit that adds the file. Do not
-hand-write the lock: it carries content hashes, and a wrong one fails `--enforce-lockfile` for
-everybody.
+**Then commit `sim\mesh_sim\pubspec.lock` — done, `991d11c`, 2026-10-28.** It used to be
+git-ignored, so every CI run resolved `test: ^1.25.0` against whatever pub.dev served that morning —
+a caret range in an application package (`pubspec.yaml` says `publish_to: none`), which is the case
+the Dart guidance says to pin. It is un-ignored now, and both the workflow and `run-pipeline.sh`
+resolve with `dart pub get --enforce-lockfile` when the lock exists.
+
+The gate this section wrote in advance — "every Dart job publishes a warning annotation saying that
+the run resolved dependencies fresh; that warning is the acceptance gate, and it disappears on the
+commit that adds the file" — was measured on both sides rather than assumed. At `e894ff0`, the last
+commit without a lock, the warning fired on **seven of nine jobs**: `Dart mesh_sim (authoritative
+engine)`, `CLI probes (SOS, groups, media)` and all five `CLI acceptance across scenarios` legs
+(run 40463387905). At `991d11c` it fires on **none**, with all nine jobs green and
+`dart test: 279 passed, 0 failed, 0 skipped` (run 40610830053). The two jobs that never warned are
+the two that never resolve Dart dependencies.
+
+What the committed lock says, for whoever reads it before installing an SDK: **49 packages**, and
+`sdks: dart: ">=3.13.0 <4.0.0"` — the range it was resolved under, which is narrower than
+`pubspec.yaml`'s `environment: sdk: ^3.4.0`. Whether an SDK older than 3.13 re-resolves or refuses
+is **not verified anywhere in this repository**: the environment that wrote these lines has no Dart
+SDK at all, so treat the range as a description of the lock, not as a promise about your machine.
+CI asks `dart-lang/setup-dart` for `stable`, which satisfies it.
+
+The SDK that produced it was fetched inside WSL2, not on the Windows side — a resumed 228 MB
+download of `dartsdk-linux-x64-release.zip` from `storage.googleapis.com`, which is what the note
+below about installing inside the distro asks for. Do not hand-write the lock: it carries content
+hashes, and a wrong one fails `--enforce-lockfile` for everybody.
 
 **Under WSL** the SDK must be installed *inside* the distro, not shared from Windows: a Windows
 `dart.exe` invoked from WSL works, but resolves paths differently and confuses `dart pub get`. Use

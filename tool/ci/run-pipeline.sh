@@ -118,7 +118,7 @@ web        TypeScript engine + React simulator
              npm run golden && git diff --quiet -- test-fixtures/golden-vectors.json
              npm run build
 dart       Dart mesh_sim (authoritative engine)      [runs all three, then gates]
-             dart pub get (--enforce-lockfile once pubspec.lock is committed)
+             dart pub get (--enforce-lockfile; pubspec.lock is committed, so that is the branch taken)
              dart analyze
              dart test --reporter expanded
              dart run bin/mesh_sim.dart --scenario campus_quad --seed 42
