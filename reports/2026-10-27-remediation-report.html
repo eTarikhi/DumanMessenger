@@ -52,8 +52,9 @@ footer { margin-top:56px; padding-top:18px; border-top:1px solid #1e2a3a; color:
 <header>
 <h1>Engineering remediation report</h1>
 <p class="sub">2026-10-27 &middot; branch <code>arena/ff85cb12-dumanmessenger</code> &middot;
-started at <code>d2fbba3</code> &middot; code head <code>462ca35</code> &middot;
-21 commits, 32 files, +2 177 / &minus;126 (this report is most of the added lines) &middot;
+started at <code>d2fbba3</code> &middot; code head <code>4b81270</code> &middot;
+25 commits in the range &mdash; 24 from this session and one (<code>991d11c</code>) from the owner
+&mdash; 33 files, +2 637 / &minus;128 (this report is most of the added lines) &middot;
 <a href="https://github.com/eTarikhi/DumanMessenger/pull/3" style="color:#4de0ff">pull request #3</a></p>
 <p>Remediation of the verification and toolchain layer, plus the two engine-side defects that only
 became visible once CI executed the authoritative Dart engine for the first time in this
@@ -64,9 +65,9 @@ verified, the row says so and says why.</p>
 
 <h2>0. Summary</h2>
 <div class="grid">
-  <div class="card"><div class="k">commits</div><div class="v">21</div><div class="n">by concern, all pushed</div></div>
-  <div class="card"><div class="k">defects fixed</div><div class="v">17</div><div class="n">each with its evidence in &sect;1</div></div>
-  <div class="card"><div class="k">CI jobs green</div><div class="v">9 / 9</div><div class="n">run 40460956532</div></div>
+  <div class="card"><div class="k">commits</div><div class="v">25</div><div class="n">by concern, all pushed</div></div>
+  <div class="card"><div class="k">defects fixed</div><div class="v">18</div><div class="n">each with its evidence in &sect;1</div></div>
+  <div class="card"><div class="k">CI jobs green</div><div class="v">9 / 9</div><div class="n">run 40614121740</div></div>
   <div class="card"><div class="k">Dart tests</div><div class="v">279</div><div class="n">0 failed; read from the notice</div></div>
   <div class="card"><div class="k">TS tests</div><div class="v">474</div><div class="n">18 files; read from the notice</div></div>
   <div class="card"><div class="k">local checks</div><div class="v">12 / 0</div><div class="n">passed / failed; 13 could not run</div></div>
@@ -366,6 +367,41 @@ count and now quotes the new one with the reason. This is the seventeenth defect
 kind to miss: nothing failed, every check was green, and the number was simply wrong in the
 direction that flatters the work.</p>
 
+<h3>1.5 Addendum &mdash; the owner committed the lock, and a wget log with it</h3>
+<p>On 2026-10-28 the owner pushed <code>991d11c</code>, "Checks Validated", to this branch: two
+files, <code>sim/mesh_sim/pubspec.lock</code> (397 lines, 49 packages) and <code>wget-log</code>
+(4 184 lines, 324 KB). The first closes mandatory owner action 1, the one gate in &sect;5.1 that
+could not be met from a branch; the second was not meant to be there. <code>wget</code> writes
+<code>./wget-log</code> when it runs without a terminal, so an unattended download leaves one in
+whatever directory it was started from, and it was staged alongside the file that mattered.</p>
+<p>Both were worth more than they looked. The log is the only available evidence of <em>how</em> the
+SDK was obtained &mdash; a resumed fetch (HTTP 206, 133 MB of 228 MB remaining) of
+<code>dartsdk-linux-x64-release.zip</code> from <code>storage.googleapis.com</code>, saved to
+<code>/tmp/dart-sdk.zip</code> at 2026-10-24 18:36:16 &mdash; and the <em>linux</em> archive says it
+was installed inside WSL2, which is what <code>docs/11</code> &sect;2 tells you to do and which this
+sandbox cannot do at all, that host being unreachable from here. So the fact was moved into
+<code>docs/11</code> &sect;2 and the file was removed in <code>61c1476</code>, with
+<code>wget-log</code>, <code>wget-log.*</code> and <code>*.zip</code> added to <code>.gitignore</code>
+and the reason inline. No tracked file matched any of the three patterns, so nothing else moved.</p>
+<p>The lock then falsified six statements in this repository, every one of them written as a
+conditional about a file that did not yet exist: three identical comment blocks in
+<code>ci.yml</code>, a row in <code>docs/10</code>'s job table, a paragraph in <code>docs/10</code>'s
+blocker prose, <code>docs/11</code> &sect;2's "until somebody who can reach pub.dev commits one",
+<code>run-pipeline.sh</code>'s help text and <code>.gitignore</code>'s comment. All six are corrected
+in <code>4b81270</code>, which also makes <code>doctor.sh</code> read the lock's contents instead of
+treating it as a boolean &mdash; it now prints <code>committed: 49 packages, resolved for Dart
+&gt;=3.13.0 &lt;4.0.0</code>, tested against a real lock, a lock with its <code>sdks:</code> section
+deleted and an empty file, so nothing is hard-coded. This is the eighteenth defect, and it is the
+same species as &sect;1.4: a claim that was true when written and went stale silently, in a
+repository whose whole subject is which claims are backed by measurements.</p>
+<p>One verification nuance, recorded rather than smoothed over: <code>61c1476</code> has <strong>no
+completed CI run</strong>. Both of its runs &mdash; push 40613897925 and <code>pull_request</code>
+40613903311 &mdash; were cancelled at 8 / 9 green when <code>4b81270</code> was pushed minutes later,
+the concurrency group added in <code>0d38edd</code> doing exactly its job. The commit is therefore
+verified transitively, by a successor that contains it and is green twice over; that is sound here
+only because it touched two files no job reads. A sha whose content <em>was</em> read by a job would
+need its own run.</p>
+
 <h2>2. What was verified, and how</h2>
 
 <h3>2.1 Remote CI &mdash; executed, on this branch</h3>
@@ -420,10 +456,41 @@ beacon rounds</strong> &mdash; the figures <code>docs/06</code> &sect;17.3 had c
 reference engine, matched exactly. Spread arm unchanged at 171 / 29 750.</td></tr>
 <tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40458960415" style="color:#4de0ff">40458960415</a></td>
 <td><code>149beec</code></td><td class="pass">success</td>
-<td>Branch head. The one residual difference that confirmation exposed &mdash; the same convergence
+<td>The one residual difference that confirmation exposed &mdash; the same convergence
 time printed as <code>8.75 s</code> in Dart and <code>8.8 s</code> in the reference &mdash; is gone;
 both probes and both blocks now read <code>8.8 s</code>, and <code>dart test</code> is still
 279 / 0 / 0.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40460087980" style="color:#4de0ff">40460087980</a></td>
+<td><code>f01c32a</code></td><td class="pass">success</td><td>9 / 9. Finding F4 marked resolved in
+&sect;6 with both arms as measured.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40460956532" style="color:#4de0ff">40460956532</a></td>
+<td><code>462ca35</code></td><td class="pass">success</td><td>9 / 9. The <code>blockers.sh</code>
+reclassification of &sect;1.4; verified by local execution, since that script is deliberately not a
+CI step.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40463387905" style="color:#4de0ff">40463387905</a></td>
+<td><code>e894ff0</code></td><td class="pass">success</td><td>9 / 9, and the
+<strong>baseline</strong> for the lock gate: the <code>pubspec.lock is not committed</code> warning
+fires on <strong>seven of nine jobs</strong> &mdash; every job that resolves Dart
+dependencies.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40610830053" style="color:#4de0ff">40610830053</a></td>
+<td><code>991d11c</code> <em>(the owner's)</em></td><td class="pass">success</td>
+<td><strong>Owner action 1 closed, on the gate &sect;5.1 wrote for it:</strong> the same warning fires
+on <strong>none</strong> of the nine jobs, <code>--enforce-lockfile</code> is now the live resolution
+path, and <code>dart test</code> is still 279 / 0 / 0. Run
+<a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40610835443" style="color:#4de0ff">40610835443</a>
+is the <code>pull_request</code> event for the same sha, green as well, so the same commit resolved
+identically twice.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40613897925" style="color:#4de0ff">40613897925</a></td>
+<td><code>61c1476</code></td><td class="blocked">cancelled</td><td>8 / 9 green, the TypeScript job
+cancelled &mdash; and the same for its <code>pull_request</code> twin 40613903311. The concurrency
+group added in <code>0d38edd</code> superseded both when <code>4b81270</code> was pushed minutes
+later, which is what it is for. <strong>This sha therefore has no completed run of its own</strong>;
+it is verified transitively by its successor, which is sound only because it touched two files no job
+reads: a deleted <code>wget-log</code> and <code>.gitignore</code>.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40614121740" style="color:#4de0ff">40614121740</a></td>
+<td><code>4b81270</code></td><td class="pass">success</td><td>Branch head, 9 / 9 on the push event
+and 9 / 9 on the <code>pull_request</code> event (40614127531). The six stale conditionals about the
+lock, corrected; <code>doctor.sh</code> reading the lock's own contents.</td></tr>
 </table>
 
 <h3>2.2 What the authoritative engine measured, for the first time</h3>
@@ -557,9 +624,11 @@ every commit since (279 cases at <code>4e7b412</code>). The blocker moved from "
 compile it".</td></tr>
 <tr><td><strong>A</strong> <code>flutter-sdk</code>, <code>pub-dev</code></td>
 <td class="blocked">externally blocked</td><td>Unchanged and reproduced: <code>pub.dev</code> curl
-exit 35 / HTTP 000 / 0 bytes, so no new Dart dependency and no generatable
-<code>pubspec.lock</code>; Flutter absent and there is no <code>app/</code> to build. The lock is now
-un-ignored and enforced when present, which is the part that was fixable here.</td></tr>
+exit 35 / HTTP 000 / 0 bytes, so no new Dart dependency; Flutter absent and there is no
+<code>app/</code> to build. The lock is no longer missing &mdash; the owner committed one at
+<code>991d11c</code> &mdash; but this row stays blocked, because where <code>pub.dev</code> is
+unreachable a lock can be <em>enforced</em> and not <em>regenerated</em>: the file is now a
+dependency of the build that this machine cannot refresh.</td></tr>
 <tr><td><strong>A</strong> <code>powershell</code></td><td class="blocked">externally blocked</td>
 <td>Unchanged: release page HTTP 200, asset redirects to
 <code>objects.githubusercontent.com</code> with 0 bytes delivered. What changed is that the static
@@ -658,13 +727,17 @@ controller and a counsel review, not a document.</div>
 <h3>5.1 Mandatory release gates</h3>
 <table>
 <tr><th>#</th><th>action</th><th>why it is needed</th><th>how it unblocks</th><th>evidence that closes it</th></tr>
-<tr><td>1</td><td><strong>Commit <code>sim/mesh_sim/pubspec.lock</code></strong> from a machine that
-can reach <code>pub.dev</code> (<code>cd sim/mesh_sim &amp;&amp; dart pub get</code>, then commit the
-file).</td><td>Every Dart job currently resolves <code>test: ^1.25.0</code> afresh, so a bad upstream
-release can turn CI red with no change in this repository.</td><td>Makes the three Dart jobs
-reproducible; they already switch to <code>--enforce-lockfile</code> the moment the file
-exists.</td><td>The warning annotation "pubspec.lock is not committed&hellip;" disappears from the
-Dart jobs, and a re-run of the same commit resolves identically.</td></tr>
+<tr><td>1</td><td><strong>DONE by the owner, <code>991d11c</code>, 2026-10-28</strong> &mdash;
+Commit <code>sim/mesh_sim/pubspec.lock</code> from a machine that can reach <code>pub.dev</code>.</td>
+<td>Every Dart job resolved <code>test: ^1.25.0</code> afresh, so a bad upstream release could turn
+CI red with no change in this repository.</td><td>The seven Dart-resolving jobs are reproducible and
+now fail loudly if the lock stops matching <code>pubspec.yaml</code>, because
+<code>--enforce-lockfile</code> is the branch taken.</td><td><strong>Met, and measured on both
+sides.</strong> The evidence column asked for the warning annotation to disappear and for the same
+commit to resolve identically on a re-run: at <code>e894ff0</code> the warning fired on seven of nine
+jobs (run 40463387905), at <code>991d11c</code> on none (run 40610830053), and the same sha ran green
+a second time as a <code>pull_request</code> event (run 40610835443). The lock pins 49 packages and
+records <code>sdks: dart &gt;=3.13.0 &lt;4.0.0</code>.</td></tr>
 <tr><td>2</td><td><strong>Keep GitHub Actions payable.</strong></td><td>87 consecutive runs were
 refused for billing between 2026-10-23 and 2026-10-27. During that window the authoritative engine
 was uncompiled and every claim about it was unverifiable.</td><td>CI is now the only place the Dart
@@ -707,11 +780,20 @@ which is what verifies detection, path translation and forwarding.</td></tr>
 <h3>5.2 Optional, in the order they pay</h3>
 <table>
 <tr><th>action</th><th>what it buys</th><th>evidence that closes it</th></tr>
-<tr><td>Install the Dart SDK on the development machine (<code>docs/11</code> &sect;2).</td>
+<tr><td><strong>INSTALLED, closing evidence outstanding</strong> &mdash; Install the Dart SDK on
+the development machine (<code>docs/11</code> &sect;2).</td>
 <td>Turns 13 not-run collector rows into run ones locally, so <code>make daily</code> can return
 GREEN instead of INCOMPLETE and a push can be gated on the authoritative engine rather than on
-CI.</td><td><code>make doctor</code> reporting <code>dart</code> present and satisfying
-<code>^3.4.0</code>; a daily run with 0 not-run.</td></tr>
+CI.</td><td><code>make doctor</code> reporting <code>dart</code> present; a daily run with 0 not-run.
+<strong>Neither has been produced.</strong> What is known is that an SDK exists on the owner's
+machine: the log committed by accident in <code>991d11c</code> records a resumed 228 MB fetch of
+<code>dartsdk-linux-x64-release.zip</code> from <code>storage.googleapis.com</code> into
+<code>/tmp/dart-sdk.zip</code>, finishing 2026-10-24 18:36:16 &mdash; the <em>linux</em> archive, so
+inside WSL2, which is what <code>docs/11</code> &sect;2 asks for, and a host this sandbox cannot
+reach. The lock in that same commit could only have been produced by a working
+<code>dart pub get</code>. So the SDK is there; the two artifacts that would prove the pipeline runs
+on it &mdash; a <code>doctor</code> transcript and a <code>daily</code> verdict &mdash; are
+not.</td></tr>
 <tr><td><strong>DONE</strong> &mdash; Port the history probe's second arm (finding F4).</td>
 <td>Ported in <code>56fa3fe</code>: <code>--history</code> now runs both memberships and prints both
 blocks, with a close-membership arm selected as the most central node plus its nearest neighbours.
@@ -831,7 +913,8 @@ than a disclaimer.</p>
 <table>
 <tr><th>claim that could have been made</th><th>what is actually true</th></tr>
 <tr><td>"The Dart engine passes its tests."</td><td>It passes <strong>in CI, on
-<code>ubuntu-latest</code>, with a stable Dart SDK resolved fresh from pub.dev</strong>. It has never
+<code>ubuntu-latest</code>, with a stable Dart SDK and, since <code>991d11c</code>, dependencies
+resolved against the committed lock rather than fresh from pub.dev</strong>. It has never
 been compiled on the machine that wrote it, and no Dart file was executed locally at any point in
 this session. Every Dart fix here was reasoned about statically, checked with
 <code>check-dart-balance</code> and <code>check-dart-sites</code>, and then verified by pushing.</td></tr>
@@ -863,11 +946,12 @@ machine does not.</td></tr>
 </table>
 
 <h2>8. The change set, and what remains incomplete</h2>
-<p>Twenty-one commits from <code>d2fbba3</code> to <code>462ca35</code>, 32 files, +2 177 / &minus;126
+<p>Twenty-five commits from <code>d2fbba3</code> to <code>4b81270</code> &mdash; 24 of them this
+session's and one, <code>991d11c</code>, the owner's &mdash; 33 files, +2 637 / &minus;128
 (this report is most of the added lines), all pushed to
 <code>arena/ff85cb12-dumanmessenger</code> and collected in
 <a href="https://github.com/eTarikhi/DumanMessenger/pull/3" style="color:#4de0ff">pull request #3</a>
-against <code>main</code>. The branch is 106 commits ahead of <code>origin/main</code> including the
+against <code>main</code>. The branch is 109 commits ahead of <code>origin/main</code> including the
 earlier merged work. <code>main</code> was not touched, nothing was force-pushed, and no history was
 rewritten &mdash; including the one commit whose message understates its contents, which is recorded
 in &sect;1 instead.</p>
@@ -920,10 +1004,12 @@ the last <em>code</em> commit rather than the branch tip.</li>
 
 <footer>
 Produced 2026-10-27 on branch <code>arena/ff85cb12-dumanmessenger</code> from
-<code>d2fbba3</code> to <code>462ca35</code>, and amended the same day as the addenda landed.
+<code>d2fbba3</code> to <code>462ca35</code>, amended the same day as the addenda landed, and amended
+again on 2026-10-28 after the owner's <code>991d11c</code>.
 Sources for every number: CI runs 40428343622, 40429112891, 40430079404, 40432981960, 40437372608,
-40443962188, 40455143525, 40455641251, 40457964023, 40458532323, 40458960415, 40460087980 and
-40460956532 (job conclusions and check-run annotations &mdash; the annotations are the only
+40443962188, 40455143525, 40455641251, 40457964023, 40458532323, 40458960415, 40460087980,
+40460956532, 40463387905 and 40463393423, plus the owner's 40610830053 and 40610835443 and the
+cancelled pair 40613897925 and 40613903311 (job conclusions and check-run annotations &mdash; the annotations are the only
 machine-readable channel out of a runner here, since <code>$GITHUB_STEP_SUMMARY</code> is not
 exposed by the check-runs API and log downloads are refused);
 <code>artifacts/ci/daily/20261027T004508Z-3911753/</code> (885 s),
