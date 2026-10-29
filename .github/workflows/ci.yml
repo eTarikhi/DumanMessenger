@@ -81,6 +81,14 @@ jobs:
       # Includes the skills/02 + skills/08 acceptance criteria and the golden
       # vectors that the Dart job asserts against too. `pipefail` is what keeps `tee` from
       # masking a failing suite's exit code, which would make this gate vacuous.
+      - name: Deployment regressions and dependency audit
+        run: |
+          npm run test:deployment
+          npm audit --audit-level=low
+
+      - name: Record toolchain versions
+        run: echo "::notice title=Node toolchain::Node $(node --version), npm $(npm --version)"
+
       - name: Unit + acceptance tests
         run: |
           set -o pipefail
@@ -123,11 +131,6 @@ jobs:
       - name: Production build
         run: npm run build
 
-      - name: Deployment regressions and dependency audit
-        run: |
-          npm run test:deployment
-          npm audit --audit-level=low
-
       - name: Package simulator for private staging (no deployment)
         run: |
           npm run package:simulator
@@ -154,7 +157,7 @@ jobs:
 
       - uses: dart-lang/setup-dart@v1
         with:
-          sdk: stable
+          sdk: "3.13.7"
 
       # `pubspec.lock` was git-ignored until 5d408cd, so every run resolved `test: ^1.25.0` afresh
       # against whatever pub.dev served that morning — a caret range in an application package
@@ -279,7 +282,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dart-lang/setup-dart@v1
         with:
-          sdk: stable
+          sdk: "3.13.7"
       # `pubspec.lock` was git-ignored until 5d408cd, so every run resolved `test: ^1.25.0` afresh
       # against whatever pub.dev served that morning — a caret range in an application package
       # (`publish_to: none`), which is exactly the case the Dart guidance says to pin. It is
@@ -339,7 +342,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dart-lang/setup-dart@v1
         with:
-          sdk: stable
+          sdk: "3.13.7"
       # `pubspec.lock` was git-ignored until 5d408cd, so every run resolved `test: ^1.25.0` afresh
       # against whatever pub.dev served that morning — a caret range in an application package
       # (`publish_to: none`), which is exactly the case the Dart guidance says to pin. It is

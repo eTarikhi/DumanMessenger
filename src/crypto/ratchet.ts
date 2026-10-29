@@ -169,9 +169,14 @@ export class SymmetricRatchet {
    *  not need to put the number anywhere. */
   seal(plaintext: Uint8Array): SealedMessage {
     const { num, nonce, key } = this.nextKey();
-    const sealed = this.p.seal(key, nonce, plaintext, new Uint8Array(0));
-    zeroize(key);
-    return { num, nonce, sealed };
+    try {
+      const sealed = this.p.seal(key, nonce, plaintext, new Uint8Array(0));
+      return { num, nonce, sealed };
+    } finally {
+      // Provider failures must not retain the one-use sending key. The number
+      // remains consumed so a retry cannot reuse its nonce/key pair.
+      zeroize(key);
+    }
   }
 
   /** Authenticate on a bounded candidate state; failed packets cannot advance the

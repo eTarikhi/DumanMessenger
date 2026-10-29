@@ -28,7 +28,7 @@ this document and those scripts were written for.
 | --- | --- | --- | --- |
 | **Node.js** | **22.x** | `actions/setup-node` pins `node-version: 22` in `ci.yml` | no |
 | **npm** | 10.x (ships with Node 22) | CI runs `npm ci`, which needs `package-lock.json` | no |
-| **Dart SDK** | **stable, ≥ 3.4.0** | `dart-lang/setup-dart` pins `stable`; `sim/mesh_sim/pubspec.yaml` pins `sdk: ^3.4.0` | no — see §2 |
+| **Dart SDK** | **3.13.7 for CI reproduction** | CI compiler pinned; pubspec `^3.4.0` but committed lock requires ≥3.13 | no — see §2 |
 | **Git** | 2.30+ | the push gate inspects ancestry before pushing | no |
 | **Python 3** | 3.9+ | `tool/ci/diagnostics.py`, shared with the workflow | no |
 | **`gh`** (GitHub CLI) | 2.x, authenticated | `make watch` / `make diagnose` read remote runs | yes |
@@ -87,7 +87,7 @@ echo 'export PATH="$PATH:/usr/lib/dart/bin"' >> ~/.bashrc && source ~/.bashrc
 **Any platform, no package manager**
 
 Download `dartsdk-<os>-<arch>-release.zip` from
-`https://storage.googleapis.com/dart-archive/channels/stable/release/latest/sdk/`, unzip it
+`https://storage.googleapis.com/dart-archive/channels/stable/release/3.13.7/sdk/`, unzip it
 anywhere, and put its `bin/` directory on `PATH`.
 
 Then fetch the package's dependencies once:

@@ -26,6 +26,10 @@ was already terminal. JS zeroization still best-effort, not a secure-enclave gua
 were silently masked/truncated. Exact lengths/integer bytes/known type now required.
 Existing valid wire bytes/size fixtures unchanged. Malformed decoded packets still fail.
 
+5. **Sending-provider exception cleanup.** Raw ratchet seal now zeroizes its one-use
+key in finally, matching session.send. Captured real OpenSSL/HMAC key bytes are all zero
+after injected seal failure; the consumed message number is NOT rolled back/reused.
+
 ## Dependencies and supply chain
 
 Starting npm audit:6 advisories (2critical,1high,3moderate), developer servers/tool workers:

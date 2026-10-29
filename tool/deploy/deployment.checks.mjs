@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { request } from 'node:http';
@@ -36,4 +36,14 @@ test('HTTP smoke: security headers, HEAD, missing assets, methods, traversal and
  for(const path of ['/../package.json','/%2e%2e/package.json','/%ZZ','/%5c..%5c.env','/%00'])assert.equal((await get(path)).code,400);
  assert.equal((await get('/manifest.json')).code,404);assert.equal((await get('/.env')).code,404);
  writeFileSync(join(output,'web','index.html'),'changed');assert.equal((await get('/')).body,index.body);
+});
+
+test('repeatable manifest and rollback to a known-good immutable package',async t=>{
+ const {source,output}=fixture(t);packageSimulator(source,output,{sourceSha:'fixture',dirty:false});
+ const candidate=output+'-candidate';packageSimulator(source,candidate,{sourceSha:'fixture',dirty:false});
+ assert.equal(readFileSync(join(output,'manifest.json'),'utf8'),readFileSync(join(candidate,'manifest.json'),'utf8'));
+ writeFileSync(join(candidate,'web','index.html'),'corrupted');assert.throws(()=>createStagingServer(candidate),/Integrity mismatch/);
+ const restored=createStagingServer(output);await new Promise(resolve=>restored.listen(0,'127.0.0.1',resolve));
+ t.after(()=>new Promise(resolve=>restored.close(resolve)));
+ const res=await fetch(`http://127.0.0.1:${restored.address().port}/`);assert.equal(res.status,200);assert.equal(await res.text(),'<h1>Simulator</h1>');
 });

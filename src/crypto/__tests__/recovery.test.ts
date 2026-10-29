@@ -41,3 +41,11 @@ it('rejects noncanonical/truncated header fields rather than silently truncating
   expect(()=>encodeHeader({...good,...patch})).toThrow(RangeError);
  expect(encodeHeader(good)).toHaveLength(27);
 });
+
+it('zeroizes a send key even when the crypto provider throws without reusing its number',()=>{
+ let captured:Uint8Array|undefined;
+ const broken={...p,seal:(key:Uint8Array)=>{captured=key;throw Error('provider failure');}};
+ const r=new SymmetricRatchet(broken,p.randomBytes(32));
+ expect(()=>r.seal(new Uint8Array([1]))).toThrow('provider failure');
+ expect(captured).toBeDefined();expect(Array.from(captured!)).toEqual(Array(32).fill(0));expect(r.nextSendNum).toBe(1);
+});

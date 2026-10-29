@@ -26,7 +26,9 @@ experimental policies remain TS-only/offline. No new search needed.
 - C production rollout: BLOCKED pending explicit owner authorization/environment; no
 public hosting, release publication, store upload or signing executed.
 
-## Dependency-aware implementation checklist
+## Initial dependency-aware implementation checklist
+
+Recorded BEFORE edits. Final statuses superseding this initial checklist are in LEDGER.md.
 
 1. [x] Verify metadata, owner work and exact startingHEAD CI; inventory actual targets.
 2. [ ] Fix concrete crypto state-consumption/resource-bound defects with regressions.

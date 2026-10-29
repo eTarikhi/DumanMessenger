@@ -17,7 +17,7 @@ what blocks the phone baseline. No framework replacement/unbuildable scaffold in
 ## 2. Reproducible setup and verification
 
 Node22/npm10, Python3.9+; `npm ci` uses committed lockfile. Tested exact tools in dated
-verification. Dart stable with committed lock requires>=3.13 (pubspec lower range alone
+verification. CI pins Dart3.13.7; committed lock requires>=3.13 (pubspec lower range alone
 is not enough). Flutter is only for future app work; no pubspec/application exists today.
 
 ```sh
@@ -136,7 +136,7 @@ across OS/architecture; signing/native transports require actual mobile toolchai
 
 ## 7. Release/rollout decision
 
-**Simulator: READY FOR STAGING ONLY** after final checks. **Phone messenger: NOT READY —
-BLOCKED**, independent of routing target. Milestone C requires owner approval for any
+**Simulator: NOT READY — BLOCKED** by strict TS test timeouts; private diagnostic staging
+works but does not satisfy the full gate. **Phone messenger: NOT READY — BLOCKED**, independent of routing target. Milestone C requires owner approval for any
 external/public rollout, infrastructure/signing/identity decisions and device validation.
 See completion ledger/security review for precise owners and acceptance gates.

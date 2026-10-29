@@ -62,7 +62,7 @@ tool_version() {
 # machine has against what CI actually uses, instead of letting a contributor
 # discover the difference as a build that passes locally and fails remotely.
 REQUIRED_NODE_MAJOR=22      # actions/setup-node with node-version: 22
-REQUIRED_DART_SDK=stable    # dart-lang/setup-dart with sdk: stable
+REQUIRED_DART_SDK=3.13.7    # exact CI compiler, matching committed lock
 MIN_DART_SDK=3.4.0          # sim/mesh_sim/pubspec.yaml environment.sdk: ^3.4.0
 
 # --- artifacts ----------------------------------------------------------------
