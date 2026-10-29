@@ -1,0 +1,134 @@
+{
+  "date": "2026-10-29",
+  "branch": "arena/ff85cb12-dumanmessenger",
+  "startingBaselineSha": "65fdd27",
+  "testedEngineSha": "810cab6e3a099465b27963a4df471c19c9bdfba0",
+  "protocolCommit": "99cabbe",
+  "toolchains": {
+    "localNode": "v22.22.3",
+    "npm": "10.9.8",
+    "typescript": "5.9.3",
+    "python": "3.11.2",
+    "localDart": "unavailable",
+    "ciNode": "22 (workflow)",
+    "ciDart": "stable channel; exact resolved version not extracted"
+  },
+  "commands": [
+    {
+      "command": "npm ci --no-audit --no-fund",
+      "status": "failed first attempt",
+      "exit": 1,
+      "detail": "transient ERR_SSL_CIPHER_OPERATION_FAILED; immediate retry with fetch-retries3 succeeded"
+    },
+    {
+      "command": "npx tsc -p tool/tsconfig.golden.json before successful npm ci",
+      "status": "failed",
+      "exit": 1,
+      "detail": "npx found unrelated tsc package while dependencies absent; subsequent commands use installed ./node_modules/.bin/tsc"
+    },
+    {
+      "command": "./node_modules/.bin/tsc -p tool/tsconfig.golden.json",
+      "status": "passed",
+      "exit": 0
+    },
+    {
+      "command": "vitest focused diagnostics and epoch tests",
+      "status": "passed",
+      "exit": 0,
+      "tests": 4,
+      "detail": "initial diagnostic test incorrectly called rng.next(), then corrected to rng(); epoch fixture needed coordinates for typecheck"
+    },
+    {
+      "command": "npm run typecheck",
+      "status": "passed after fixture correction",
+      "exit": 0
+    },
+    {
+      "command": "git push (initial automatic pre-push hook)",
+      "status": "failed preliminary typecheck; command timed out while hook kept running",
+      "exit": null,
+      "detail": "test fixture makeNode missing coordinates; fixed810cab6. Hook also started an unintended full local suite, final outcome not retained. Later pushes CI_PREPUSH=off; final full engine suite verified in CI."
+    },
+    {
+      "command": "node tool/.build/tool/routing-diagnose.js reports/routing/2026-10-29-diagnosis",
+      "status": "passed final-source replay",
+      "exit": 0,
+      "worlds": 12,
+      "everyPriorStatsFieldMatches": true
+    },
+    {
+      "command": "node tool/.build/tool/routing-epoch-experiment.js reports/routing/2026-10-29-diagnosis",
+      "status": "passed execution, candidate FAILED scientific gates",
+      "exit": 0,
+      "worlds": 64,
+      "pairedWorlds": 32
+    },
+    {
+      "command": "python3 tool/routing/analyze_diagnosis.py",
+      "status": "passed source hashes, complete population, pairs and no overflow assertions",
+      "exit": 0
+    },
+    {
+      "command": "python3 -m unittest discover -s tool/routing -p test_diagnosis.py -v",
+      "status": "passed",
+      "exit": 0,
+      "tests": 4
+    },
+    {
+      "command": "npm run build",
+      "status": "passed",
+      "exit": 0
+    },
+    {
+      "command": "validateModel(OGM_EPOCH_PROFILE)",
+      "status": "passed explicit rejection (null)",
+      "exit": 0
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed",
+      "exit": 0
+    },
+    {
+      "command": "gh run watch 40847018098 --exit-status",
+      "status": "passed",
+      "exit": 0
+    }
+  ],
+  "ci": {
+    "runId": 40847018098,
+    "headSha": "810cab6e3a099465b27963a4df471c19c9bdfba0",
+    "status": "completed",
+    "conclusion": "success",
+    "successfulJobs": 9,
+    "totalJobs": 9,
+    "ts": {
+      "files": 24,
+      "passed": 513
+    },
+    "dart": {
+      "passed": 344,
+      "failed": 0,
+      "skipped": 0
+    },
+    "annotationCheckIds": {
+      "ts": 123356892341,
+      "dart": 123356892312
+    },
+    "scope": "default engine/goldens and existing Dart policies, NOT new TS-only candidate parity"
+  },
+  "notRunOrBlocked": [
+    "Dart candidate implementation/outcome parity",
+    "local Dart tests (SDK unavailable)",
+    "real-device tests, device adapter and canary cohort",
+    "candidate shadow-device validation",
+    "production activation and main merge"
+  ],
+  "result": {
+    "primaryTargetMet": false,
+    "promotion": "rejected-offline-only",
+    "defaultChanged": false,
+    "ownerApproval": false
+  },
+  "evidencePackaging": "experiments.json.gz is complete raw JSON compressed with gzip mtime0; no filtered seeds/messages. Later evidence/docs commits do not change frozen engine source hashes."
+}
