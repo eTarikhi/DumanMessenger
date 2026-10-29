@@ -1,3 +1,4 @@
+import { sourceBackupDecision } from "./routing-backup";
 import { validateResearchProfile, type RoutingResearchProfile } from "./routing-research";
 import { FailureDiagnostics } from "./failure-diagnostics";
 import { RoutingSelector, type SelectorOptions, type SelectorDecision } from "./routing-selector";
@@ -2805,6 +2806,11 @@ export class MeshSimulation {
   }
 
   private applyDecision(node: MeshNode, msg: MeshMessage, decision: ForwardDecision): void {
+    if(this.routingResearchProfile==="source-backup-v1") {
+      const original=decision;
+      decision=sourceBackupDecision(node,msg,decision,new Set(peersInRange(node,this.nodes,this.rf).map(p=>p.id)),this.now);
+      if(decision!==original)this.diagnostics?.record(msg.id,this.now,"source-backup",decision.targets.join(","));
+    }
     if(this.diagnostics&&msg.type==="text") {
       const entry=node.nextHopTable[msg.to];
       this.diagnostics.decision(msg.id,this.now,msg.attempt,node.id,decision.targets,decision.mode,decision.reason,

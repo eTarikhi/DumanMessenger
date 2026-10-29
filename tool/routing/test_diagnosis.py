@@ -1,3 +1,4 @@
+import subprocess
 """Retained evidence contract tests; stdlib only, no simulations or fitting."""
 import gzip
 import hashlib
@@ -14,7 +15,7 @@ class EvidenceTests(unittest.TestCase):
  def test_source_integrity_and_complete_pairs(self):
   self.assertEqual(len(self.experiment['rows']),64)
   for data in [self.baseline,self.experiment]:
-   for path,digest in data['sourceHashes'].items():self.assertEqual(hashlib.sha256(Path(path).read_bytes()).hexdigest(),digest)
+   for path,digest in data['sourceHashes'].items():self.assertEqual(hashlib.sha256(subprocess.check_output(['git','show',f"{data['sourceSha']}:{path}"])).hexdigest(),digest)
   groups={}
   for r in self.experiment['rows']:
    key=tuple(r[k] for k in ['split','scenario','seed','duty']);groups.setdefault(key,[]).append(r)

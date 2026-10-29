@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Descriptive analysis only: no fitting, ranking or modifying policies."""
+import subprocess
 import csv, gzip, hashlib, json, math, statistics, sys
 from collections import Counter
 from pathlib import Path
@@ -9,7 +10,7 @@ experiment=json.loads(gzip.decompress((root/'experiments.json.gz').read_bytes())
 assert len(baseline['rows'])==12 and len(experiment['rows'])==64
 for data in [baseline,experiment]:
  for path,digest in data['sourceHashes'].items():
-  assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest, path
+  assert hashlib.sha256(subprocess.check_output(['git','show',f"{data['sourceSha']}:{path}"])).hexdigest()==digest, path
  assert all(r['diagnosticOverflow']==0 for r in data['rows'])
 assert all(r['priorFullStatsMatch'] for r in baseline['rows'])
 def ci(values):
