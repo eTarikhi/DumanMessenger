@@ -1,0 +1,152 @@
+{
+  "date": "2026-10-29",
+  "branch": "arena/ff85cb12-dumanmessenger",
+  "startingHead": "dbd6e83b963b364b9e6de7d42a20a0d8038d7cfa",
+  "startingHeadCI": [
+    40848112462,
+    40848103808
+  ],
+  "startingHeadCIConclusion": "success",
+  "engineProtocolCommit": "305177456ff2edea3cc584e9a8e7cd941045f39b",
+  "modelFreezeCommit": "55b74bf4d52a0e756829adaaaa82ff71c2e9a83f",
+  "toolchains": {
+    "node": "v22.22.3",
+    "npm": "10.9.8",
+    "typescript": "5.9.3",
+    "python": "3.11.2",
+    "DartLocal": "unavailable",
+    "ciNode": "22",
+    "ciDart": "stable, exact resolved version not extracted"
+  },
+  "commands": [
+    {
+      "command": "git status/branch/rev-parse/remote/log; git fetch origin; gh run list",
+      "exit": 0,
+      "result": "clean requested branch, actual starting HEAD current CI verified"
+    },
+    {
+      "command": "historical SHA256 verification at startingHEAD",
+      "exit": 0
+    },
+    {
+      "command": "tsc -p tool/tsconfig.golden.json",
+      "exit": 0
+    },
+    {
+      "command": "node routing-diagnose.js new report path",
+      "exit": 0,
+      "worlds": 12,
+      "priorFullStatsMatch": true
+    },
+    {
+      "command": "python3 reliability_ml.py",
+      "exit": 0,
+      "status": "offline diagnostic model, not deployment"
+    },
+    {
+      "command": "vitest focused backup/diagnostics/epoch",
+      "exit": 0,
+      "passed": 7
+    },
+    {
+      "command": "npm run typecheck",
+      "exit": 0
+    },
+    {
+      "command": "node routing-reliability.js development",
+      "exit": 0,
+      "worlds": 24,
+      "includesHistoricalAuditWorlds": 12
+    },
+    {
+      "command": "python3 reliability_local_ml.py freeze",
+      "exit": 0,
+      "frozenBeforeFinal": true
+    },
+    {
+      "command": "node routing-reliability.js final",
+      "exit": 0,
+      "worlds": 46,
+      "diagnosticRadioWorlds": 4
+    },
+    {
+      "command": "python3 analyze_reliability.py",
+      "exit": 0,
+      "scientificScreenPass": false
+    },
+    {
+      "command": "python3 reliability_local_ml.py evaluate",
+      "exit": 0
+    },
+    {
+      "command": "python3 -m unittest discover -s tool/routing -p test_diagnosis.py -v",
+      "exit": 0,
+      "passed": 4
+    },
+    {
+      "command": "python3 -m unittest discover -s tool/routing -p test_reliability.py -v",
+      "exit": 0,
+      "passed": 4
+    },
+    {
+      "command": "npm run build",
+      "exit": 0
+    },
+    {
+      "command": "check-docs.py/check-parity.py/check-dart-sites.py",
+      "exit": 0
+    },
+    {
+      "command": "git diff --check",
+      "exit": 0
+    }
+  ],
+  "CI": {
+    "testedHead": "55b74bf4d52a0e756829adaaaa82ff71c2e9a83f",
+    "runIds": [
+      40852877613,
+      40852870858
+    ],
+    "status": "completed",
+    "conclusion": "success",
+    "jobs": 9,
+    "TS": {
+      "files": 25,
+      "passed": 516
+    },
+    "Dart": {
+      "passed": 344,
+      "failed": 0,
+      "skipped": 0
+    },
+    "annotationCheckIds": [
+      123376666284,
+      123376666007
+    ],
+    "cancelledSupersededRuns": [
+      40852496189,
+      40852486643
+    ],
+    "scope": "default goldens/regression/Dart baseline, NOT new TS-only profile parity"
+  },
+  "finalHeadPolicy": "Final evidence commit gets separate CI; final handoff records exact finalHEAD/run. This file does not assert that a future untested HEAD passed.",
+  "packaging": {
+    "gzip": "complete70-world JSON, mtime0; no seed/message filtering",
+    "modelBytes": 3290,
+    "MLruntime": "Python diagnostic only, liveEligible=false; no deployment artifact loader",
+    "snapshotFeatures": "source-local before-send; fixed normalization and explicit missing-route indicator",
+    "timingCaveat": "per-run wallMs/trainingSeconds/score time nondeterministic, not phone measurement"
+  },
+  "blockedOrNotRun": [
+    "Dart candidate implementation/parity/goldens",
+    "local Dart SDK tests",
+    "native phone adapters/cohort",
+    "real-device battery/latency or canary",
+    "candidate runtime shadow actuation",
+    "owner-approved budgets",
+    "production promotion"
+  ],
+  "defaultsChanged": false,
+  "mainMerged": false,
+  "newDependencies": false
+}

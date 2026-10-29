@@ -1,0 +1,6179 @@
+{
+  "groups": [
+    {
+      "split": "development",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "profile": "ogm-epoch-v1",
+      "nSeeds": 2,
+      "seeds": [
+        4301,
+        4302
+      ],
+      "fiveDistribution": [
+        0.7266666666666667,
+        0.7
+      ],
+      "fiveMean": 0.7133333333333334,
+      "seedsAbove90": 0,
+      "worstPairedFiveDelta": -0.06,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": -5,
+          "paired95TInterval": [
+            -55.82481894559999,
+            45.82481894559999
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.990909090909091
+        },
+        "three": {
+          "pairedMeanDelta": -1.5,
+          "paired95TInterval": [
+            -20.5593071046,
+            17.5593071046
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0
+        },
+        "overall": {
+          "pairedMeanDelta": -1.5,
+          "paired95TInterval": [
+            -45.971716577399995,
+            42.971716577399995
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.017094017094017
+        },
+        "totalTx": {
+          "pairedMeanDelta": -2051.5,
+          "paired95TInterval": [
+            -12171.992072542598,
+            8068.992072542598
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.9588632489838731
+        },
+        "relayTx": {
+          "pairedMeanDelta": -2051.5,
+          "paired95TInterval": [
+            -12171.992072542598,
+            8068.992072542598
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.9588632489838731
+        },
+        "p50": {
+          "pairedMeanDelta": -31.073627769947052,
+          "paired95TInterval": [
+            -1782.8776810462007,
+            1720.7304255063066
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.1329115780338443
+        },
+        "p95": {
+          "pairedMeanDelta": -12812.044357483974,
+          "paired95TInterval": [
+            -167124.02584633813,
+            141499.93713137018
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.9899695492333609
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": -0.0005976562500110139,
+          "paired95TInterval": [
+            -0.00819159892447074,
+            0.006996286424448712
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.9999999999998752
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": -6,
+          "paired95TInterval": [
+            -56.82481894559999,
+            44.82481894559999
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.9777777777777777
+        },
+        "jainTx": {
+          "pairedMeanDelta": -0.0048347576577474904,
+          "paired95TInterval": [
+            -0.37074905868118,
+            0.36107954336568504
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0351593936365662
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.00041978250548442564,
+          "paired95TInterval": [
+            -0.03492562617713368,
+            0.03576519118810253
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0611981017391527
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": -2442.308829125754,
+          "paired95TInterval": [
+            -20312.983432476056,
+            15428.365774224547
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.8829187384561308
+        },
+        "retriesSent": {
+          "pairedMeanDelta": -4,
+          "paired95TInterval": [
+            -105.64963789119999,
+            97.64963789119999
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0277777777777777
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": -3.5,
+          "paired95TInterval": [
+            -60.6779213138,
+            53.6779213138
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0153846153846153
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 193.5,
+          "paired95TInterval": [
+            -1655.2527891462,
+            2042.2527891462
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.1005338078291815
+        },
+        "totalQueued": {
+          "pairedMeanDelta": -6,
+          "paired95TInterval": [
+            -56.82481894559999,
+            44.82481894559999
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.9777777777777777
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            0.0,
+            0.0
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            0.0,
+            0.0
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.004291845493562228,
+          "paired95TInterval": [
+            -0.050241222044635145,
+            0.0588249130317596
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.074074074074074
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": -835930.1452792138,
+          "paired95TInterval": [
+            -3383655.374323978,
+            1711795.0837655505
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.9933708789493371
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": -112.5,
+          "paired95TInterval": [
+            -423.8020160418,
+            198.80201604180002
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.9389736477115118
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": -1153.5,
+          "paired95TInterval": [
+            -9279.1179289278,
+            6972.1179289278
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.999325919320149
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": -0.06192075150216425,
+          "paired95TInterval": [
+            -0.2506411388388228,
+            0.12679963583449425
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.9933708789493372
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": false
+    },
+    {
+      "split": "development",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "profile": "source-backup-v1",
+      "nSeeds": 2,
+      "seeds": [
+        4301,
+        4302
+      ],
+      "fiveDistribution": [
+        0.7733333333333333,
+        0.72
+      ],
+      "fiveMean": 0.7466666666666666,
+      "seedsAbove90": 0,
+      "worstPairedFiveDelta": -0.04,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            -76.2372284184,
+            76.2372284184
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0545454545454545
+        },
+        "three": {
+          "pairedMeanDelta": 2,
+          "paired95TInterval": [
+            -36.1186142092,
+            40.1186142092
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0588235294117647
+        },
+        "overall": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            -38.1186142092,
+            38.1186142092
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0256410256410255
+        },
+        "totalTx": {
+          "pairedMeanDelta": 2120.5,
+          "paired95TInterval": [
+            -29880.0766286234,
+            34121.0766286234
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.117741116751269
+        },
+        "relayTx": {
+          "pairedMeanDelta": 2120.5,
+          "paired95TInterval": [
+            -29880.0766286234,
+            34121.0766286234
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.117741116751269
+        },
+        "p50": {
+          "pairedMeanDelta": 19.56743721384555,
+          "paired95TInterval": [
+            -630.4296889599975,
+            669.5645633876886
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0880175108866015
+        },
+        "p95": {
+          "pairedMeanDelta": 9796.748385621468,
+          "paired95TInterval": [
+            -77328.08568401862,
+            96921.58245526155
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.250279165858912
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": -0.0002343750000224909,
+          "paired95TInterval": [
+            -0.0018722842042634565,
+            0.0014035342042184747
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.9990125000543919
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": -3.5,
+          "paired95TInterval": [
+            -60.6779213138,
+            53.6779213138
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.011111111111111
+        },
+        "jainTx": {
+          "pairedMeanDelta": -0.007805724996383934,
+          "paired95TInterval": [
+            -0.07403243212593945,
+            0.05842098213317158
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.9961946698837979
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.0009156306536029744,
+          "paired95TInterval": [
+            -0.02957394004617539,
+            0.03140520135338134
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0633712311332963
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": 868.5484885432516,
+          "paired95TInterval": [
+            -12611.599672178341,
+            14348.696649264846
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.2180838463899701
+        },
+        "retriesSent": {
+          "pairedMeanDelta": -2,
+          "paired95TInterval": [
+            -65.53102368200001,
+            61.531023682000004
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0208333333333333
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": -0.5,
+          "paired95TInterval": [
+            -57.6779213138,
+            56.6779213138
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0615384615384615
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 219.5,
+          "paired95TInterval": [
+            -549.2253865522,
+            988.2253865522
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0504413619167718
+        },
+        "totalQueued": {
+          "pairedMeanDelta": -3.5,
+          "paired95TInterval": [
+            -60.6779213138,
+            53.6779213138
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.011111111111111
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            0.0,
+            0.0
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            0.0,
+            0.0
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.012875536480686678,
+          "paired95TInterval": [
+            0.012875536480686678,
+            0.012875536480686678
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.111111111111111
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": 477037.6019719094,
+          "paired95TInterval": [
+            -10538222.121356292,
+            11492297.32530011
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0124538072148637
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": 60,
+          "paired95TInterval": [
+            -1756.9872773052,
+            1876.9872773052
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.1407766990291262
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": -2401.5,
+          "paired95TInterval": [
+            -6334.0703659158,
+            1531.0703659157998
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.9969525385557771
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": 0.035336118664588856,
+          "paired95TInterval": [
+            -0.7806090460264213,
+            0.851281283355599
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0124538072148643
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": false,
+      "noRegressionPass": false,
+      "vsEpochFiveDeltas": [
+        7,
+        3
+      ],
+      "vsEpoch95TInterval": [
+        -20.412409472799997,
+        30.412409472799997
+      ]
+    },
+    {
+      "split": "development",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "profile": "ogm-epoch-v1",
+      "nSeeds": 2,
+      "seeds": [
+        4301,
+        4302
+      ],
+      "fiveDistribution": [
+        0.7533333333333333,
+        0.6933333333333334
+      ],
+      "fiveMean": 0.7233333333333334,
+      "seedsAbove90": 0,
+      "worstPairedFiveDelta": -0.02,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": -0.5,
+          "paired95TInterval": [
+            -32.265511841000006,
+            31.265511841000002
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.018018018018018
+        },
+        "three": {
+          "pairedMeanDelta": -0.5,
+          "paired95TInterval": [
+            -19.5593071046,
+            18.5593071046
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0125
+        },
+        "overall": {
+          "pairedMeanDelta": 2,
+          "paired95TInterval": [
+            -10.706204736399998,
+            14.706204736399998
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0263157894736843
+        },
+        "totalTx": {
+          "pairedMeanDelta": -3716.5,
+          "paired95TInterval": [
+            -44293.7648256934,
+            36860.7648256934
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.9815909890883492
+        },
+        "relayTx": {
+          "pairedMeanDelta": -3716.5,
+          "paired95TInterval": [
+            -44293.7648256934,
+            36860.7648256934
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.9815909890883492
+        },
+        "p50": {
+          "pairedMeanDelta": 27.69326465204358,
+          "paired95TInterval": [
+            -272.0743866955474,
+            327.46091599963455
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0718899545855787
+        },
+        "p95": {
+          "pairedMeanDelta": -24484.0925917821,
+          "paired95TInterval": [
+            -323113.9798424173,
+            274145.7946588531
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.9865390223765982
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": -0.0008386003059127622,
+          "paired95TInterval": [
+            -0.017904763060975975,
+            0.01622756244915045
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0080801539974562
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": -4,
+          "paired95TInterval": [
+            -54.82481894559999,
+            46.82481894559999
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0
+        },
+        "jainTx": {
+          "pairedMeanDelta": 0.017205296896709688,
+          "paired95TInterval": [
+            -0.14443143883122952,
+            0.1788420326246489
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0435092625825169
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.00027191897169213594,
+          "paired95TInterval": [
+            -0.06371227468171384,
+            0.06425611262509812
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0956779617670223
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": -2327.1925990804666,
+          "paired95TInterval": [
+            -8869.806655319233,
+            4215.421457158301
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.8403859100990428
+        },
+        "retriesSent": {
+          "pairedMeanDelta": 3,
+          "paired95TInterval": [
+            3.0,
+            3.0
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0220588235294117
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": 0.5,
+          "paired95TInterval": [
+            -31.265511841000002,
+            32.265511841000006
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0454545454545454
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 33,
+          "paired95TInterval": [
+            -1885.6369151964,
+            1951.6369151964
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.057608015028178
+        },
+        "totalQueued": {
+          "pairedMeanDelta": -4,
+          "paired95TInterval": [
+            -54.82481894559999,
+            46.82481894559999
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            0.0,
+            0.0
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            0.0,
+            0.0
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.010729613733905581,
+          "paired95TInterval": [
+            -0.0710699875733907,
+            0.09252921504120185
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.1111111111111112
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": -1065732.4333123118,
+          "paired95TInterval": [
+            -15663190.68721183,
+            13531725.820587207
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.000876997301159
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": -102,
+          "paired95TInterval": [
+            -1283.6770404852,
+            1079.6770404852
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.9907312049433573
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": 2173.5,
+          "paired95TInterval": [
+            2040.0848502678,
+            2306.9151497322
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0031642977102364
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": -0.07894314320832096,
+          "paired95TInterval": [
+            -1.1602363472008779,
+            1.002350060784236
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0008769973011589
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": false
+    },
+    {
+      "split": "development",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "profile": "source-backup-v1",
+      "nSeeds": 2,
+      "seeds": [
+        4301,
+        4302
+      ],
+      "fiveDistribution": [
+        0.72,
+        0.7133333333333334
+      ],
+      "fiveMean": 0.7166666666666667,
+      "seedsAbove90": 0,
+      "worstPairedFiveDelta": -0.02,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": -1.5,
+          "paired95TInterval": [
+            -20.5593071046,
+            17.5593071046
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0
+        },
+        "three": {
+          "pairedMeanDelta": 1.5,
+          "paired95TInterval": [
+            -30.265511841000002,
+            33.265511841000006
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.05
+        },
+        "overall": {
+          "pairedMeanDelta": 0.5,
+          "paired95TInterval": [
+            -18.5593071046,
+            19.5593071046
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0175438596491229
+        },
+        "totalTx": {
+          "pairedMeanDelta": -218.5,
+          "paired95TInterval": [
+            -3274.3422391042,
+            2837.3422391042
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.000774375219993
+        },
+        "relayTx": {
+          "pairedMeanDelta": -218.5,
+          "paired95TInterval": [
+            -3274.3422391042,
+            2837.3422391042
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.000774375219993
+        },
+        "p50": {
+          "pairedMeanDelta": 24.411815482890233,
+          "paired95TInterval": [
+            -306.1632569100896,
+            354.9868878758701
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.070688852863559
+        },
+        "p95": {
+          "pairedMeanDelta": -13642.985903533408,
+          "paired95TInterval": [
+            -92866.24241941742,
+            65580.2706123506
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.8983925357894912
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": -0.0007700437403255767,
+          "paired95TInterval": [
+            -0.004983018461782562,
+            0.003442930981131409
+          ],
+          "availablePairs": 2,
+          "maxRatio": 0.9954142221760318
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": 2,
+          "paired95TInterval": [
+            -48.82481894559999,
+            52.82481894559999
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0731707317073171
+        },
+        "jainTx": {
+          "pairedMeanDelta": 0.013314730291368593,
+          "paired95TInterval": [
+            -0.1959833193150933,
+            0.2226127798978305
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0518675554427983
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.0012004266071527075,
+          "paired95TInterval": [
+            -0.019960617184138104,
+            0.02236147039844352
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0611659217180995
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": -560.8191862316771,
+          "paired95TInterval": [
+            -12383.328705937878,
+            11261.690333474526
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0325549189316383
+        },
+        "retriesSent": {
+          "pairedMeanDelta": 3,
+          "paired95TInterval": [
+            3.0,
+            3.0
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0220588235294117
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": 0.5,
+          "paired95TInterval": [
+            -18.5593071046,
+            19.5593071046
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0303030303030303
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 51,
+          "paired95TInterval": [
+            -990.9087883847999,
+            1092.9087883848
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0416405760801504
+        },
+        "totalQueued": {
+          "pairedMeanDelta": 2,
+          "paired95TInterval": [
+            -48.82481894559999,
+            52.82481894559999
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0731707317073171
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            0.0,
+            0.0
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            0.0,
+            0.0
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.004291845493562242,
+          "paired95TInterval": [
+            -0.05024122204463531,
+            0.058824913031759796
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0689655172413794
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": 18814.767957925797,
+          "paired95TInterval": [
+            -2152460.741533957,
+            2190090.2774498085
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0020016798340683
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": 14.5,
+          "paired95TInterval": [
+            8.146897631800002,
+            20.8531023682
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0144181256436664
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": 889,
+          "paired95TInterval": [
+            -7763.9254254884,
+            9541.9254254884
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.0022967856703981
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": 0.001393686515400283,
+          "paired95TInterval": [
+            -0.15944153640992575,
+            0.16222890944072632
+          ],
+          "availablePairs": 2,
+          "maxRatio": 1.002001679834068
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": false,
+      "vsEpochFiveDeltas": [
+        -5,
+        3
+      ],
+      "vsEpoch95TInterval": [
+        -51.82481894559999,
+        49.82481894559999
+      ]
+    },
+    {
+      "split": "final",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "profile": "ogm-epoch-v1",
+      "nSeeds": 4,
+      "seeds": [
+        7401,
+        7402,
+        7403,
+        7404
+      ],
+      "fiveDistribution": [
+        0.7866666666666666,
+        0.7466666666666667,
+        0.9466666666666667,
+        0.7266666666666667
+      ],
+      "fiveMean": 0.8016666666666666,
+      "seedsAbove90": 1,
+      "worstPairedFiveDelta": -0.013333333333333334,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": 1.75,
+          "paired95TInterval": [
+            -2.2280578816,
+            5.7280578816
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.028301886792453
+        },
+        "three": {
+          "pairedMeanDelta": 0.5,
+          "paired95TInterval": [
+            -7.019827239601052,
+            8.019827239601053
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0512820512820513
+        },
+        "overall": {
+          "pairedMeanDelta": 3.5,
+          "paired95TInterval": [
+            -3.435980918979957,
+            10.435980918979958
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0603448275862069
+        },
+        "totalTx": {
+          "pairedMeanDelta": -5888,
+          "paired95TInterval": [
+            -8274.030141644334,
+            -3501.969858355665
+          ],
+          "availablePairs": 4,
+          "maxRatio": 0.9105260114492781
+        },
+        "relayTx": {
+          "pairedMeanDelta": -5888,
+          "paired95TInterval": [
+            -8274.030141644334,
+            -3501.969858355665
+          ],
+          "availablePairs": 4,
+          "maxRatio": 0.9105260114492781
+        },
+        "p50": {
+          "pairedMeanDelta": 68.77108351327479,
+          "paired95TInterval": [
+            -160.76418989699386,
+            298.30635692354343
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.4053113762856486
+        },
+        "p95": {
+          "pairedMeanDelta": -12188.212684129248,
+          "paired95TInterval": [
+            -35584.172117662565,
+            11207.746749404068
+          ],
+          "availablePairs": 4,
+          "maxRatio": 0.9762360156693318
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": -0.0004423828125002527,
+          "paired95TInterval": [
+            -0.0010020820165461658,
+            0.00011731639154566038
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0137345214882034
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": -5,
+          "paired95TInterval": [
+            -13.715488147254142,
+            3.715488147254142
+          ],
+          "availablePairs": 4,
+          "maxRatio": 0.9871794871794872
+        },
+        "jainTx": {
+          "pairedMeanDelta": -0.022373014306680455,
+          "paired95TInterval": [
+            -0.06649586587872035,
+            0.021749837265359437
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.013302828611697
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.0042912239659007555,
+          "paired95TInterval": [
+            -0.0025548896839080503,
+            0.01113733761570956
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.1685580861789095
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": -380.6417724663311,
+          "paired95TInterval": [
+            -1358.7093611963705,
+            597.4258162637085
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0537917329195663
+        },
+        "retriesSent": {
+          "pairedMeanDelta": -0.75,
+          "paired95TInterval": [
+            -13.831299628141368,
+            12.331299628141368
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0512820512820513
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": -2.25,
+          "paired95TInterval": [
+            -7.968818524777976,
+            3.4688185247779764
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0161290322580645
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 129.75,
+          "paired95TInterval": [
+            18.839919907992027,
+            240.66008009200797
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0554197229013855
+        },
+        "totalQueued": {
+          "pairedMeanDelta": -5,
+          "paired95TInterval": [
+            -13.715488147254142,
+            3.715488147254142
+          ],
+          "availablePairs": 4,
+          "maxRatio": 0.9871794871794872
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            0.0,
+            0.0
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            0.0,
+            0.0
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.007510729613733905,
+          "paired95TInterval": [
+            -0.005416896196792448,
+            0.020438355424260257
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.111111111111111
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": -2240041.0472434536,
+          "paired95TInterval": [
+            -3113519.2791129816,
+            -1366562.8153739255
+          ],
+          "availablePairs": 4,
+          "maxRatio": 0.984762246323546
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": -243.75,
+          "paired95TInterval": [
+            -407.7534471723344,
+            -79.74655282766562
+          ],
+          "availablePairs": 4,
+          "maxRatio": 0.9001148105625718
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": -1312.75,
+          "paired95TInterval": [
+            -4366.471647736117,
+            1740.9716477361171
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0013855217715175
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": -0.1659289664624779,
+          "paired95TInterval": [
+            -0.23063105771206635,
+            -0.10122687521288945
+          ],
+          "availablePairs": 4,
+          "maxRatio": 0.9847622463235463
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": false
+    },
+    {
+      "split": "final",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "profile": "source-backup-v1",
+      "nSeeds": 4,
+      "seeds": [
+        7401,
+        7402,
+        7403,
+        7404
+      ],
+      "fiveDistribution": [
+        0.8333333333333334,
+        0.7266666666666667,
+        0.9266666666666666,
+        0.7266666666666667
+      ],
+      "fiveMean": 0.8033333333333333,
+      "seedsAbove90": 1,
+      "worstPairedFiveDelta": 0.0,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": 2,
+          "paired95TInterval": [
+            -1.897684790870791,
+            5.897684790870791
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0416666666666667
+        },
+        "three": {
+          "pairedMeanDelta": 1,
+          "paired95TInterval": [
+            -3.3090526674644227,
+            5.309052667464423
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.064102564102564
+        },
+        "overall": {
+          "pairedMeanDelta": 1,
+          "paired95TInterval": [
+            -4.356855362707918,
+            6.356855362707918
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0441176470588236
+        },
+        "totalTx": {
+          "pairedMeanDelta": 1412.5,
+          "paired95TInterval": [
+            -140.68840095711607,
+            2965.688400957116
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.047955095956773
+        },
+        "relayTx": {
+          "pairedMeanDelta": 1412.5,
+          "paired95TInterval": [
+            -140.68840095711607,
+            2965.688400957116
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.047955095956773
+        },
+        "p50": {
+          "pairedMeanDelta": -8.459503820049576,
+          "paired95TInterval": [
+            -73.67757918900195,
+            56.75857154890279
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0538100030451543
+        },
+        "p95": {
+          "pairedMeanDelta": 3491.990897731157,
+          "paired95TInterval": [
+            -8315.213616747553,
+            15299.195412209867
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.1865092509225048
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": -0.00035156249999906963,
+          "paired95TInterval": [
+            -0.0014950852231641295,
+            0.0007919602231659902
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.021472280072983
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": -1.5,
+          "paired95TInterval": [
+            -5.2878687528062915,
+            2.2878687528062915
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0
+        },
+        "jainTx": {
+          "pairedMeanDelta": 0.0014718606247889066,
+          "paired95TInterval": [
+            -0.017835861527114968,
+            0.02077958277669278
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0282096962986615
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": -0.001825961714708467,
+          "paired95TInterval": [
+            -0.0077830867705851025,
+            0.0041311633411681686
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.023114904280703
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": 230.54769229668517,
+          "paired95TInterval": [
+            -512.8439473808053,
+            973.9393319741757
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.2399154236249785
+        },
+        "retriesSent": {
+          "pairedMeanDelta": -2.5,
+          "paired95TInterval": [
+            -18.385689003290317,
+            13.385689003290318
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.1025641025641026
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": -1,
+          "paired95TInterval": [
+            -5.309052667464423,
+            3.3090526674644227
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0357142857142858
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": -94.5,
+          "paired95TInterval": [
+            -263.85130183498177,
+            74.85130183498177
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0
+        },
+        "totalQueued": {
+          "pairedMeanDelta": -1.5,
+          "paired95TInterval": [
+            -5.2878687528062915,
+            2.2878687528062915
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            0.0,
+            0.0
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            0.0,
+            0.0
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.004291845493562239,
+          "paired95TInterval": [
+            -0.026754492812811122,
+            0.0353381837999356
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.2592592592592593
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": 476227.9905876368,
+          "paired95TInterval": [
+            -78380.20345726877,
+            1030836.1846325424
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0071775398548415
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": 35,
+          "paired95TInterval": [
+            -37.76838209065761,
+            107.76838209065761
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.055683122847302
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": -264.75,
+          "paired95TInterval": [
+            -1875.30543507558,
+            1345.80543507558
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.000857518346763
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": 0.03527614745093821,
+          "paired95TInterval": [
+            -0.005805940996834763,
+            0.07635823589871119
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0071775398548417
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": false,
+      "noRegressionPass": true,
+      "vsEpochFiveDeltas": [
+        7,
+        -3,
+        -3,
+        0
+      ],
+      "vsEpoch95TInterval": [
+        -7.255784599448692,
+        7.755784599448692
+      ]
+    },
+    {
+      "split": "final",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "profile": "ogm-epoch-v1",
+      "nSeeds": 4,
+      "seeds": [
+        7401,
+        7402,
+        7403,
+        7404
+      ],
+      "fiveDistribution": [
+        0.82,
+        0.7666666666666667,
+        0.9466666666666667,
+        0.68
+      ],
+      "fiveMean": 0.8033333333333333,
+      "seedsAbove90": 1,
+      "worstPairedFiveDelta": -0.02666666666666667,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": -0.75,
+          "paired95TInterval": [
+            -6.756735676000778,
+            5.256735676000778
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0267857142857142
+        },
+        "three": {
+          "pairedMeanDelta": -3.75,
+          "paired95TInterval": [
+            -6.467530883792849,
+            -1.0324691162071509
+          ],
+          "availablePairs": 4,
+          "maxRatio": 0.9759036144578314
+        },
+        "overall": {
+          "pairedMeanDelta": 2.25,
+          "paired95TInterval": [
+            -5.02741810612283,
+            9.52741810612283
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.056
+        },
+        "totalTx": {
+          "pairedMeanDelta": -4863.25,
+          "paired95TInterval": [
+            -10606.754099080721,
+            880.2540990807211
+          ],
+          "availablePairs": 4,
+          "maxRatio": 0.9729764019284446
+        },
+        "relayTx": {
+          "pairedMeanDelta": -4863.25,
+          "paired95TInterval": [
+            -10606.754099080721,
+            880.2540990807211
+          ],
+          "availablePairs": 4,
+          "maxRatio": 0.9729764019284446
+        },
+        "p50": {
+          "pairedMeanDelta": 27.29513872123789,
+          "paired95TInterval": [
+            -224.73104505345168,
+            279.32132249592746
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.2442613596799785
+        },
+        "p95": {
+          "pairedMeanDelta": -4244.332225813996,
+          "paired95TInterval": [
+            -9481.87110617278,
+            993.2066545447897
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0151803730561522
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": 0.0013484888193099065,
+          "paired95TInterval": [
+            -0.005499656576597365,
+            0.008196634215217179
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0081939911923428
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            -19.66089124502322,
+            19.66089124502322
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.2465753424657535
+        },
+        "jainTx": {
+          "pairedMeanDelta": -0.03728795039906069,
+          "paired95TInterval": [
+            -0.07519512755878287,
+            0.0006192267606614926
+          ],
+          "availablePairs": 4,
+          "maxRatio": 0.9864499353470623
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.006880164089745663,
+          "paired95TInterval": [
+            -0.0015755592505409706,
+            0.015335887430032297
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.246958216211727
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": -343.12906540701533,
+          "paired95TInterval": [
+            -985.034964626748,
+            298.7768338127173
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.004472839246093
+        },
+        "retriesSent": {
+          "pairedMeanDelta": 4.75,
+          "paired95TInterval": [
+            -9.385639332488083,
+            18.885639332488083
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.123456790123457
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": 0.75,
+          "paired95TInterval": [
+            -4.968818524777976,
+            6.468818524777976
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.12
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 217,
+          "paired95TInterval": [
+            -92.4373349236215,
+            526.4373349236215
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.1498967246975509
+        },
+        "totalQueued": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            -19.66089124502322,
+            19.66089124502322
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.2465753424657535
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            0.0,
+            0.0
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            0.0,
+            0.0
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.0053648068669527905,
+          "paired95TInterval": [
+            -0.05022153697464965,
+            0.060951150708555224
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.4615384615384615
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": -1778069.3239275552,
+          "paired95TInterval": [
+            -4117641.4064946617,
+            561502.7586395512
+          ],
+          "availablePairs": 4,
+          "maxRatio": 0.9958266776600326
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": -174.75,
+          "paired95TInterval": [
+            -428.9621129976356,
+            79.46211299763559
+          ],
+          "availablePairs": 4,
+          "maxRatio": 0.9929522317932654
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": -427.25,
+          "paired95TInterval": [
+            -5242.808208761746,
+            4388.308208761746
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0048031730197402
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": -0.13170883880944984,
+          "paired95TInterval": [
+            -0.3050104745551667,
+            0.041592796936267024
+          ],
+          "availablePairs": 4,
+          "maxRatio": 0.9958266776600327
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": false
+    },
+    {
+      "split": "final",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "profile": "source-backup-v1",
+      "nSeeds": 4,
+      "seeds": [
+        7401,
+        7402,
+        7403,
+        7404
+      ],
+      "fiveDistribution": [
+        0.8466666666666667,
+        0.7466666666666667,
+        0.9333333333333333,
+        0.7
+      ],
+      "fiveMean": 0.8066666666666666,
+      "seedsAbove90": 1,
+      "worstPairedFiveDelta": -0.006666666666666667,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": -0.25,
+          "paired95TInterval": [
+            -1.04561157632,
+            0.54561157632
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0
+        },
+        "three": {
+          "pairedMeanDelta": 0.25,
+          "paired95TInterval": [
+            -0.54561157632,
+            1.04561157632
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0120481927710843
+        },
+        "overall": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            -2.5984565272471944,
+            2.5984565272471944
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.016
+        },
+        "totalTx": {
+          "pairedMeanDelta": -268,
+          "paired95TInterval": [
+            -2841.0024254895393,
+            2305.0024254895393
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0387465110378076
+        },
+        "relayTx": {
+          "pairedMeanDelta": -268,
+          "paired95TInterval": [
+            -2841.0024254895393,
+            2305.0024254895393
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0387465110378076
+        },
+        "p50": {
+          "pairedMeanDelta": -5.8472199842799455,
+          "paired95TInterval": [
+            -56.99367856387461,
+            45.29923859531472
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0352513131649759
+        },
+        "p95": {
+          "pairedMeanDelta": 2428.7006017559906,
+          "paired95TInterval": [
+            -5279.252358769964,
+            10136.653562281947
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.1474470146932625
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": 0.0004375790850149608,
+          "paired95TInterval": [
+            -0.0004536456191271829,
+            0.0013288037891571046
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0210152365583318
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": 2,
+          "paired95TInterval": [
+            -7.368868246053848,
+            11.368868246053848
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.2083333333333333
+        },
+        "jainTx": {
+          "pairedMeanDelta": -0.003324258189705831,
+          "paired95TInterval": [
+            -0.007782458305696348,
+            0.0011339419262846864
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.0004092352257453677,
+          "paired95TInterval": [
+            -0.00012191784958864708,
+            0.0009403883010793825
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0133274897320768
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": 277.4389276036026,
+          "paired95TInterval": [
+            -940.9198941086916,
+            1495.797749315897
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.1526221534508836
+        },
+        "retriesSent": {
+          "pairedMeanDelta": 0.5,
+          "paired95TInterval": [
+            -4.447313834241428,
+            5.447313834241428
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0342465753424657
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": 1,
+          "paired95TInterval": [
+            -3.3090526674644227,
+            5.309052667464423
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.2
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 29.5,
+          "paired95TInterval": [
+            -34.07595321307136,
+            93.07595321307136
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.026851851851852
+        },
+        "totalQueued": {
+          "pairedMeanDelta": 2,
+          "paired95TInterval": [
+            -7.368868246053848,
+            11.368868246053848
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.2083333333333333
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            0.0,
+            0.0
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": [
+            0.0,
+            0.0
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": -0.006437768240343342,
+          "paired95TInterval": [
+            -0.019514851337571127,
+            0.006639314856884442
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": -132062.98704049736,
+          "paired95TInterval": [
+            -1112393.836366042,
+            848267.8622850473
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0046863320983226
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": -9.5,
+          "paired95TInterval": [
+            -158.3538017795492,
+            139.3538017795492
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.072826938136257
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": -253,
+          "paired95TInterval": [
+            -743.0743431630486,
+            237.07434316304864
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": -0.00978244348448376,
+          "paired95TInterval": [
+            -0.08239954343453001,
+            0.0628346564655625
+          ],
+          "availablePairs": 4,
+          "maxRatio": 1.0046863320983228
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": false,
+      "noRegressionPass": false,
+      "vsEpochFiveDeltas": [
+        4,
+        -3,
+        -2,
+        3
+      ],
+      "vsEpoch95TInterval": [
+        -5.088192059912594,
+        6.088192059912594
+      ]
+    },
+    {
+      "split": "protected",
+      "scenario": "campus_quad",
+      "duty": false,
+      "profile": "ogm-epoch-v1",
+      "nSeeds": 1,
+      "seeds": [
+        7501
+      ],
+      "fiveDistribution": [
+        1.0
+      ],
+      "fiveMean": 1.0,
+      "seedsAbove90": 1,
+      "worstPairedFiveDelta": 0.006666666666666667,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": 1,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0067114093959733
+        },
+        "three": {
+          "pairedMeanDelta": 5,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0354609929078014
+        },
+        "overall": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "totalTx": {
+          "pairedMeanDelta": -1391,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.626175759204515
+        },
+        "relayTx": {
+          "pairedMeanDelta": -1391,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.626175759204515
+        },
+        "p50": {
+          "pairedMeanDelta": -16.116025974042714,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9493285424193675
+        },
+        "p95": {
+          "pairedMeanDelta": 178.2707693334669,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0419587240916452
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "jainTx": {
+          "pairedMeanDelta": 0.023242863020845994,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0332080637268042
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.0004916994716220313,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0035595597935907
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": -90.08582812037002,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.8855590486408712
+        },
+        "retriesSent": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 12,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.2553191489361701
+        },
+        "totalQueued": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": -420388.649848938,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9801850218852618
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": -57,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.5648854961832062
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": 554,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0036218856033317
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": -0.09341969996643051,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9801850218852618
+        }
+      },
+      "primaryTargetPass": true,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": true
+    },
+    {
+      "split": "protected",
+      "scenario": "campus_quad",
+      "duty": false,
+      "profile": "source-backup-v1",
+      "nSeeds": 1,
+      "seeds": [
+        7501
+      ],
+      "fiveDistribution": [
+        0.9933333333333333
+      ],
+      "fiveMean": 0.9933333333333333,
+      "seedsAbove90": 1,
+      "worstPairedFiveDelta": 0.0,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "three": {
+          "pairedMeanDelta": 5,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0354609929078014
+        },
+        "overall": {
+          "pairedMeanDelta": -1,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9933333333333333
+        },
+        "totalTx": {
+          "pairedMeanDelta": 46,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.012362268207471
+        },
+        "relayTx": {
+          "pairedMeanDelta": 46,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.012362268207471
+        },
+        "p50": {
+          "pairedMeanDelta": -2.192446799017489,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9931065837723803
+        },
+        "p95": {
+          "pairedMeanDelta": -3206.158680820372,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.24538202204683893
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": 2,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": "unbounded"
+        },
+        "jainTx": {
+          "pairedMeanDelta": -0.022494635952809094,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9678609600047045
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.0017642140008919116,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0127716737301922
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": -91.32868016841962,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.8839801857526111
+        },
+        "retriesSent": {
+          "pairedMeanDelta": 2,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.1538461538461537
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": 2,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": "unbounded"
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 16,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.3404255319148937
+        },
+        "totalQueued": {
+          "pairedMeanDelta": 2,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": "unbounded"
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": -0.025751072961373397,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.7499999999999999
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": 117579.99619853497,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0055421216825007
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": 5,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0381679389312977
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": 748,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.004890199334462
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": 0.026128888044119947,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.005542121682501
+        }
+      },
+      "primaryTargetPass": true,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": true,
+      "vsEpochFiveDeltas": [
+        -1
+      ],
+      "vsEpoch95TInterval": null
+    },
+    {
+      "split": "protected",
+      "scenario": "campus_quad",
+      "duty": true,
+      "profile": "ogm-epoch-v1",
+      "nSeeds": 1,
+      "seeds": [
+        7501
+      ],
+      "fiveDistribution": [
+        1.0
+      ],
+      "fiveMean": 1.0,
+      "seedsAbove90": 1,
+      "worstPairedFiveDelta": 0.006666666666666667,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": 1,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0067114093959733
+        },
+        "three": {
+          "pairedMeanDelta": 1,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0069444444444444
+        },
+        "overall": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "totalTx": {
+          "pairedMeanDelta": -1432,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.6383838383838384
+        },
+        "relayTx": {
+          "pairedMeanDelta": -1432,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.6383838383838384
+        },
+        "p50": {
+          "pairedMeanDelta": -6.172573717776686,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9804528637779396
+        },
+        "p95": {
+          "pairedMeanDelta": -88.32437565084547,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9393062587073547
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": 0.0005507812499963016,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9892907269206968
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "jainTx": {
+          "pairedMeanDelta": 0.0675402855376861,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.1030130623284886
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.0015966628308400344,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0111512959614224
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": -0.9270668625521239,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9985439801879249
+        },
+        "retriesSent": {
+          "pairedMeanDelta": 5,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.4545454545454546
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": -8,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.8333333333333334
+        },
+        "totalQueued": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.025751072961373397,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.3333333333333335
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": -481233.9415787123,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9774880538519914
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": -71,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.5103448275862069
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": 296,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.001928979660995
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": -0.10694087590637924,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9774880538519918
+        }
+      },
+      "primaryTargetPass": true,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": true
+    },
+    {
+      "split": "protected",
+      "scenario": "campus_quad",
+      "duty": true,
+      "profile": "source-backup-v1",
+      "nSeeds": 1,
+      "seeds": [
+        7501
+      ],
+      "fiveDistribution": [
+        0.9933333333333333
+      ],
+      "fiveMean": 0.9933333333333333,
+      "seedsAbove90": 1,
+      "worstPairedFiveDelta": 0.0,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "three": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "overall": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "totalTx": {
+          "pairedMeanDelta": 251,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0633838383838383
+        },
+        "relayTx": {
+          "pairedMeanDelta": 251,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0633838383838383
+        },
+        "p50": {
+          "pairedMeanDelta": 0.6018038489855826,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0019057758324057
+        },
+        "p95": {
+          "pairedMeanDelta": -184.22744251787663,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.8734046784617306
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": -0.0005507812499963016,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0107092730793032
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": 1,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": "unbounded"
+        },
+        "jainTx": {
+          "pairedMeanDelta": 0.021712541366740723,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0331161670300302
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": -0.007584572871915551,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9470283799421771
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": 15.090434811962723,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0237005257620355
+        },
+        "retriesSent": {
+          "pairedMeanDelta": 2,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.1818181818181819
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": 1,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": "unbounded"
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": -2,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9583333333333334
+        },
+        "totalQueued": {
+          "pairedMeanDelta": 1,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": "unbounded"
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.025751072961373397,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.3333333333333335
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": -29754.681764561683,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9986080869704711
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": -15,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.896551724137931
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": -855,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9944281161819236
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": -0.006612151503237129,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9986080869704709
+        }
+      },
+      "primaryTargetPass": true,
+      "benefitPass": false,
+      "resourcePass": false,
+      "noRegressionPass": true,
+      "vsEpochFiveDeltas": [
+        -1
+      ],
+      "vsEpoch95TInterval": null
+    },
+    {
+      "split": "protected",
+      "scenario": "partitioned_pair",
+      "duty": false,
+      "profile": "ogm-epoch-v1",
+      "nSeeds": 1,
+      "seeds": [
+        7501
+      ],
+      "fiveDistribution": [
+        0.44
+      ],
+      "fiveMean": 0.44,
+      "seedsAbove90": 0,
+      "worstPairedFiveDelta": 0.0,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "three": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "overall": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "totalTx": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "relayTx": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "p50": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "p95": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "jainTx": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "retriesSent": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "totalQueued": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": true
+    },
+    {
+      "split": "protected",
+      "scenario": "partitioned_pair",
+      "duty": false,
+      "profile": "source-backup-v1",
+      "nSeeds": 1,
+      "seeds": [
+        7501
+      ],
+      "fiveDistribution": [
+        0.44
+      ],
+      "fiveMean": 0.44,
+      "seedsAbove90": 0,
+      "worstPairedFiveDelta": 0.0,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "three": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "overall": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "totalTx": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "relayTx": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "p50": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "p95": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "jainTx": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "retriesSent": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "totalQueued": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": true,
+      "vsEpochFiveDeltas": [
+        0
+      ],
+      "vsEpoch95TInterval": null
+    },
+    {
+      "split": "protected",
+      "scenario": "partitioned_pair",
+      "duty": true,
+      "profile": "ogm-epoch-v1",
+      "nSeeds": 1,
+      "seeds": [
+        7501
+      ],
+      "fiveDistribution": [
+        0.44
+      ],
+      "fiveMean": 0.44,
+      "seedsAbove90": 0,
+      "worstPairedFiveDelta": 0.0,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "three": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "overall": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "totalTx": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "relayTx": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "p50": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "p95": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "jainTx": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "retriesSent": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "totalQueued": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": true
+    },
+    {
+      "split": "protected",
+      "scenario": "partitioned_pair",
+      "duty": true,
+      "profile": "source-backup-v1",
+      "nSeeds": 1,
+      "seeds": [
+        7501
+      ],
+      "fiveDistribution": [
+        0.44
+      ],
+      "fiveMean": 0.44,
+      "seedsAbove90": 0,
+      "worstPairedFiveDelta": 0.0,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "three": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "overall": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "totalTx": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "relayTx": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "p50": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "p95": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "jainTx": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "retriesSent": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "totalQueued": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": true,
+      "vsEpochFiveDeltas": [
+        0
+      ],
+      "vsEpoch95TInterval": null
+    },
+    {
+      "split": "protected",
+      "scenario": "sparse_village",
+      "duty": false,
+      "profile": "ogm-epoch-v1",
+      "nSeeds": 1,
+      "seeds": [
+        7501
+      ],
+      "fiveDistribution": [
+        0.29333333333333333
+      ],
+      "fiveMean": 0.29333333333333333,
+      "seedsAbove90": 0,
+      "worstPairedFiveDelta": 0.0,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "three": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "overall": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "totalTx": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "relayTx": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "p50": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "p95": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "jainTx": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "retriesSent": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "totalQueued": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": true
+    },
+    {
+      "split": "protected",
+      "scenario": "sparse_village",
+      "duty": false,
+      "profile": "source-backup-v1",
+      "nSeeds": 1,
+      "seeds": [
+        7501
+      ],
+      "fiveDistribution": [
+        0.29333333333333333
+      ],
+      "fiveMean": 0.29333333333333333,
+      "seedsAbove90": 0,
+      "worstPairedFiveDelta": 0.0,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "three": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "overall": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "totalTx": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "relayTx": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "p50": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "p95": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "jainTx": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "retriesSent": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "totalQueued": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": true,
+      "vsEpochFiveDeltas": [
+        0
+      ],
+      "vsEpoch95TInterval": null
+    },
+    {
+      "split": "protected",
+      "scenario": "sparse_village",
+      "duty": true,
+      "profile": "ogm-epoch-v1",
+      "nSeeds": 1,
+      "seeds": [
+        7501
+      ],
+      "fiveDistribution": [
+        0.29333333333333333
+      ],
+      "fiveMean": 0.29333333333333333,
+      "seedsAbove90": 0,
+      "worstPairedFiveDelta": 0.0,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "three": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "overall": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "totalTx": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "relayTx": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "p50": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "p95": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "jainTx": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "retriesSent": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "totalQueued": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": true
+    },
+    {
+      "split": "protected",
+      "scenario": "sparse_village",
+      "duty": true,
+      "profile": "source-backup-v1",
+      "nSeeds": 1,
+      "seeds": [
+        7501
+      ],
+      "fiveDistribution": [
+        0.29333333333333333
+      ],
+      "fiveMean": 0.29333333333333333,
+      "seedsAbove90": 0,
+      "worstPairedFiveDelta": 0.0,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "three": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "overall": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "totalTx": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "relayTx": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "p50": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "p95": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "jainTx": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "retriesSent": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "totalQueued": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": 0.0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": true,
+      "vsEpochFiveDeltas": [
+        0
+      ],
+      "vsEpoch95TInterval": null
+    },
+    {
+      "split": "radio-sensitivity",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "profile": "source-backup-v1",
+      "nSeeds": 1,
+      "seeds": [
+        7401
+      ],
+      "fiveDistribution": [
+        0.58
+      ],
+      "fiveMean": 0.58,
+      "seedsAbove90": 0,
+      "worstPairedFiveDelta": -0.02666666666666667,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": -4,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9560439560439561
+        },
+        "three": {
+          "pairedMeanDelta": -5,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9397590361445783
+        },
+        "overall": {
+          "pairedMeanDelta": -3,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.967391304347826
+        },
+        "totalTx": {
+          "pairedMeanDelta": -34,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9945721583652618
+        },
+        "relayTx": {
+          "pairedMeanDelta": -34,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9945721583652618
+        },
+        "p50": {
+          "pairedMeanDelta": 1080.4242056328803,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.166329940846731
+        },
+        "p95": {
+          "pairedMeanDelta": -41831.007808886934,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.5155486471914476
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": -0.000937499999967506,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0044809175904028
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": -3,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.97
+        },
+        "jainTx": {
+          "pairedMeanDelta": -0.00762339508719323,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9903840028725613
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.001312655158063919,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0378915756226377
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": -2939.2186086487654,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.8301720375236527
+        },
+        "retriesSent": {
+          "pairedMeanDelta": -2,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9914529914529915
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": -2,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9787234042553191
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": 33,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.007570543702684
+        },
+        "totalQueued": {
+          "pairedMeanDelta": -3,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.97
+        },
+        "channelDrops": {
+          "pairedMeanDelta": -1124,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9309412632096338
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.05150214592274682,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.285714285714286
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": -260623.49473933876,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9975222050527459
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": -9,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9592760180995475
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": -2123,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9974671069899734
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": -0.019305444054762866,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9975222050527464
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": false
+    },
+    {
+      "split": "radio-sensitivity",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "profile": "source-backup-v1",
+      "nSeeds": 1,
+      "seeds": [
+        7401
+      ],
+      "fiveDistribution": [
+        0.58
+      ],
+      "fiveMean": 0.58,
+      "seedsAbove90": 0,
+      "worstPairedFiveDelta": -0.02,
+      "metrics": {
+        "five": {
+          "pairedMeanDelta": -3,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9666666666666667
+        },
+        "three": {
+          "pairedMeanDelta": -4,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9487179487179487
+        },
+        "overall": {
+          "pairedMeanDelta": -2,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9782608695652174
+        },
+        "totalTx": {
+          "pairedMeanDelta": -70,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9890350877192983
+        },
+        "relayTx": {
+          "pairedMeanDelta": -70,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9890350877192983
+        },
+        "p50": {
+          "pairedMeanDelta": -49.80303392279893,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9931041930336743
+        },
+        "p95": {
+          "pairedMeanDelta": -9482.98697182443,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.879157639508371
+        },
+        "modeledBatteryDrain": {
+          "pairedMeanDelta": 0.010524439387950224,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9423495194996916
+        },
+        "queueAtHorizon": {
+          "pairedMeanDelta": -1,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9901960784313726
+        },
+        "jainTx": {
+          "pairedMeanDelta": -0.008386630453732113,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9892994336532472
+        },
+        "maxTxShare": {
+          "pairedMeanDelta": 0.003855953631306648,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.115029943842344
+        },
+        "avgLatencyMs": {
+          "pairedMeanDelta": -2565.3925302450752,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.8495222588574026
+        },
+        "retriesSent": {
+          "pairedMeanDelta": 2,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0084745762711864
+        },
+        "retriesExhausted": {
+          "pairedMeanDelta": 2,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0206185567010309
+        },
+        "routeExpiries": {
+          "pairedMeanDelta": -97,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9768441155407018
+        },
+        "totalQueued": {
+          "pairedMeanDelta": -1,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9901960784313726
+        },
+        "channelDrops": {
+          "pairedMeanDelta": 137,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.0086424425939944
+        },
+        "rateRelayDrops": {
+          "pairedMeanDelta": 0,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1
+        },
+        "roleChangesPerNodeMin": {
+          "pairedMeanDelta": 0.0429184549356223,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 1.3124999999999998
+        },
+        "wakeLockMs": {
+          "pairedMeanDelta": -138827.96419012547,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9986808205251306
+        },
+        "lostTransmissions": {
+          "pairedMeanDelta": -9,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9644268774703557
+        },
+        "controlOverhead": {
+          "pairedMeanDelta": -988,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9988211571273461
+        },
+        "radioDemandRatio": {
+          "pairedMeanDelta": -0.01028355290297256,
+          "paired95TInterval": null,
+          "availablePairs": 1,
+          "maxRatio": 0.9986808205251306
+        }
+      },
+      "primaryTargetPass": false,
+      "benefitPass": false,
+      "resourcePass": true,
+      "noRegressionPass": false
+    }
+  ],
+  "points": [
+    {
+      "split": "development",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "profile": "baseline",
+      "seeds": [
+        4301,
+        4302
+      ],
+      "fiveRatio": 0.7466666666666667,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.7333333333333333,
+      "means": {
+        "five": 112,
+        "three": 84.5,
+        "overall": 119.5,
+        "totalTx": 34954,
+        "relayTx": 34954,
+        "p50": 760.6571968703065,
+        "p95": 62126.54527783627,
+        "modeledBatteryDrain": 0.12398511413607421,
+        "queueAtHorizon": 86,
+        "jainTx": 0.6537925373331349,
+        "maxTxShare": 0.04979920553417295,
+        "avgLatencyMs": 8839.270178551329,
+        "retriesSent": 144.5,
+        "retriesExhausted": 63.5,
+        "routeExpiries": 4461.5,
+        "totalQueued": 86,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.1330472103004292,
+        "wakeLockMs": 101884090.73854458,
+        "lostTransmissions": 1284.5,
+        "controlOverhead": 724496.5,
+        "radioDemandRatio": 7.546969684336634
+      },
+      "firstArrivalHopHistogram": {
+        "1": 100,
+        "2": 34,
+        "5": 21,
+        "6": 15,
+        "4": 34,
+        "3": 35
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 183,
+        "decision:flood": 176,
+        "radio-link-loss": 177,
+        "duplicate-suppression": 185,
+        "mpr-suppression": 165,
+        "mpr-physical-coverage-gap": 34,
+        "source-retries-exhausted": 127,
+        "decision:route": 165,
+        "advertised-route-over-five": 115,
+        "route-age-over-10s": 91,
+        "ttl-exhausted": 30,
+        "decision:direct": 230,
+        "decision:queue": 50,
+        "queued": 50,
+        "route-reverse-to-sender": 61
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "development",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "profile": "ogm-epoch-v1",
+      "seeds": [
+        4301,
+        4302
+      ],
+      "fiveRatio": 0.7133333333333334,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.7,
+      "means": {
+        "five": 107,
+        "three": 83,
+        "overall": 118,
+        "totalTx": 32902.5,
+        "relayTx": 32902.5,
+        "p50": 729.5835691003595,
+        "p95": 49314.50092035229,
+        "modeledBatteryDrain": 0.1233874578860632,
+        "queueAtHorizon": 80,
+        "jainTx": 0.6489577796753874,
+        "maxTxShare": 0.050218988039657374,
+        "avgLatencyMs": 6396.9613494255755,
+        "retriesSent": 140.5,
+        "retriesExhausted": 60,
+        "routeExpiries": 4655,
+        "totalQueued": 80,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.13733905579399142,
+        "wakeLockMs": 101048160.59326537,
+        "lostTransmissions": 1172,
+        "controlOverhead": 723343,
+        "radioDemandRatio": 7.48504893283447
+      },
+      "firstArrivalHopHistogram": {
+        "1": 100,
+        "3": 36,
+        "2": 30,
+        "6": 22,
+        "4": 33,
+        "5": 15
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 177,
+        "decision:flood": 170,
+        "radio-link-loss": 171,
+        "duplicate-suppression": 174,
+        "mpr-suppression": 161,
+        "mpr-physical-coverage-gap": 33,
+        "source-retries-exhausted": 120,
+        "decision:queue": 40,
+        "queued": 40,
+        "decision:direct": 238,
+        "decision:route": 168,
+        "advertised-route-over-five": 124,
+        "route-age-over-10s": 84,
+        "ttl-exhausted": 25,
+        "route-reverse-to-sender": 50
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "development",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "profile": "source-backup-v1",
+      "seeds": [
+        4301,
+        4302
+      ],
+      "fiveRatio": 0.7466666666666667,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.72,
+      "means": {
+        "five": 112,
+        "three": 86.5,
+        "overall": 119.5,
+        "totalTx": 37074.5,
+        "relayTx": 37074.5,
+        "p50": 780.2246340841521,
+        "p95": 71923.29366345773,
+        "modeledBatteryDrain": 0.12375073913605172,
+        "queueAtHorizon": 82.5,
+        "jainTx": 0.6459868123367509,
+        "maxTxShare": 0.05071483618777592,
+        "avgLatencyMs": 9707.81866709458,
+        "retriesSent": 142.5,
+        "retriesExhausted": 63,
+        "routeExpiries": 4681,
+        "totalQueued": 82.5,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.1459227467811159,
+        "wakeLockMs": 102361128.3405165,
+        "lostTransmissions": 1344.5,
+        "controlOverhead": 722095,
+        "radioDemandRatio": 7.582305803001223
+      },
+      "firstArrivalHopHistogram": {
+        "1": 100,
+        "3": 40,
+        "2": 33,
+        "4": 34,
+        "5": 17,
+        "6": 15
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 185,
+        "decision:flood": 178,
+        "radio-link-loss": 189,
+        "duplicate-suppression": 188,
+        "mpr-suppression": 174,
+        "mpr-physical-coverage-gap": 30,
+        "source-retries-exhausted": 126,
+        "decision:queue": 52,
+        "queued": 52,
+        "decision:route": 158,
+        "advertised-route-over-five": 109,
+        "ttl-exhausted": 33,
+        "decision:direct": 231,
+        "source-backup": 7,
+        "route-reverse-to-sender": 55,
+        "route-age-over-10s": 85
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "development",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "profile": "baseline",
+      "seeds": [
+        4301,
+        4302
+      ],
+      "fiveRatio": 0.7266666666666667,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.7133333333333334,
+      "means": {
+        "five": 109,
+        "three": 84.5,
+        "overall": 114.5,
+        "totalTx": 35633.5,
+        "relayTx": 35633.5,
+        "p50": 634.0245163976215,
+        "p95": 88046.35245256242,
+        "modeledBatteryDrain": 0.07902886775193635,
+        "queueAtHorizon": 91.5,
+        "jainTx": 0.6310515135108324,
+        "maxTxShare": 0.05116345718101825,
+        "avgLatencyMs": 11233.574557254899,
+        "retriesSent": 142,
+        "retriesExhausted": 63,
+        "routeExpiries": 4267.5,
+        "totalQueued": 91.5,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.13948497854077252,
+        "wakeLockMs": 101896151.35244301,
+        "lostTransmissions": 1239,
+        "controlOverhead": 722426.5,
+        "radioDemandRatio": 7.547863063143928
+      },
+      "firstArrivalHopHistogram": {
+        "1": 100,
+        "3": 31,
+        "2": 38,
+        "4": 32,
+        "6": 11,
+        "5": 17
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 187,
+        "decision:flood": 179,
+        "radio-link-loss": 176,
+        "duplicate-suppression": 184,
+        "mpr-suppression": 173,
+        "mpr-physical-coverage-gap": 39,
+        "source-retries-exhausted": 126,
+        "decision:queue": 56,
+        "queued": 56,
+        "decision:direct": 220,
+        "decision:route": 165,
+        "advertised-route-over-five": 113,
+        "route-age-over-10s": 102,
+        "route-reverse-to-sender": 60,
+        "ttl-exhausted": 30
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "development",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "profile": "ogm-epoch-v1",
+      "seeds": [
+        4301,
+        4302
+      ],
+      "fiveRatio": 0.7233333333333334,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.6933333333333334,
+      "means": {
+        "five": 108.5,
+        "three": 84,
+        "overall": 116.5,
+        "totalTx": 31917,
+        "relayTx": 31917,
+        "p50": 661.7177810496651,
+        "p95": 63562.25986078032,
+        "modeledBatteryDrain": 0.07819026744602359,
+        "queueAtHorizon": 87.5,
+        "jainTx": 0.6482568104075421,
+        "maxTxShare": 0.051435376152710384,
+        "avgLatencyMs": 8906.381958174432,
+        "retriesSent": 145,
+        "retriesExhausted": 63.5,
+        "routeExpiries": 4300.5,
+        "totalQueued": 87.5,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.1502145922746781,
+        "wakeLockMs": 100830418.91913071,
+        "lostTransmissions": 1137,
+        "controlOverhead": 724600,
+        "radioDemandRatio": 7.468919919935606
+      },
+      "firstArrivalHopHistogram": {
+        "1": 100,
+        "3": 37,
+        "2": 31,
+        "4": 32,
+        "6": 16,
+        "5": 17
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 173,
+        "decision:flood": 165,
+        "radio-link-loss": 164,
+        "duplicate-suppression": 171,
+        "mpr-suppression": 160,
+        "mpr-physical-coverage-gap": 28,
+        "source-retries-exhausted": 127,
+        "decision:queue": 42,
+        "queued": 42,
+        "decision:direct": 230,
+        "decision:route": 173,
+        "advertised-route-over-five": 129,
+        "ttl-exhausted": 32,
+        "route-age-over-10s": 102,
+        "route-reverse-to-sender": 42
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "development",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "profile": "source-backup-v1",
+      "seeds": [
+        4301,
+        4302
+      ],
+      "fiveRatio": 0.7166666666666667,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.7133333333333334,
+      "means": {
+        "five": 107.5,
+        "three": 86,
+        "overall": 115,
+        "totalTx": 35415,
+        "relayTx": 35415,
+        "p50": 658.4363318805117,
+        "p95": 74403.36654902902,
+        "modeledBatteryDrain": 0.07825882401161077,
+        "queueAtHorizon": 93.5,
+        "jainTx": 0.6443662438022011,
+        "maxTxShare": 0.05236388378817096,
+        "avgLatencyMs": 10672.75537102322,
+        "retriesSent": 145,
+        "retriesExhausted": 63.5,
+        "routeExpiries": 4318.5,
+        "totalQueued": 93.5,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.14377682403433478,
+        "wakeLockMs": 101914966.12040094,
+        "lostTransmissions": 1253.5,
+        "controlOverhead": 723315.5,
+        "radioDemandRatio": 7.549256749659328
+      },
+      "firstArrivalHopHistogram": {
+        "1": 99,
+        "3": 38,
+        "2": 35,
+        "5": 14,
+        "6": 15,
+        "4": 29
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 187,
+        "decision:flood": 177,
+        "radio-link-loss": 186,
+        "duplicate-suppression": 186,
+        "mpr-suppression": 172,
+        "mpr-physical-coverage-gap": 41,
+        "source-retries-exhausted": 127,
+        "decision:route": 168,
+        "advertised-route-over-five": 117,
+        "ttl-exhausted": 25,
+        "decision:queue": 55,
+        "queued": 55,
+        "decision:direct": 226,
+        "source-backup": 8,
+        "route-age-over-10s": 106,
+        "route-reverse-to-sender": 63
+      },
+      "meanParetoEfficient": false
+    },
+    {
+      "split": "final",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "profile": "baseline",
+      "seeds": [
+        7401,
+        7402,
+        7403,
+        7404
+      ],
+      "fiveRatio": 0.79,
+      "seedsAbove90": 1,
+      "worstFiveRatio": 0.7066666666666667,
+      "means": {
+        "five": 118.5,
+        "three": 85.75,
+        "overall": 133.5,
+        "totalTx": 41309.75,
+        "relayTx": 41309.75,
+        "p50": 910.3164547431516,
+        "p95": 49758.78289290005,
+        "modeledBatteryDrain": -0.08724344879026483,
+        "queueAtHorizon": 76,
+        "jainTx": 0.631983761182018,
+        "maxTxShare": 0.05131732620237467,
+        "avgLatencyMs": 7262.521791461229,
+        "retriesSent": 125,
+        "retriesExhausted": 53,
+        "routeExpiries": 3470.25,
+        "totalQueued": 76,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.1223175965665236,
+        "wakeLockMs": 119717264.55914912,
+        "lostTransmissions": 1465.5,
+        "controlOverhead": 853301.5,
+        "radioDemandRatio": 8.867945522899934
+      },
+      "firstArrivalHopHistogram": {
+        "4": 72,
+        "1": 189,
+        "3": 95,
+        "5": 59,
+        "6": 60,
+        "2": 59
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 366,
+        "decision:flood": 352,
+        "radio-link-loss": 365,
+        "duplicate-suppression": 370,
+        "mpr-suppression": 334,
+        "decision:direct": 528,
+        "source-retries-exhausted": 212,
+        "decision:route": 370,
+        "mpr-physical-coverage-gap": 48,
+        "advertised-route-over-five": 251,
+        "ttl-exhausted": 62,
+        "route-reverse-to-sender": 159,
+        "route-age-over-10s": 169,
+        "decision:queue": 86,
+        "queued": 86
+      },
+      "meanParetoEfficient": false
+    },
+    {
+      "split": "final",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "profile": "ogm-epoch-v1",
+      "seeds": [
+        7401,
+        7402,
+        7403,
+        7404
+      ],
+      "fiveRatio": 0.8016666666666666,
+      "seedsAbove90": 1,
+      "worstFiveRatio": 0.7266666666666667,
+      "means": {
+        "five": 120.25,
+        "three": 86.25,
+        "overall": 137,
+        "totalTx": 35421.75,
+        "relayTx": 35421.75,
+        "p50": 979.0875382564263,
+        "p95": 37570.570208770805,
+        "modeledBatteryDrain": -0.08768583160276508,
+        "queueAtHorizon": 71,
+        "jainTx": 0.6096107468753376,
+        "maxTxShare": 0.05560855016827542,
+        "avgLatencyMs": 6881.880018994898,
+        "retriesSent": 124.25,
+        "retriesExhausted": 50.75,
+        "routeExpiries": 3600,
+        "totalQueued": 71,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.12982832618025753,
+        "wakeLockMs": 117477223.51190566,
+        "lostTransmissions": 1221.75,
+        "controlOverhead": 851988.75,
+        "radioDemandRatio": 8.702016556437457
+      },
+      "firstArrivalHopHistogram": {
+        "4": 78,
+        "1": 189,
+        "3": 101,
+        "5": 58,
+        "6": 67,
+        "2": 55
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 317,
+        "decision:flood": 302,
+        "radio-link-loss": 330,
+        "duplicate-suppression": 325,
+        "mpr-suppression": 290,
+        "decision:direct": 548,
+        "source-retries-exhausted": 203,
+        "decision:route": 382,
+        "mpr-physical-coverage-gap": 47,
+        "advertised-route-over-five": 269,
+        "route-age-over-10s": 163,
+        "route-reverse-to-sender": 99,
+        "ttl-exhausted": 40,
+        "decision:queue": 70,
+        "queued": 70
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "final",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "profile": "source-backup-v1",
+      "seeds": [
+        7401,
+        7402,
+        7403,
+        7404
+      ],
+      "fiveRatio": 0.8033333333333333,
+      "seedsAbove90": 1,
+      "worstFiveRatio": 0.7266666666666667,
+      "means": {
+        "five": 120.5,
+        "three": 86.75,
+        "overall": 134.5,
+        "totalTx": 42722.25,
+        "relayTx": 42722.25,
+        "p50": 901.856950923102,
+        "p95": 53250.77379063121,
+        "modeledBatteryDrain": -0.0875950112902639,
+        "queueAtHorizon": 74.5,
+        "jainTx": 0.633455621806807,
+        "maxTxShare": 0.0494913644876662,
+        "avgLatencyMs": 7493.069483757914,
+        "retriesSent": 122.5,
+        "retriesExhausted": 52,
+        "routeExpiries": 3375.75,
+        "totalQueued": 74.5,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.12660944206008584,
+        "wakeLockMs": 120193492.54973674,
+        "lostTransmissions": 1500.5,
+        "controlOverhead": 853036.75,
+        "radioDemandRatio": 8.903221670350872
+      },
+      "firstArrivalHopHistogram": {
+        "4": 76,
+        "1": 190,
+        "3": 96,
+        "5": 59,
+        "6": 56,
+        "2": 61
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 365,
+        "decision:flood": 357,
+        "radio-link-loss": 364,
+        "duplicate-suppression": 372,
+        "mpr-suppression": 340,
+        "decision:direct": 529,
+        "source-retries-exhausted": 208,
+        "decision:route": 362,
+        "mpr-physical-coverage-gap": 52,
+        "advertised-route-over-five": 241,
+        "ttl-exhausted": 63,
+        "route-reverse-to-sender": 149,
+        "route-age-over-10s": 147,
+        "decision:queue": 83,
+        "queued": 83,
+        "source-backup": 8
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "final",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "profile": "baseline",
+      "seeds": [
+        7401,
+        7402,
+        7403,
+        7404
+      ],
+      "fiveRatio": 0.8083333333333333,
+      "seedsAbove90": 1,
+      "worstFiveRatio": 0.7066666666666667,
+      "means": {
+        "five": 121.25,
+        "three": 89,
+        "overall": 134,
+        "totalTx": 40967.5,
+        "relayTx": 40967.5,
+        "p50": 904.6272357192356,
+        "p95": 45111.44407079148,
+        "modeledBatteryDrain": -0.09464548108521259,
+        "queueAtHorizon": 76,
+        "jainTx": 0.648564658746011,
+        "maxTxShare": 0.04953991736793398,
+        "avgLatencyMs": 6691.916702958832,
+        "retriesSent": 123.25,
+        "retriesExhausted": 50.75,
+        "routeExpiries": 3164.25,
+        "totalQueued": 76,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.12017167381974249,
+        "wakeLockMs": 119628142.72891825,
+        "lostTransmissions": 1464,
+        "controlOverhead": 853518,
+        "radioDemandRatio": 8.861343905845796
+      },
+      "firstArrivalHopHistogram": {
+        "4": 70,
+        "1": 189,
+        "3": 107,
+        "5": 59,
+        "6": 51,
+        "2": 60
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 368,
+        "decision:flood": 351,
+        "radio-link-loss": 360,
+        "duplicate-suppression": 371,
+        "mpr-suppression": 339,
+        "decision:direct": 530,
+        "source-retries-exhausted": 203,
+        "decision:queue": 87,
+        "queued": 87,
+        "decision:route": 368,
+        "advertised-route-over-five": 252,
+        "mpr-physical-coverage-gap": 56,
+        "route-reverse-to-sender": 156,
+        "route-age-over-10s": 174,
+        "ttl-exhausted": 57
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "final",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "profile": "ogm-epoch-v1",
+      "seeds": [
+        7401,
+        7402,
+        7403,
+        7404
+      ],
+      "fiveRatio": 0.8033333333333333,
+      "seedsAbove90": 1,
+      "worstFiveRatio": 0.68,
+      "means": {
+        "five": 120.5,
+        "three": 85.25,
+        "overall": 136.25,
+        "totalTx": 36104.25,
+        "relayTx": 36104.25,
+        "p50": 931.9223744404735,
+        "p95": 40867.11184497748,
+        "modeledBatteryDrain": -0.09329699226590268,
+        "queueAtHorizon": 76,
+        "jainTx": 0.6112767083469504,
+        "maxTxShare": 0.05642008145767964,
+        "avgLatencyMs": 6348.787637551816,
+        "retriesSent": 128,
+        "retriesExhausted": 51.5,
+        "routeExpiries": 3381.25,
+        "totalQueued": 76,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.1255364806866953,
+        "wakeLockMs": 117850073.4049907,
+        "lostTransmissions": 1289.25,
+        "controlOverhead": 853090.75,
+        "radioDemandRatio": 8.729635067036348
+      },
+      "firstArrivalHopHistogram": {
+        "4": 72,
+        "1": 189,
+        "3": 99,
+        "5": 69,
+        "6": 63,
+        "2": 53
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 320,
+        "decision:flood": 310,
+        "radio-link-loss": 327,
+        "duplicate-suppression": 327,
+        "mpr-suppression": 299,
+        "decision:direct": 545,
+        "source-retries-exhausted": 206,
+        "decision:route": 386,
+        "advertised-route-over-five": 281,
+        "mpr-physical-coverage-gap": 62,
+        "route-age-over-10s": 178,
+        "route-reverse-to-sender": 106,
+        "ttl-exhausted": 45,
+        "decision:queue": 72,
+        "queued": 72
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "final",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "profile": "source-backup-v1",
+      "seeds": [
+        7401,
+        7402,
+        7403,
+        7404
+      ],
+      "fiveRatio": 0.8066666666666666,
+      "seedsAbove90": 1,
+      "worstFiveRatio": 0.7,
+      "means": {
+        "five": 121,
+        "three": 89.25,
+        "overall": 134,
+        "totalTx": 40699.5,
+        "relayTx": 40699.5,
+        "p50": 898.7800157349557,
+        "p95": 47540.14467254747,
+        "modeledBatteryDrain": -0.09420790200019763,
+        "queueAtHorizon": 78,
+        "jainTx": 0.6452404005563052,
+        "maxTxShare": 0.049949152593679345,
+        "avgLatencyMs": 6969.355630562434,
+        "retriesSent": 123.75,
+        "retriesExhausted": 51.75,
+        "routeExpiries": 3193.75,
+        "totalQueued": 78,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.11373390557939915,
+        "wakeLockMs": 119496079.74187776,
+        "lostTransmissions": 1454.5,
+        "controlOverhead": 853265,
+        "radioDemandRatio": 8.851561462361314
+      },
+      "firstArrivalHopHistogram": {
+        "4": 70,
+        "1": 189,
+        "3": 107,
+        "5": 57,
+        "6": 52,
+        "2": 61
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 367,
+        "decision:flood": 349,
+        "radio-link-loss": 361,
+        "duplicate-suppression": 370,
+        "mpr-suppression": 340,
+        "decision:direct": 531,
+        "source-retries-exhausted": 207,
+        "decision:queue": 90,
+        "queued": 90,
+        "decision:route": 367,
+        "advertised-route-over-five": 253,
+        "mpr-physical-coverage-gap": 51,
+        "route-reverse-to-sender": 160,
+        "route-age-over-10s": 170,
+        "ttl-exhausted": 54,
+        "source-backup": 6
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "campus_quad",
+      "duty": false,
+      "profile": "baseline",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 0.9933333333333333,
+      "seedsAbove90": 1,
+      "worstFiveRatio": 0.9933333333333333,
+      "means": {
+        "five": 149,
+        "three": 141,
+        "overall": 150,
+        "totalTx": 3721,
+        "relayTx": 3721,
+        "p50": 318.04938605520874,
+        "p95": 4248.717595513444,
+        "modeledBatteryDrain": -0.07401570488284426,
+        "queueAtHorizon": 0,
+        "jainTx": 0.6999162375759145,
+        "maxTxShare": 0.13813490997043806,
+        "avgLatencyMs": 787.1817478838532,
+        "retriesSent": 13,
+        "retriesExhausted": 0,
+        "routeExpiries": 47,
+        "totalQueued": 0,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.10300429184549356,
+        "wakeLockMs": 21215700.941716246,
+        "lostTransmissions": 131,
+        "controlOverhead": 152959,
+        "radioDemandRatio": 4.714600209270277
+      },
+      "firstArrivalHopHistogram": {
+        "3": 21,
+        "2": 40,
+        "1": 80,
+        "6": 1,
+        "4": 7,
+        "5": 1
+      },
+      "overlappingMessageTags": {
+        "decision:route": 60,
+        "decision:direct": 150,
+        "advertised-route-over-five": 9,
+        "route-age-over-10s": 7,
+        "radio-link-loss": 35,
+        "decision:wait-mpr": 52,
+        "decision:flood": 52,
+        "route-reverse-to-sender": 12,
+        "duplicate-suppression": 52,
+        "mpr-suppression": 49,
+        "mpr-physical-coverage-gap": 4
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "campus_quad",
+      "duty": false,
+      "profile": "ogm-epoch-v1",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 1.0,
+      "seedsAbove90": 1,
+      "worstFiveRatio": 1.0,
+      "means": {
+        "five": 150,
+        "three": 146,
+        "overall": 150,
+        "totalTx": 2330,
+        "relayTx": 2330,
+        "p50": 301.93336008116603,
+        "p95": 4426.988364846911,
+        "modeledBatteryDrain": -0.07401570488284426,
+        "queueAtHorizon": 0,
+        "jainTx": 0.7231591005967605,
+        "maxTxShare": 0.1386266094420601,
+        "avgLatencyMs": 697.0959197634832,
+        "retriesSent": 13,
+        "retriesExhausted": 0,
+        "routeExpiries": 59,
+        "totalQueued": 0,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.10300429184549356,
+        "wakeLockMs": 20795312.29186731,
+        "lostTransmissions": 74,
+        "controlOverhead": 153513,
+        "radioDemandRatio": 4.621180509303846
+      },
+      "firstArrivalHopHistogram": {
+        "4": 4,
+        "2": 43,
+        "1": 81,
+        "3": 22
+      },
+      "overlappingMessageTags": {
+        "decision:route": 66,
+        "decision:direct": 150,
+        "decision:wait-mpr": 35,
+        "decision:flood": 38,
+        "duplicate-suppression": 38,
+        "mpr-suppression": 33,
+        "route-reverse-to-sender": 8,
+        "advertised-route-over-five": 13,
+        "radio-link-loss": 29,
+        "mpr-physical-coverage-gap": 2,
+        "route-age-over-10s": 4
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "campus_quad",
+      "duty": false,
+      "profile": "source-backup-v1",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 0.9933333333333333,
+      "seedsAbove90": 1,
+      "worstFiveRatio": 0.9933333333333333,
+      "means": {
+        "five": 149,
+        "three": 146,
+        "overall": 149,
+        "totalTx": 3767,
+        "relayTx": 3767,
+        "p50": 315.85693925619125,
+        "p95": 1042.5589146930724,
+        "modeledBatteryDrain": -0.07401570488284426,
+        "queueAtHorizon": 2,
+        "jainTx": 0.6774216016231054,
+        "maxTxShare": 0.13989912397132998,
+        "avgLatencyMs": 695.8530677154336,
+        "retriesSent": 15,
+        "retriesExhausted": 2,
+        "routeExpiries": 63,
+        "totalQueued": 2,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.07725321888412016,
+        "wakeLockMs": 21333280.93791478,
+        "lostTransmissions": 136,
+        "controlOverhead": 153707,
+        "radioDemandRatio": 4.7407290973143965
+      },
+      "firstArrivalHopHistogram": {
+        "3": 22,
+        "2": 43,
+        "1": 81,
+        "4": 3
+      },
+      "overlappingMessageTags": {
+        "decision:route": 60,
+        "decision:direct": 149,
+        "source-backup": 15,
+        "radio-link-loss": 36,
+        "advertised-route-over-five": 15,
+        "route-age-over-10s": 9,
+        "duplicate-suppression": 62,
+        "decision:wait-mpr": 56,
+        "decision:flood": 54,
+        "route-reverse-to-sender": 15,
+        "mpr-suppression": 53,
+        "source-retries-exhausted": 2,
+        "mpr-physical-coverage-gap": 7
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "campus_quad",
+      "duty": true,
+      "profile": "baseline",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 0.9933333333333333,
+      "seedsAbove90": 1,
+      "worstFiveRatio": 0.9933333333333333,
+      "means": {
+        "five": 149,
+        "three": 144,
+        "overall": 150,
+        "totalTx": 3960,
+        "relayTx": 3960,
+        "p50": 315.77892780071124,
+        "p95": 1455.246847034432,
+        "modeledBatteryDrain": -0.05143031146163779,
+        "queueAtHorizon": 0,
+        "jainTx": 0.6556477791361384,
+        "maxTxShare": 0.1431818181818182,
+        "avgLatencyMs": 636.7130823795994,
+        "retriesSent": 11,
+        "retriesExhausted": 0,
+        "routeExpiries": 48,
+        "totalQueued": 0,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.07725321888412016,
+        "wakeLockMs": 21376825.371505443,
+        "lostTransmissions": 145,
+        "controlOverhead": 153449,
+        "radioDemandRatio": 4.750405638112321
+      },
+      "firstArrivalHopHistogram": {
+        "3": 19,
+        "2": 44,
+        "1": 81,
+        "6": 1,
+        "4": 4,
+        "5": 1
+      },
+      "overlappingMessageTags": {
+        "decision:route": 55,
+        "decision:direct": 150,
+        "advertised-route-over-five": 11,
+        "route-age-over-10s": 5,
+        "decision:wait-mpr": 48,
+        "decision:flood": 50,
+        "radio-link-loss": 34,
+        "route-reverse-to-sender": 14,
+        "duplicate-suppression": 50,
+        "mpr-suppression": 42,
+        "mpr-physical-coverage-gap": 1
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "campus_quad",
+      "duty": true,
+      "profile": "ogm-epoch-v1",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 1.0,
+      "seedsAbove90": 1,
+      "worstFiveRatio": 1.0,
+      "means": {
+        "five": 150,
+        "three": 145,
+        "overall": 150,
+        "totalTx": 2528,
+        "relayTx": 2528,
+        "p50": 309.60635408293456,
+        "p95": 1366.9224713835865,
+        "modeledBatteryDrain": -0.05087953021164149,
+        "queueAtHorizon": 0,
+        "jainTx": 0.7231880646738245,
+        "maxTxShare": 0.14477848101265822,
+        "avgLatencyMs": 635.7860155170473,
+        "retriesSent": 16,
+        "retriesExhausted": 0,
+        "routeExpiries": 40,
+        "totalQueued": 0,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.10300429184549356,
+        "wakeLockMs": 20895591.42992673,
+        "lostTransmissions": 74,
+        "controlOverhead": 153745,
+        "radioDemandRatio": 4.643464762205942
+      },
+      "firstArrivalHopHistogram": {
+        "4": 3,
+        "2": 46,
+        "1": 81,
+        "3": 18,
+        "5": 2
+      },
+      "overlappingMessageTags": {
+        "decision:route": 62,
+        "decision:direct": 150,
+        "decision:wait-mpr": 33,
+        "decision:flood": 37,
+        "duplicate-suppression": 37,
+        "mpr-suppression": 30,
+        "route-reverse-to-sender": 10,
+        "advertised-route-over-five": 14,
+        "radio-link-loss": 26,
+        "mpr-physical-coverage-gap": 1,
+        "route-age-over-10s": 3
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "campus_quad",
+      "duty": true,
+      "profile": "source-backup-v1",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 0.9933333333333333,
+      "seedsAbove90": 1,
+      "worstFiveRatio": 0.9933333333333333,
+      "means": {
+        "five": 149,
+        "three": 144,
+        "overall": 150,
+        "totalTx": 4211,
+        "relayTx": 4211,
+        "p50": 316.3807316496968,
+        "p95": 1271.0194045165554,
+        "modeledBatteryDrain": -0.05198109271163409,
+        "queueAtHorizon": 1,
+        "jainTx": 0.6773603205028791,
+        "maxTxShare": 0.13559724530990264,
+        "avgLatencyMs": 651.8035171915622,
+        "retriesSent": 13,
+        "retriesExhausted": 1,
+        "routeExpiries": 46,
+        "totalQueued": 1,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.10300429184549356,
+        "wakeLockMs": 21347070.68974088,
+        "lostTransmissions": 130,
+        "controlOverhead": 152594,
+        "radioDemandRatio": 4.743793486609084
+      },
+      "firstArrivalHopHistogram": {
+        "3": 20,
+        "2": 44,
+        "1": 80,
+        "6": 1,
+        "4": 5
+      },
+      "overlappingMessageTags": {
+        "decision:route": 57,
+        "decision:direct": 150,
+        "source-backup": 14,
+        "radio-link-loss": 38,
+        "advertised-route-over-five": 11,
+        "route-age-over-10s": 9,
+        "decision:wait-mpr": 55,
+        "decision:flood": 55,
+        "duplicate-suppression": 61,
+        "route-reverse-to-sender": 13,
+        "mpr-suppression": 51,
+        "source-retries-exhausted": 1,
+        "mpr-physical-coverage-gap": 4
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "partitioned_pair",
+      "duty": false,
+      "profile": "baseline",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 0.44,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.44,
+      "means": {
+        "five": 66,
+        "three": 66,
+        "overall": 66,
+        "totalTx": 1884,
+        "relayTx": 1884,
+        "p50": 253.59457255573943,
+        "p95": 312.8637533215806,
+        "modeledBatteryDrain": -0.09268605680661146,
+        "queueAtHorizon": 82,
+        "jainTx": 0.6841190665258386,
+        "maxTxShare": 0.27441613588110403,
+        "avgLatencyMs": 251.4767883794213,
+        "retriesSent": 165,
+        "retriesExhausted": 82,
+        "routeExpiries": 0,
+        "totalQueued": 82,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.20600858369098712,
+        "wakeLockMs": 3495159.0842097905,
+        "lostTransmissions": 9,
+        "controlOverhead": 17984,
+        "radioDemandRatio": 1.5534040374265736
+      },
+      "firstArrivalHopHistogram": {
+        "1": 66
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 84,
+        "decision:flood": 84,
+        "mpr-suppression": 84,
+        "source-retries-exhausted": 82,
+        "decision:direct": 66,
+        "duplicate-suppression": 62,
+        "radio-link-loss": 8
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "partitioned_pair",
+      "duty": false,
+      "profile": "ogm-epoch-v1",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 0.44,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.44,
+      "means": {
+        "five": 66,
+        "three": 66,
+        "overall": 66,
+        "totalTx": 1884,
+        "relayTx": 1884,
+        "p50": 253.59457255573943,
+        "p95": 312.8637533215806,
+        "modeledBatteryDrain": -0.09268605680661146,
+        "queueAtHorizon": 82,
+        "jainTx": 0.6841190665258386,
+        "maxTxShare": 0.27441613588110403,
+        "avgLatencyMs": 251.4767883794213,
+        "retriesSent": 165,
+        "retriesExhausted": 82,
+        "routeExpiries": 0,
+        "totalQueued": 82,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.20600858369098712,
+        "wakeLockMs": 3495159.0842097905,
+        "lostTransmissions": 9,
+        "controlOverhead": 17984,
+        "radioDemandRatio": 1.5534040374265736
+      },
+      "firstArrivalHopHistogram": {
+        "1": 66
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 84,
+        "decision:flood": 84,
+        "mpr-suppression": 84,
+        "source-retries-exhausted": 82,
+        "decision:direct": 66,
+        "duplicate-suppression": 62,
+        "radio-link-loss": 8
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "partitioned_pair",
+      "duty": false,
+      "profile": "source-backup-v1",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 0.44,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.44,
+      "means": {
+        "five": 66,
+        "three": 66,
+        "overall": 66,
+        "totalTx": 1884,
+        "relayTx": 1884,
+        "p50": 253.59457255573943,
+        "p95": 312.8637533215806,
+        "modeledBatteryDrain": -0.09268605680661146,
+        "queueAtHorizon": 82,
+        "jainTx": 0.6841190665258386,
+        "maxTxShare": 0.27441613588110403,
+        "avgLatencyMs": 251.4767883794213,
+        "retriesSent": 165,
+        "retriesExhausted": 82,
+        "routeExpiries": 0,
+        "totalQueued": 82,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.20600858369098712,
+        "wakeLockMs": 3495159.0842097905,
+        "lostTransmissions": 9,
+        "controlOverhead": 17984,
+        "radioDemandRatio": 1.5534040374265736
+      },
+      "firstArrivalHopHistogram": {
+        "1": 66
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 84,
+        "decision:flood": 84,
+        "mpr-suppression": 84,
+        "source-retries-exhausted": 82,
+        "decision:direct": 66,
+        "duplicate-suppression": 62,
+        "radio-link-loss": 8
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "partitioned_pair",
+      "duty": true,
+      "profile": "baseline",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 0.44,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.44,
+      "means": {
+        "five": 66,
+        "three": 66,
+        "overall": 66,
+        "totalTx": 1876,
+        "relayTx": 1876,
+        "p50": 253.81583265727386,
+        "p95": 313.83309353142977,
+        "modeledBatteryDrain": -0.0643493695652515,
+        "queueAtHorizon": 82,
+        "jainTx": 0.6095170798955324,
+        "maxTxShare": 0.2755863539445629,
+        "avgLatencyMs": 244.92989907411604,
+        "retriesSent": 165,
+        "retriesExhausted": 82,
+        "routeExpiries": 0,
+        "totalQueued": 82,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.05150214592274678,
+        "wakeLockMs": 3507508.6846715,
+        "lostTransmissions": 13,
+        "controlOverhead": 18064,
+        "radioDemandRatio": 1.558892748742889
+      },
+      "firstArrivalHopHistogram": {
+        "1": 66
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 84,
+        "decision:flood": 84,
+        "mpr-suppression": 84,
+        "source-retries-exhausted": 82,
+        "decision:direct": 66,
+        "duplicate-suppression": 65,
+        "radio-link-loss": 13
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "partitioned_pair",
+      "duty": true,
+      "profile": "ogm-epoch-v1",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 0.44,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.44,
+      "means": {
+        "five": 66,
+        "three": 66,
+        "overall": 66,
+        "totalTx": 1876,
+        "relayTx": 1876,
+        "p50": 253.81583265727386,
+        "p95": 313.83309353142977,
+        "modeledBatteryDrain": -0.0643493695652515,
+        "queueAtHorizon": 82,
+        "jainTx": 0.6095170798955324,
+        "maxTxShare": 0.2755863539445629,
+        "avgLatencyMs": 244.92989907411604,
+        "retriesSent": 165,
+        "retriesExhausted": 82,
+        "routeExpiries": 0,
+        "totalQueued": 82,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.05150214592274678,
+        "wakeLockMs": 3507508.6846715,
+        "lostTransmissions": 13,
+        "controlOverhead": 18064,
+        "radioDemandRatio": 1.558892748742889
+      },
+      "firstArrivalHopHistogram": {
+        "1": 66
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 84,
+        "decision:flood": 84,
+        "mpr-suppression": 84,
+        "source-retries-exhausted": 82,
+        "decision:direct": 66,
+        "duplicate-suppression": 65,
+        "radio-link-loss": 13
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "partitioned_pair",
+      "duty": true,
+      "profile": "source-backup-v1",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 0.44,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.44,
+      "means": {
+        "five": 66,
+        "three": 66,
+        "overall": 66,
+        "totalTx": 1876,
+        "relayTx": 1876,
+        "p50": 253.81583265727386,
+        "p95": 313.83309353142977,
+        "modeledBatteryDrain": -0.0643493695652515,
+        "queueAtHorizon": 82,
+        "jainTx": 0.6095170798955324,
+        "maxTxShare": 0.2755863539445629,
+        "avgLatencyMs": 244.92989907411604,
+        "retriesSent": 165,
+        "retriesExhausted": 82,
+        "routeExpiries": 0,
+        "totalQueued": 82,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.05150214592274678,
+        "wakeLockMs": 3507508.6846715,
+        "lostTransmissions": 13,
+        "controlOverhead": 18064,
+        "radioDemandRatio": 1.558892748742889
+      },
+      "firstArrivalHopHistogram": {
+        "1": 66
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 84,
+        "decision:flood": 84,
+        "mpr-suppression": 84,
+        "source-retries-exhausted": 82,
+        "decision:direct": 66,
+        "duplicate-suppression": 65,
+        "radio-link-loss": 13
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "sparse_village",
+      "duty": false,
+      "profile": "baseline",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 0.29333333333333333,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.29333333333333333,
+      "means": {
+        "five": 44,
+        "three": 44,
+        "overall": 44,
+        "totalTx": 1436,
+        "relayTx": 1436,
+        "p50": 246.98112592333928,
+        "p95": 305.97041880711913,
+        "modeledBatteryDrain": -0.020072016401167847,
+        "queueAtHorizon": 102,
+        "jainTx": 0.7232988186435446,
+        "maxTxShare": 0.22632311977715877,
+        "avgLatencyMs": 246.57312430647752,
+        "retriesSent": 206,
+        "retriesExhausted": 102,
+        "routeExpiries": 0,
+        "totalQueued": 102,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.04291845493562232,
+        "wakeLockMs": 2589566.621656553,
+        "lostTransmissions": 22,
+        "controlOverhead": 12070,
+        "radioDemandRatio": 0.9590987487616862
+      },
+      "firstArrivalHopHistogram": {
+        "1": 44
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 106,
+        "decision:flood": 106,
+        "mpr-suppression": 106,
+        "source-retries-exhausted": 102,
+        "decision:direct": 44,
+        "duplicate-suppression": 49,
+        "radio-link-loss": 20
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "sparse_village",
+      "duty": false,
+      "profile": "ogm-epoch-v1",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 0.29333333333333333,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.29333333333333333,
+      "means": {
+        "five": 44,
+        "three": 44,
+        "overall": 44,
+        "totalTx": 1436,
+        "relayTx": 1436,
+        "p50": 246.98112592333928,
+        "p95": 305.97041880711913,
+        "modeledBatteryDrain": -0.020072016401167847,
+        "queueAtHorizon": 102,
+        "jainTx": 0.7232988186435446,
+        "maxTxShare": 0.22632311977715877,
+        "avgLatencyMs": 246.57312430647752,
+        "retriesSent": 206,
+        "retriesExhausted": 102,
+        "routeExpiries": 0,
+        "totalQueued": 102,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.04291845493562232,
+        "wakeLockMs": 2589566.621656553,
+        "lostTransmissions": 22,
+        "controlOverhead": 12070,
+        "radioDemandRatio": 0.9590987487616862
+      },
+      "firstArrivalHopHistogram": {
+        "1": 44
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 106,
+        "decision:flood": 106,
+        "mpr-suppression": 106,
+        "source-retries-exhausted": 102,
+        "decision:direct": 44,
+        "duplicate-suppression": 49,
+        "radio-link-loss": 20
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "sparse_village",
+      "duty": false,
+      "profile": "source-backup-v1",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 0.29333333333333333,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.29333333333333333,
+      "means": {
+        "five": 44,
+        "three": 44,
+        "overall": 44,
+        "totalTx": 1436,
+        "relayTx": 1436,
+        "p50": 246.98112592333928,
+        "p95": 305.97041880711913,
+        "modeledBatteryDrain": -0.020072016401167847,
+        "queueAtHorizon": 102,
+        "jainTx": 0.7232988186435446,
+        "maxTxShare": 0.22632311977715877,
+        "avgLatencyMs": 246.57312430647752,
+        "retriesSent": 206,
+        "retriesExhausted": 102,
+        "routeExpiries": 0,
+        "totalQueued": 102,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.04291845493562232,
+        "wakeLockMs": 2589566.621656553,
+        "lostTransmissions": 22,
+        "controlOverhead": 12070,
+        "radioDemandRatio": 0.9590987487616862
+      },
+      "firstArrivalHopHistogram": {
+        "1": 44
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 106,
+        "decision:flood": 106,
+        "mpr-suppression": 106,
+        "source-retries-exhausted": 102,
+        "decision:direct": 44,
+        "duplicate-suppression": 49,
+        "radio-link-loss": 20
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "sparse_village",
+      "duty": true,
+      "profile": "baseline",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 0.29333333333333333,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.29333333333333333,
+      "means": {
+        "five": 44,
+        "three": 44,
+        "overall": 44,
+        "totalTx": 1436,
+        "relayTx": 1436,
+        "p50": 246.98112592333928,
+        "p95": 305.97041880711913,
+        "modeledBatteryDrain": -0.012953147606897808,
+        "queueAtHorizon": 102,
+        "jainTx": 0.7232988186435446,
+        "maxTxShare": 0.22632311977715877,
+        "avgLatencyMs": 246.57312430647752,
+        "retriesSent": 206,
+        "retriesExhausted": 102,
+        "routeExpiries": 0,
+        "totalQueued": 102,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.04291845493562232,
+        "wakeLockMs": 2589566.621656553,
+        "lostTransmissions": 22,
+        "controlOverhead": 12070,
+        "radioDemandRatio": 0.9590987487616862
+      },
+      "firstArrivalHopHistogram": {
+        "1": 44
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 106,
+        "decision:flood": 106,
+        "mpr-suppression": 106,
+        "source-retries-exhausted": 102,
+        "decision:direct": 44,
+        "duplicate-suppression": 49,
+        "radio-link-loss": 20
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "sparse_village",
+      "duty": true,
+      "profile": "ogm-epoch-v1",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 0.29333333333333333,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.29333333333333333,
+      "means": {
+        "five": 44,
+        "three": 44,
+        "overall": 44,
+        "totalTx": 1436,
+        "relayTx": 1436,
+        "p50": 246.98112592333928,
+        "p95": 305.97041880711913,
+        "modeledBatteryDrain": -0.012953147606897808,
+        "queueAtHorizon": 102,
+        "jainTx": 0.7232988186435446,
+        "maxTxShare": 0.22632311977715877,
+        "avgLatencyMs": 246.57312430647752,
+        "retriesSent": 206,
+        "retriesExhausted": 102,
+        "routeExpiries": 0,
+        "totalQueued": 102,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.04291845493562232,
+        "wakeLockMs": 2589566.621656553,
+        "lostTransmissions": 22,
+        "controlOverhead": 12070,
+        "radioDemandRatio": 0.9590987487616862
+      },
+      "firstArrivalHopHistogram": {
+        "1": 44
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 106,
+        "decision:flood": 106,
+        "mpr-suppression": 106,
+        "source-retries-exhausted": 102,
+        "decision:direct": 44,
+        "duplicate-suppression": 49,
+        "radio-link-loss": 20
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "protected",
+      "scenario": "sparse_village",
+      "duty": true,
+      "profile": "source-backup-v1",
+      "seeds": [
+        7501
+      ],
+      "fiveRatio": 0.29333333333333333,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.29333333333333333,
+      "means": {
+        "five": 44,
+        "three": 44,
+        "overall": 44,
+        "totalTx": 1436,
+        "relayTx": 1436,
+        "p50": 246.98112592333928,
+        "p95": 305.97041880711913,
+        "modeledBatteryDrain": -0.012953147606897808,
+        "queueAtHorizon": 102,
+        "jainTx": 0.7232988186435446,
+        "maxTxShare": 0.22632311977715877,
+        "avgLatencyMs": 246.57312430647752,
+        "retriesSent": 206,
+        "retriesExhausted": 102,
+        "routeExpiries": 0,
+        "totalQueued": 102,
+        "channelDrops": 0,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.04291845493562232,
+        "wakeLockMs": 2589566.621656553,
+        "lostTransmissions": 22,
+        "controlOverhead": 12070,
+        "radioDemandRatio": 0.9590987487616862
+      },
+      "firstArrivalHopHistogram": {
+        "1": 44
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 106,
+        "decision:flood": 106,
+        "mpr-suppression": 106,
+        "source-retries-exhausted": 102,
+        "decision:direct": 44,
+        "duplicate-suppression": 49,
+        "radio-link-loss": 20
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "radio-sensitivity",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "profile": "baseline",
+      "seeds": [
+        7401
+      ],
+      "fiveRatio": 0.6066666666666667,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.6066666666666667,
+      "means": {
+        "five": 91,
+        "three": 83,
+        "overall": 92,
+        "totalTx": 6264,
+        "relayTx": 6264,
+        "p50": 6495.66879019374,
+        "p95": 86347.17927068705,
+        "modeledBatteryDrain": -0.209220540448104,
+        "queueAtHorizon": 100,
+        "jainTx": 0.7927825878234052,
+        "maxTxShare": 0.034642401021711365,
+        "avgLatencyMs": 17307.035695362138,
+        "retriesSent": 234,
+        "retriesExhausted": 94,
+        "routeExpiries": 4359,
+        "totalQueued": 100,
+        "channelDrops": 16276,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.1802575107296137,
+        "wakeLockMs": 105183641.21622224,
+        "lostTransmissions": 221,
+        "controlOverhead": 838172,
+        "radioDemandRatio": 7.791380830831274
+      },
+      "firstArrivalHopHistogram": {
+        "4": 7,
+        "1": 48,
+        "3": 25,
+        "2": 10,
+        "5": 1,
+        "6": 1
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 92,
+        "decision:flood": 88,
+        "radio-queue-full": 111,
+        "duplicate-suppression": 93,
+        "radio-receiver-loss": 99,
+        "radio-link-loss": 67,
+        "source-retries-exhausted": 94,
+        "decision:route": 68,
+        "decision:queue": 20,
+        "queued": 20,
+        "route-age-over-10s": 35,
+        "decision:direct": 94,
+        "mpr-suppression": 69,
+        "advertised-route-over-five": 37,
+        "ttl-exhausted": 6,
+        "route-reverse-to-sender": 16,
+        "mpr-physical-coverage-gap": 10
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "radio-sensitivity",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "profile": "source-backup-v1",
+      "seeds": [
+        7401
+      ],
+      "fiveRatio": 0.58,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.58,
+      "means": {
+        "five": 87,
+        "three": 78,
+        "overall": 89,
+        "totalTx": 6230,
+        "relayTx": 6230,
+        "p50": 7576.092995826621,
+        "p95": 44516.17146180011,
+        "modeledBatteryDrain": -0.21015804044807151,
+        "queueAtHorizon": 97,
+        "jainTx": 0.7851591927362119,
+        "maxTxShare": 0.035955056179775284,
+        "avgLatencyMs": 14367.817086713372,
+        "retriesSent": 232,
+        "retriesExhausted": 92,
+        "routeExpiries": 4392,
+        "totalQueued": 97,
+        "channelDrops": 15152,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.23175965665236054,
+        "wakeLockMs": 104923017.7214829,
+        "lostTransmissions": 212,
+        "controlOverhead": 836049,
+        "radioDemandRatio": 7.772075386776511
+      },
+      "firstArrivalHopHistogram": {
+        "4": 7,
+        "1": 47,
+        "3": 21,
+        "2": 10,
+        "5": 2,
+        "6": 2
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 89,
+        "decision:flood": 83,
+        "radio-queue-full": 106,
+        "duplicate-suppression": 88,
+        "radio-receiver-loss": 100,
+        "radio-link-loss": 66,
+        "source-retries-exhausted": 92,
+        "decision:route": 72,
+        "decision:queue": 19,
+        "queued": 19,
+        "decision:direct": 93,
+        "mpr-suppression": 70,
+        "advertised-route-over-five": 40,
+        "ttl-exhausted": 4,
+        "route-reverse-to-sender": 16,
+        "mpr-physical-coverage-gap": 12,
+        "route-age-over-10s": 37,
+        "source-backup": 2
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "radio-sensitivity",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "profile": "baseline",
+      "seeds": [
+        7401
+      ],
+      "fiveRatio": 0.6,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.6,
+      "means": {
+        "five": 90,
+        "three": 78,
+        "overall": 92,
+        "totalTx": 6384,
+        "relayTx": 6384,
+        "p50": 7222.219845480286,
+        "p95": 78474.02958072256,
+        "modeledBatteryDrain": -0.18255596998699652,
+        "queueAtHorizon": 102,
+        "jainTx": 0.7837557547855585,
+        "maxTxShare": 0.03352130325814536,
+        "avgLatencyMs": 17048.31897904441,
+        "retriesSent": 236,
+        "retriesExhausted": 97,
+        "routeExpiries": 4189,
+        "totalQueued": 102,
+        "channelDrops": 15852,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.13733905579399142,
+        "wakeLockMs": 105238117.20453942,
+        "lostTransmissions": 253,
+        "controlOverhead": 838110,
+        "radioDemandRatio": 7.795416089225142
+      },
+      "firstArrivalHopHistogram": {
+        "4": 8,
+        "1": 48,
+        "3": 20,
+        "2": 10,
+        "5": 4,
+        "6": 2
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 91,
+        "decision:flood": 87,
+        "radio-queue-full": 103,
+        "duplicate-suppression": 81,
+        "radio-receiver-loss": 97,
+        "radio-link-loss": 71,
+        "mpr-suppression": 68,
+        "source-retries-exhausted": 97,
+        "decision:queue": 18,
+        "queued": 18,
+        "decision:route": 71,
+        "decision:direct": 95,
+        "advertised-route-over-five": 43,
+        "mpr-physical-coverage-gap": 9,
+        "route-reverse-to-sender": 23,
+        "route-age-over-10s": 36
+      },
+      "meanParetoEfficient": true
+    },
+    {
+      "split": "radio-sensitivity",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "profile": "source-backup-v1",
+      "seeds": [
+        7401
+      ],
+      "fiveRatio": 0.58,
+      "seedsAbove90": 0,
+      "worstFiveRatio": 0.58,
+      "means": {
+        "five": 87,
+        "three": 74,
+        "overall": 90,
+        "totalTx": 6314,
+        "relayTx": 6314,
+        "p50": 7172.416811557487,
+        "p95": 68991.04260889813,
+        "modeledBatteryDrain": -0.1720315305990463,
+        "queueAtHorizon": 101,
+        "jainTx": 0.7753691243318264,
+        "maxTxShare": 0.03737725688945201,
+        "avgLatencyMs": 14482.926448799333,
+        "retriesSent": 238,
+        "retriesExhausted": 99,
+        "routeExpiries": 4092,
+        "totalQueued": 101,
+        "channelDrops": 15989,
+        "rateRelayDrops": 0,
+        "roleChangesPerNodeMin": 0.1802575107296137,
+        "wakeLockMs": 105099289.2403493,
+        "lostTransmissions": 244,
+        "controlOverhead": 837122,
+        "radioDemandRatio": 7.78513253632217
+      },
+      "firstArrivalHopHistogram": {
+        "4": 9,
+        "1": 48,
+        "3": 16,
+        "2": 10,
+        "5": 4,
+        "6": 3
+      },
+      "overlappingMessageTags": {
+        "decision:wait-mpr": 92,
+        "decision:flood": 89,
+        "radio-queue-full": 105,
+        "duplicate-suppression": 89,
+        "radio-receiver-loss": 103,
+        "radio-link-loss": 74,
+        "mpr-suppression": 72,
+        "source-retries-exhausted": 99,
+        "decision:queue": 16,
+        "queued": 16,
+        "decision:route": 67,
+        "decision:direct": 93,
+        "advertised-route-over-five": 41,
+        "mpr-physical-coverage-gap": 12,
+        "route-reverse-to-sender": 21,
+        "route-age-over-10s": 33,
+        "ttl-exhausted": 1,
+        "source-backup": 1
+      },
+      "meanParetoEfficient": true
+    }
+  ],
+  "screenPass": false,
+  "productionApproved": false,
+  "decision": "offline-only; owner approval and Dart candidate parity absent",
+  "counterSemantics": "totalTx is existing data/ACK/cover counter, excludes OGM broadcasts; controlOverhead counts per-neighbor OGM attempts, not physical broadcast equivalence",
+  "uncertainty": "seed pairs, t df3 final/n4; n1 protected sentinel no CI; means Pareto descriptive only; RF/jitter not packet-paired",
+  "missingMetrics": [
+    "true end-to-end path diversity/cut vertices",
+    "route stretch against contemporaneous optimal schedule",
+    "directional end-to-end ETX",
+    "measured phone airtime/energy/CPU",
+    "per-message queue eviction and all-copy terminal cause"
+  ]
+}
