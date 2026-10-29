@@ -205,6 +205,9 @@ export function App() {
           }}>DM</div>
           <div>
             <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>Duman Mesh Simulator</h1>
+            <p role="note" style={{ margin: "4px 0", color: "#ffd28a", fontSize: 12 }}>
+              Simulation only — synthetic data. No real radios, encryption or saved messages. Do not enter secrets.
+            </p>
             <div style={{ fontSize: 12, color: "#9fb0c3", marginTop: 2 }}>
               BATMAN-lite routing · coverage-score super-node election · MPR flood suppression ·
               DTN store-carry-forward

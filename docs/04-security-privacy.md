@@ -1,4 +1,6 @@
 # 04 — Security, Privacy & Threat Model
+
+> 2026-10-29 deployment clarification: Security requirements below are product design, not a production guarantee: browser simulation is plaintext/in-memory; crypto is a Node-only reference, not integrated native/Dart security. See [deployment baseline](18-deployment-baseline.md).
 ## E2EE Without Servers, Without Internet
 
 ---

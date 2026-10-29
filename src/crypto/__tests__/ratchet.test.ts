@@ -258,11 +258,8 @@ describe("forward secrecy — skills/03 acceptance line 2", () => {
     ratchet.wipe();
     expect(ratchet.nextSendNum).toBe(0);
     expect(ratchet.cachedSkips).toBe(0);
-    // A wiped ratchet is re-seeded from zero, so its first output is not the first
-    // output of the session it replaced.
-    const fresh = new SymmetricRatchet(p, SEED);
-    const wiped = ratchet.seal(body("x"));
-    const original = fresh.seal(body("x"));
-    expect(equalBytes(wiped.sealed, original.sealed)).toBe(false);
+    // A terminal wipe must not produce ciphertext under a publicly known zero seed.
+    expect(() => ratchet.seal(body("x"))).toThrow("wiped");
+    expect(ratchet.keyFor(0)).toEqual({ ok: false, reason: "wiped" });
   });
 });

@@ -193,8 +193,8 @@ export function sealPacket(
     );
   }
   if (fields.from.length !== FROM_BYTES) throw new RangeError("from must be a 32-byte public key");
-  if (fields.ttl < 0 || fields.ttl > 0xff) throw new RangeError(`ttl ${fields.ttl} does not fit a byte`);
-  if (fields.hop < 0 || fields.hop > 0xff) throw new RangeError(`hop ${fields.hop} does not fit a byte`);
+  if (!Number.isInteger(fields.ttl) || fields.ttl < 0 || fields.ttl > 0xff) throw new RangeError(`ttl ${fields.ttl} does not fit a byte`);
+  if (!Number.isInteger(fields.hop) || fields.hop < 0 || fields.hop > 0xff) throw new RangeError(`hop ${fields.hop} does not fit a byte`);
 
   const digest = msgIdDigest(p, fields.msgId);
   const plaintext = padPlaintext(
@@ -233,6 +233,11 @@ export function sealPacket(
 }
 
 export function encodeHeader(header: PacketHeader): Uint8Array {
+  if (header.msgIdDigest.length !== MSG_ID_DIGEST_BYTES || header.destHint.length !== 8)
+    throw new RangeError("header requires an exact 16-byte digest and 8-byte destination hint");
+  if (![header.ttl, header.hop].every(n => Number.isInteger(n) && n >= 0 && n <= 255))
+    throw new RangeError("header ttl/hop must be integer bytes");
+  if (!Number.isInteger(msgTypeCode(header.type))) throw new RangeError("unknown packet type");
   const out = new Uint8Array(HEADER_BYTES);
   out.set(header.msgIdDigest.subarray(0, MSG_ID_DIGEST_BYTES), 0);
   let offset = MSG_ID_DIGEST_BYTES;

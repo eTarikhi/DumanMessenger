@@ -25,7 +25,16 @@
 - `src/` — **TypeScript mesh simulator** (reference engine + React visualiser)
 - `test-fixtures/golden-vectors.json` — cross-language determinism contract asserted by both engines
 
-**Status:** Research Complete | Stack Selected | Simulator Implemented (Dart + TS) | Ready for Development
+**Current delivery boundary:** buildable simulator/CLI, **not a deployable phone messenger**.
+The browser is plaintext, in-memory simulation; do not enter real secrets. No backend,
+real BLE/Wi-Fi adapters, handset app, encrypted persistent store or native keystore is shipped.
+Routing >90% remains research, not a simulator release requirement.
+
+[Deployment, staging and rollback guide](docs/18-deployment-baseline.md) ·
+[Completion ledger](reports/deployment/2026-10-29/LEDGER.md) ·
+[Security review](reports/deployment/2026-10-29/SECURITY.md)
+
+**Status:** Simulator staging preparation | Mobile messenger blocked | Research preserved
 **Date:** Oct 2026 | **Location:** Bucharest, RO
 **Target platforms:** Android 8+ • iOS 13+ (with graceful degradation)
 
@@ -326,3 +335,25 @@ The follow-up [learned-selector implementation and rollback guide](docs/14-learn
 adds a bounded, immutable controller in both simulators. The fitted experimental model selects
 baseline; shadow and canary requests cannot activate unapproved strategies. No phone deployment
 or generalized delivery improvement is claimed.
+
+
+## Simulator staging package (no public deployment)
+
+```sh
+npm ci
+npm run typecheck
+npm test
+npm run test:deployment
+npm audit --audit-level=low
+npm run build
+npm run package:simulator -- artifacts/my-package
+node artifacts/my-package/serve.mjs artifacts/my-package
+```
+
+Open `http://127.0.0.1:4173` on the same machine. Existing output directories are refused;
+use a fresh name for every immutable package. The package contains only compiled web
+assets, a manifest, LICENSE, instructions and a dependency-free Node22+ staging server.
+It is **not** a secure messaging service. For remote private staging use explicit HOST,
+TLS/access control at your own proxy, and the [deployment guide](docs/18-deployment-baseline.md).
+`.env.example` documents non-secret settings; it is not loaded automatically.
+CI uploads simulator and Linux-x64 Dart CLI build artifacts, not releases or deployments.

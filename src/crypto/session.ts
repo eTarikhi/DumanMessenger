@@ -394,28 +394,17 @@ export class DumanSession {
     const num = decodeNonce(bytes.subarray(HEADER_BYTES, HEADER_BYTES + NONCE_BYTES));
     if (num === null) return { ok: false, reason: "not-a-packet" };
 
-    const derived = this.recvRatchet.keyFor(num);
-    if (!derived.ok) return { ok: false, reason: "ratchet", detail: derived.reason };
-    try {
-      const opened = openPacket(this.p, derived.key, bytes);
-      if (!opened.ok) return { ok: false, reason: "packet", detail: opened.reason };
-      const { packet } = opened;
-      return {
-        ok: true,
-        num,
-        body: packet.body,
-        type: packet.type,
-        ttl: packet.ttl,
-        hop: packet.hop,
-        from: packet.from,
-        timestampMs: packet.timestampMs,
-        msgIdDigest: packet.msgIdDigest,
-        destHint: packet.destHint,
-        authenticated: this.phase === "verified",
-      };
-    } finally {
-      zeroize(derived.key);
-    }
+    const received = this.recvRatchet.withReceiveKey(num, key => openPacket(this.p, key, bytes));
+    if (!received.ok) return { ok: false, reason: "ratchet", detail: received.reason };
+    const opened = received.result;
+    if (!opened.ok) return { ok: false, reason: "packet", detail: opened.reason };
+    const { packet } = opened;
+    return {
+      ok: true, num, body: packet.body, type: packet.type, ttl: packet.ttl,
+      hop: packet.hop, from: packet.from, timestampMs: packet.timestampMs,
+      msgIdDigest: packet.msgIdDigest, destHint: packet.destHint,
+      authenticated: this.phase === "verified",
+    };
   }
 
   /**

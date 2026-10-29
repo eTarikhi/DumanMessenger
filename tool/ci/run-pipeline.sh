@@ -321,6 +321,12 @@ job_web() {
   if [ "$FAST" = 0 ]; then
     run_step out "Production build (tsc -b && vite build)" "web-build.txt" "$ROOT" npm run build
     [ "$out" = success ] || failed="$failed build"
+    run_step out "Deployment regressions" "web-deployment.txt" "$ROOT" npm run test:deployment
+    [ "$out" = success ] || failed="$failed deployment"
+    run_step out "Dependency audit" "web-audit.txt" "$ROOT" npm audit --audit-level=low
+    [ "$out" = success ] || failed="$failed audit"
+    run_step out "Simulator staging package" "web-package.txt" "$ROOT" npm run package:simulator -- "$artifact_dir/package"
+    [ "$out" = success ] || failed="$failed package"
   fi
 
   if [ -n "$failed" ]; then record_job web failure "$failed"; else record_job web success; fi
@@ -348,7 +354,7 @@ job_dart() {
   # These three run unconditionally and are gated afterwards, exactly as the workflow does
   # it, so a single red build reports the analyzer, the test failures and the CLI metrics
   # together instead of stopping at the first.
-  local analyze=test=cli=success
+  local analyze=success test=success cli=success package=success smoke=success
   run_step analyze "Analyze (dart analyze)" "dart-analyze.txt" "$DART_DIR" dart analyze
   run_step test    "Tests (dart test --reporter expanded)" "dart-test.txt" "$DART_DIR" \
                    dart test --reporter expanded
@@ -359,6 +365,12 @@ job_dart() {
   else
     run_step cli "CLI acceptance (campus_quad, seed 42)" "dart-cli.txt" "$DART_DIR" \
                  dart run bin/mesh_sim.dart --scenario campus_quad --seed 42
+    mkdir -p "$DART_DIR/build"
+    run_step package "Compile authoritative CLI" "dart-compile.txt" "$DART_DIR" \
+                 dart compile exe bin/mesh_sim.dart -o build/duman-mesh-sim
+    if [ "$package" = success ]; then
+      run_step smoke "Compiled CLI help smoke" "dart-compiled-smoke.txt" "$DART_DIR" build/duman-mesh-sim --help
+    else smoke=failure; fi
   fi
 
   # Diagnostics: the same parser the workflow calls, on the same captured files.
@@ -376,9 +388,9 @@ job_dart() {
   fi
 
   # Gate — the workflow's own condition, on the same three outcomes.
-  if [ "$analyze" != success ] || [ "$test" != success ] || [ "$cli" != success ]; then
+  if [ "$analyze" != success ] || [ "$test" != success ] || [ "$cli" != success ] || [ "$package" != success ] || [ "$smoke" != success ]; then
     err "Dart engine failed (analyze: $analyze, test: $test, CLI: $cli). Captured output is in ${artifact_dir#$ROOT/}"
-    record_job dart failure "analyze=$analyze test=$test cli=$cli"
+    record_job dart failure "analyze=$analyze test=$test cli=$cli compile=$package smoke=$smoke"
   else
     record_job dart success
   fi

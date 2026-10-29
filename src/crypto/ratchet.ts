@@ -56,7 +56,9 @@ export type OpenFailure =
   /** Too far ahead to pre-derive. Treat as a protocol error, not a gap. */
   | "gap-too-large"
   /** The tag did not verify: wrong key, tampered bytes, or not for us. */
-  | "auth-failed";
+  | "auth-failed"
+  /** Terminal wipe: never encrypt again under a predictable zero seed. */
+  | "wiped";
 
 export type OpenResult =
   | { ok: true; plaintext: Uint8Array; num: number }
@@ -81,6 +83,7 @@ export interface CompromisedState {
 
 export class SymmetricRatchet {
   private chainKey: Uint8Array;
+  private wiped = false;
   private sendNum = 0;
   private nextRecvNum = 0;
   /** Keys derived ahead of the next expected message, by message number. */
@@ -116,6 +119,7 @@ export class SymmetricRatchet {
    * owns zeroizing the key.
    */
   nextKey(): { num: number; nonce: Uint8Array; key: Uint8Array } {
+    if (this.wiped) throw new Error("ratchet is wiped");
     const num = this.sendNum;
     return { num, nonce: encodeNonce(num), key: this.stepSend() };
   }
@@ -131,6 +135,7 @@ export class SymmetricRatchet {
    * engine already does (`isSeen` keys on `id#attempt`).
    */
   keyFor(num: number): { ok: true; key: Uint8Array } | { ok: false; reason: OpenFailure } {
+    if (this.wiped) return { ok: false, reason: "wiped" };
     if (!Number.isSafeInteger(num) || num < 0) return { ok: false, reason: "replay" };
 
     if (num < this.nextRecvNum) {
@@ -151,6 +156,12 @@ export class SymmetricRatchet {
       this.skipped.set(skippedNum, this.stepRecv());
     }
     const key = this.stepRecv();
+    // Bound total cached keys, not merely each individual forward jump.
+    while (this.skipped.size > MAX_SKIP) {
+      const oldest = this.skipped.keys().next().value!;
+      zeroize(this.skipped.get(oldest)!);
+      this.skipped.delete(oldest);
+    }
     return { ok: true, key };
   }
 
@@ -163,14 +174,48 @@ export class SymmetricRatchet {
     return { num, nonce, sealed };
   }
 
+  /** Authenticate on a bounded candidate state; failed packets cannot advance the
+   * chain or consume an out-of-order key. The callback must be synchronous and
+   * return ok=true only after all packet authentication/validation succeeded.
+   * keyFor() remains a destructive low-level primitive for trusted test tooling.
+   */
+  withReceiveKey<T extends { ok: boolean }>(num: number, authenticate: (key: Uint8Array) => T):
+    { ok: true; result: T } | { ok: false; reason: OpenFailure } {
+    if (this.wiped) return { ok: false, reason: "wiped" };
+    const candidate = new SymmetricRatchet(this.p, this.chainKey);
+    candidate.nextRecvNum = this.nextRecvNum;
+    for (const [n, key] of this.skipped) candidate.skipped.set(n, Uint8Array.from(key));
+    let key: Uint8Array | undefined;
+    try {
+      const derived = candidate.keyFor(num);
+      if (!derived.ok) return derived;
+      key = derived.key;
+      const result = authenticate(key);
+      if (result.ok) {
+        zeroize(this.chainKey);
+        for (const old of this.skipped.values()) zeroize(old);
+        this.skipped.clear();
+        this.chainKey = candidate.chainKey;
+        candidate.chainKey = new Uint8Array(0);
+        this.nextRecvNum = candidate.nextRecvNum;
+        for (const [n, cached] of candidate.skipped) this.skipped.set(n, cached);
+        candidate.skipped.clear();
+      }
+      return { ok: true, result };
+    } finally {
+      if (key) zeroize(key);
+      candidate.wipe();
+    }
+  }
+
   open(num: number, sealed: Uint8Array): OpenResult {
-    const derived = this.keyFor(num);
-    if (!derived.ok) return { ok: false, reason: derived.reason, num };
-    const plaintext = this.p.open(derived.key, encodeNonce(num), sealed, new Uint8Array(0));
-    zeroize(derived.key);
-    if (plaintext === null) return { ok: false, reason: "auth-failed", num };
-    if (num >= this.nextRecvNum) this.nextRecvNum = num + 1;
-    return { ok: true, plaintext, num };
+    const received = this.withReceiveKey(num, key => {
+      const plaintext = this.p.open(key, encodeNonce(num), sealed, new Uint8Array(0));
+      return plaintext === null
+        ? { ok: false as const, reason: "auth-failed" as const, num }
+        : { ok: true as const, plaintext, num };
+    });
+    return received.ok ? received.result : { ok: false, reason: received.reason, num };
   }
 
   /** `chainKey -> (msgKey, chainKey')`. One-way in both outputs, so neither the
@@ -222,6 +267,7 @@ export class SymmetricRatchet {
   }
 
   wipe(): void {
+    this.wiped = true;
     zeroize(this.chainKey);
     this.chainKey = new Uint8Array(32);
     for (const key of this.skipped.values()) zeroize(key);
