@@ -4,7 +4,7 @@ import { makeNode } from './helpers';
 import type { OGM } from '../types';
 import { validateResearchProfile,OGM_EPOCH_PROFILE } from '../routing-research';
 it('fresh epoch replaces historical minimum and late old sequences cannot revert it',()=>{
- const base=makeNode('observer'),fresh=makeNode('observer');
+ const base=makeNode('observer',0,0),fresh=makeNode('observer',0,0);
  const ogm=(seq:number,hopCount:number):OGM=>({nodeId:'dest',seq,hopCount,score:.5,isSuper:false,peerCount:1,batteryBucket:8,bestHopTo:{},neighborIds:[],declinedRouter:false});
  for(const n of [base,fresh])receiveOGM(n,ogm(10,1),'old',1000);
  receiveOGM(base,ogm(11,3),'new',2000);
