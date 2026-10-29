@@ -30,7 +30,9 @@
     "routing-targeted.ts",
     "routing-shadow.ts",
     "routing-evolve.ts",
-    "routing-contact-bound.ts"
+    "routing-contact-bound.ts",
+    "routing-diagnose.ts",
+    "routing-epoch-experiment.ts"
   ],
   "exclude": [
     "../src/**/*.tsx",

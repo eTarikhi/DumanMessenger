@@ -1,3 +1,5 @@
+import { validateResearchProfile, type RoutingResearchProfile } from "./routing-research";
+import { FailureDiagnostics } from "./failure-diagnostics";
 import { RoutingSelector, type SelectorOptions, type SelectorDecision } from "./routing-selector";
 import {
   HISTORY_BUCKETS,
@@ -40,6 +42,7 @@ import {
   integrateMotion,
   effectiveLossProbability,
   peersInRange,
+  canReach,
   radioComponents,
   rssiModel,
 } from "./rf";
@@ -1494,7 +1497,8 @@ export class MeshSimulation {
   readonly selectorDiagnostics: SelectorDecision[] = [];
   readonly selectorDecisionCounts: Record<string,number> = {};
 
-  constructor(config: SimConfig = DEFAULT_CONFIG, selectorOptions?: SelectorOptions, motionSeed?: number) {
+  constructor(config: SimConfig = DEFAULT_CONFIG, selectorOptions?: SelectorOptions, motionSeed?: number, readonly diagnostics?: FailureDiagnostics, readonly routingResearchProfile: RoutingResearchProfile = "baseline") {
+    validateResearchProfile(routingResearchProfile);
     // Copy/validate into per-node immutable controllers before time starts.
     if (selectorOptions) {
       this.selectorOptions = {mode: selectorOptions.mode};
@@ -1920,7 +1924,7 @@ export class MeshSimulation {
 
   private acceptOgm(receiver: MeshNode, ogm: OGM, via: NodeId): void {
     if (!receiver.isOnline) return;
-    const shouldGossip = receiveOGM(receiver, ogm, via, this.now);
+    const shouldGossip = receiveOGM(receiver, ogm, via, this.now, this.routingResearchProfile);
     if (!shouldGossip) return;
     const next = ogmToGossip(ogm, this.config.ogmTtl);
     if (!next) return;
@@ -1965,6 +1969,8 @@ export class MeshSimulation {
     detail: string,
     extra: Partial<MeshLogEntry> = {}
   ): void {
+    if(this.diagnostics&&extra.msgId&&extra.msgType==="text")
+      this.diagnostics.log(extra.msgId,this.now,kind,detail);
     if (!this.config.captureLog) return;
     if (kind === "ogm" && !this.config.captureOgm) return;
     this.log.push({ atMs: this.now, kind, nodeId, detail, ...extra });
@@ -2799,6 +2805,11 @@ export class MeshSimulation {
   }
 
   private applyDecision(node: MeshNode, msg: MeshMessage, decision: ForwardDecision): void {
+    if(this.diagnostics&&msg.type==="text") {
+      const entry=node.nextHopTable[msg.to];
+      this.diagnostics.decision(msg.id,this.now,msg.attempt,node.id,decision.targets,decision.mode,decision.reason,
+        entry?.hopCount??null,entry?this.now-entry.lastSeen:null,msg.hopCount);
+    }
     switch (decision.mode) {
       case "direct":
       case "route":
@@ -2831,6 +2842,13 @@ export class MeshSimulation {
     const decision = resolveMprWait(node, msg, this.nodes, this.rf);
     const hopRecord = this.traces.get(msg.id)?.hops.find((h) => h.nodeId === node.id);
     if (decision.mode === "drop") {
+      if(this.diagnostics&&msg.type==="text") {
+        const heard=node.heardRelays.get(seenKey(msg));
+        const gap=peersInRange(node,this.nodes,this.rf).some(p=>![...(heard??[])].some(r=>{
+          const relay=this.byId(r);return relay&&(relay.id===p.id||canReach(relay,p,this.rf));
+        }));
+        if(gap)this.diagnostics.record(msg.id,this.now,"mpr-physical-coverage-gap",node.id);
+      }
       this.mprSuppressed++;
       node.mprSuppressed++;
       if (hopRecord) {
@@ -3204,6 +3222,7 @@ export class MeshSimulation {
     if (!node || !node.isOnline) return;
     const { msg, via } = payload;
     const sender = this.byId(via);
+    if(this.diagnostics&&msg.type==="text")this.diagnostics.receive(msg.id,msg.attempt,nodeId,via);
 
     // A transmission the receiver gave up on part-way through, because a stronger packet took
     // it over (`channelCapture: "strongest"`). Checked before anything else: the receiver

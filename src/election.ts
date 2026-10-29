@@ -1,3 +1,4 @@
+import type { RoutingResearchProfile } from "./routing-research";
 import type { MeshNode, NodeId, OGM, Role, TqWindow } from "./types";
 import type { RfParams } from "./rf";
 import { normRssi, peersInRange, rssiModel } from "./rf";
@@ -317,7 +318,8 @@ export function receiveOGM(
   node: MeshNode,
   ogm: OGM,
   via: NodeId,
-  nowMs: number
+  nowMs: number,
+  researchProfile: RoutingResearchProfile = "baseline"
 ): boolean {
   if (ogm.nodeId === node.id) return false;
 
@@ -352,8 +354,12 @@ export function receiveOGM(
 
   // Fewest hops wins, ties go to the better link. Whichever copy arrives last,
   // the entry reports the window of the neighbour it actually routes through.
-  const betterHop =
-    !prev || hopCount < prev.hopCount || (hopCount === prev.hopCount && tqOfWindow(sample.window) > prev.tq);
+  const shorterOrBetter = !prev || hopCount < prev.hopCount || (hopCount === prev.hopCount && tqOfWindow(sample.window) > prev.tq);
+  // Experimental epoch freshness: an older, short historical route must not pin
+  // a moving destination forever. Baseline semantics are deliberately retained.
+  const betterHop = researchProfile === "ogm-epoch-v1"
+    ? !prev || ogm.seq > prev.lastSeq || (ogm.seq === prev.lastSeq && shorterOrBetter)
+    : shorterOrBetter;
   const bestNeighbor = betterHop ? via : prev.bestNeighbor;
   const best = betterHop ? sample : tqWindowFor(node, ogm.nodeId, bestNeighbor) ?? sample;
   node.nextHopTable[ogm.nodeId] = {
