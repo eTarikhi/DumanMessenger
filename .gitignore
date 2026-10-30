@@ -28,7 +28,7 @@ sim/mesh_sim/.dart_tool/
 sim/mesh_sim/build/
 
 # local CI run artifacts (tool/ci/): captures, not deliverables
-
+artifacts/
 
 
 
