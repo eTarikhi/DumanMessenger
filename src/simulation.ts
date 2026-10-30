@@ -1,3 +1,4 @@
+import { TqHistory } from "./tq-history";
 import { sourceBackupDecision } from "./routing-backup";
 import { validateResearchProfile, type RoutingResearchProfile } from "./routing-research";
 import { FailureDiagnostics } from "./failure-diagnostics";
@@ -1084,7 +1085,7 @@ export function createNode(
     reasonTrace: "Initial",
     ogmTable: {},
     nextHopTable: {},
-    tqWindows: new Map(),
+    tqWindows: new TqHistory(),
     neighborScores: {},
     seenCache: new Map(),
     mprHeardSuper: new Set(),

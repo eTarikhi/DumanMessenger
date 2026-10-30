@@ -1,3 +1,4 @@
+import { TqHistory } from "./tq-history";
 import type { RoutingResearchProfile } from "./routing-research";
 import type { MeshNode, NodeId, OGM, Role, TqWindow } from "./types";
 import type { RfParams } from "./rf";
@@ -361,7 +362,7 @@ export function receiveOGM(
     ? !prev || ogm.seq > prev.lastSeq || (ogm.seq === prev.lastSeq && shorterOrBetter)
     : shorterOrBetter;
   const bestNeighbor = betterHop ? via : prev.bestNeighbor;
-  const best = betterHop ? sample : tqWindowFor(node, ogm.nodeId, bestNeighbor) ?? sample;
+  const best = betterHop || bestNeighbor === via ? sample : tqWindowFor(node, ogm.nodeId, bestNeighbor) ?? sample;
   node.nextHopTable[ogm.nodeId] = {
     bestNeighbor,
     tq: tqOfWindow(best.window),
@@ -386,7 +387,7 @@ export function receiveOGM(
   // The only link this second-hand route can be judged on is the one to the
   // neighbour that told us about it: nothing about `dest`'s own beacon has been
   // heard, so lastSeq stays 0 and buildOGM will not pass the rumour on.
-  const linkToVia = tqWindowFor(node, via, via) ?? sample;
+  const linkToVia = via === ogm.nodeId ? sample : tqWindowFor(node, via, via) ?? sample;
   for (const dest of Object.keys(ogm.bestHopTo)) {
     if (dest === node.id) continue;
     if (node.nextHopTable[dest]) continue;
@@ -586,11 +587,13 @@ export function pruneStaleEntries(node: MeshNode, nowMs: number, maxAgeMs: numbe
   // Receipt windows are keyed by the neighbour that delivered them: a neighbour
   // we can no longer hear is not a candidate next hop, and an originator whose
   // route entry just expired is not worth measuring either.
-  for (const key of Array.from(node.tqWindows.keys())) {
-    const sep = key.lastIndexOf("|");
-    const originator = key.slice(0, sep);
-    const via = key.slice(sep + 1);
-    if (!peers.has(via) || !node.nextHopTable[originator]) node.tqWindows.delete(key);
+  if (node.tqWindows instanceof TqHistory) {
+    node.tqWindows.prune(peers, node.nextHopTable);
+  } else {
+    for (const key of node.tqWindows.keys()) {
+      const sep = key.lastIndexOf("|");
+      if (!peers.has(key.slice(sep + 1)) || !node.nextHopTable[key.slice(0, sep)]) node.tqWindows.delete(key);
+    }
   }
   // Insertion order is stable in both JS Maps and Dart LinkedHashMaps, so
   // evicting the oldest keeps the two engines bit-identical.
