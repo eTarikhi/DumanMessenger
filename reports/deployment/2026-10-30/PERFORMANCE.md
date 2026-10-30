@@ -150,9 +150,12 @@ Default loopback4173 only. Do NOT expose beyond trusted local environment until 
 TLS/access controls are configured and verified. No host/provider chosen, auth added or
 public staging enabled here. No installed interactive browser; HTTP/SSR cannot stand in
 for browser/device tests. Existing security headers, traversal/allowlist/integrity and
-rollback safeguards remain enforced. Owner .gitignore edit is preserved; local live-tree
-package must truthfully report dirty=true, not be called a clean release. Final handoff
-records source/manifest/archive checksum and actual local smoke status.
+rollback safeguards remain enforced. Owner .gitignore edit was preserved during initial work. The owner concurrently committed
+those exact bytes in95492c1; integrated that commit without rebasing/force-pushing, using
+a path-specific temporary stash and byte-equality check. No engine/test sources changed
+concurrently. The working tree became clean; package dirty flag must reflect ACTUAL build
+status, never fabricated provenance. Final handoff records source/manifest/archive checksum
+and actual local smoke status.
 
 Acceptance still fails (2) all required TS cases under5s and (8) exact-tip green CI.
 Further performance engineering is required in receive bookkeeping, allocation/GC, RF
