@@ -2,7 +2,24 @@ import { useEffect, useRef } from "react";
 import type { MeshNode } from "../types";
 import type { SimConfig } from "../simulation";
 import type { RfParams } from "../rf";
-import { canReach, maxRangeM, rssiModel, normRssi } from "../rf";
+import { canReach, maxRangeM, radioComponents, rssiModel, normRssi } from "../rf";
+
+/**
+ * Ring colours for the components of a split network, largest first.
+ *
+ * The largest component gets the dimmest colour on purpose: when a crowd splits 35/25 the
+ * interesting half is the smaller one, and a palette that made the biggest piece the loudest
+ * would put the emphasis where nothing is wrong. Distinct hues rather than shades, because the
+ * point is to see at a glance which phones cannot hear which.
+ */
+const COMPONENT_COLORS = [
+  "rgba(150,165,185,0.55)",
+  "rgba(255,123,114,0.95)",
+  "rgba(255,214,102,0.95)",
+  "rgba(182,255,74,0.9)",
+  "rgba(139,125,255,0.95)",
+  "rgba(77,224,255,0.95)",
+];
 
 interface Props {
   nodes: MeshNode[];
@@ -153,6 +170,21 @@ export function MeshCanvas({ nodes, config, rf, selectedId, onSelect, showLinks,
       ctx.textAlign = "start";
     }
 
+    // docs/06 §24.10: a 60-node crowd splits and re-joins inside a measurement window, and
+    // broadcast reach reads as two modes depending on how much of the window was spent split.
+    // The status bar reports the share; this draws which nodes are on which side, because
+    // "connected 49% of the window" does not tell you that the phone being watched is in the
+    // piece that cannot hear the sender. Drawn only when there is a split, so a healthy
+    // network looks exactly as it did before.
+    const components = radioComponents(nodes, rf);
+    const split = components.length > 1;
+    const componentOf = new Map<string, number>();
+    if (split) {
+      components.forEach((component, index) => {
+        for (const id of component) componentOf.set(id, index);
+      });
+    }
+
     for (const node of nodes) {
       const isSelected = node.id === selectedId;
       const cx = px(node.pos.x);
@@ -166,6 +198,18 @@ export function MeshCanvas({ nodes, config, rf, selectedId, onSelect, showLinks,
         ctx.strokeStyle = node.role === "SUPER" ? "rgba(182,255,74,0.3)" : "rgba(77,224,255,0.4)";
         ctx.lineWidth = 2;
         ctx.stroke();
+      }
+
+      if (split) {
+        // Dashed and outside the role ring, so it reads as a boundary rather than as a role.
+        const index = componentOf.get(node.id) ?? 0;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius + 12, 0, Math.PI * 2);
+        ctx.strokeStyle = COMPONENT_COLORS[index % COMPONENT_COLORS.length];
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
       }
 
       ctx.beginPath();

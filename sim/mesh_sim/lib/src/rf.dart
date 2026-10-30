@@ -172,6 +172,49 @@ List<MeshNode> peersInRange(MeshNode node, List<MeshNode> allNodes, RfParams p) 
   return out;
 }
 
+/// The radio graph's connected components, as node-id lists, largest first.
+///
+/// One walk with two consumers, which is why it lives here rather than in either of them:
+/// `MeshSimulation.componentSizes` samples it during a run to report how much of a window the
+/// network spent in one piece (docs/06 §24.10), and the TypeScript visualiser draws it so a
+/// split is visible rather than inferable. Two walks would eventually disagree, and a
+/// disagreement between what the metric says and what the picture shows is the kind of bug
+/// nobody finds.
+///
+/// An offline node is a component of one, and that needs forcing. [peersInRange] filters the
+/// *far* end on `isOnline` but never the near one, so an offline node still lists its online
+/// neighbours while listing nothing in theirs — an asymmetric edge that a depth-first search
+/// happily follows, absorbing a dead phone into a live component and reporting a network in one
+/// piece while a node in it cannot hear anybody. A component is supposed to mean "these nodes
+/// can exchange packets", so the adjacency of an offline node is emptied here.
+List<List<NodeId>> radioComponents(List<MeshNode> allNodes, RfParams p) {
+  final adj = <NodeId, List<NodeId>>{};
+  for (final node in allNodes) {
+    adj[node.id] = node.isOnline
+        ? peersInRange(node, allNodes, p).map((n) => n.id).toList()
+        : const <NodeId>[];
+  }
+  final seen = <NodeId>{};
+  final out = <List<NodeId>>[];
+  for (final node in allNodes) {
+    if (seen.contains(node.id)) continue;
+    final component = <NodeId>[];
+    final stack = <NodeId>[node.id];
+    while (stack.isNotEmpty) {
+      final id = stack.removeLast();
+      if (seen.contains(id)) continue;
+      seen.add(id);
+      component.add(id);
+      for (final nb in adj[id] ?? const <NodeId>[]) {
+        if (!seen.contains(nb)) stack.add(nb);
+      }
+    }
+    out.add(component);
+  }
+  out.sort((a, b) => b.length.compareTo(a.length));
+  return out;
+}
+
 /// Waypoint mobility (skills/08: "random walk + waypoint clusters").
 ///
 /// A node walks towards a waypoint near its home position and picks a fresh one

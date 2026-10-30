@@ -1,3 +1,5 @@
+import { TqHistory } from "./tq-history";
+import type { RoutingResearchProfile } from "./routing-research";
 import type { MeshNode, NodeId, OGM, Role, TqWindow } from "./types";
 import type { RfParams } from "./rf";
 import { normRssi, peersInRange, rssiModel } from "./rf";
@@ -120,8 +122,11 @@ export function computeScore(
   return Math.min(1, score);
 }
 
-/** Entries advertised in an OGM so peers can learn routes to non-neighbours. */
-const BEST_HOP_ADVERTISE_LIMIT = 8;
+/** Entries advertised in an OGM so peers can learn routes to non-neighbours.
+ *  Exported so `OGM_MAX_WIRE_BYTES` — which `check-parity.py` requires to be spelled as a
+ *  literal on both engines — can be tied back to the limit the engine really enforces by a
+ *  test. A size bound that could drift from the real one would be worse than no bound. */
+export const BEST_HOP_ADVERTISE_LIMIT = 8;
 
 export function buildOGM(node: MeshNode, hopCount = 0): OGM {
   const bestHopTo: Record<string, number> = {};
@@ -314,7 +319,8 @@ export function receiveOGM(
   node: MeshNode,
   ogm: OGM,
   via: NodeId,
-  nowMs: number
+  nowMs: number,
+  researchProfile: RoutingResearchProfile = "baseline"
 ): boolean {
   if (ogm.nodeId === node.id) return false;
 
@@ -349,10 +355,14 @@ export function receiveOGM(
 
   // Fewest hops wins, ties go to the better link. Whichever copy arrives last,
   // the entry reports the window of the neighbour it actually routes through.
-  const betterHop =
-    !prev || hopCount < prev.hopCount || (hopCount === prev.hopCount && tqOfWindow(sample.window) > prev.tq);
+  const shorterOrBetter = !prev || hopCount < prev.hopCount || (hopCount === prev.hopCount && tqOfWindow(sample.window) > prev.tq);
+  // Experimental epoch freshness: an older, short historical route must not pin
+  // a moving destination forever. Baseline semantics are deliberately retained.
+  const betterHop = researchProfile === "ogm-epoch-v1"
+    ? !prev || ogm.seq > prev.lastSeq || (ogm.seq === prev.lastSeq && shorterOrBetter)
+    : shorterOrBetter;
   const bestNeighbor = betterHop ? via : prev.bestNeighbor;
-  const best = betterHop ? sample : tqWindowFor(node, ogm.nodeId, bestNeighbor) ?? sample;
+  const best = betterHop || bestNeighbor === via ? sample : tqWindowFor(node, ogm.nodeId, bestNeighbor) ?? sample;
   node.nextHopTable[ogm.nodeId] = {
     bestNeighbor,
     tq: tqOfWindow(best.window),
@@ -377,7 +387,7 @@ export function receiveOGM(
   // The only link this second-hand route can be judged on is the one to the
   // neighbour that told us about it: nothing about `dest`'s own beacon has been
   // heard, so lastSeq stays 0 and buildOGM will not pass the rumour on.
-  const linkToVia = tqWindowFor(node, via, via) ?? sample;
+  const linkToVia = via === ogm.nodeId ? sample : tqWindowFor(node, via, via) ?? sample;
   for (const dest of Object.keys(ogm.bestHopTo)) {
     if (dest === node.id) continue;
     if (node.nextHopTable[dest]) continue;
@@ -550,24 +560,40 @@ export function electRole(
   return { role: "NORMAL", reason: `NORMAL: score ${node.score.toFixed(2)}, rank ${rankLabel}` };
 }
 
-/** Drop routes and scores that have not been refreshed (soft state, docs/05 §1.4). */
-export function pruneStaleEntries(node: MeshNode, nowMs: number, maxAgeMs: number): void {
+/**
+ * Drop routes and scores that have not been refreshed (soft state, docs/05 §1.4).
+ *
+ * Returns how many **route entries** were dropped, which is the route table's churn: a
+ * neighbour that expires and is re-learned a moment later costs two table updates and, in
+ * between, any message that needed it is forwarded by a node that no longer knows where it
+ * goes. `docs/06` §24.7 needed that number to test why a 12 s beacon interval delivered
+ * *worse* than both 5 s and 25 s in a 60-node crowd — the flap hypothesis says the middle
+ * interval should be the one that churns, and without a count there was no way to ask.
+ * Callers that do not care can ignore it, as every existing one did when this returned void.
+ */
+export function pruneStaleEntries(node: MeshNode, nowMs: number, maxAgeMs: number): number {
   // Drop 2-hop views for nodes that are no longer direct neighbours.
   const peers = new Set<NodeId>(node.peerIds);
   for (const id of Object.keys(node.twoHopView)) {
     if (!peers.has(id)) delete node.twoHopView[id];
   }
+  let expired = 0;
   for (const id of Object.keys(node.nextHopTable)) {
-    if (nowMs - node.nextHopTable[id].lastSeen > maxAgeMs) delete node.nextHopTable[id];
+    if (nowMs - node.nextHopTable[id].lastSeen > maxAgeMs) {
+      delete node.nextHopTable[id];
+      expired++;
+    }
   }
   // Receipt windows are keyed by the neighbour that delivered them: a neighbour
   // we can no longer hear is not a candidate next hop, and an originator whose
   // route entry just expired is not worth measuring either.
-  for (const key of Array.from(node.tqWindows.keys())) {
-    const sep = key.lastIndexOf("|");
-    const originator = key.slice(0, sep);
-    const via = key.slice(sep + 1);
-    if (!peers.has(via) || !node.nextHopTable[originator]) node.tqWindows.delete(key);
+  if (node.tqWindows instanceof TqHistory) {
+    node.tqWindows.prune(peers, node.nextHopTable);
+  } else {
+    for (const key of node.tqWindows.keys()) {
+      const sep = key.lastIndexOf("|");
+      if (!peers.has(key.slice(sep + 1)) || !node.nextHopTable[key.slice(0, sep)]) node.tqWindows.delete(key);
+    }
   }
   // Insertion order is stable in both JS Maps and Dart LinkedHashMaps, so
   // evicting the oldest keeps the two engines bit-identical.
@@ -582,6 +608,7 @@ export function pruneStaleEntries(node: MeshNode, nowMs: number, maxAgeMs: numbe
       delete node.neighborScores[id];
     }
   }
+  return expired;
 }
 
 export function getNextHop(node: MeshNode, dest: NodeId): NodeId | null {

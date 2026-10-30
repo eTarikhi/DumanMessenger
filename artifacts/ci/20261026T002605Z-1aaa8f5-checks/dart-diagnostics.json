@@ -1,0 +1,22 @@
+{
+  "analyze_issues": [],
+  "test_failures": [
+    {
+      "name": "test/engine_test.dart: density-derived beacon interval (docs/06 \u00a724.11) costs a dense crowd fewer deferrals under csma, and buys it delivery",
+      "path": "test/engine_test.dart",
+      "line": "2723",
+      "col": "7",
+      "message": "Expected: a value less than <0>\n    Actual: <0>\n     Which: is not a value less than <0>\n  \n  package:matcher               expect"
+    }
+  ],
+  "test": {
+    "passed": 277,
+    "failed": 1,
+    "skipped": 0
+  },
+  "analyze": {
+    "error": 0,
+    "warning": 0,
+    "info": 0
+  }
+}

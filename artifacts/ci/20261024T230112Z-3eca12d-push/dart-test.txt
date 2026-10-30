@@ -1,0 +1,230 @@
+00:00 +0: loading test/acceptance_test.dart
+00:00 +0: test/atrium_test.dart: the atrium becomes a router (docs/06 §18) elects a healthy open node in campus_quad within two cycles
+00:00 +1: test/atrium_test.dart: the atrium becomes a router (docs/06 §18) elects a healthy open node in sparse_village within two cycles
+00:00 +2: test/atrium_test.dart: the atrium becomes a router (docs/06 §18) elects a healthy open node in festival_crowd within two cycles
+00:02 +3: test/atrium_test.dart: the atrium becomes a router (docs/06 §18) elects a healthy open node in partitioned_pair within two cycles
+00:02 +4: test/atrium_test.dart: the atrium becomes a router (docs/06 §18) weighs openness against health, and says where the crossover is
+00:03 +5: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +6: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +7: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +8: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +9: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +10: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +11: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +12: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +13: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +14: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +15: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +16: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +17: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +18: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +19: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +20: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +21: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +22: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +23: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +24: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +25: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:12 +26: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:18 +27: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:19 +28: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:19 +29: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:19 +30: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:19 +31: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:19 +32: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:19 +33: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +34: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +35: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +36: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +37: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +38: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +39: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +40: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:21 +41: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:21 +42: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:21 +43: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:21 +44: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:21 +45: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:21 +46: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:21 +47: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:21 +48: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:21 +49: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:25 +50: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:26 +51: test/community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:26 +52: test/community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:26 +53: test/community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:26 +54: test/community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:27 +55: test/community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:36 +56: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +57: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +58: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +59: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:42 +60: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:42 +61: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:43 +62: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:43 +63: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:43 +64: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +65: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +66: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +67: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +68: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +69: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +70: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +71: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +72: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +73: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +74: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +75: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +76: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +77: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +78: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +79: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +80: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +81: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +82: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +83: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +84: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +85: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +86: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +87: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +88: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +89: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +90: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +91: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +92: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +93: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +94: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +95: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +96: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +97: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +98: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +99: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +100: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +101: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +102: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +103: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +104: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +105: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +106: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +107: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +108: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +109: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +110: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +111: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +112: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +113: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +114: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +115: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:46 +116: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:46 +117: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:47 +118: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:47 +119: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:48 +120: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:48 +121: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:48 +122: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:49 +123: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:49 +124: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:50 +125: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:50 +126: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") counts a stale key epoch as rejected, not as a delivery
+00:50 +127: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") lets only the admin rotate the key
+00:50 +128: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") lets only the admin rotate the key
+00:50 +129: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") lets only the admin rotate the key
+00:50 +130: test/golden_test.dart: golden vectors v1 reproduces the reference run
+00:51 +131: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") offers per-member unicast, with ACKs and the same reach
+00:51 +132: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") logs membership changes when capture is on
+00:51 +133: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") logs membership changes when capture is on
+00:51 +134: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") logs membership changes when capture is on
+00:51 +135: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") logs membership changes when capture is on
+00:51 +136: test/history_test.dart: group history anti-entropy repairs a long absence in bounded rounds rather than one huge reply
+00:51 +137: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") lists a node's groups, and forgets them when the world is rebuilt
+00:51 +138: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") lists a node's groups, and forgets them when the world is rebuilt
+00:51 +139: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") lists a node's groups, and forgets them when the world is rebuilt
+00:52 +140: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") lists a node's groups, and forgets them when the world is rebuilt
+00:52 +141: test/media_test.dart: media transport charges air time only for the part of a payload above one packet
+00:52 +142: test/media_test.dart: media transport charges air time only for the part of a payload above one packet
+00:52 +143: test/media_test.dart: media transport charges air time only for the part of a payload above one packet
+00:52 +144: test/media_test.dart: media transport charges air time only for the part of a payload above one packet
+00:52 +145: test/media_test.dart: media transport charges air time only for the part of a payload above one packet
+00:52 +146: test/media_test.dart: media transport charges air time only for the part of a payload above one packet
+00:52 +147: test/media_test.dart: media transport charges air time only for the part of a payload above one packet
+00:52 +148: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) carries a GPS fix and goes out on the fastest transport
+00:52 +149: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) carries a GPS fix and goes out on the fastest transport
+00:52 +150: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) carries a GPS fix and goes out on the fastest transport
+00:52 +151: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) carries a GPS fix and goes out on the fastest transport
+00:52 +152: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) carries a GPS fix and goes out on the fastest transport
+00:52 +153: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) carries a GPS fix and goes out on the fastest transport
+00:52 +154: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) carries a GPS fix and goes out on the fastest transport
+00:52 +155: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) carries a GPS fix and goes out on the fastest transport
+00:52 +156: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) carries a GPS fix and goes out on the fastest transport
+00:53 +157: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) carries a GPS fix and goes out on the fastest transport
+00:53 +158: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) carries a GPS fix and goes out on the fastest transport
+00:53 +159: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) carries a GPS fix and goes out on the fastest transport
+00:53 +160: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) carries a GPS fix and goes out on the fastest transport
+00:53 +161: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) carries a GPS fix and goes out on the fastest transport
+00:53 +162: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) carries a GPS fix and goes out on the fastest transport
+00:53 +163: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) carries a GPS fix and goes out on the fastest transport
+00:53 +164: test/media_test.dart: media against skills/05 (Voice PTT & Media) resumes a 10 MB Wi-Fi Direct image after a mid-transfer disconnect
+00:53 +165: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) re-floods on the interval, every flood with a fresh id
+00:53 +166: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) re-floods on the interval, every flood with a fresh id
+00:53 +167: test/transport_test.dart: MeshTransport — startAdvertising puts a 12-byte beacon on air, and refreshing replaces it
+00:53 +168: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:53 +169: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:54 +170: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:54 +171: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:54 +172: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:54 +173: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:54 +174: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:54 +175: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:54 +176: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:54 +177: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:54 +178: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:54 +179: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:54 +180: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:54 +181: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:54 +182: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) re-floods with a fresh fix, so a moving sender stays trackable
+00:54 +183: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches every radio-connected node — the roadmap exit criterion
+00:55 +184: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:59 +185: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) collapses repeats into one alert per receiver, newest fix wins
+00:59 +186: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) keeps a late copy from overwriting a newer fix
+00:59 +187: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) floods to every peer whatever the relay policy says
+01:00 +188: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) stops flooding when the sender goes dark
+01:00 +189: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) logs every flood when capture is on
+01:01 +190: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) buys reach with radio time, and the cost is visible
+01:02 +191: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) leaves the unicast metrics baseline alone
+01:02 +192: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) records when each hop arrived, over what link, and what it decided
+01:02 +193: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) recovers the route chain from the fan-out tree
+01:03 +194: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) marks the relays MPR suppressed, with the reason
+01:03 +195: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) traces hops always, and captures the log only when asked
+01:04 +196: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) logs beacons too when captureOgm is set
+01:05 +197: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) keeps the capture bounded and in time order
+01:05 +198: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) does not perturb the run it is measuring
+01:06 +199: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) drops the log when metrics are re-baselined
+01:07 +200: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) logs the DTN last resort as a queue event
+01:07 +201: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) never promotes a node the user opted out of
+01:08 +202: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) never auto-promotes with battery saver on
+01:08 +203: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) leaves duty cycling off by default
+01:08 +204: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) scans 3 s out of every 10 s when duty cycling, never a SUPER
+01:09 +205: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) spreads duty phases so a crowd does not sleep in lockstep
+01:09 +206: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) measures the per-role battery rate against the skills/07 budget
+01:09 +207: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) buys battery headroom by sleeping
+01:10 +208: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) excludes charging nodes from the measured drain rate
+01:11 +209: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) buckets latency by hop for first-attempt routed traffic
+01:11 +210: test/engine_test.dart: encrypted packet size (skills/03 Packet) is the documented layout: 95 bytes around the body, padded to 256
+01:11 +211: test/engine_test.dart: encrypted packet size (skills/03 Packet) keeps a long text on BLE, where the documented packet still fits
+01:11 +212: test/engine_test.dart: encrypted packet size (skills/03 Packet) sizes a created message from the packet layout
+01:11 +213: test/engine_test.dart: encrypted packet size (skills/03 Packet) counts a body in UTF-8 bytes, not in UTF-16 code units
+01:11 +214: test/engine_test.dart: encrypted packet size (skills/03 Packet) agrees with utf8.encode on every script the app will meet first
+01:11 +215: test/engine_test.dart: encrypted packet size (skills/03 Packet) moves a non-ASCII body to the transport that can actually carry it
+01:11 +216: test/engine_test.dart: encrypted packet size (skills/03 Packet) leaves every ASCII result exactly where wireSizeOf put it
+01:11 +217: test/engine_test.dart: abuse limits (docs/04 §6) the caps are the numbers docs/04 §6 states
+01:11 +218: test/engine_test.dart: abuse limits (docs/04 §6) admits exactly cap messages, then refuses
+01:11 +219: test/engine_test.dart: abuse limits (docs/04 §6) refills continuously, so a rate is enforced rather than a tally
+01:11 +220: test/engine_test.dart: abuse limits (docs/04 §6) never refills above the cap, so silence does not bank a burst
+01:11 +221: test/engine_test.dart: abuse limits (docs/04 §6) keeps sources and enforcers apart
+01:11 +222: test/engine_test.dart: abuse limits (docs/04 §6) treats a non-positive cap as no cap
+01:11 +223: test/engine_test.dart: abuse limits (docs/04 §6) grants no refill when the clock goes backwards
+01:11 +224: test/engine_test.dart: abuse limits (docs/04 §6) reports one token every 2 s at the relay cap
+01:11 +225: test/engine_test.dart: abuse limits (docs/04 §6) exempts control-plane traffic from the relay cap
+01:11 +226: test/engine_test.dart: abuse limits (docs/04 §6) counting beacons would cost a node 90% of its sustained data rate
+01:11 +227: test/engine_test.dart: abuse limits (docs/04 §6) is off by default, so nothing a shipped run does changes
+01:11 +228: All tests passed!

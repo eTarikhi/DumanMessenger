@@ -1,0 +1,137 @@
+{
+  "primary": "actual homogeneous ACK-6000 vs baseline; five-hop ratio",
+  "crowd": [
+    {
+      "split": "train",
+      "duty": false,
+      "seeds": [
+        101,
+        202,
+        303
+      ],
+      "deltaMean": -0.015555555555555545,
+      "worst": -0.046666666666666634,
+      "ci95": [
+        -0.1220273623810102,
+        0.0909162512698991
+      ],
+      "baselineRatio": 0.88,
+      "candidateRatio": 0.8644444444444445
+    },
+    {
+      "split": "train",
+      "duty": true,
+      "seeds": [
+        101,
+        202,
+        303
+      ],
+      "deltaMean": -0.013333333333333308,
+      "worst": -0.07333333333333336,
+      "ci95": [
+        -0.18140829513852294,
+        0.15474162847185632
+      ],
+      "baselineRatio": 0.8888888888888888,
+      "candidateRatio": 0.8755555555555555
+    },
+    {
+      "split": "tune",
+      "duty": false,
+      "seeds": [
+        404
+      ],
+      "deltaMean": -0.06000000000000005,
+      "worst": -0.06000000000000005,
+      "ci95": null,
+      "baselineRatio": 0.8466666666666667,
+      "candidateRatio": 0.7866666666666666
+    },
+    {
+      "split": "tune",
+      "duty": true,
+      "seeds": [
+        404
+      ],
+      "deltaMean": -0.12,
+      "worst": -0.12,
+      "ci95": null,
+      "baselineRatio": 0.8333333333333334,
+      "candidateRatio": 0.7133333333333334
+    },
+    {
+      "split": "validation",
+      "duty": false,
+      "seeds": [
+        505
+      ],
+      "deltaMean": 0.14,
+      "worst": 0.14,
+      "ci95": null,
+      "baselineRatio": 0.7466666666666667,
+      "candidateRatio": 0.8866666666666667
+    },
+    {
+      "split": "validation",
+      "duty": true,
+      "seeds": [
+        505
+      ],
+      "deltaMean": 0.14666666666666672,
+      "worst": 0.14666666666666672,
+      "ci95": null,
+      "baselineRatio": 0.7533333333333333,
+      "candidateRatio": 0.9
+    },
+    {
+      "split": "exposed-audit",
+      "duty": false,
+      "seeds": [
+        606
+      ],
+      "deltaMean": -0.020000000000000018,
+      "worst": -0.020000000000000018,
+      "ci95": null,
+      "baselineRatio": 0.9133333333333333,
+      "candidateRatio": 0.8933333333333333
+    },
+    {
+      "split": "exposed-audit",
+      "duty": true,
+      "seeds": [
+        606
+      ],
+      "deltaMean": -0.019999999999999907,
+      "worst": -0.019999999999999907,
+      "ci95": null,
+      "baselineRatio": 0.8733333333333333,
+      "candidateRatio": 0.8533333333333334
+    },
+    {
+      "split": "holdout",
+      "duty": false,
+      "seeds": [
+        909
+      ],
+      "deltaMean": 0.06000000000000005,
+      "worst": 0.06000000000000005,
+      "ci95": null,
+      "baselineRatio": 0.7733333333333333,
+      "candidateRatio": 0.8333333333333334
+    },
+    {
+      "split": "holdout",
+      "duty": true,
+      "seeds": [
+        909
+      ],
+      "deltaMean": -0.026666666666666727,
+      "worst": -0.026666666666666727,
+      "ci95": null,
+      "baselineRatio": 0.8133333333333334,
+      "candidateRatio": 0.7866666666666666
+    }
+  ],
+  "modelDecision": "baseline-only learned stump; no promotion",
+  "warning": "one-seed tune/validation/final sets cannot yield seed-level CIs; label replay is not deployed routing"
+}

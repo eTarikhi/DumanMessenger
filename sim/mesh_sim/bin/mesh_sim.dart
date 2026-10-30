@@ -62,6 +62,77 @@ Duman mesh simulator (headless)
   --duty-cycle        NORMAL scans 3 s and sleeps 7 s (skills/07). Gates the
                       15%-per-8h battery budget, which an always-scanning
                       NORMAL node in a mobile population does not meet.
+  --channel-access <name>
+                      free | half-duplex | csma. What the medium does when two
+                      radios talk at once (docs/08 §12.9-§12.10)
+  --channel-capture <name>
+                      none | first | strongest. What a busy *receiver* does:
+                      take everything, lock onto the first packet, or let a
+                      newcomer that is enough stronger take over (docs/08 §12.9,
+                      §12.15)
+  --capture-ratio <dB>
+                      margin a newcomer must clear to take the receiver over
+                      (default: 6; read only under --channel-capture strongest)
+  --channel-queue <int>
+                      transmit queue depth, so a busy radio buffers instead of
+                      dropping (docs/08 §12.7)
+  --channel-priority <name>
+                      fifo | ack-first | by-class. Which queued packet a busy
+                      radio takes next (docs/08 §12.8)
+  --backoff <name>    none | binary. Wait a random number of slots before taking
+                      a medium that has just freed up (docs/08 §12.13)
+  --media-backpressure
+                      stop a transfer pumping chunks into a radio that is full
+                      (docs/08 §12.12)
+  --rate-limits       enforce docs/04 §6's abuse limits: 5 broadcasts/min per node
+                      (SUPERs drop excess) and 30 relayed msgs/min per source, with
+                      control-plane traffic exempt
+  --broadcast-cap-scope <name>
+                      super | all. Who enforces the broadcast cap. `super` is what
+                      docs/04 §6 says and bounds how far a flood travels; `all` also
+                      stops the flooder's own neighbours hearing it (docs/06 §21.5)
+  --cover-traffic       emit dummy beacons at a low rate (docs/04 §5's traffic-analysis
+                        mitigation). Off by default; costs airtime and hides nothing this
+                        engine cannot model — see docs/06 §23 for what it does and does not
+                        cover. Reports coverTx
+  --cover-interval <ms> Mean gap between a node's dummy beacons, default 30000. Read only
+                        with --cover-traffic, like --capture-ratio is read only under
+                        --channel-capture strongest
+  --scan-interval-mode <n>
+                        fixed (ships) or density: scale each node's scan interval by its peer
+                        count, dense sooner and sparse later, anchored so ten peers reproduces
+                        the configured interval and clamped to a quarter..four times it.
+                        docs/05 §1.2's third mitigation row, which was documented and never
+                        built. The inverse direction to --ogm-interval-mode, deliberately
+  --ogm-interval-mode <n> fixed (ships, docs/03 §4's 2 s for every node) or density (each
+                        node stretches its interval in proportion to its peer count, so the
+                        receptions it imposes stay constant). Density is measured and
+                        rejected — docs/06 §24.11 — and is here so the measurement is
+                        reproducible rather than so it can be turned on
+  --connectivity-sample <ms>
+                        How often to sample whether the radio graph is in one piece,
+                        default 5000; 0 disables it. Reports connectivitySamples,
+                        connectedSampleShare and meanLargestComponent. Read these beside
+                        delivery and reach in any mobile scenario: a 60-node crowd splits
+                        and re-joins inside a window, and the graph measured after the
+                        window cannot see a partition that healed (docs/06 §24.10)
+  --ogm-alias-bytes <n> Bytes one advertised neighbour costs on air, read only with
+                        --radio-occupancy airtime. 32 ships (this engine advertises the
+                        X25519 public key); docs/03 §4 says a real deployment advertises
+                        2-byte aliases, which §24.6 derives at 130 B for a fully loaded
+                        beacon against 1270 B — under the BLE ceiling instead of over it
+  --radio-occupancy <n> How long a packet holds a radio, which is not how long it takes to
+                        arrive: hop-latency (ships, and is what docs/08 §12's contention
+                        numbers were measured under) or airtime (bytes x 8 / kbps for the
+                        whole packet, beacons sized from the fields an OGM carries).
+                        Delivery latency is the same either way; under the shipped free/none
+                        radio only the wake-lock telemetry moves. docs/06 §24.6
+  --block-scope <name>
+                      delivery | relay. How far a local block reaches (docs/04 §6,
+                      "Block/mute peer locally"). `delivery` — the default — means the
+                      blocking node ignores the message and the mesh still carries it;
+                      `relay` also refuses to forward, which is §6's "ignore floods"
+                      (docs/06 §22). Inert until something calls blockPeer()
   --trace             print the hop-by-hop route each delivered message took
   --capture           record the pcap-like mesh log and print its tail
   --capture-ogm       also log OGM beacons (they outnumber everything else)
@@ -69,7 +140,9 @@ Duman mesh simulator (headless)
                       world) and report what a group message costs in both
                       delivery modes -- the docs/06 §14 measurement
   --history           form a group, take one member out of range while it talks, and
-                      report whether hash-beacon anti-entropy repairs what it missed
+                      report whether hash-beacon anti-entropy repairs what it missed --
+                      once with members spread across the world and once with the five
+                      nearest, each against the same world with repair switched off
                       (roadmap Phase 1, docs/06 §17)
   --media             run the media transport in a separate world and report what
                       a 10 MB image costs at 1/2/3 hops, what a BLE-only mesh can
@@ -144,6 +217,266 @@ void main(List<String> args) {
       return;
   }
 
+  // --- the radio model of docs/08 §12 -----------------------------------------
+  //
+  // The engine has carried every one of these knobs since the measurements in docs/08 §12 were
+  // taken, but the CLI never exposed them — so the six-arm contention table (§12.9-§12.10) and
+  // the capture sweep (§12.15) could only be reproduced from inside a test file. In the one
+  // engine the roadmap calls authoritative, from the one place a reader would not think to look.
+  // Each switch is the --policy idiom above: an unknown name is a usage error that prints the
+  // valid set, never a silent fall back to the default. An absent flag changes nothing at all,
+  // so every published number and the golden vectors stay exactly where they were.
+  var radioOverridden = false;
+
+  final accessName = _arg(args, '--channel-access', '');
+  if (accessName.isNotEmpty) {
+    radioOverridden = true;
+    switch (accessName) {
+      case 'free':
+        config = config.copyWith(channelAccess: ChannelAccess.free);
+        break;
+      case 'half-duplex':
+        config = config.copyWith(channelAccess: ChannelAccess.halfDuplex);
+        break;
+      case 'csma':
+        config = config.copyWith(channelAccess: ChannelAccess.csma);
+        break;
+      default:
+        stderr.writeln('Unknown --channel-access "$accessName". '
+            'Try: free | half-duplex | csma');
+        exitCode = 64;
+        return;
+    }
+  }
+
+  final captureName = _arg(args, '--channel-capture', '');
+  if (captureName.isNotEmpty) {
+    radioOverridden = true;
+    switch (captureName) {
+      case 'none':
+        config = config.copyWith(channelCapture: ChannelCapture.none);
+        break;
+      case 'first':
+        config = config.copyWith(channelCapture: ChannelCapture.first);
+        break;
+      case 'strongest':
+        config = config.copyWith(channelCapture: ChannelCapture.strongest);
+        break;
+      default:
+        stderr.writeln('Unknown --channel-capture "$captureName". '
+            'Try: none | first | strongest');
+        exitCode = 64;
+        return;
+    }
+  }
+
+  final priorityName = _arg(args, '--channel-priority', '');
+  if (priorityName.isNotEmpty) {
+    radioOverridden = true;
+    switch (priorityName) {
+      case 'fifo':
+        config = config.copyWith(channelPriority: ChannelPriority.fifo);
+        break;
+      case 'ack-first':
+        config = config.copyWith(channelPriority: ChannelPriority.ackFirst);
+        break;
+      case 'by-class':
+        config = config.copyWith(channelPriority: ChannelPriority.byClass);
+        break;
+      default:
+        stderr.writeln('Unknown --channel-priority "$priorityName". '
+            'Try: fifo | ack-first | by-class');
+        exitCode = 64;
+        return;
+    }
+  }
+
+  final backoffName = _arg(args, '--backoff', '');
+  if (backoffName.isNotEmpty) {
+    radioOverridden = true;
+    switch (backoffName) {
+      case 'none':
+        config = config.copyWith(channelBackoff: ChannelBackoff.none);
+        break;
+      case 'binary':
+        config = config.copyWith(channelBackoff: ChannelBackoff.binary);
+        break;
+      default:
+        stderr.writeln('Unknown --backoff "$backoffName". Try: none | binary');
+        exitCode = 64;
+        return;
+    }
+  }
+
+  final ratioArg = _arg(args, '--capture-ratio', '');
+  if (ratioArg.isNotEmpty) {
+    // tryParse, not parse: a bad number is a usage error with a message, not a stack trace.
+    final db = double.tryParse(ratioArg);
+    if (db == null) {
+      stderr.writeln('--capture-ratio needs a number in dB, got "$ratioArg"');
+      exitCode = 64;
+      return;
+    }
+    radioOverridden = true;
+    config = config.copyWith(channelCaptureRatioDb: db);
+  }
+
+  final queueArg = _arg(args, '--channel-queue', '');
+  if (queueArg.isNotEmpty) {
+    final depth = int.tryParse(queueArg);
+    if (depth == null || depth < 1) {
+      stderr.writeln('--channel-queue needs a positive integer, got "$queueArg"');
+      exitCode = 64;
+      return;
+    }
+    radioOverridden = true;
+    config = config.copyWith(channelQueueDepth: depth);
+  }
+
+  if (args.contains('--media-backpressure')) {
+    radioOverridden = true;
+    config = config.copyWith(mediaBackpressure: true);
+  }
+
+  // Not part of the radio model, so it does not set `radioOverridden`: the shipped
+  // combination is inert by construction and this one is a policy switch.
+  if (args.contains('--rate-limits')) {
+    config = config.copyWith(rateLimits: true);
+  }
+
+  if (args.contains('--cover-traffic')) {
+    config = config.copyWith(coverTraffic: true);
+  }
+
+  final coverArg = _arg(args, '--cover-interval', '');
+  if (coverArg.isNotEmpty) {
+    // tryParse, not parse: a bad number is a usage error with a message, not a stack trace.
+    final ms = double.tryParse(coverArg);
+    if (ms == null || ms <= 0) {
+      stderr.writeln('--cover-interval needs a positive number of ms, got "$coverArg"');
+      exitCode = 64;
+      return;
+    }
+    config = config.copyWith(coverIntervalMs: ms);
+  }
+
+  final scanModeName = _arg(args, '--scan-interval-mode', '');
+  if (scanModeName.isNotEmpty) {
+    switch (scanModeName) {
+      case 'fixed':
+        config = config.copyWith(scanIntervalMode: ScanIntervalMode.fixed);
+        break;
+      case 'density':
+        config = config.copyWith(scanIntervalMode: ScanIntervalMode.density);
+        break;
+      default:
+        stderr.writeln('Unknown --scan-interval-mode "$scanModeName". '
+            'Try: fixed | density');
+        exitCode = 64;
+        return;
+    }
+  }
+
+  final intervalModeName = _arg(args, '--ogm-interval-mode', '');
+  if (intervalModeName.isNotEmpty) {
+    switch (intervalModeName) {
+      case 'fixed':
+        config = config.copyWith(ogmIntervalMode: OgmIntervalMode.fixed);
+        break;
+      case 'density':
+        config = config.copyWith(ogmIntervalMode: OgmIntervalMode.density);
+        break;
+      default:
+        stderr.writeln('Unknown --ogm-interval-mode "$intervalModeName". '
+            'Try: fixed | density');
+        exitCode = 64;
+        return;
+    }
+  }
+
+  final connArg = _arg(args, '--connectivity-sample', '');
+  if (connArg.isNotEmpty) {
+    // tryParse, not parse: a bad number is a usage error with a message, not a stack trace.
+    final ms = double.tryParse(connArg);
+    if (ms == null || ms < 0) {
+      stderr.writeln(
+          '--connectivity-sample needs a non-negative number of ms, got "$connArg"');
+      exitCode = 64;
+      return;
+    }
+    config = config.copyWith(connectivitySampleMs: ms);
+  }
+
+  final aliasArg = _arg(args, '--ogm-alias-bytes', '');
+  if (aliasArg.isNotEmpty) {
+    // tryParse, not parse: a bad number is a usage error with a message, not a stack trace.
+    final width = int.tryParse(aliasArg);
+    if (width == null || width < 1) {
+      stderr.writeln('--ogm-alias-bytes needs a positive integer, got "$aliasArg"');
+      exitCode = 64;
+      return;
+    }
+    config = config.copyWith(ogmAliasBytes: width);
+  }
+
+  final occupancyName = _arg(args, '--radio-occupancy', '');
+  if (occupancyName.isNotEmpty) {
+    switch (occupancyName) {
+      case 'hop-latency':
+        config = config.copyWith(radioOccupancy: RadioOccupancy.hopLatency);
+        break;
+      case 'airtime':
+        config = config.copyWith(radioOccupancy: RadioOccupancy.airtime);
+        break;
+      default:
+        stderr.writeln('Unknown --radio-occupancy "$occupancyName". '
+            'Try: hop-latency | airtime');
+        exitCode = 64;
+        return;
+    }
+  }
+
+  final blockScopeName = _arg(args, '--block-scope', '');
+  if (blockScopeName.isNotEmpty) {
+    switch (blockScopeName) {
+      case 'delivery':
+        config = config.copyWith(blockScope: BlockScope.delivery);
+        break;
+      case 'relay':
+        config = config.copyWith(blockScope: BlockScope.relay);
+        break;
+      default:
+        stderr.writeln('Unknown --block-scope "$blockScopeName". '
+            'Try: delivery | relay');
+        exitCode = 64;
+        return;
+    }
+  }
+
+  final capScopeName = _arg(args, '--broadcast-cap-scope', '');
+  if (capScopeName.isNotEmpty) {
+    switch (capScopeName) {
+      case 'super':
+        config =
+            config.copyWith(broadcastCapScope: BroadcastCapScope.superOnly);
+        break;
+      case 'all':
+        config = config.copyWith(broadcastCapScope: BroadcastCapScope.all);
+        break;
+      default:
+        stderr.writeln('Unknown --broadcast-cap-scope "$capScopeName". '
+            'Try: super | all');
+        exitCode = 64;
+        return;
+    }
+  }
+
+  // Built here rather than nested inside the header's own interpolation, which would put a
+  // string literal containing an interpolation inside a ternary inside an interpolation.
+  final radioArm = radioOverridden
+      ? ', radio ${config.channelAccess.name}+${config.channelCapture.name}'
+      : '';
+
   final plan = _trafficPlan(config.seed, messages, config.nodeCount);
   final sim = MeshSimulation(config);
   final sent = _replay(sim, plan, gapMs);
@@ -182,6 +515,9 @@ void main(List<String> args) {
       .where((d) => d.type != MsgType.ack && d.type != MsgType.broadcast)
       .toList();
   final withinFive = unicast.where((d) => d.hops <= 5).length;
+  // Owner decision (2026-10-28): five hops is primary, three is diagnostic.
+  // Both use all unicast deliveries, including retries and DTN, unlike latencyByHop.
+  final withinThree = unicast.where((d) => d.hops <= 3).length;
   final overheadVsFlood =
       s.totalForwarded / math.max(1, baseline.stats.totalForwarded);
 
@@ -189,12 +525,40 @@ void main(List<String> args) {
     'scenario': scenarioName,
     'seed': seed,
     'policy': policyName,
+    // Which radio model this run used. Present unconditionally, so two arms of one scenario can
+    // be told apart from their JSON alone; the human table below skips it and carries the arm in
+    // the header line instead.
+    'radio': <String, Object?>{
+      'channelAccess': config.channelAccess.name,
+      'channelCapture': config.channelCapture.name,
+      'captureRatioDb': _round(config.channelCaptureRatioDb),
+      'channelQueueDepth': config.channelQueueDepth,
+      'channelPriority': config.channelPriority.name,
+      'channelBackoff': config.channelBackoff.name,
+      'mediaBackpressure': config.mediaBackpressure,
+      'rateLimits': config.rateLimits,
+      'broadcastPerMinuteCap': config.broadcastPerMinuteCap,
+      'relayPerSourcePerMinuteCap': config.relayPerSourcePerMinuteCap,
+      'broadcastCapScope': config.broadcastCapScope.wire,
+      'blockScope': config.blockScope.wire,
+      'coverTraffic': config.coverTraffic,
+      'coverIntervalMs': config.coverIntervalMs,
+      'radioOccupancy': config.radioOccupancy.wire,
+      'ogmAliasBytes': config.ogmAliasBytes,
+      'connectivitySampleMs': config.connectivitySampleMs,
+      'ogmIntervalMode': config.ogmIntervalMode.wire,
+      'ogmDensityReferencePeers': config.ogmDensityReferencePeers,
+      'scanIntervalMode': config.scanIntervalMode.wire,
+      'scanDensityReferencePeers': config.scanDensityReferencePeers,
+    },
     'nodes': sim.nodes.length,
     'sent': sent,
     'deliveredUnicast': unicast.length,
     'deliveryRatio': _round(s.deliveryRatio),
     'deliveredWithinFiveHops': withinFive,
     'withinFiveRatio': _round(withinFive / math.max(1, sent)),
+    'deliveredWithinThreeHops': withinThree,
+    'withinThreeRatio': _round(withinThree / math.max(1, sent)),
     'superNodes': s.superNodes,
     'superRatio': _round(s.superRatio),
     'timeAvgSuperRatio': _round(sim.timeAvgSuperRatio),
@@ -273,10 +637,10 @@ void main(List<String> args) {
   } else {
     stdout.writeln('Duman mesh simulator — $scenarioName '
         '(seed $seed, policy $policyName'
-        '${config.dutyCycleEnabled ? ', duty-cycle' : ''})');
+        '${config.dutyCycleEnabled ? ', duty-cycle' : ''}$radioArm)');
     stdout.writeln('─' * 62);
     report.forEach((k, v) {
-      if (k == 'latencyByHop') return;
+      if (k == 'latencyByHop' || k == 'radio') return;
       stdout.writeln('  ${k.padRight(24)} $v');
     });
     if (group != null) {
@@ -301,8 +665,14 @@ void main(List<String> args) {
           '(missed ${history['missed']})');
       stdout.writeln('  ${'without repair'.padRight(22)}${history['offRecovered']} recovered, '
           'converged=${history['offConverged']} — a missed flood is missed for good');
-      stdout.writeln('  ${'with repair'.padRight(22)}${history['recovered']} recovered in '
-          '${history['convergedSeconds']} s (${history['rounds']} beacon rounds)');
+      // `convergedSeconds` is null when the run did not converge inside the window, and
+      // printing it raw read as `recovered in null s` — a line that looks like a broken probe
+      // rather than a measured negative result. This is the TypeScript probe's wording
+      // (tool/history-probe.ts), which says what the null means.
+      stdout.writeln('  ${'with repair'.padRight(22)}${history['recovered']}/${history['heldBefore']} '
+          'recovered, converged=${history['converged']} in '
+          '${history['converged'] == true ? '${history['convergedSeconds']} s' : '>300 s'} '
+          '(${history['rounds']} beacon rounds)');
       stdout.writeln('  ${'radio cost'.padRight(22)}${history['beacons']} beacons, '
           '${history['requests']} requests, ${history['replies']} replies = '
           '${history['syncPackets']} packets, ${history['bytes']} payload bytes');
@@ -310,6 +680,22 @@ void main(List<String> args) {
           '-> ${history['beaconWire']} B on the wire (${history['beaconTransport']}), '
           'constant in the size of the history');
       stdout.writeln('  ${history['verdict']}');
+
+      final close = history['close'] as Map<String, Object?>?;
+      if (close != null) {
+        stdout.writeln('\nHistory probe, the same world with a membership that can hear itself '
+            '(${history['members']} nearest nodes)');
+        stdout.writeln('  ${'without repair'.padRight(22)}${close['offRecovered']} recovered, '
+            'converged=${close['offConverged']}');
+        stdout.writeln('  ${'with repair'.padRight(22)}${close['recovered']}/${close['heldBefore']} '
+            'recovered, converged=${close['converged']} in '
+            '${close['converged'] == true ? '${(close['convergedSeconds'] as num).toStringAsFixed(1)} s' : '>300 s'} '
+            '(${close['rounds']} beacon rounds)');
+        stdout.writeln('  ${'radio cost'.padRight(22)}${close['beacons']} beacons, '
+            '${close['requests']} requests, ${close['replies']} replies = '
+            '${close['syncPackets']} packets, ${close['bytes']} payload bytes');
+        stdout.writeln('  ${close['verdict']}');
+      }
     }
 
     if (media != null) {
@@ -631,7 +1017,7 @@ Map<String, Object?> _groupProbe(SimConfig config, int size) {
         (n.pos.x - cx) * (n.pos.x - cx) + (n.pos.y - cy) * (n.pos.y - cy);
     // Spread across the world by rank, so the group is not one radio cell.
     final ranked = online.toList()..sort((a, b) => d2(b).compareTo(d2(a)));
-    final step = ranked.length ~/ math.max(1, size);
+    final step = math.max(1, ranked.length ~/ size);
     final ids = <NodeId>{};
     for (var i = 0; i < ranked.length && ids.length < size; i++) {
       ids.add(ranked[(i * step) % ranked.length].id);
@@ -1240,7 +1626,7 @@ Map<String, Object?> _historyProbe(SimConfig config) {
     int replies,
     int packets,
     int bytes,
-  }) run({required bool repair}) {
+  }) run({required bool repair, bool close = false}) {
     final sim = MeshSimulation(config.copyWith(
         trafficIntervalMs: 0,
         captureLog: true,
@@ -1253,11 +1639,31 @@ Map<String, Object?> _historyProbe(SimConfig config) {
     final cy = online.fold<double>(0, (a, n) => a + n.pos.y) / online.length;
     double d2(MeshNode n) =>
         (n.pos.x - cx) * (n.pos.x - cx) + (n.pos.y - cy) * (n.pos.y - cy);
-    final ranked = online.toList()..sort((a, b) => d2(b).compareTo(d2(a)));
-    final step = ranked.length ~/ math.max(1, size);
     final ids = <NodeId>{};
-    for (var i = 0; i < ranked.length && ids.length < size; i++) {
-      ids.add(ranked[(i * step) % ranked.length].id);
+    if (close) {
+      // The most central node and its nearest neighbours: a membership that can hear itself,
+      // which is the case the protocol is actually able to converge in. docs/06 §17.4 puts the
+      // boundary at the peer graph rather than the membership list, and this arm is the evidence.
+      final byCentrality = online.toList()..sort((a, b) => d2(a).compareTo(d2(b)));
+      final centre = byCentrality.first;
+      double d2from(MeshNode n) =>
+          (n.pos.x - centre.pos.x) * (n.pos.x - centre.pos.x) +
+              (n.pos.y - centre.pos.y) * (n.pos.y - centre.pos.y);
+      ids.add(centre.id);
+      final byProximity = online.toList()..sort((a, b) => d2from(a).compareTo(d2from(b)));
+      for (final n in byProximity) {
+        if (ids.length >= size) break;
+        ids.add(n.id);
+      }
+    } else {
+      // Spread across the world: every step-th node out from the centroid. `max(1, …)` matches
+      // tool/history-probe.ts — without it, a world smaller than the membership steps by zero and
+      // picks the same node forever. Identical at 20 nodes, which is what this probe runs.
+      final ranked = online.toList()..sort((a, b) => d2(b).compareTo(d2(a)));
+      final step = math.max(1, ranked.length ~/ size);
+      for (var i = 0; i < ranked.length && ids.length < size; i++) {
+        ids.add(ranked[(i * step) % ranked.length].id);
+      }
     }
     final group = sim.createGroup('field team', ids.toList(), ids.first)!;
     final away = ids.last;
@@ -1302,12 +1708,29 @@ Map<String, Object?> _historyProbe(SimConfig config) {
   final off = run(repair: false);
   final on = run(repair: true);
 
+  // The same pair with a membership that can hear itself. The spread membership is the pessimistic
+  // case, and until now it was the only one this probe ran — so the authoritative engine could show
+  // a repair that never converges and not one that does, while tool/history-probe.ts printed both
+  // and docs/06 §17.3's "repair works, and it is transitive" rested on the reference engine alone.
+  final offClose = run(repair: false, close: true);
+  final onClose = run(repair: true, close: true);
+
   final beacon = encodeHistoryBeacon(
       'grp-1', 0, historyDigest(<HistoryEntry>[]));
   final verdict = on.converged
       ? 'anti-entropy recovered all ${on.recovered} messages the absent member missed, '
           'in ${on.rounds} bounded rounds; without it the member holds ${off.recovered}'
       : 'anti-entropy did NOT converge inside 5 minutes (${on.recovered}/${on.missed} recovered)';
+
+  // One decimal place, because that is what tool/history-probe.ts prints and what docs/06 §17.3's
+  // table carries: the same 8.75 s read as "8.8 s" there and "8.75 s" here, which is the kind of
+  // difference that makes a reader check whether the engines agree rather than the rounding.
+  final closeVerdict = onClose.converged
+      ? 'a membership that can hear itself converges in ${onClose.seconds.toStringAsFixed(1)} s over '
+          '${onClose.rounds} bounded rounds, at ${onClose.packets} packets against '
+          '${on.packets} for the spread one — the peer graph is the boundary, not the list'
+      : 'even a membership that can hear itself did NOT converge inside 5 minutes '
+          '(${onClose.recovered}/${onClose.missed} recovered)';
 
   return <String, Object?>{
     'members': size,
@@ -1326,8 +1749,24 @@ Map<String, Object?> _historyProbe(SimConfig config) {
     'syncPackets': on.packets,
     'bytes': on.bytes,
     'beaconChars': beacon.length,
-    'beaconWire': wireSizeOf(beacon.length),
-    'beaconTransport': selectTransport(wireSizeOf(beacon.length)).name,
+    'beaconWire': wireSizeOfBody(beacon),
+    'beaconTransport': selectTransport(wireSizeOfBody(beacon)).name,
     'verdict': verdict,
+    'close': <String, Object?>{
+      'heldBefore': onClose.held,
+      'missed': onClose.missed,
+      'offRecovered': offClose.recovered,
+      'offConverged': offClose.converged,
+      'recovered': onClose.recovered,
+      'converged': onClose.converged,
+      'convergedSeconds': onClose.seconds < 0 ? null : _round(onClose.seconds),
+      'rounds': onClose.rounds,
+      'beacons': onClose.beacons,
+      'requests': onClose.requests,
+      'replies': onClose.replies,
+      'syncPackets': onClose.packets,
+      'bytes': onClose.bytes,
+      'verdict': closeVerdict,
+    },
   };
 }

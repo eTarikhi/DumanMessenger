@@ -205,6 +205,9 @@ export function App() {
           }}>DM</div>
           <div>
             <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>Duman Mesh Simulator</h1>
+            <p role="note" style={{ margin: "4px 0", color: "#ffd28a", fontSize: 12 }}>
+              Simulation only — synthetic data. No real radios, encryption or saved messages. Do not enter secrets.
+            </p>
             <div style={{ fontSize: 12, color: "#9fb0c3", marginTop: 2 }}>
               BATMAN-lite routing · coverage-score super-node election · MPR flood suppression ·
               DTN store-carry-forward
@@ -368,6 +371,19 @@ export function App() {
             onToggleBatterySaver={(id) => {
               const n = sim.nodes.find((x) => x.id === id);
               if (n) sim.setBatterySaver(id, !n.batterySaver);
+            }}
+            blockedPeers={selectedNode ? sim.blockedPeers(selectedNode.id) : []}
+            onToggleBlock={(peerId) => {
+              // docs/04 §6's local block, from the inspector. One-way and local: this node
+              // stops accepting that peer's messages and nothing else changes — the peer
+              // keeps hearing this one, and SOS, beacons and ACKs still get through, because
+              // blocking those would make the blocked peer retransmit forever (docs/06 §22).
+              if (!selectedNode) return;
+              if (sim.isBlocked(selectedNode.id, peerId)) {
+                sim.unblockPeer(selectedNode.id, peerId);
+              } else {
+                sim.blockPeer(selectedNode.id, peerId);
+              }
             }}
             groups={[...sim.groups.values()]}
             onCreateGroup={handleCreateGroup}

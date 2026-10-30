@@ -1,0 +1,2976 @@
+{
+  "groups": [
+    {
+      "split": "development",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "nSeeds": 2,
+      "seeds": [
+        4301,
+        4302
+      ],
+      "five": {
+        "baselineMean": 112,
+        "candidateMean": 107,
+        "pairedDeltaMean": -5,
+        "paired95TInterval": [
+          -55.82481894559999,
+          45.82481894559999
+        ],
+        "maxCandidateBaselineRatio": 0.990909090909091
+      },
+      "three": {
+        "baselineMean": 84.5,
+        "candidateMean": 83,
+        "pairedDeltaMean": -1.5,
+        "paired95TInterval": [
+          -20.5593071046,
+          17.5593071046
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "overall": {
+        "baselineMean": 119.5,
+        "candidateMean": 118,
+        "pairedDeltaMean": -1.5,
+        "paired95TInterval": [
+          -45.971716577399995,
+          42.971716577399995
+        ],
+        "maxCandidateBaselineRatio": 1.017094017094017
+      },
+      "relayTx": {
+        "baselineMean": 34954,
+        "candidateMean": 32902.5,
+        "pairedDeltaMean": -2051.5,
+        "paired95TInterval": [
+          -12171.992072542598,
+          8068.992072542598
+        ],
+        "maxCandidateBaselineRatio": 0.9588632489838731
+      },
+      "totalTx": {
+        "baselineMean": 34954,
+        "candidateMean": 32902.5,
+        "pairedDeltaMean": -2051.5,
+        "paired95TInterval": [
+          -12171.992072542598,
+          8068.992072542598
+        ],
+        "maxCandidateBaselineRatio": 0.9588632489838731
+      },
+      "p50": {
+        "baselineMean": 760.6571968703065,
+        "candidateMean": 729.5835691003595,
+        "pairedDeltaMean": -31.073627769947052,
+        "paired95TInterval": [
+          -1782.8776810462007,
+          1720.7304255063066
+        ],
+        "maxCandidateBaselineRatio": 1.1329115780338443
+      },
+      "p95": {
+        "baselineMean": 62126.54527783627,
+        "candidateMean": 49314.50092035229,
+        "pairedDeltaMean": -12812.044357483974,
+        "paired95TInterval": [
+          -167124.02584633813,
+          141499.93713137018
+        ],
+        "maxCandidateBaselineRatio": 0.9899695492333609
+      },
+      "modeledBatteryDrain": {
+        "baselineMean": 0.12398511413607421,
+        "candidateMean": 0.1233874578860632,
+        "pairedDeltaMean": -0.0005976562500110139,
+        "paired95TInterval": [
+          -0.00819159892447074,
+          0.006996286424448712
+        ],
+        "maxCandidateBaselineRatio": 0.9999999999998752
+      },
+      "queueAtHorizon": {
+        "baselineMean": 86,
+        "candidateMean": 80,
+        "pairedDeltaMean": -6,
+        "paired95TInterval": [
+          -56.82481894559999,
+          44.82481894559999
+        ],
+        "maxCandidateBaselineRatio": 0.9777777777777777
+      },
+      "retriesSent": {
+        "baselineMean": 144.5,
+        "candidateMean": 140.5,
+        "pairedDeltaMean": -4,
+        "paired95TInterval": [
+          -105.64963789119999,
+          97.64963789119999
+        ],
+        "maxCandidateBaselineRatio": 1.0277777777777777
+      },
+      "retriesExhausted": {
+        "baselineMean": 63.5,
+        "candidateMean": 60,
+        "pairedDeltaMean": -3.5,
+        "paired95TInterval": [
+          -60.6779213138,
+          53.6779213138
+        ],
+        "maxCandidateBaselineRatio": 1.0153846153846153
+      },
+      "routeExpiries": {
+        "baselineMean": 4461.5,
+        "candidateMean": 4655,
+        "pairedDeltaMean": 193.5,
+        "paired95TInterval": [
+          -1655.2527891462,
+          2042.2527891462
+        ],
+        "maxCandidateBaselineRatio": 1.1005338078291815
+      },
+      "totalQueued": {
+        "baselineMean": 86,
+        "candidateMean": 80,
+        "pairedDeltaMean": -6,
+        "paired95TInterval": [
+          -56.82481894559999,
+          44.82481894559999
+        ],
+        "maxCandidateBaselineRatio": 0.9777777777777777
+      },
+      "channelDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "rateRelayDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "roleChangesPerNodeMin": {
+        "baselineMean": 0.1330472103004292,
+        "candidateMean": 0.13733905579399142,
+        "pairedDeltaMean": 0.004291845493562228,
+        "paired95TInterval": [
+          -0.050241222044635145,
+          0.0588249130317596
+        ],
+        "maxCandidateBaselineRatio": 1.074074074074074
+      },
+      "wakeLockMs": {
+        "baselineMean": 101884090.73854458,
+        "candidateMean": 101048160.59326537,
+        "pairedDeltaMean": -835930.1452792138,
+        "paired95TInterval": [
+          -3383655.374323978,
+          1711795.0837655505
+        ],
+        "maxCandidateBaselineRatio": 0.9933708789493371
+      },
+      "lostTransmissions": {
+        "baselineMean": 1284.5,
+        "candidateMean": 1172,
+        "pairedDeltaMean": -112.5,
+        "paired95TInterval": [
+          -423.8020160418,
+          198.80201604180002
+        ],
+        "maxCandidateBaselineRatio": 0.9389736477115118
+      },
+      "controlOverhead": {
+        "baselineMean": 724496.5,
+        "candidateMean": 723343,
+        "pairedDeltaMean": -1153.5,
+        "paired95TInterval": [
+          -9279.1179289278,
+          6972.1179289278
+        ],
+        "maxCandidateBaselineRatio": 0.999325919320149
+      },
+      "lostOgmTransmissions": {
+        "baselineMean": 25810.5,
+        "candidateMean": 25572,
+        "pairedDeltaMean": -238.5,
+        "paired95TInterval": [
+          -867.4571344518,
+          390.4571344518
+        ],
+        "maxCandidateBaselineRatio": 0.9921253281113287
+      },
+      "radioDemandRatio": {
+        "baselineMean": 7.546969684336634,
+        "candidateMean": 7.48504893283447,
+        "pairedDeltaMean": -0.06192075150216425,
+        "paired95TInterval": [
+          -0.2506411388388228,
+          0.12679963583449425
+        ],
+        "maxCandidateBaselineRatio": 0.9933708789493372
+      },
+      "dataPlusOgmLinkAttemptsProxy": {
+        "baselineMean": 759450.5,
+        "candidateMean": 756245.5,
+        "pairedDeltaMean": -3205,
+        "paired95TInterval": [
+          -5199.874143614799,
+          -1210.1258563852002
+        ],
+        "maxCandidateBaselineRatio": 0.9958075618515563
+      },
+      "baselineFiveDistribution": [
+        0.7333333333333333,
+        0.76
+      ],
+      "candidateFiveDistribution": [
+        0.7266666666666667,
+        0.7
+      ],
+      "candidateSeedsStrictlyAbove90": 0,
+      "worstFivePairedDelta": -0.06,
+      "meanFiveGatePass": false,
+      "allSeedsFiveGatePass": false,
+      "benefitGatePass": false,
+      "resourceScreenPass": true,
+      "protectedNoRegressionPass": false
+    },
+    {
+      "split": "development",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "nSeeds": 2,
+      "seeds": [
+        4301,
+        4302
+      ],
+      "five": {
+        "baselineMean": 109,
+        "candidateMean": 108.5,
+        "pairedDeltaMean": -0.5,
+        "paired95TInterval": [
+          -32.265511841000006,
+          31.265511841000002
+        ],
+        "maxCandidateBaselineRatio": 1.018018018018018
+      },
+      "three": {
+        "baselineMean": 84.5,
+        "candidateMean": 84,
+        "pairedDeltaMean": -0.5,
+        "paired95TInterval": [
+          -19.5593071046,
+          18.5593071046
+        ],
+        "maxCandidateBaselineRatio": 1.0125
+      },
+      "overall": {
+        "baselineMean": 114.5,
+        "candidateMean": 116.5,
+        "pairedDeltaMean": 2,
+        "paired95TInterval": [
+          -10.706204736399998,
+          14.706204736399998
+        ],
+        "maxCandidateBaselineRatio": 1.0263157894736843
+      },
+      "relayTx": {
+        "baselineMean": 35633.5,
+        "candidateMean": 31917,
+        "pairedDeltaMean": -3716.5,
+        "paired95TInterval": [
+          -44293.7648256934,
+          36860.7648256934
+        ],
+        "maxCandidateBaselineRatio": 0.9815909890883492
+      },
+      "totalTx": {
+        "baselineMean": 35633.5,
+        "candidateMean": 31917,
+        "pairedDeltaMean": -3716.5,
+        "paired95TInterval": [
+          -44293.7648256934,
+          36860.7648256934
+        ],
+        "maxCandidateBaselineRatio": 0.9815909890883492
+      },
+      "p50": {
+        "baselineMean": 634.0245163976215,
+        "candidateMean": 661.7177810496651,
+        "pairedDeltaMean": 27.69326465204358,
+        "paired95TInterval": [
+          -272.0743866955474,
+          327.46091599963455
+        ],
+        "maxCandidateBaselineRatio": 1.0718899545855787
+      },
+      "p95": {
+        "baselineMean": 88046.35245256242,
+        "candidateMean": 63562.25986078032,
+        "pairedDeltaMean": -24484.0925917821,
+        "paired95TInterval": [
+          -323113.9798424173,
+          274145.7946588531
+        ],
+        "maxCandidateBaselineRatio": 0.9865390223765982
+      },
+      "modeledBatteryDrain": {
+        "baselineMean": 0.07902886775193635,
+        "candidateMean": 0.07819026744602359,
+        "pairedDeltaMean": -0.0008386003059127622,
+        "paired95TInterval": [
+          -0.017904763060975975,
+          0.01622756244915045
+        ],
+        "maxCandidateBaselineRatio": 1.0080801539974562
+      },
+      "queueAtHorizon": {
+        "baselineMean": 91.5,
+        "candidateMean": 87.5,
+        "pairedDeltaMean": -4,
+        "paired95TInterval": [
+          -54.82481894559999,
+          46.82481894559999
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "retriesSent": {
+        "baselineMean": 142,
+        "candidateMean": 145,
+        "pairedDeltaMean": 3,
+        "paired95TInterval": [
+          3.0,
+          3.0
+        ],
+        "maxCandidateBaselineRatio": 1.0220588235294117
+      },
+      "retriesExhausted": {
+        "baselineMean": 63,
+        "candidateMean": 63.5,
+        "pairedDeltaMean": 0.5,
+        "paired95TInterval": [
+          -31.265511841000002,
+          32.265511841000006
+        ],
+        "maxCandidateBaselineRatio": 1.0454545454545454
+      },
+      "routeExpiries": {
+        "baselineMean": 4267.5,
+        "candidateMean": 4300.5,
+        "pairedDeltaMean": 33,
+        "paired95TInterval": [
+          -1885.6369151964,
+          1951.6369151964
+        ],
+        "maxCandidateBaselineRatio": 1.057608015028178
+      },
+      "totalQueued": {
+        "baselineMean": 91.5,
+        "candidateMean": 87.5,
+        "pairedDeltaMean": -4,
+        "paired95TInterval": [
+          -54.82481894559999,
+          46.82481894559999
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "channelDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "rateRelayDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "roleChangesPerNodeMin": {
+        "baselineMean": 0.13948497854077252,
+        "candidateMean": 0.1502145922746781,
+        "pairedDeltaMean": 0.010729613733905581,
+        "paired95TInterval": [
+          -0.0710699875733907,
+          0.09252921504120185
+        ],
+        "maxCandidateBaselineRatio": 1.1111111111111112
+      },
+      "wakeLockMs": {
+        "baselineMean": 101896151.35244301,
+        "candidateMean": 100830418.91913071,
+        "pairedDeltaMean": -1065732.4333123118,
+        "paired95TInterval": [
+          -15663190.68721183,
+          13531725.820587207
+        ],
+        "maxCandidateBaselineRatio": 1.000876997301159
+      },
+      "lostTransmissions": {
+        "baselineMean": 1239,
+        "candidateMean": 1137,
+        "pairedDeltaMean": -102,
+        "paired95TInterval": [
+          -1283.6770404852,
+          1079.6770404852
+        ],
+        "maxCandidateBaselineRatio": 0.9907312049433573
+      },
+      "controlOverhead": {
+        "baselineMean": 722426.5,
+        "candidateMean": 724600,
+        "pairedDeltaMean": 2173.5,
+        "paired95TInterval": [
+          2040.0848502678,
+          2306.9151497322
+        ],
+        "maxCandidateBaselineRatio": 1.0031642977102364
+      },
+      "lostOgmTransmissions": {
+        "baselineMean": 25623,
+        "candidateMean": 25791,
+        "pairedDeltaMean": 168,
+        "paired95TInterval": [
+          -1255.0949304767998,
+          1591.0949304767998
+        ],
+        "maxCandidateBaselineRatio": 1.0102316743404225
+      },
+      "radioDemandRatio": {
+        "baselineMean": 7.547863063143928,
+        "candidateMean": 7.468919919935606,
+        "pairedDeltaMean": -0.07894314320832096,
+        "paired95TInterval": [
+          -1.1602363472008779,
+          1.002350060784236
+        ],
+        "maxCandidateBaselineRatio": 1.0008769973011589
+      },
+      "dataPlusOgmLinkAttemptsProxy": {
+        "baselineMean": 758060,
+        "candidateMean": 756517,
+        "pairedDeltaMean": -1543,
+        "paired95TInterval": [
+          -41986.849675961195,
+          38900.849675961195
+        ],
+        "maxCandidateBaselineRatio": 1.0023034549014431
+      },
+      "baselineFiveDistribution": [
+        0.74,
+        0.7133333333333334
+      ],
+      "candidateFiveDistribution": [
+        0.7533333333333333,
+        0.6933333333333334
+      ],
+      "candidateSeedsStrictlyAbove90": 0,
+      "worstFivePairedDelta": -0.02,
+      "meanFiveGatePass": false,
+      "allSeedsFiveGatePass": false,
+      "benefitGatePass": false,
+      "resourceScreenPass": true,
+      "protectedNoRegressionPass": false
+    },
+    {
+      "split": "final",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "nSeeds": 6,
+      "seeds": [
+        5301,
+        5302,
+        5303,
+        5304,
+        5305,
+        5306
+      ],
+      "five": {
+        "baselineMean": 124.33333333333333,
+        "candidateMean": 124.66666666666667,
+        "pairedDeltaMean": 0.3333333333333333,
+        "paired95TInterval": [
+          -3.0292305197625553,
+          3.6958971864292223
+        ],
+        "maxCandidateBaselineRatio": 1.048780487804878
+      },
+      "three": {
+        "baselineMean": 91.66666666666667,
+        "candidateMean": 91,
+        "pairedDeltaMean": -0.6666666666666666,
+        "paired95TInterval": [
+          -4.899245861421254,
+          3.5659125280879205
+        ],
+        "maxCandidateBaselineRatio": 1.0555555555555556
+      },
+      "overall": {
+        "baselineMean": 137.83333333333334,
+        "candidateMean": 138.33333333333334,
+        "pairedDeltaMean": 0.5,
+        "paired95TInterval": [
+          -1.676156060082623,
+          2.676156060082623
+        ],
+        "maxCandidateBaselineRatio": 1.0296296296296297
+      },
+      "relayTx": {
+        "baselineMean": 42100.5,
+        "candidateMean": 34397.833333333336,
+        "pairedDeltaMean": -7702.666666666667,
+        "paired95TInterval": [
+          -11170.059616554498,
+          -4235.273716778836
+        ],
+        "maxCandidateBaselineRatio": 0.9089265660522063
+      },
+      "totalTx": {
+        "baselineMean": 42100.5,
+        "candidateMean": 34397.833333333336,
+        "pairedDeltaMean": -7702.666666666667,
+        "paired95TInterval": [
+          -11170.059616554498,
+          -4235.273716778836
+        ],
+        "maxCandidateBaselineRatio": 0.9089265660522063
+      },
+      "p50": {
+        "baselineMean": 889.9583335123801,
+        "candidateMean": 836.2336121623715,
+        "pairedDeltaMean": -53.72472135000862,
+        "paired95TInterval": [
+          -122.89217813769477,
+          15.442735437677527
+        ],
+        "maxCandidateBaselineRatio": 1.0169293066188323
+      },
+      "p95": {
+        "baselineMean": 31897.60868492187,
+        "candidateMean": 29203.8966718968,
+        "pairedDeltaMean": -2693.7120130250696,
+        "paired95TInterval": [
+          -15001.750296763696,
+          9614.326270713556
+        ],
+        "maxCandidateBaselineRatio": 1.612377557102986
+      },
+      "modeledBatteryDrain": {
+        "baselineMean": 0.08059901171463703,
+        "candidateMean": 0.08068494921462561,
+        "pairedDeltaMean": 8.593749998858646e-05,
+        "paired95TInterval": [
+          -0.00159029794337217,
+          0.0017621729433493429
+        ],
+        "maxCandidateBaselineRatio": 1.0403247015320944
+      },
+      "queueAtHorizon": {
+        "baselineMean": 65.33333333333333,
+        "candidateMean": 63.666666666666664,
+        "pairedDeltaMean": -1.6666666666666667,
+        "paired95TInterval": [
+          -9.166032925722082,
+          5.832699592388749
+        ],
+        "maxCandidateBaselineRatio": 1.2391304347826086
+      },
+      "retriesSent": {
+        "baselineMean": 115.83333333333333,
+        "candidateMean": 115,
+        "pairedDeltaMean": -0.8333333333333334,
+        "paired95TInterval": [
+          -11.848242337888188,
+          10.18157567122152
+        ],
+        "maxCandidateBaselineRatio": 1.2317073170731707
+      },
+      "retriesExhausted": {
+        "baselineMean": 43,
+        "candidateMean": 43.333333333333336,
+        "pairedDeltaMean": 0.3333333333333333,
+        "paired95TInterval": [
+          -4.437464645404858,
+          5.104131312071524
+        ],
+        "maxCandidateBaselineRatio": 1.3103448275862069
+      },
+      "routeExpiries": {
+        "baselineMean": 4850.333333333333,
+        "candidateMean": 5127,
+        "pairedDeltaMean": 276.6666666666667,
+        "paired95TInterval": [
+          55.15601715656783,
+          498.17731617676554
+        ],
+        "maxCandidateBaselineRatio": 1.115247856097051
+      },
+      "totalQueued": {
+        "baselineMean": 65.33333333333333,
+        "candidateMean": 63.666666666666664,
+        "pairedDeltaMean": -1.6666666666666667,
+        "paired95TInterval": [
+          -9.166032925722082,
+          5.832699592388749
+        ],
+        "maxCandidateBaselineRatio": 1.2391304347826086
+      },
+      "channelDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "rateRelayDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "roleChangesPerNodeMin": {
+        "baselineMean": 0.1380543633762518,
+        "candidateMean": 0.148068669527897,
+        "pairedDeltaMean": 0.010014306151645211,
+        "paired95TInterval": [
+          -0.002618367076166075,
+          0.0226469793794565
+        ],
+        "maxCandidateBaselineRatio": 1.1785714285714286
+      },
+      "wakeLockMs": {
+        "baselineMean": 115216225.04544166,
+        "candidateMean": 112473430.39864829,
+        "pairedDeltaMean": -2742794.6467933706,
+        "paired95TInterval": [
+          -3974871.7926685708,
+          -1510717.5009181707
+        ],
+        "maxCandidateBaselineRatio": 0.9884042111713541
+      },
+      "lostTransmissions": {
+        "baselineMean": 1519.5,
+        "candidateMean": 1214.1666666666667,
+        "pairedDeltaMean": -305.3333333333333,
+        "paired95TInterval": [
+          -440.29853604205454,
+          -170.3681306246121
+        ],
+        "maxCandidateBaselineRatio": 0.8966049382716049
+      },
+      "controlOverhead": {
+        "baselineMean": 815264.5,
+        "candidateMean": 815268.3333333334,
+        "pairedDeltaMean": 3.8333333333333335,
+        "paired95TInterval": [
+          -1448.0311079120972,
+          1455.6977745787638
+        ],
+        "maxCandidateBaselineRatio": 1.0018976855260402
+      },
+      "lostOgmTransmissions": {
+        "baselineMean": 28356,
+        "candidateMean": 28346.833333333332,
+        "pairedDeltaMean": -9.166666666666666,
+        "paired95TInterval": [
+          -177.35478525070198,
+          159.02145191736867
+        ],
+        "maxCandidateBaselineRatio": 1.0093386697160283
+      },
+      "radioDemandRatio": {
+        "baselineMean": 8.534535188551237,
+        "candidateMean": 8.331365214714689,
+        "pairedDeltaMean": -0.20316997383654792,
+        "paired95TInterval": [
+          -0.29443494760508154,
+          -0.11190500006801428
+        ],
+        "maxCandidateBaselineRatio": 0.9884042111713539
+      },
+      "dataPlusOgmLinkAttemptsProxy": {
+        "baselineMean": 857365,
+        "candidateMean": 849666.1666666666,
+        "pairedDeltaMean": -7698.833333333333,
+        "paired95TInterval": [
+          -11327.093927948223,
+          -4070.5727387184443
+        ],
+        "maxCandidateBaselineRatio": 0.9947821438623962
+      },
+      "baselineFiveDistribution": [
+        0.8466666666666667,
+        0.9133333333333333,
+        0.82,
+        0.76,
+        0.78,
+        0.8533333333333334
+      ],
+      "candidateFiveDistribution": [
+        0.84,
+        0.9,
+        0.86,
+        0.7666666666666667,
+        0.76,
+        0.86
+      ],
+      "candidateSeedsStrictlyAbove90": 0,
+      "worstFivePairedDelta": -0.02,
+      "meanFiveGatePass": false,
+      "allSeedsFiveGatePass": false,
+      "benefitGatePass": false,
+      "resourceScreenPass": false,
+      "protectedNoRegressionPass": false
+    },
+    {
+      "split": "final",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "nSeeds": 6,
+      "seeds": [
+        5301,
+        5302,
+        5303,
+        5304,
+        5305,
+        5306
+      ],
+      "five": {
+        "baselineMean": 124.16666666666667,
+        "candidateMean": 125.5,
+        "pairedDeltaMean": 1.3333333333333333,
+        "paired95TInterval": [
+          -1.456402701998415,
+          4.123069368665082
+        ],
+        "maxCandidateBaselineRatio": 1.0350877192982457
+      },
+      "three": {
+        "baselineMean": 92,
+        "candidateMean": 92.83333333333333,
+        "pairedDeltaMean": 0.8333333333333334,
+        "paired95TInterval": [
+          -5.300855125200332,
+          6.967521791866998
+        ],
+        "maxCandidateBaselineRatio": 1.0909090909090908
+      },
+      "overall": {
+        "baselineMean": 138.33333333333334,
+        "candidateMean": 138.33333333333334,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          -2.2991982904868924,
+          2.2991982904868924
+        ],
+        "maxCandidateBaselineRatio": 1.0223880597014925
+      },
+      "relayTx": {
+        "baselineMean": 40785.5,
+        "candidateMean": 33669.166666666664,
+        "pairedDeltaMean": -7116.333333333333,
+        "paired95TInterval": [
+          -11745.16749741822,
+          -2487.4991692484464
+        ],
+        "maxCandidateBaselineRatio": 0.943277067031972
+      },
+      "totalTx": {
+        "baselineMean": 40785.5,
+        "candidateMean": 33669.166666666664,
+        "pairedDeltaMean": -7116.333333333333,
+        "paired95TInterval": [
+          -11745.16749741822,
+          -2487.4991692484464
+        ],
+        "maxCandidateBaselineRatio": 0.943277067031972
+      },
+      "p50": {
+        "baselineMean": 888.2833619334269,
+        "candidateMean": 870.0636321345033,
+        "pairedDeltaMean": -18.219729798923556,
+        "paired95TInterval": [
+          -120.90011490370307,
+          84.46065530585597
+        ],
+        "maxCandidateBaselineRatio": 1.130665907874122
+      },
+      "p95": {
+        "baselineMean": 31760.976068877306,
+        "candidateMean": 30958.20284190898,
+        "pairedDeltaMean": -802.7732269683232,
+        "paired95TInterval": [
+          -14337.822959155717,
+          12732.27650521907
+        ],
+        "maxCandidateBaselineRatio": 2.633639533382811
+      },
+      "modeledBatteryDrain": {
+        "baselineMean": 0.039229611442834544,
+        "candidateMean": 0.038826883078008356,
+        "pairedDeltaMean": -0.0004027283648261881,
+        "paired95TInterval": [
+          -0.0018659599803833508,
+          0.0010605032507309746
+        ],
+        "maxCandidateBaselineRatio": 1.0787756205184453
+      },
+      "queueAtHorizon": {
+        "baselineMean": 67.83333333333333,
+        "candidateMean": 67.66666666666667,
+        "pairedDeltaMean": -0.16666666666666666,
+        "paired95TInterval": [
+          -6.1555032636317515,
+          5.822169930298418
+        ],
+        "maxCandidateBaselineRatio": 1.1486486486486487
+      },
+      "retriesSent": {
+        "baselineMean": 109.66666666666667,
+        "candidateMean": 116.5,
+        "pairedDeltaMean": 6.833333333333333,
+        "paired95TInterval": [
+          4.063406325161494,
+          9.603260341505173
+        ],
+        "maxCandidateBaselineRatio": 1.101123595505618
+      },
+      "retriesExhausted": {
+        "baselineMean": 41.5,
+        "candidateMean": 42.666666666666664,
+        "pairedDeltaMean": 1.1666666666666667,
+        "paired95TInterval": [
+          -1.8323454749133334,
+          4.165678808246667
+        ],
+        "maxCandidateBaselineRatio": 1.1
+      },
+      "routeExpiries": {
+        "baselineMean": 4415.666666666667,
+        "candidateMean": 4720.833333333333,
+        "pairedDeltaMean": 305.1666666666667,
+        "paired95TInterval": [
+          160.68347667334717,
+          449.6498566599862
+        ],
+        "maxCandidateBaselineRatio": 1.1109540636042403
+      },
+      "totalQueued": {
+        "baselineMean": 67.83333333333333,
+        "candidateMean": 67.66666666666667,
+        "pairedDeltaMean": -0.16666666666666666,
+        "paired95TInterval": [
+          -6.1555032636317515,
+          5.822169930298418
+        ],
+        "maxCandidateBaselineRatio": 1.1486486486486487
+      },
+      "channelDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "rateRelayDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "roleChangesPerNodeMin": {
+        "baselineMean": 0.1301859799713877,
+        "candidateMean": 0.14163090128755365,
+        "pairedDeltaMean": 0.011444921316165953,
+        "paired95TInterval": [
+          -0.014920566927835334,
+          0.03781040956016724
+        ],
+        "maxCandidateBaselineRatio": 1.303030303030303
+      },
+      "wakeLockMs": {
+        "baselineMean": 114933757.61199,
+        "candidateMean": 112336293.30721588,
+        "pairedDeltaMean": -2597464.304774128,
+        "paired95TInterval": [
+          -4213902.486604671,
+          -981026.1229435848
+        ],
+        "maxCandidateBaselineRatio": 0.9922435879981868
+      },
+      "lostTransmissions": {
+        "baselineMean": 1480.3333333333333,
+        "candidateMean": 1165.8333333333333,
+        "pairedDeltaMean": -314.5,
+        "paired95TInterval": [
+          -463.3538541038472,
+          -165.64614589615277
+        ],
+        "maxCandidateBaselineRatio": 0.9122112211221122
+      },
+      "controlOverhead": {
+        "baselineMean": 816797.5,
+        "candidateMean": 816231.3333333334,
+        "pairedDeltaMean": -566.1666666666666,
+        "paired95TInterval": [
+          -1748.6815150667162,
+          616.3481817333828
+        ],
+        "maxCandidateBaselineRatio": 1.0009482213665881
+      },
+      "lostOgmTransmissions": {
+        "baselineMean": 28377.5,
+        "candidateMean": 28428,
+        "pairedDeltaMean": 50.5,
+        "paired95TInterval": [
+          -85.69192278443793,
+          186.69192278443793
+        ],
+        "maxCandidateBaselineRatio": 1.0088708752341988
+      },
+      "radioDemandRatio": {
+        "baselineMean": 8.513611674962224,
+        "candidateMean": 8.321206911645621,
+        "pairedDeltaMean": -0.19240476331660408,
+        "paired95TInterval": [
+          -0.3121409249336818,
+          -0.0726686016995264
+        ],
+        "maxCandidateBaselineRatio": 0.9922435879981865
+      },
+      "dataPlusOgmLinkAttemptsProxy": {
+        "baselineMean": 857583,
+        "candidateMean": 849900.5,
+        "pairedDeltaMean": -7682.5,
+        "paired95TInterval": [
+          -12174.8039698057,
+          -3190.196030194301
+        ],
+        "maxCandidateBaselineRatio": 0.996840786168567
+      },
+      "baselineFiveDistribution": [
+        0.8333333333333334,
+        0.8933333333333333,
+        0.8266666666666667,
+        0.76,
+        0.8266666666666667,
+        0.8266666666666667
+      ],
+      "candidateFiveDistribution": [
+        0.86,
+        0.88,
+        0.8466666666666667,
+        0.7866666666666666,
+        0.82,
+        0.8266666666666667
+      ],
+      "candidateSeedsStrictlyAbove90": 0,
+      "worstFivePairedDelta": -0.013333333333333334,
+      "meanFiveGatePass": false,
+      "allSeedsFiveGatePass": false,
+      "benefitGatePass": false,
+      "resourceScreenPass": false,
+      "protectedNoRegressionPass": false
+    },
+    {
+      "split": "protected",
+      "scenario": "campus_quad",
+      "duty": false,
+      "nSeeds": 2,
+      "seeds": [
+        6301,
+        6302
+      ],
+      "five": {
+        "baselineMean": 150,
+        "candidateMean": 150,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "three": {
+        "baselineMean": 143.5,
+        "candidateMean": 144,
+        "pairedDeltaMean": 0.5,
+        "paired95TInterval": [
+          -18.5593071046,
+          19.5593071046
+        ],
+        "maxCandidateBaselineRatio": 1.013986013986014
+      },
+      "overall": {
+        "baselineMean": 150,
+        "candidateMean": 150,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "relayTx": {
+        "baselineMean": 4238,
+        "candidateMean": 2948,
+        "pairedDeltaMean": -1290,
+        "paired95TInterval": [
+          -4161.6022704264,
+          1581.6022704264
+        ],
+        "maxCandidateBaselineRatio": 0.7999623989471705
+      },
+      "totalTx": {
+        "baselineMean": 4238,
+        "candidateMean": 2948,
+        "pairedDeltaMean": -1290,
+        "paired95TInterval": [
+          -4161.6022704264,
+          1581.6022704264
+        ],
+        "maxCandidateBaselineRatio": 0.7999623989471705
+      },
+      "p50": {
+        "baselineMean": 425.4180464928504,
+        "candidateMean": 466.7742914671544,
+        "pairedDeltaMean": 41.35624497430399,
+        "paired95TInterval": [
+          -512.7596433066758,
+          595.4721332552838
+        ],
+        "maxCandidateBaselineRatio": 1.2192936148178484
+      },
+      "p95": {
+        "baselineMean": 2802.8810212621465,
+        "candidateMean": 4331.784341241,
+        "pairedDeltaMean": 1528.9033199788537,
+        "paired95TInterval": [
+          -18170.859300678072,
+          21228.66594063578
+        ],
+        "maxCandidateBaselineRatio": 3.7643740622115565
+      },
+      "modeledBatteryDrain": {
+        "baselineMean": -0.043426155486752493,
+        "candidateMean": -0.04301013986176899,
+        "pairedDeltaMean": 0.0004160156249835012,
+        "paired95TInterval": [
+          -0.004869964079767548,
+          0.00570199532973455
+        ],
+        "maxCandidateBaselineRatio": 1.0000000000002138
+      },
+      "queueAtHorizon": {
+        "baselineMean": 0.5,
+        "candidateMean": 0,
+        "pairedDeltaMean": -0.5,
+        "paired95TInterval": [
+          -6.853102368199999,
+          5.853102368199999
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "retriesSent": {
+        "baselineMean": 15.5,
+        "candidateMean": 16,
+        "pairedDeltaMean": 0.5,
+        "paired95TInterval": [
+          -18.5593071046,
+          19.5593071046
+        ],
+        "maxCandidateBaselineRatio": 1.1818181818181819
+      },
+      "retriesExhausted": {
+        "baselineMean": 0.5,
+        "candidateMean": 0,
+        "pairedDeltaMean": -0.5,
+        "paired95TInterval": [
+          -6.853102368199999,
+          5.853102368199999
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "routeExpiries": {
+        "baselineMean": 63,
+        "candidateMean": 55.5,
+        "pairedDeltaMean": -7.5,
+        "paired95TInterval": [
+          -90.09033078659999,
+          75.09033078659999
+        ],
+        "maxCandidateBaselineRatio": 0.8813559322033898
+      },
+      "totalQueued": {
+        "baselineMean": 0.5,
+        "candidateMean": 0,
+        "pairedDeltaMean": -0.5,
+        "paired95TInterval": [
+          -6.853102368199999,
+          5.853102368199999
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "channelDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "rateRelayDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "roleChangesPerNodeMin": {
+        "baselineMean": 0.10300429184549356,
+        "candidateMean": 0.10944206008583691,
+        "pairedDeltaMean": 0.006437768240343353,
+        "paired95TInterval": [
+          -0.40256023829613724,
+          0.415435774776824
+        ],
+        "maxCandidateBaselineRatio": 1.6
+      },
+      "wakeLockMs": {
+        "baselineMean": 19753642.406675402,
+        "candidateMean": 19247379.07649918,
+        "pairedDeltaMean": -506263.3301762212,
+        "paired95TInterval": [
+          -2568670.8221906396,
+          1556144.1618381971
+        ],
+        "maxCandidateBaselineRatio": 0.9825460121496823
+      },
+      "lostTransmissions": {
+        "baselineMean": 142.5,
+        "candidateMean": 95,
+        "pairedDeltaMean": -47.5,
+        "paired95TInterval": [
+          -117.3841260502,
+          22.384126050199995
+        ],
+        "maxCandidateBaselineRatio": 0.702247191011236
+      },
+      "controlOverhead": {
+        "baselineMean": 137748.5,
+        "candidateMean": 137515.5,
+        "pairedDeltaMean": -233,
+        "paired95TInterval": [
+          -7539.067723429999,
+          7073.067723429999
+        ],
+        "maxCandidateBaselineRatio": 1.0025337274687174
+      },
+      "lostOgmTransmissions": {
+        "baselineMean": 3907.5,
+        "candidateMean": 4000,
+        "pairedDeltaMean": 92.5,
+        "paired95TInterval": [
+          -167.97719709619997,
+          352.9771970962
+        ],
+        "maxCandidateBaselineRatio": 1.028723945094052
+      },
+      "radioDemandRatio": {
+        "baselineMean": 4.3896983125945335,
+        "candidateMean": 4.277195350333152,
+        "pairedDeltaMean": -0.11250296226138223,
+        "paired95TInterval": [
+          -0.5708157382645772,
+          0.34580981374181274
+        ],
+        "maxCandidateBaselineRatio": 0.9825460121496823
+      },
+      "dataPlusOgmLinkAttemptsProxy": {
+        "baselineMean": 141986.5,
+        "candidateMean": 140463.5,
+        "pairedDeltaMean": -1523,
+        "paired95TInterval": [
+          -11700.6699938564,
+          8654.6699938564
+        ],
+        "maxCandidateBaselineRatio": 0.9948538111733596
+      },
+      "baselineFiveDistribution": [
+        1.0,
+        1.0
+      ],
+      "candidateFiveDistribution": [
+        1.0,
+        1.0
+      ],
+      "candidateSeedsStrictlyAbove90": 2,
+      "worstFivePairedDelta": 0.0,
+      "meanFiveGatePass": true,
+      "allSeedsFiveGatePass": true,
+      "benefitGatePass": false,
+      "resourceScreenPass": false,
+      "protectedNoRegressionPass": true
+    },
+    {
+      "split": "protected",
+      "scenario": "campus_quad",
+      "duty": true,
+      "nSeeds": 2,
+      "seeds": [
+        6301,
+        6302
+      ],
+      "five": {
+        "baselineMean": 149.5,
+        "candidateMean": 149.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          -12.706204736399998,
+          12.706204736399998
+        ],
+        "maxCandidateBaselineRatio": 1.0067114093959733
+      },
+      "three": {
+        "baselineMean": 142.5,
+        "candidateMean": 143,
+        "pairedDeltaMean": 0.5,
+        "paired95TInterval": [
+          -43.971716577399995,
+          44.971716577399995
+        ],
+        "maxCandidateBaselineRatio": 1.0285714285714285
+      },
+      "overall": {
+        "baselineMean": 149.5,
+        "candidateMean": 149.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          -12.706204736399998,
+          12.706204736399998
+        ],
+        "maxCandidateBaselineRatio": 1.0067114093959733
+      },
+      "relayTx": {
+        "baselineMean": 4395.5,
+        "candidateMean": 2872,
+        "pairedDeltaMean": -1523.5,
+        "paired95TInterval": [
+          -4668.2856722589995,
+          1621.2856722589995
+        ],
+        "maxCandidateBaselineRatio": 0.6743287973519676
+      },
+      "totalTx": {
+        "baselineMean": 4395.5,
+        "candidateMean": 2872,
+        "pairedDeltaMean": -1523.5,
+        "paired95TInterval": [
+          -4668.2856722589995,
+          1621.2856722589995
+        ],
+        "maxCandidateBaselineRatio": 0.6743287973519676
+      },
+      "p50": {
+        "baselineMean": 447.66642686212435,
+        "candidateMean": 437.26069816970266,
+        "pairedDeltaMean": -10.40572869242169,
+        "paired95TInterval": [
+          -30.73416923814621,
+          9.922711853302832
+        ],
+        "maxCandidateBaselineRatio": 0.9806244205941602
+      },
+      "p95": {
+        "baselineMean": 2833.0775253358297,
+        "candidateMean": 4368.713472150266,
+        "pairedDeltaMean": 1535.6359468144365,
+        "paired95TInterval": [
+          -15182.485339201146,
+          18253.75723283002
+        ],
+        "maxCandidateBaselineRatio": 3.011400574226994
+      },
+      "modeledBatteryDrain": {
+        "baselineMean": -0.036362491471056524,
+        "candidateMean": -0.03777466522115036,
+        "pairedDeltaMean": -0.001412173750093837,
+        "paired95TInterval": [
+          -0.005557398336152817,
+          0.0027330508359651434
+        ],
+        "maxCandidateBaselineRatio": 1.3391257874947085
+      },
+      "queueAtHorizon": {
+        "baselineMean": 1.5,
+        "candidateMean": 0.5,
+        "pairedDeltaMean": -1,
+        "paired95TInterval": [
+          -1.0,
+          -1.0
+        ],
+        "maxCandidateBaselineRatio": 0.5
+      },
+      "retriesSent": {
+        "baselineMean": 15,
+        "candidateMean": 19.5,
+        "pairedDeltaMean": 4.5,
+        "paired95TInterval": [
+          -14.559307104599998,
+          23.5593071046
+        ],
+        "maxCandidateBaselineRatio": 1.3333333333333333
+      },
+      "retriesExhausted": {
+        "baselineMean": 1.5,
+        "candidateMean": 0.5,
+        "pairedDeltaMean": -1,
+        "paired95TInterval": [
+          -1.0,
+          -1.0
+        ],
+        "maxCandidateBaselineRatio": 0.5
+      },
+      "routeExpiries": {
+        "baselineMean": 57.5,
+        "candidateMean": 51.5,
+        "pairedDeltaMean": -6,
+        "paired95TInterval": [
+          -69.53102368200001,
+          57.531023682000004
+        ],
+        "maxCandidateBaselineRatio": 0.9230769230769231
+      },
+      "totalQueued": {
+        "baselineMean": 1.5,
+        "candidateMean": 0.5,
+        "pairedDeltaMean": -1,
+        "paired95TInterval": [
+          -1.0,
+          -1.0
+        ],
+        "maxCandidateBaselineRatio": 0.5
+      },
+      "channelDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "rateRelayDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "roleChangesPerNodeMin": {
+        "baselineMean": 0.1094420600858369,
+        "candidateMean": 0.1223175965665236,
+        "pairedDeltaMean": 0.012875536480686699,
+        "paired95TInterval": [
+          -0.47792207136309,
+          0.5036731443244634
+        ],
+        "maxCandidateBaselineRatio": 1.6666666666666667
+      },
+      "wakeLockMs": {
+        "baselineMean": 19764630.825279415,
+        "candidateMean": 19206589.822592843,
+        "pairedDeltaMean": -558041.0026865732,
+        "paired95TInterval": [
+          -797109.630489491,
+          -318972.37488365534
+        ],
+        "maxCandidateBaselineRatio": 0.9728414114023043
+      },
+      "lostTransmissions": {
+        "baselineMean": 152,
+        "candidateMean": 86,
+        "pairedDeltaMean": -66,
+        "paired95TInterval": [
+          -142.23722841839998,
+          10.237228418399994
+        ],
+        "maxCandidateBaselineRatio": 0.5838150289017341
+      },
+      "controlOverhead": {
+        "baselineMean": 137570.5,
+        "candidateMean": 137438.5,
+        "pairedDeltaMean": -132,
+        "paired95TInterval": [
+          -5405.074965605999,
+          5141.074965605999
+        ],
+        "maxCandidateBaselineRatio": 1.0021016672236456
+      },
+      "lostOgmTransmissions": {
+        "baselineMean": 3989.5,
+        "candidateMean": 4004,
+        "pairedDeltaMean": 14.5,
+        "paired95TInterval": [
+          -677.9881581337999,
+          706.9881581337999
+        ],
+        "maxCandidateBaselineRatio": 1.017362858580775
+      },
+      "radioDemandRatio": {
+        "baselineMean": 4.392140183395425,
+        "candidateMean": 4.268131071687298,
+        "pairedDeltaMean": -0.12400911170812634,
+        "paired95TInterval": [
+          -0.1771354734420916,
+          -0.07088274997416108
+        ],
+        "maxCandidateBaselineRatio": 0.9728414114023043
+      },
+      "dataPlusOgmLinkAttemptsProxy": {
+        "baselineMean": 141966,
+        "candidateMean": 140310.5,
+        "pairedDeltaMean": -1655.5,
+        "paired95TInterval": [
+          -3783.789293347,
+          472.7892933469998
+        ],
+        "maxCandidateBaselineRatio": 0.989378484292577
+      },
+      "baselineFiveDistribution": [
+        0.9933333333333333,
+        1.0
+      ],
+      "candidateFiveDistribution": [
+        1.0,
+        0.9933333333333333
+      ],
+      "candidateSeedsStrictlyAbove90": 2,
+      "worstFivePairedDelta": -0.006666666666666667,
+      "meanFiveGatePass": true,
+      "allSeedsFiveGatePass": true,
+      "benefitGatePass": false,
+      "resourceScreenPass": false,
+      "protectedNoRegressionPass": false
+    },
+    {
+      "split": "protected",
+      "scenario": "partitioned_pair",
+      "duty": false,
+      "nSeeds": 2,
+      "seeds": [
+        6301,
+        6302
+      ],
+      "five": {
+        "baselineMean": 58.5,
+        "candidateMean": 58.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "three": {
+        "baselineMean": 58.5,
+        "candidateMean": 58.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "overall": {
+        "baselineMean": 58.5,
+        "candidateMean": 58.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "relayTx": {
+        "baselineMean": 1826.5,
+        "candidateMean": 1826.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "totalTx": {
+        "baselineMean": 1826.5,
+        "candidateMean": 1826.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "p50": {
+        "baselineMean": 252.69417232950218,
+        "candidateMean": 252.69417232950218,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "p95": {
+        "baselineMean": 314.51697517652065,
+        "candidateMean": 314.51697517652065,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "modeledBatteryDrain": {
+        "baselineMean": -0.024717044113191422,
+        "candidateMean": -0.024717044113191422,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "queueAtHorizon": {
+        "baselineMean": 88,
+        "candidateMean": 88,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "retriesSent": {
+        "baselineMean": 181.5,
+        "candidateMean": 181.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "retriesExhausted": {
+        "baselineMean": 88,
+        "candidateMean": 88,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "routeExpiries": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "totalQueued": {
+        "baselineMean": 88,
+        "candidateMean": 88,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "channelDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "rateRelayDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "roleChangesPerNodeMin": {
+        "baselineMean": 0.14163090128755365,
+        "candidateMean": 0.14163090128755365,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "wakeLockMs": {
+        "baselineMean": 3465402.1506995684,
+        "candidateMean": 3465402.1506995684,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "lostTransmissions": {
+        "baselineMean": 19,
+        "candidateMean": 19,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "controlOverhead": {
+        "baselineMean": 18000,
+        "candidateMean": 18000,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "lostOgmTransmissions": {
+        "baselineMean": 271,
+        "candidateMean": 271,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "radioDemandRatio": {
+        "baselineMean": 1.5401787336442525,
+        "candidateMean": 1.5401787336442525,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "dataPlusOgmLinkAttemptsProxy": {
+        "baselineMean": 19826.5,
+        "candidateMean": 19826.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "baselineFiveDistribution": [
+        0.44,
+        0.34
+      ],
+      "candidateFiveDistribution": [
+        0.44,
+        0.34
+      ],
+      "candidateSeedsStrictlyAbove90": 0,
+      "worstFivePairedDelta": 0.0,
+      "meanFiveGatePass": false,
+      "allSeedsFiveGatePass": false,
+      "benefitGatePass": false,
+      "resourceScreenPass": true,
+      "protectedNoRegressionPass": true
+    },
+    {
+      "split": "protected",
+      "scenario": "partitioned_pair",
+      "duty": true,
+      "nSeeds": 2,
+      "seeds": [
+        6301,
+        6302
+      ],
+      "five": {
+        "baselineMean": 58.5,
+        "candidateMean": 58.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "three": {
+        "baselineMean": 58.5,
+        "candidateMean": 58.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "overall": {
+        "baselineMean": 58.5,
+        "candidateMean": 58.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "relayTx": {
+        "baselineMean": 1826.5,
+        "candidateMean": 1826.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "totalTx": {
+        "baselineMean": 1826.5,
+        "candidateMean": 1826.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "p50": {
+        "baselineMean": 252.69417232950218,
+        "candidateMean": 252.69417232950218,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "p95": {
+        "baselineMean": 314.51697517652065,
+        "candidateMean": 314.51697517652065,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "modeledBatteryDrain": {
+        "baselineMean": -0.023070971873535684,
+        "candidateMean": -0.023070971873535684,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "queueAtHorizon": {
+        "baselineMean": 88,
+        "candidateMean": 88,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "retriesSent": {
+        "baselineMean": 181.5,
+        "candidateMean": 181.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "retriesExhausted": {
+        "baselineMean": 88,
+        "candidateMean": 88,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "routeExpiries": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "totalQueued": {
+        "baselineMean": 88,
+        "candidateMean": 88,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "channelDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "rateRelayDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "roleChangesPerNodeMin": {
+        "baselineMean": 0.14163090128755365,
+        "candidateMean": 0.14163090128755365,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "wakeLockMs": {
+        "baselineMean": 3465402.1506995684,
+        "candidateMean": 3465402.1506995684,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "lostTransmissions": {
+        "baselineMean": 19,
+        "candidateMean": 19,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "controlOverhead": {
+        "baselineMean": 18000,
+        "candidateMean": 18000,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "lostOgmTransmissions": {
+        "baselineMean": 271,
+        "candidateMean": 271,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "radioDemandRatio": {
+        "baselineMean": 1.5401787336442525,
+        "candidateMean": 1.5401787336442525,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "dataPlusOgmLinkAttemptsProxy": {
+        "baselineMean": 19826.5,
+        "candidateMean": 19826.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "baselineFiveDistribution": [
+        0.44,
+        0.34
+      ],
+      "candidateFiveDistribution": [
+        0.44,
+        0.34
+      ],
+      "candidateSeedsStrictlyAbove90": 0,
+      "worstFivePairedDelta": 0.0,
+      "meanFiveGatePass": false,
+      "allSeedsFiveGatePass": false,
+      "benefitGatePass": false,
+      "resourceScreenPass": true,
+      "protectedNoRegressionPass": true
+    },
+    {
+      "split": "protected",
+      "scenario": "sparse_village",
+      "duty": false,
+      "nSeeds": 2,
+      "seeds": [
+        6301,
+        6302
+      ],
+      "five": {
+        "baselineMean": 41.5,
+        "candidateMean": 41.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "three": {
+        "baselineMean": 41.5,
+        "candidateMean": 41.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "overall": {
+        "baselineMean": 41.5,
+        "candidateMean": 41.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "relayTx": {
+        "baselineMean": 1219.5,
+        "candidateMean": 1219.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "totalTx": {
+        "baselineMean": 1219.5,
+        "candidateMean": 1219.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "p50": {
+        "baselineMean": 249.6390516392421,
+        "candidateMean": 249.6390516392421,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "p95": {
+        "baselineMean": 308.46931455191225,
+        "candidateMean": 308.46931455191225,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "modeledBatteryDrain": {
+        "baselineMean": -0.010467428469421503,
+        "candidateMean": -0.010467428469421503,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "queueAtHorizon": {
+        "baselineMean": 103.5,
+        "candidateMean": 103.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "retriesSent": {
+        "baselineMean": 212.5,
+        "candidateMean": 212.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "retriesExhausted": {
+        "baselineMean": 103.5,
+        "candidateMean": 103.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "routeExpiries": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "totalQueued": {
+        "baselineMean": 103.5,
+        "candidateMean": 103.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "channelDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "rateRelayDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "roleChangesPerNodeMin": {
+        "baselineMean": 0.02145922746781116,
+        "candidateMean": 0.02145922746781116,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "wakeLockMs": {
+        "baselineMean": 2507885.698586829,
+        "candidateMean": 2507885.698586829,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "lostTransmissions": {
+        "baselineMean": 22,
+        "candidateMean": 22,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "controlOverhead": {
+        "baselineMean": 12065,
+        "candidateMean": 12065,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "lostOgmTransmissions": {
+        "baselineMean": 225.5,
+        "candidateMean": 225.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "radioDemandRatio": {
+        "baselineMean": 0.928846555032159,
+        "candidateMean": 0.928846555032159,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "dataPlusOgmLinkAttemptsProxy": {
+        "baselineMean": 13284.5,
+        "candidateMean": 13284.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "baselineFiveDistribution": [
+        0.2866666666666667,
+        0.26666666666666666
+      ],
+      "candidateFiveDistribution": [
+        0.2866666666666667,
+        0.26666666666666666
+      ],
+      "candidateSeedsStrictlyAbove90": 0,
+      "worstFivePairedDelta": 0.0,
+      "meanFiveGatePass": false,
+      "allSeedsFiveGatePass": false,
+      "benefitGatePass": false,
+      "resourceScreenPass": true,
+      "protectedNoRegressionPass": true
+    },
+    {
+      "split": "protected",
+      "scenario": "sparse_village",
+      "duty": true,
+      "nSeeds": 2,
+      "seeds": [
+        6301,
+        6302
+      ],
+      "five": {
+        "baselineMean": 41.5,
+        "candidateMean": 41.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "three": {
+        "baselineMean": 41.5,
+        "candidateMean": 41.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "overall": {
+        "baselineMean": 41.5,
+        "candidateMean": 41.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "relayTx": {
+        "baselineMean": 1189,
+        "candidateMean": 1189,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "totalTx": {
+        "baselineMean": 1189,
+        "candidateMean": 1189,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "p50": {
+        "baselineMean": 248.74884260236286,
+        "candidateMean": 248.74884260236286,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "p95": {
+        "baselineMean": 308.0904524587095,
+        "candidateMean": 308.0904524587095,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "modeledBatteryDrain": {
+        "baselineMean": -0.004722607582114513,
+        "candidateMean": -0.004722607582114513,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "queueAtHorizon": {
+        "baselineMean": 103.5,
+        "candidateMean": 103.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "retriesSent": {
+        "baselineMean": 212.5,
+        "candidateMean": 212.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "retriesExhausted": {
+        "baselineMean": 103.5,
+        "candidateMean": 103.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "routeExpiries": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "totalQueued": {
+        "baselineMean": 103.5,
+        "candidateMean": 103.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "channelDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "rateRelayDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "roleChangesPerNodeMin": {
+        "baselineMean": 0.02145922746781116,
+        "candidateMean": 0.02145922746781116,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "wakeLockMs": {
+        "baselineMean": 2498627.3502057814,
+        "candidateMean": 2498627.3502057814,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "lostTransmissions": {
+        "baselineMean": 25.5,
+        "candidateMean": 25.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "controlOverhead": {
+        "baselineMean": 12071.5,
+        "candidateMean": 12071.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "lostOgmTransmissions": {
+        "baselineMean": 212.5,
+        "candidateMean": 212.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "radioDemandRatio": {
+        "baselineMean": 0.9254175371132524,
+        "candidateMean": 0.9254175371132524,
+        "pairedDeltaMean": 0.0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "dataPlusOgmLinkAttemptsProxy": {
+        "baselineMean": 13260.5,
+        "candidateMean": 13260.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "baselineFiveDistribution": [
+        0.2866666666666667,
+        0.26666666666666666
+      ],
+      "candidateFiveDistribution": [
+        0.2866666666666667,
+        0.26666666666666666
+      ],
+      "candidateSeedsStrictlyAbove90": 0,
+      "worstFivePairedDelta": 0.0,
+      "meanFiveGatePass": false,
+      "allSeedsFiveGatePass": false,
+      "benefitGatePass": false,
+      "resourceScreenPass": true,
+      "protectedNoRegressionPass": true
+    },
+    {
+      "split": "validation",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "nSeeds": 2,
+      "seeds": [
+        4303,
+        4304
+      ],
+      "five": {
+        "baselineMean": 131,
+        "candidateMean": 134.5,
+        "pairedDeltaMean": 3.5,
+        "paired95TInterval": [
+          -40.971716577399995,
+          47.971716577399995
+        ],
+        "maxCandidateBaselineRatio": 1.054263565891473
+      },
+      "three": {
+        "baselineMean": 93,
+        "candidateMean": 99.5,
+        "pairedDeltaMean": 6.5,
+        "paired95TInterval": [
+          -12.559307104599998,
+          25.5593071046
+        ],
+        "maxCandidateBaselineRatio": 1.0888888888888888
+      },
+      "overall": {
+        "baselineMean": 144,
+        "candidateMean": 145.5,
+        "pairedDeltaMean": 1.5,
+        "paired95TInterval": [
+          -17.5593071046,
+          20.5593071046
+        ],
+        "maxCandidateBaselineRatio": 1.0205479452054795
+      },
+      "relayTx": {
+        "baselineMean": 42712.5,
+        "candidateMean": 36172.5,
+        "pairedDeltaMean": -6540,
+        "paired95TInterval": [
+          -24328.68663096,
+          11248.686630960001
+        ],
+        "maxCandidateBaselineRatio": 0.8540974765108291
+      },
+      "totalTx": {
+        "baselineMean": 42712.5,
+        "candidateMean": 36172.5,
+        "pairedDeltaMean": -6540,
+        "paired95TInterval": [
+          -24328.68663096,
+          11248.686630960001
+        ],
+        "maxCandidateBaselineRatio": 0.8540974765108291
+      },
+      "p50": {
+        "baselineMean": 892.6466494204942,
+        "candidateMean": 818.4948205889668,
+        "pairedDeltaMean": -74.15182883152738,
+        "paired95TInterval": [
+          -809.5564128999102,
+          661.2527552368555
+        ],
+        "maxCandidateBaselineRatio": 0.982691758835749
+      },
+      "p95": {
+        "baselineMean": 7756.016822113888,
+        "candidateMean": 7715.793762466637,
+        "pairedDeltaMean": -40.22305964725092,
+        "paired95TInterval": [
+          -43869.43802107563,
+          43788.991901781126
+        ],
+        "maxCandidateBaselineRatio": 1.4917195195652417
+      },
+      "modeledBatteryDrain": {
+        "baselineMean": 0.06615075273161847,
+        "candidateMean": 0.06609801835661816,
+        "pairedDeltaMean": -5.273437500030731e-05,
+        "paired95TInterval": [
+          -0.0066788216104469635,
+          0.006573352860446349
+        ],
+        "maxCandidateBaselineRatio": 1.007560069277911
+      },
+      "queueAtHorizon": {
+        "baselineMean": 59.5,
+        "candidateMean": 59,
+        "pairedDeltaMean": -0.5,
+        "paired95TInterval": [
+          -95.79653552299999,
+          94.79653552299999
+        ],
+        "maxCandidateBaselineRatio": 1.1320754716981132
+      },
+      "retriesSent": {
+        "baselineMean": 90,
+        "candidateMean": 100,
+        "pairedDeltaMean": 10,
+        "paired95TInterval": [
+          -40.82481894559999,
+          60.82481894559999
+        ],
+        "maxCandidateBaselineRatio": 1.1359223300970873
+      },
+      "retriesExhausted": {
+        "baselineMean": 34.5,
+        "candidateMean": 33,
+        "pairedDeltaMean": -1.5,
+        "paired95TInterval": [
+          -7.853102368199999,
+          4.853102368199999
+        ],
+        "maxCandidateBaselineRatio": 0.9666666666666667
+      },
+      "routeExpiries": {
+        "baselineMean": 4374,
+        "candidateMean": 4769.5,
+        "pairedDeltaMean": 395.5,
+        "paired95TInterval": [
+          -1148.3038754725999,
+          1939.3038754725999
+        ],
+        "maxCandidateBaselineRatio": 1.1251210067763795
+      },
+      "totalQueued": {
+        "baselineMean": 59.5,
+        "candidateMean": 59,
+        "pairedDeltaMean": -0.5,
+        "paired95TInterval": [
+          -95.79653552299999,
+          94.79653552299999
+        ],
+        "maxCandidateBaselineRatio": 1.1320754716981132
+      },
+      "channelDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "rateRelayDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "roleChangesPerNodeMin": {
+        "baselineMean": 0.11373390557939915,
+        "candidateMean": 0.11587982832618025,
+        "pairedDeltaMean": 0.0021459227467811037,
+        "paired95TInterval": [
+          -0.18871981363690982,
+          0.19301165913047202
+        ],
+        "maxCandidateBaselineRatio": 1.1538461538461537
+      },
+      "wakeLockMs": {
+        "baselineMean": 122528396.70117787,
+        "candidateMean": 120293977.93266448,
+        "pairedDeltaMean": -2234418.768513374,
+        "paired95TInterval": [
+          -10094701.135605495,
+          5625863.598578748
+        ],
+        "maxCandidateBaselineRatio": 0.9867032250728617
+      },
+      "lostTransmissions": {
+        "baselineMean": 1617,
+        "candidateMean": 1359.5,
+        "pairedDeltaMean": -257.5,
+        "paired95TInterval": [
+          -301.9717165774,
+          -213.0282834226
+        ],
+        "maxCandidateBaselineRatio": 0.8645333333333334
+      },
+      "controlOverhead": {
+        "baselineMean": 874480,
+        "candidateMean": 875126,
+        "pairedDeltaMean": 646,
+        "paired95TInterval": [
+          -9125.071442291599,
+          10417.071442291599
+        ],
+        "maxCandidateBaselineRatio": 1.0015912303528034
+      },
+      "lostOgmTransmissions": {
+        "baselineMean": 32535.5,
+        "candidateMean": 32613.5,
+        "pairedDeltaMean": 78,
+        "paired95TInterval": [
+          -163.4178899916,
+          319.41788999159996
+        ],
+        "maxCandidateBaselineRatio": 1.0030076586772503
+      },
+      "radioDemandRatio": {
+        "baselineMean": 9.076177533420584,
+        "candidateMean": 8.91066503204922,
+        "pairedDeltaMean": -0.16551250137136186,
+        "paired95TInterval": [
+          -0.7477556396744602,
+          0.4167306369317365
+        ],
+        "maxCandidateBaselineRatio": 0.9867032250728613
+      },
+      "dataPlusOgmLinkAttemptsProxy": {
+        "baselineMean": 917192.5,
+        "candidateMean": 911298.5,
+        "pairedDeltaMean": -5894,
+        "paired95TInterval": [
+          -33453.75807325159,
+          21665.758073251596
+        ],
+        "maxCandidateBaselineRatio": 0.995970699140488
+      },
+      "baselineFiveDistribution": [
+        0.8866666666666667,
+        0.86
+      ],
+      "candidateFiveDistribution": [
+        0.8866666666666667,
+        0.9066666666666666
+      ],
+      "candidateSeedsStrictlyAbove90": 1,
+      "worstFivePairedDelta": 0.0,
+      "meanFiveGatePass": false,
+      "allSeedsFiveGatePass": false,
+      "benefitGatePass": false,
+      "resourceScreenPass": false,
+      "protectedNoRegressionPass": true
+    },
+    {
+      "split": "validation",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "nSeeds": 2,
+      "seeds": [
+        4303,
+        4304
+      ],
+      "five": {
+        "baselineMean": 133,
+        "candidateMean": 129.5,
+        "pairedDeltaMean": -3.5,
+        "paired95TInterval": [
+          -60.6779213138,
+          53.6779213138
+        ],
+        "maxCandidateBaselineRatio": 1.007936507936508
+      },
+      "three": {
+        "baselineMean": 95,
+        "candidateMean": 93,
+        "pairedDeltaMean": -2,
+        "paired95TInterval": [
+          -2.0,
+          -2.0
+        ],
+        "maxCandidateBaselineRatio": 0.9791666666666666
+      },
+      "overall": {
+        "baselineMean": 142.5,
+        "candidateMean": 145.5,
+        "pairedDeltaMean": 3,
+        "paired95TInterval": [
+          -73.2372284184,
+          79.2372284184
+        ],
+        "maxCandidateBaselineRatio": 1.064748201438849
+      },
+      "relayTx": {
+        "baselineMean": 45442,
+        "candidateMean": 33912.5,
+        "pairedDeltaMean": -11529.5,
+        "paired95TInterval": [
+          -48244.078585827796,
+          25185.078585827796
+        ],
+        "maxCandidateBaselineRatio": 0.8185293314570162
+      },
+      "totalTx": {
+        "baselineMean": 45442,
+        "candidateMean": 33912.5,
+        "pairedDeltaMean": -11529.5,
+        "paired95TInterval": [
+          -48244.078585827796,
+          25185.078585827796
+        ],
+        "maxCandidateBaselineRatio": 0.8185293314570162
+      },
+      "p50": {
+        "baselineMean": 926.6064635210205,
+        "candidateMean": 801.7011443409137,
+        "pairedDeltaMean": -124.90531918010674,
+        "paired95TInterval": [
+          -1420.6678506060753,
+          1170.8572122458618
+        ],
+        "maxCandidateBaselineRatio": 0.9757007506415852
+      },
+      "p95": {
+        "baselineMean": 7255.654554347275,
+        "candidateMean": 7603.59630502644,
+        "pairedDeltaMean": 347.9417506791651,
+        "paired95TInterval": [
+          -1680.0075295085248,
+          2375.891030866855
+        ],
+        "maxCandidateBaselineRatio": 1.0532399500675313
+      },
+      "modeledBatteryDrain": {
+        "baselineMean": 0.027591299569360683,
+        "candidateMean": 0.029291335728747148,
+        "pairedDeltaMean": 0.0017000361593864644,
+        "paired95TInterval": [
+          -0.0052049017553216755,
+          0.008604974074094603
+        ],
+        "maxCandidateBaselineRatio": 1.0871497387777531
+      },
+      "queueAtHorizon": {
+        "baselineMean": 61,
+        "candidateMean": 56,
+        "pairedDeltaMean": -5,
+        "paired95TInterval": [
+          -30.412409472799997,
+          20.412409472799997
+        ],
+        "maxCandidateBaselineRatio": 0.94
+      },
+      "retriesSent": {
+        "baselineMean": 96.5,
+        "candidateMean": 93.5,
+        "pairedDeltaMean": -3,
+        "paired95TInterval": [
+          -117.3558426276,
+          111.3558426276
+        ],
+        "maxCandidateBaselineRatio": 1.0576923076923077
+      },
+      "retriesExhausted": {
+        "baselineMean": 33.5,
+        "candidateMean": 33.5,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1.0
+      },
+      "routeExpiries": {
+        "baselineMean": 3881.5,
+        "candidateMean": 4306.5,
+        "pairedDeltaMean": 425,
+        "paired95TInterval": [
+          -95.95439419239995,
+          945.9543941924
+        ],
+        "maxCandidateBaselineRatio": 1.1177957532861476
+      },
+      "totalQueued": {
+        "baselineMean": 61,
+        "candidateMean": 56,
+        "pairedDeltaMean": -5,
+        "paired95TInterval": [
+          -30.412409472799997,
+          20.412409472799997
+        ],
+        "maxCandidateBaselineRatio": 0.94
+      },
+      "channelDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "rateRelayDrops": {
+        "baselineMean": 0,
+        "candidateMean": 0,
+        "pairedDeltaMean": 0,
+        "paired95TInterval": [
+          0.0,
+          0.0
+        ],
+        "maxCandidateBaselineRatio": 1
+      },
+      "roleChangesPerNodeMin": {
+        "baselineMean": 0.1072961373390558,
+        "candidateMean": 0.12660944206008584,
+        "pairedDeltaMean": 0.01931330472103005,
+        "paired95TInterval": [
+          -0.11701936412446354,
+          0.15564597356652363
+        ],
+        "maxCandidateBaselineRatio": 1.35
+      },
+      "wakeLockMs": {
+        "baselineMean": 123402425.04431258,
+        "candidateMean": 119456300.62848622,
+        "pairedDeltaMean": -3946124.415826373,
+        "paired95TInterval": [
+          -10795580.279936573,
+          2903331.448283827
+        ],
+        "maxCandidateBaselineRatio": 0.9722512465438702
+      },
+      "lostTransmissions": {
+        "baselineMean": 1799,
+        "candidateMean": 1296,
+        "pairedDeltaMean": -503,
+        "paired95TInterval": [
+          -2205.6314346776,
+          1199.6314346775998
+        ],
+        "maxCandidateBaselineRatio": 0.7994565217391304
+      },
+      "controlOverhead": {
+        "baselineMean": 874012.5,
+        "candidateMean": 874936,
+        "pairedDeltaMean": 923.5,
+        "paired95TInterval": [
+          -48649.757779064596,
+          50496.757779064596
+        ],
+        "maxCandidateBaselineRatio": 1.0054414081574885
+      },
+      "lostOgmTransmissions": {
+        "baselineMean": 32680.5,
+        "candidateMean": 32606.5,
+        "pairedDeltaMean": -74,
+        "paired95TInterval": [
+          -1560.6259541588,
+          1412.6259541588
+        ],
+        "maxCandidateBaselineRatio": 1.0013068319961098
+      },
+      "radioDemandRatio": {
+        "baselineMean": 9.140920373652785,
+        "candidateMean": 8.848614861369349,
+        "pairedDeltaMean": -0.29230551228343504,
+        "paired95TInterval": [
+          -0.7996726133286346,
+          0.2150615887617645
+        ],
+        "maxCandidateBaselineRatio": 0.9722512465438702
+      },
+      "dataPlusOgmLinkAttemptsProxy": {
+        "baselineMean": 919454.5,
+        "candidateMean": 908848.5,
+        "pairedDeltaMean": -10606,
+        "paired95TInterval": [
+          -23464.6791932368,
+          2252.6791932367996
+        ],
+        "maxCandidateBaselineRatio": 0.9896837822260837
+      },
+      "baselineFiveDistribution": [
+        0.9333333333333333,
+        0.84
+      ],
+      "candidateFiveDistribution": [
+        0.88,
+        0.8466666666666667
+      ],
+      "candidateSeedsStrictlyAbove90": 0,
+      "worstFivePairedDelta": -0.05333333333333334,
+      "meanFiveGatePass": false,
+      "allSeedsFiveGatePass": false,
+      "benefitGatePass": false,
+      "resourceScreenPass": false,
+      "protectedNoRegressionPass": false
+    }
+  ],
+  "primaryTargetMet": false,
+  "protectedScreenPass": false,
+  "targetMet": false,
+  "promotion": "rejected-offline-only",
+  "DartCandidateValidation": "not implemented; disabled TS-only research profile",
+  "expiryObservation": "7-day bundle expiry cannot occur in this 225-second traffic window; routeExpiries are not bundle expiry",
+  "inferenceCost": "not applicable: no learner/model; one extra fixed route-epoch comparison per OGM",
+  "uncertainty": "seed paired t intervals; n2 protected/dev/validation and n6 final; no simultaneous or exact coverage guarantee; packets not independent"
+}

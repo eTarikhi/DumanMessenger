@@ -1,0 +1,1202 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Duman Messenger - engineering remediation report, 2026-10-27</title>
+<style>
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin:0; background:#0b1017; color:#eaf2ff;
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+.wrap { max-width:1180px; margin:0 auto; padding:32px 24px 80px; }
+header { border-bottom:1px solid #1e2a3a; padding-bottom:20px; margin-bottom:28px; }
+h1 { font-size:30px; margin:0 0 8px; letter-spacing:-0.3px; }
+h2 { font-size:21px; margin:44px 0 6px; padding-top:18px; border-top:1px solid #16202c; }
+h3 { font-size:16px; margin:24px 0 6px; color:#b6ff4a; }
+p { margin:8px 0; color:#c9d7e6; }
+.sub { color:#9fb0c3; font-size:14px; margin:0; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:10px; margin:18px 0; }
+.card { background:rgba(17,24,35,0.92); border:1px solid #1e2a3a; border-radius:12px; padding:12px 14px; }
+.card .k { font-size:11px; text-transform:uppercase; letter-spacing:0.6px; color:#7d8ea1; }
+.card .v { font-size:22px; font-weight:700; color:#4de0ff; margin-top:2px; }
+.card .n { font-size:11px; color:#7d8ea1; margin-top:2px; }
+table { width:100%; border-collapse:collapse; margin:12px 0 4px; font-size:13px; }
+th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;
+  color:#7d8ea1; border-bottom:1px solid #1e2a3a; padding:7px 8px; font-weight:600; }
+td { border-bottom:1px solid #141d29; padding:7px 8px; color:#c9d7e6; vertical-align:top; }
+tr:hover td { background:rgba(77,224,255,0.04); }
+td.num { font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; }
+.bar { position:relative; background:#141d29; border-radius:4px; height:18px; min-width:120px; overflow:hidden; }
+.bar .fill { position:absolute; left:0; top:0; bottom:0; border-radius:4px; opacity:0.85; }
+.bar .barlabel { position:relative; z-index:1; font-size:11px; line-height:18px; padding-left:7px;
+  color:#eaf2ff; font-variant-numeric:tabular-nums; }
+.pass { color:#b6ff4a; font-weight:600; }
+.part { color:#ffd166; font-weight:600; }
+.blocked { color:#ff9f4d; font-weight:600; }
+.note { background:rgba(127,179,255,0.07); border-left:3px solid #7fb3ff; padding:10px 14px;
+  border-radius:0 8px 8px 0; margin:14px 0; font-size:13.5px; color:#c9d7e6; }
+.warn { background:rgba(255,159,77,0.07); border-left-color:#ff9f4d; }
+.good { background:rgba(182,255,74,0.07); border-left-color:#b6ff4a; }
+code, pre { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+code { background:#141d29; padding:1px 5px; border-radius:4px; font-size:12.5px; color:#9fe8ff; }
+pre { background:#0e1520; border:1px solid #1e2a3a; border-radius:10px; padding:12px 14px;
+  overflow-x:auto; font-size:12.5px; color:#c9d7e6; }
+.two { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+@media (max-width:820px){ .two { grid-template-columns:1fr; } }
+ul { margin:8px 0 8px 20px; padding:0; color:#c9d7e6; }
+li { margin:5px 0; }
+.tag { display:inline-block; font-size:10.5px; padding:1px 7px; border-radius:20px;
+  border:1px solid #1e2a3a; color:#9fb0c3; margin-right:5px; }
+footer { margin-top:56px; padding-top:18px; border-top:1px solid #1e2a3a; color:#7d8ea1; font-size:12.5px; }
+</style></head><body><div class="wrap">
+
+<header>
+<h1>Engineering remediation report</h1>
+<p class="sub">2026-10-27 &middot; branch <code>arena/ff85cb12-dumanmessenger</code> &middot;
+started at <code>d2fbba3</code> &middot; code head <code>e5bc87b</code> &middot;
+30 commits in the range &mdash; 29 from this session and one (<code>991d11c</code>) from the owner
+&mdash; 38 files, +2 975 / &minus;172 (this report is most of the added lines) &middot;
+<a href="https://github.com/eTarikhi/DumanMessenger/pull/3" style="color:#4de0ff">pull request #3</a></p>
+<p>Remediation of the verification and toolchain layer, plus the two engine-side defects that only
+became visible once CI executed the authoritative Dart engine for the first time in this
+repository's history. Every number below was measured during this session, on the commits named;
+nothing is carried over from an earlier report or from memory. Where something could not be
+verified, the row says so and says why.</p>
+</header>
+
+<h2>0. Summary</h2>
+<div class="grid">
+  <div class="card"><div class="k">commits</div><div class="v">30</div><div class="n">by concern, all pushed</div></div>
+  <div class="card"><div class="k">defects fixed</div><div class="v">20</div><div class="n">each with its evidence in &sect;1</div></div>
+  <div class="card"><div class="k">CI jobs green</div><div class="v">9 / 9</div><div class="n">run 40618882207</div></div>
+  <div class="card"><div class="k">Dart tests</div><div class="v">279</div><div class="n">0 failed; read from the notice</div></div>
+  <div class="card"><div class="k">TS tests</div><div class="v">480</div><div class="n">18 files; read from the notice</div></div>
+  <div class="card"><div class="k">local checks</div><div class="v">12 / 0</div><div class="n">passed / failed; 13 could not run</div></div>
+  <div class="card"><div class="k">still blocked</div><div class="v">15</div><div class="n">of 27 probed rows, all external</div></div>
+  <div class="card"><div class="k">roadmap open</div><div class="v">28</div><div class="n">16 closed; none closable here</div></div>
+</div>
+
+<div class="note good"><strong>The one thing that changed the shape of this session:</strong>
+GitHub Actions stopped being refused for billing part-way through it. Run
+<a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40428343622" style="color:#4de0ff">40428343622</a>
+was the first run since <code>8406717</code> (2026-10-23T08:46:52Z) to execute any job at all, and
+therefore the first time the authoritative Dart engine &mdash; 22 files, 15 200 lines, written on a
+machine with no Dart SDK &mdash; was compiled, analysed and tested anywhere. It found one failing
+test, fixed in <code>3b52b09</code>. It also made a new class of work possible: reading what a green
+run measures, which is what <code>4350b40</code> is about. Billing was not fixed by anything in this
+repository; the refusal was on the account, and the runs before and after it are the evidence.</div>
+
+<h2>1. The ten commits</h2>
+<table>
+<tr><th>sha</th><th>concern</th><th>the defect, with the evidence that it was one</th><th>how it was verified</th></tr>
+
+<tr><td><code>9be0d83</code></td><td>tool/ci &mdash; <code>--help</code></td>
+<td>Four of the seven scripts printed their own source code as help text, because a hard-coded
+<code>sed -n '2,Np'</code> range had drifted past the header comment. Measured leaked lines:
+<code>run-pipeline.sh</code> 11 (<code>set -uo pipefail</code>, <code>HERE=&hellip;</code>,
+<code>. "$HERE/lib.sh"</code>, <code>JOBS_ALL=&hellip;</code>), <code>validate-and-push.sh</code> 8,
+<code>watch.sh</code> 5, <code>blockers.sh</code> 1. Two more were exactly correct and one line from
+being wrong.</td>
+<td>All six range-based <code>usage()</code>s replaced with the awk header walk
+<code>daily.sh</code> already used. After: zero leaked source lines in all seven
+<code>--help</code> outputs; each script's last header line still present (nothing truncated the
+other way); for <code>pr-flow.sh</code>, whose range was exact, the new output is byte-identical to
+the old; <code>bash -n</code> clean on all seven.</td></tr>
+
+<tr><td><code>0d38edd</code></td><td>CI parity &mdash; the checks job</td>
+<td><code>check-ps1.py</code> was run by nothing automated: it had a <code>make</code> target and
+three hand-kept lists that never mentioned it, so <code>make.ps1</code> &mdash; the Windows entry
+point, 21 targets &mdash; was validated only when a human typed the command. Separately,
+<code>run-pipeline.sh --list</code> and its <code>--job</code> help line both omitted the
+<code>checks</code> job, which <code>JOBS_ALL</code> runs first and the workflow gates on, while
+<code>docs/10</code> &sect;10 tells a reader <code>--list</code> "prints this mapping from the script
+itself".</td>
+<td>Wired into all three entry points. New check <code>ci-checkers</code> compares the checker set
+across the three and asks whether any <code>check-*.py</code> on disk is run by none of them;
+<code>ci-jobs</code> extended to require every job to be described and advertised. Both found their
+own defects while being written: counting bare mentions made a step <em>label</em> look like an
+invocation, so a deleted invocation passed; and a <code>\s{2,}</code> separator reported
+<code>cli-matrix</code> as undescribed because its label fills the ten-character column. Self-test:
+14 faults, all caught and named.</td></tr>
+
+<tr><td><code>5d408cd</code></td><td>reproducible resolution</td>
+<td><code>sim/mesh_sim/pubspec.lock</code> was git-ignored, so every run resolved
+<code>test: ^1.25.0</code> afresh &mdash; a caret range in an application package
+(<code>publish_to: none</code>), the exact case the Dart guidance says to pin.
+<code>.gitignore</code> also ignored <code>package.json</code>, <code>package-lock.json</code> and
+<code>wget-log</code>: unanchored, so any nested <code>package.json</code> would have been silently
+ignored, while <code>doctor.sh</code> treats the npm lockfile as the thing that makes
+<code>npm ci</code> reproducible.</td>
+<td>Lock un-ignored; the three Dart jobs resolve with <code>--enforce-lockfile</code> when a lock
+exists and publish a <code>::warning::</code> annotation when one does not. Both branches exercised
+against a stub <code>dart</code> on <code>PATH</code> before pushing. On the runner, the else-branch
+fired and its annotation was read back: "pubspec.lock is not committed, so this run resolves Dart
+dependencies fresh". The lock itself is <strong>not</strong> written &mdash; <code>pub.dev</code> is
+unreachable from here and an invented lock would fail <code>--enforce-lockfile</code> for
+everybody.</td></tr>
+
+<tr><td><code>8f8391b</code></td><td>the pre-push gate</td>
+<td><code>.githooks/pre-push</code> has been in version control since it was written and
+<code>make doctor</code> has reported it present-but-inactive on every run since: a fresh clone has
+no gate at all, because git refuses to install hooks by itself and nothing in the setup path ran
+<code>make install-hooks</code>.</td>
+<td><code>package.json</code> gained <code>"prepare": "git config core.hooksPath .githooks || exit
+0"</code> &mdash; <code>exit 0</code> rather than <code>true</code> because npm runs scripts through
+<code>cmd.exe</code> on Windows, where <code>true</code> is not a command, and a failing
+<code>prepare</code> would fail <code>npm ci</code> for every Windows user. Verified:
+<code>git config --unset core.hooksPath</code> &rarr; empty; <code>npm ci</code> (101 packages, 2 s)
+&rarr; <code>.githooks</code>.</td></tr>
+
+<tr><td><code>7b34d3c</code></td><td>evidence that survives a wipe</td>
+<td>Every capture this repository produces &mdash; <code>DAILY.md</code>, <code>REPORT.md</code>,
+<code>checks.json</code>, <code>pipeline.json</code>, <code>blockers.json</code>, the verification
+log &mdash; lands under git-ignored <code>artifacts/</code>, so the record of what a commit verified
+was destroyed by exactly the event it exists to explain. Fourteen rollbacks in one week made that
+concrete: each erased every earlier run's evidence.</td>
+<td><code>daily.sh</code> appends one digest line to the tracked
+<code>reports/verification-log.jsonl</code> (verdict, exit codes, counts, tool versions, elapsed,
+artifact directory; no captured output). The builder was extracted and run standalone before
+committing; the first line written by <code>daily.sh</code> itself came from the 885 s run at
+<code>3911753</code> and is in the file. Three earlier runs are backfilled and marked
+<code>"source": "backfilled from the session's own measurements"</code>, with <code>null</code>
+where a run recorded no count rather than a guessed number.</td></tr>
+
+<tr><td><code>3911753</code></td><td>documentation accuracy</td>
+<td>Eleven claims the tools had outgrown, all found by reading prose against a program's own output:
+57 paired constants (59), <code>SimConfig</code> 83 / <code>SimulationStats</code> 80 fields (88 /
+83), a one-sided list missing <code>mask</code>, 11 self-test cases (14), "four checks" in the docs
+group (five), "all twenty targets" (21), "thirteen rollbacks" (fourteen), "280 lines" of
+<code>make.ps1</code> in three files (281 &mdash; and a line count in prose is undetectable when it
+drifts, so all three now name the target count the checker prints), a pasted <code>--list</code>
+sample whose <code>analyze</code> row no longer matched the registry, and the &sect;10 reference
+table omitting the <code>checks</code> job's six steps entirely.</td>
+<td><code>check-docs.py</code> 12 checks, exit 0 after every edit; 404 section citations resolving
+at that commit. Volatile counts replaced with tool-printed facts wherever the tool prints
+one.</td></tr>
+
+<tr><td><code>3b52b09</code></td><td>engine correctness &mdash; the failing Dart test</td>
+<td>Run 40428343622, annotation: <code>test/engine_test.dart:2723 &hellip; Expected: a value less
+than &lt;0&gt; Actual: &lt;0&gt;</code>. The test hand-rolled a harness &mdash;
+<code>runFor(120000)</code> and <code>refresh()</code>, with no <code>clearRecords()</code> and no
+<code>injectTraffic()</code> &mdash; while the two tests beside it used the group's
+<code>world()</code> helper, which is the harness its TypeScript mirror uses. It measured a dense
+crowd with nothing to send: zero deferrals and zero drops in both arms.</td>
+<td>Uses <code>world()</code>; states the non-vacuity requirement explicitly
+(<code>greaterThan(0)</code> on both counters, with reasons) in the Dart test <em>and</em> the
+TypeScript mirror, where it is already true. <code>npx vitest run
+src/__tests__/radio-occupancy.test.ts</code> &rarr; 15/15 locally; the Dart side by execution in run
+40429112891 &rarr; 278 passed, 0 failed.</td></tr>
+
+<tr><td><code>4350b40</code></td><td>CI as an evidence channel</td>
+<td>A green run's numbers were unreadable here: <code>gh run view --log-failed</code> reaches
+<code>results-receiver.actions.githubusercontent.com</code>, outside this environment's egress
+allowlist (EOF, 0 bytes), and <code>$GITHUB_STEP_SUMMARY</code> &mdash; where
+<code>diagnostics.py</code> had been writing the CLI metrics all along &mdash; is not exposed by the
+check-runs API at all. The first green run in four days therefore produced evidence nobody could
+read.</td>
+<td><code>diagnostics.py</code> republishes the <code>dart test</code> tally and each captured CLI
+run as a notice, clipped in the middle because the CLI prints its metrics first and its verdict
+last. <code>cli-matrix</code> and <code>probes</code> capture with <code>tee</code> and gained
+<code>set -o pipefail</code> in the same edit &mdash; without it the pipeline's status is
+<code>tee</code>'s and a failing gate exits 0. Verified before pushing: all 26 <code>run:</code>
+blocks in <code>ci.yml</code> parse with <code>bash -n</code> after expression substitution; the
+parser run against synthetic captures produced a correctly escaped notice (<code>%</code> as
+<code>%25</code>, LF as <code>%0A</code>) and clipped a 5 014-character capture to 3 179 keeping
+head and verdict. Then confirmed by execution: nine notices read back from run 40430079404.</td></tr>
+
+<tr><td><code>2a9c78a</code></td><td>Windows quick start + four measured numbers</td>
+<td>The README had no setup path for the platform <code>docs/11</code> exists for, and four numbers
+were contradicted by measurements taken the same day: "451 tests" (473, from the daily run's own
+capture), <code>docs/11</code> quoting <code>"node": "&gt;=22 &lt;23"</code> while
+<code>package.json</code> says <code>"&gt;=22"</code>, Python described as needed for
+<code>diagnostics.py</code> when the whole <code>checks</code> job needs it, and "the 197 Dart
+cases, including 3 that have never run" when CI had just passed 278 with none unrun.</td>
+<td>New <code>## Quick start (Windows 11 x64)</code> in the README, with a closing section
+separating what is verified by execution from what is only statically checked.
+<code>check-docs.py</code> 12 checks and 409 citations resolving &mdash; every command the section
+names is one the checker can see.</td></tr>
+
+<tr><td><code>0734487</code></td><td>engine output &mdash; a null where a duration belongs</td>
+<td>The first readable output the authoritative engine ever produced contained
+<code>with repair 20 recovered in null s (2 beacon rounds)</code>. <code>convergedSeconds</code> is
+null by design when a run does not converge inside the window, so the output was not wrong &mdash;
+it was unreadable, and reads as a broken probe rather than a measured negative result.</td>
+<td>Now carries the recovered/held ratio, the convergence flag and <code>&gt;300 s</code> in the
+non-converged case, matching <code>tool/history-probe.ts</code>'s wording for the same measurement.
+Statically: <code>check-dart-balance</code> 22/22, <code>check-dart-sites</code> consistent,
+<code>check-docs</code> 12/12. By execution: run 40432981960's <code>probe-history</code> notice
+reads <code>20/20 recovered, converged=false in &gt;300 s (2 beacon rounds)</code>.</td></tr>
+</table>
+
+<div class="note warn"><strong>One process defect, recorded rather than rewritten.</strong>
+<code>9be0d83</code> was meant to carry only the <code>--help</code> fix, but
+<code>git add -A tool/ci</code> also swept in the collector's new <code>ps1</code> row,
+<code>run-pipeline.sh</code>'s <code>check-ps1.py</code> step and <code>check-docs.py</code>'s
+<code>ci-checkers</code> &mdash; changes that belong to <code>0d38edd</code>'s concern. The commit
+was already pushed, so the history was left alone and the misfiling is recorded here and in
+<code>0d38edd</code>'s message. Staging is by explicit path from now on;
+<code>git add -A</code> has now caused two mislabelled commits on this branch.</div>
+
+<h3>1.1 Addendum &mdash; the same day, after this report was written: <code>make.ps1</code> ran, and failed</h3>
+<p>Action 6 in &sect;5.1 was completed by the owner within the hour, on a real Windows 11 machine with
+PowerShell 5.1, and it found a defect no static check in this repository could see:</p>
+<pre>PS C:\Users\Administrator\Desktop\Git-Clones\DumanMessenger&gt; .\make.ps1 doctor
+Cannot validate argument on parameter 'Runtime'. The argument "doctor" does not belong to the set
+"auto,wsl,bash" specified by the ValidateSet attribute.</pre>
+<p>The parameter block declared <code>[Parameter(ValueFromRemainingArguments = $true)]
+[string[]]$Task</code> with no <code>Position</code>. PowerShell excludes a
+<code>ValueFromRemainingArguments</code> parameter from positional binding, so the first positional
+argument bound to the <em>next</em> parameter &mdash; <code>$Runtime</code> &mdash; and its
+<code>ValidateSet</code> rejected it. Every documented invocation was affected
+(<code>.\make.ps1 doctor</code>, <code>ci</code>, <code>help</code>); only the named form
+<code>-Task doctor</code> worked, and nothing documented it. The script's own
+<code>.EXAMPLE</code> block, its help text, <code>docs/11</code> &sect;6, <code>docs/12</code> and the
+README quick start all told the reader to type the form that could not work.</p>
+<p>Fixed by giving <code>$Task</code> <code>Position = 0</code> and setting
+<code>[CmdletBinding(PositionalBinding = $false)]</code> so <code>-Runtime</code> stays a named
+switch and a second positional argument (<code>--job web --fast</code>) is forwarded to bash instead
+of being offered to it. <code>check-ps1.py</code> gained a third failure class for this pattern, and
+it was verified both ways rather than assumed: against the pre-fix file it reports
+<em>"a ValueFromRemainingArguments parameter has no Position&hellip;"</em> and exits 1; against the
+fixed file it is clean. Five synthetic variants confirm it neither over- nor under-fires &mdash; a
+script with no param block, one with a single positioned pass-through parameter, the corrected
+two-parameter form, the defective form, and a PowerShell-7 syntax case.</p>
+<div class="note warn"><strong>What this does and does not prove.</strong> It proves the front door
+was broken and is now guarded. It does <em>not</em> prove <code>make.ps1</code> works: that run died at
+parameter binding, so runtime detection, <code>wslpath</code> translation, the target-to-script table,
+quoting and exit-code propagation were all still unexercised anywhere. It needed one more transcript
+from a real machine, and got one within the hour.</div>
+
+<h3>1.2 Addendum &mdash; the second transcript: the dispatcher worked, and the arithmetic did not</h3>
+<p>The same machine, minutes later, on <code>ffc2d19</code>:</p>
+<pre>PS&gt; .\make.ps1 -Task doctor
+PS&gt; .\make.ps1 doctor          # both forms now bind correctly
+warning: the repo is on the Windows drive (/mnt/...), so WSL file I/O is slow.
+bash: line 1: /mnt/c/Users/Administrator/Desktop/Git-Clones/tool/ci/doctor.sh: No such file or directory
+error: the wsl runtime exited with 127, which is not a pipeline verdict.</pre>
+<p>The path in that message is the <em>parent</em> of the clone, which is the whole diagnosis.
+<code>make.ps1</code> is committed at the top of the repository &mdash; a sibling of
+<code>Makefile</code>, <code>tool/</code> and <code>sim/</code> &mdash; so <code>$PSScriptRoot</code>
+is the repo root, but the script computed <code>Split-Path -Parent $PSScriptRoot</code> under a comment
+that asserted the opposite ("the repo root is its parent"). That comment is why it survived: it read
+like a documented fact rather than an untested assumption, and no static check in the repository could
+see a wrong path three layers away from the arithmetic that produced it.</p>
+<p>Fixed to <code>$RepoRoot = $PSScriptRoot</code>, with a startup guard that fails in PowerShell with
+a reason instead of in bash with a path, and a 127/126 explanation that names the likeliest cause
+inside WSL (<code>make</code> is not installed by default; the 21 script targets do not need it).
+<code>check-ps1.py</code> gained a fourth class for the assumption itself, verified both ways and with
+its boundary pinned: against <code>ffc2d19</code>'s <code>make.ps1</code> placed where
+<code>tool/</code> is a sibling it reports the climb and exits 1; against the fixed file it is clean;
+against the same defective file with no <code>tool/</code> sibling it says nothing, because there the
+parent might genuinely be the root.</p>
+<p>Two failures on a real machine bought a real verification list, which is worth recording because it
+is larger than what a static check could ever claim. Now <strong>verified by execution on Windows 11 /
+PowerShell 5.1 / WSL2</strong>: parameter binding in both the positional and the named form; WSL2
+detection against a real installed distro; <code>wslpath -u</code> translation; the
+<code>/mnt/c</code> performance warning firing on the right condition; the single-quote-only quoting
+policy surviving the PowerShell &rarr; <code>wsl.exe</code> &rarr; <code>bash -lc</code> layers
+(bash parsed the command and resolved the path, which is the part quoting exists to protect);
+exit-code propagation; and the defensive branch that refuses to report 127 as a pipeline verdict and
+says so in terms. Still unverified anywhere: <strong>a target completing</strong>. No doctor output, no
+<code>make</code> target and no script target has ever reached a verdict of 0, 1 or 2 through this
+dispatcher.</p>
+<div class="note"><strong>Also worth recording:</strong> the fifteenth rollback of this branch landed
+mid-turn, between the two transcripts, resetting local <code>.git</code> to the merge base while the
+working tree kept every edit. It was repaired with <code>git fetch</code> +
+<code>git reset --mixed origin/arena/&hellip;</code> in one command and cost one verification run
+(a check that had to be repeated against the right <code>HEAD</code>). Section E's detector reported 0
+drift rows afterwards, which is correct: nothing tracked had reverted, only the local ref had.</div>
+
+<h3>1.3 Addendum &mdash; the third transcript was a number, and it closed a release gate</h3>
+<p>Finding F1 below was written as an owner action because it needed a decision about a wire format.
+Once CI could run both engines' probe and publish the result, it turned out not to need one: the
+reference engine's encoding is the minimal one, the divergence was two artefacts of serialisation
+rather than a design choice, and the arithmetic predicted the fix exactly.</p>
+<p><code>b67c1c7</code> changed Dart's <code>HistoryEntry.toJson()</code> to omit <code>synced</code>
+unless it is true (the reference's <code>synced?: boolean</code> is <code>undefined</code> until a copy
+arrives by repair, and <code>JSON.stringify</code> drops it) and to write an integral <code>at</code>
+without a decimal point (a Dart <code>double</code> writes <code>1200.0</code> where a JS
+<code>number</code> writes <code>1200</code>). <code>toJson()</code> has exactly one call site in the
+engine &mdash; the reply body &mdash; so nothing else moves, and <code>fromJson</code> already accepted
+either form. The commit stated the falsifiable prediction: the probe would report 29 750 bytes instead
+of 30 430. Run 40455143525 reported <strong>29 750</strong>, for the same 166 beacons, 3 requests,
+2 replies and 171 packets, which is the reference's figure to the byte &mdash; and 30 430 &minus;
+29 750 = 680 = 17 bytes &times; 20 entries &times; 2 replies, the diagnosis confirmed by measurement
+rather than by inspection.</p>
+<p>The gap that allowed it is closed too, not just the instance. Golden vectors <strong>v2</strong>
+carry a <code>history</code> section &mdash; the entries, the exact reply body, its length &mdash;
+asserted from both sides: <code>src/__tests__/acceptance.test.ts</code> builds the entries locally and
+compares <code>JSON.stringify</code> to the fixture, and
+<code>sim/mesh_sim/test/golden_test.dart</code> rebuilds them through
+<code>HistoryEntry.fromJson</code> and compares <code>jsonEncode</code>. Neither engine can change its
+encoding now without moving the fixture, and moving the fixture fails the <code>web</code> job's
+<code>git diff --quiet</code> gate until both sides are updated in one commit. The <code>run</code>
+section regenerated byte-identically (<code>avgLatencyMs 526.623</code>, <code>p95LatencyMs
+1356.134</code>), which is what <code>docs/06</code> &sect;17.6's promise is about, and the fixture
+stays pure ASCII as <code>wire-bytes.test.ts</code> records it must.</p>
+<p><code>4e7b412</code> closed the last evidence asymmetry: the <code>web</code> job now publishes its
+vitest tally as a notice, so neither suite's count depends on somebody's memory. It found one bug on
+the way, in the step itself: the first version grepped for <code>Tests</code> followed by whitespace,
+and a coloured capture puts an ANSI reset between the label and its count, so it published an
+<em>empty</em> notice &mdash; a silent failure that looks like a published tally. The step now strips
+escapes first and was verified by executing its own <code>run:</code> text, parsed back out of the
+YAML, against five capture shapes: coloured, plain, one containing a percent sign (escaped to
+<code>%25</code>), one with no summary, and a missing file &mdash; the last two taking the warning
+branch rather than publishing nothing at all.</p>
+
+<h3>1.4 Addendum &mdash; the classifier contradicted the note it was classifying</h3>
+<p><code>blockers.sh</code> section F prices every open roadmap item by matching its checkbox text
+against six ordered rules, and it printed <strong>"28 open, 16 closed, 1 closable from here"</strong>
+for most of this session. The one closable row was line 488, <em>"Legal: privacy policy, crypto
+export note, takedown resilience docs"</em>, matched by a rule written before those documents existed
+and classified <code>sandbox</code> with the reason <em>"a privacy policy can be written and reviewed
+here"</em>.</p>
+<p>That reason is now false in the only way that matters: <code>PRIVACY.md</code> <em>was</em>
+written, and the implementation note the roadmap carries under that very checkbox says the box stays
+open for the two parts that are not writing &mdash; <strong>no data controller</strong>, so GDPR
+Art. 13's identity-and-contact requirement is unmet, and <strong>no counsel review</strong> of the
+export classification. So the script told its reader that one item could be closed from a branch
+while the item's own note said it could not, and this report repeated the number in two places while
+its summary card said "none closable here" &mdash; the contradiction was inside one document.</p>
+<p>The rule's class is <code>people</code> now, its reason names the two missing parts, and the
+ordering comment records why the row moved rather than silently changing. Measured after the change:
+<code>28 open, 16 closed, 0 closable from here</code>, breakdown device 10 / toolchain 10 /
+people 6 / store 2 / reachable-from-here 0, and the blocked/ok summary is unchanged at
+<strong>15 blocked &middot; 12 ok &middot; 0 unknown</strong> because the roadmap row was already
+<code>BLOCKED</code> either way. <code>docs/10</code> &sect;11's closing paragraph quoted the old
+count and now quotes the new one with the reason. This is the seventeenth defect, and the cheapest
+kind to miss: nothing failed, every check was green, and the number was simply wrong in the
+direction that flatters the work.</p>
+
+<h3>1.5 Addendum &mdash; the owner committed the lock, and a wget log with it</h3>
+<p>On 2026-10-28 the owner pushed <code>991d11c</code>, "Checks Validated", to this branch: two
+files, <code>sim/mesh_sim/pubspec.lock</code> (397 lines, 49 packages) and <code>wget-log</code>
+(4 184 lines, 324 KB). The first closes mandatory owner action 1, the one gate in &sect;5.1 that
+could not be met from a branch; the second was not meant to be there. <code>wget</code> writes
+<code>./wget-log</code> when it runs without a terminal, so an unattended download leaves one in
+whatever directory it was started from, and it was staged alongside the file that mattered.</p>
+<p>Both were worth more than they looked. The log is the only available evidence of <em>how</em> the
+SDK was obtained &mdash; a resumed fetch (HTTP 206, 133 MB of 228 MB remaining) of
+<code>dartsdk-linux-x64-release.zip</code> from <code>storage.googleapis.com</code>, saved to
+<code>/tmp/dart-sdk.zip</code> at 2026-10-24 18:36:16 &mdash; and the <em>linux</em> archive says it
+was installed inside WSL2, which is what <code>docs/11</code> &sect;2 tells you to do and which this
+sandbox cannot do at all, that host being unreachable from here. So the fact was moved into
+<code>docs/11</code> &sect;2 and the file was removed in <code>61c1476</code>, with
+<code>wget-log</code>, <code>wget-log.*</code> and <code>*.zip</code> added to <code>.gitignore</code>
+and the reason inline. No tracked file matched any of the three patterns, so nothing else moved.</p>
+<p>The lock then falsified six statements in this repository, every one of them written as a
+conditional about a file that did not yet exist: three identical comment blocks in
+<code>ci.yml</code>, a row in <code>docs/10</code>'s job table, a paragraph in <code>docs/10</code>'s
+blocker prose, <code>docs/11</code> &sect;2's "until somebody who can reach pub.dev commits one",
+<code>run-pipeline.sh</code>'s help text and <code>.gitignore</code>'s comment. All six are corrected
+in <code>4b81270</code>, which also makes <code>doctor.sh</code> read the lock's contents instead of
+treating it as a boolean &mdash; it now prints <code>committed: 49 packages, resolved for Dart
+&gt;=3.13.0 &lt;4.0.0</code>, tested against a real lock, a lock with its <code>sdks:</code> section
+deleted and an empty file, so nothing is hard-coded. This is the eighteenth defect, and it is the
+same species as &sect;1.4: a claim that was true when written and went stale silently, in a
+repository whose whole subject is which claims are backed by measurements.</p>
+<p>One verification nuance, recorded rather than smoothed over: <code>61c1476</code> has <strong>no
+completed CI run</strong>. Both of its runs &mdash; push 40613897925 and <code>pull_request</code>
+40613903311 &mdash; were cancelled at 8 / 9 green when <code>4b81270</code> was pushed minutes later,
+the concurrency group added in <code>0d38edd</code> doing exactly its job. The commit is therefore
+verified transitively, by a successor that contains it and is green twice over; that is sound here
+only because it touched two files no job reads. A sha whose content <em>was</em> read by a job would
+need its own run.</p>
+
+<h3>1.6 Addendum &mdash; the acceptance evidence was stale, and F2's number came from the wrong population</h3>
+<p>Looking for the three-hop reading F2 needs meant reading two published numbers side by side inside
+one CI annotation, and they did not agree: <code>deliveredWithinFiveHops</code> said
+<strong>148</strong> for <code>campus_quad</code> seed 42 while the <code>latencyByHop</code> table
+beside it summed to <strong>140</strong> at five hops or fewer. Neither is wrong. Both engines scope
+that table, with the reason in a comment where it is built: first-attempt routed unicast only, so a
+retry (which adds a whole ACK timeout) and a DTN bundle (which measures a meeting time, not
+transport) cannot smear the latency distribution. The gate counts a different population &mdash; every
+unicast delivery &mdash; and the eight-message difference is exactly the retries and bundles.</p>
+<p>The consequence is that <strong>the 84.7 % this report quoted for F2 was 127/150 taken from the
+latency table</strong>: first-attempt routed unicast, not the gate's population. The correct reading
+is <strong>134/150 = 89.3 %</strong> on that seed, and 89.3&ndash;96.0 % across the six seeds the
+suite enforces. An owner decision was being handed a number measured over a population nobody had
+stated out loud, seven points away from the one it needed. That is defect nineteen, and the fix is
+structural rather than a corrected figure: <code>deliveredWithinThreeHops</code> and
+<code>withinThreeRatio</code> are now published beside their five-hop twins by the Dart CLI, computed
+in the TypeScript acceptance suite, and pinned from both sides in the golden vectors
+(<code>3fdc638</code>) &mdash; the mechanism that closed F1, applied to a number a decision rests on.
+No gate changed and no threshold was added; the new test asserts that the two readings cannot
+contradict each other, because a suite that quietly picked one would be the worst place for that
+decision to hide.</p>
+<p>Re-measuring to get the six-seed range then found defect twenty, which is larger. <strong>The
+per-seed acceptance table in <code>docs/06</code> &sect;2 had been overtaken by fifteen commits to the
+engine</strong> &mdash; <code>src/simulation.ts</code>, <code>src/routing.ts</code>,
+<code>src/election.ts</code>: adaptive scan intervals, in-window connectivity sampling, the beacon
+encoding and its derived size, the broadcast cap's scope. Published at <code>82d967a</code> on
+2026-10-24 and never re-run, it said delivery 97.3&ndash;100 %, 146&ndash;150 of 150 within five hops,
+4 239 relays on seed 42, &le;0.22 role changes per node per minute. The current engine gives
+99.3&ndash;100 %, 148&ndash;150, 3 652 relays and &le;0.14 &mdash; and CI run 40616278770's annotation
+for the same seed reports <code>relayTx</code> 3652, <code>routeFloodRelayTx</code> 5574,
+<code>floodAllRelayTx</code> 44654 and <code>latencyP95Ms</code> 4190.9395, so the two engines agree
+to the unit and the table disagreed with both. Stale in the direction that made the engine look worse
+than it is, except for seed 42's p95, where it looked four times better than it is.</p>
+<p>Those ranges were quoted in <strong>seven places</strong>, not one: the table itself, the crowd
+comparison two sections later, a historical A/B in &sect;11, <code>docs/09</code> &sect;8's field-test
+predictions (which a volunteer with real phones would have been told to compare against), the README's
+measured summary, roadmap line 257's evidence for the weight-tuning item, and the acceptance lines of
+<em>both</em> skills documents &mdash; the two lines that say the headline criteria are
+<strong>Met</strong>. All seven are corrected in <code>4b760e2</code>, with the provenance inline in
+the table rather than implied by it. The historical A/B keeps its own numbers under a dated note,
+because re-running somebody else's experiment is not the same as re-measuring a table.</p>
+<p>Nothing detects this class of defect automatically, which is worth stating plainly:
+<code>check-docs.py</code> verifies that a citation resolves and that a target exists, not that the
+number behind it is current, and no checker can. The only instrument that finds a stale measurement
+is re-running the measurement. Two of the twenty defects in this report are that class
+(&sect;1.4's classifier, this one), and both were found by reading a published figure next to the
+artifact that contradicted it rather than by any gate going red.</p>
+<p>One correction to this session's own record: the commit message on <code>4b760e2</code> claims "No
+line over 110 columns in the six files touched". That is false &mdash; <code>docs/06</code> has 27
+such lines, including markdown table rows that cannot wrap and prose that predates this session. The
+claim generalised too far from a check of the new prose only. It is recorded here because a commit
+message is part of the ledger, and this branch does not force-push, so the correction lives in the
+report instead of in an amended message.</p>
+
+<h3>1.7 Addendum &mdash; the crowd was checked too, and it reproduced exactly where it mattered</h3>
+<p>Finding one stale table raises the obvious question about the other headline evidence, so the
+crowd was re-measured with the same harness: nine seeds, 150 messages, shipped configuration. Its
+numbers are quoted in the README, <code>docs/05</code>, <code>docs/06</code>, <code>docs/09</code> and
+<code>skills/08</code>, and in the suite they are guarded only by floors and ceilings &mdash; so a
+drifted figure sitting in a comment would never fail a test, which is the same exposure &sect;1.6
+had.</p>
+<table>
+<tr><th>published figure</th><th class="num">as published</th><th class="num">re-measured</th><th>verdict</th></tr>
+<tr><td>delivery, nine seeds</td><td class="num">85.3&ndash;98.7 %</td><td class="num">85.3&ndash;98.7 %</td>
+<td class="pass">reproduced seed for seed, to a tenth of a point</td></tr>
+<tr><td>SUPER ratio</td><td class="num">15.0&ndash;21.7 %</td><td class="num">15.0&ndash;21.7 %</td>
+<td class="pass">reproduced</td></tr>
+<tr><td>average hops</td><td class="num">2.49&ndash;3.08</td><td class="num">2.49&ndash;3.08</td>
+<td class="pass">reproduced</td></tr>
+<tr><td>role changes / node / min</td><td class="num">0.07&ndash;0.16</td><td class="num">0.07&ndash;0.16</td>
+<td class="pass">reproduced</td></tr>
+<tr><td>overhead vs naive flood</td><td class="num">12&ndash;14 %</td><td class="num">10.6&ndash;12.8 %</td>
+<td class="blocked">drifted &mdash; cheaper than published</td></tr>
+<tr><td>flood-all relays &divide; MPR relays</td><td class="num">7&ndash;9&times;</td><td class="num">7.8&ndash;9.5&times;</td>
+<td class="blocked">drifted</td></tr>
+<tr><td>MPR's marginal cut over routing</td><td class="num">42&ndash;50 %</td><td class="num">45&ndash;55 %</td>
+<td class="blocked">drifted</td></tr>
+<tr><td>mean delivery gap vs route-flood</td><td class="num">&minus;0.9 points</td><td class="num">&minus;0.2 points</td>
+<td class="blocked">drifted &mdash; the bound that survived is the assertion, not the figure</td></tr>
+<tr><td>within five hops</td><td class="num">82.7&ndash;89.3 %</td><td class="num">77.3&ndash;92.3 %</td>
+<td class="blocked">drifted, and wider</td></tr>
+</table>
+<p>The pattern is the useful part. <strong>The drift is not uniform, and it is not random:</strong> the
+nine-seed delivery readings were written into the test's own comment later than <code>docs/06</code>
+&sect;2's table, and they reproduce exactly, while the overhead figures around them moved. Delivery in
+this crowd did not change with those fifteen engine commits; what changed is how cheaply it is
+achieved &mdash; the overhead numbers all moved in the engine's favour, which is the direction a
+stale figure is least likely to be noticed in. Had they moved the other way, a reviewer would have
+had a reason to look.</p>
+<p>Two figures are published that nobody had measured: the crowd within <strong>three</strong> hops is
+56.7&ndash;68.0 % (mean 63.3 %) against 77.3&ndash;92.3 % within five, which is the crowd's row in
+&sect;6's F2 table read across nine seeds instead of one. And seed 42 gives 85 of 150 within three
+hops and 128 within five in the local TypeScript measurement <em>and</em> in CI run 40616278770's
+Dart annotation &mdash; agreement to the message, which is what makes that table more than one
+engine's opinion.</p>
+<p>What was <em>not</em> re-measured is marked in place rather than quietly kept: the tail
+decomposition beside the crowd's five-hop range (9&ndash;12 messages arriving at exactly six hops,
+7&ndash;11 expired) still describes the engine as of <code>82d967a</code> and now says so; the
+before/after in <code>docs/06</code> &sect;11 keeps its own numbers under a dated note; and
+<code>docs/09</code>'s crowd prediction row keeps the 91.3&ndash;95.3 % delivery figure whose
+definition lives in &sect;24.8 and &sect;24.13, with only its overhead number corrected. Correcting a
+number you have measured and labelling one you have not is the whole discipline; doing the first
+without the second is how a document comes to look uniformly fresh while carrying one stale figure
+that everybody now trusts.</p>
+
+<h2>2. What was verified, and how</h2>
+
+<h3>2.1 Remote CI &mdash; executed, on this branch</h3>
+<table>
+<tr><th>run</th><th>sha</th><th>conclusion</th><th>what it proved</th></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40428343622" style="color:#4de0ff">40428343622</a></td>
+<td><code>3911753</code></td><td class="part">failure (1 test)</td>
+<td>First run to execute since 2026-10-23. <code>dart analyze</code> clean over 22 files /
+15 200 lines never previously compiled; the gated <code>campus_quad</code> CLI acceptance run
+passing; <code>checks</code> and <code>web</code> green, so the new <code>check-ps1.py</code> step
+ran on a real runner; the <code>pubspec.lock</code> warning annotation fired as designed. One Dart
+test failed &mdash; the vacuous comparison fixed in <code>3b52b09</code>.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40429112891" style="color:#4de0ff">40429112891</a></td>
+<td><code>3b52b09</code></td><td class="pass">success</td>
+<td>First fully green run since <code>8406717</code>, and the first green run in this repository's
+history that included the Dart engine: nine jobs in 2 m 10 s.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40430079404" style="color:#4de0ff">40430079404</a></td>
+<td><code>4350b40</code></td><td class="pass">success</td>
+<td>The notice channel works: nine annotations read back through
+<code>api.github.com</code> carrying the <code>dart test</code> tally and every scenario and probe
+measurement, from a run whose log archive is not downloadable here.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40432981960" style="color:#4de0ff">40432981960</a></td>
+<td><code>0734487</code></td><td class="pass">success</td>
+<td>All nine jobs green, and the corrected history-probe line visible in the annotation:
+<code>20/20 recovered, converged=false in &gt;300 s</code>.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40443962188" style="color:#4de0ff">40443962188</a></td>
+<td><code>96f0dd0</code></td><td class="pass">success</td>
+<td>The <code>make.ps1</code> repo-root fix and <code>check-ps1.py</code>'s fourth class, green in the
+<code>checks</code> job on a runner.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40455143525" style="color:#4de0ff">40455143525</a></td>
+<td><code>b67c1c7</code></td><td class="pass">success</td>
+<td><strong>The prediction in finding F1, confirmed:</strong> the Dart engine's history probe now
+reports <strong>29 750</strong> payload bytes for the same 166/3/2/171 packets, byte-identical to the
+reference, and the golden vectors' new <code>history</code> section passes in both languages (279 Dart
+cases).</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40455641251" style="color:#4de0ff">40455641251</a></td>
+<td><code>4e7b412</code></td><td class="pass">success</td>
+<td>Both tallies now leave the runner as annotations: <code>npm test: Test Files 18
+passed (18) Tests 474 passed (474)</code> and <code>dart test: 279 passed, 0 failed, 0
+skipped</code>.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40457964023" style="color:#4de0ff">40457964023</a></td>
+<td><code>9b8434e</code></td><td class="pass">success</td>
+<td>The commit that carries the first batched daily artifact and its digest line in
+<code>reports/verification-log.jsonl</code>. Its own push went through the live
+<code>.githooks/pre-push</code> gate: 340 s, verdict PARTIAL, push allowed &mdash; the end-to-end
+evidence that the <code>prepare</code> hook works.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40458532323" style="color:#4de0ff">40458532323</a></td>
+<td><code>56fa3fe</code></td><td class="pass">success</td>
+<td><strong>The prediction registered for finding F4, confirmed:</strong> the Dart history probe's new
+close-membership arm prints <strong>60 packets, 15 656 payload bytes, converged in 8.75 s over 4
+beacon rounds</strong> &mdash; the figures <code>docs/06</code> &sect;17.3 had carried from the
+reference engine, matched exactly. Spread arm unchanged at 171 / 29 750.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40458960415" style="color:#4de0ff">40458960415</a></td>
+<td><code>149beec</code></td><td class="pass">success</td>
+<td>The one residual difference that confirmation exposed &mdash; the same convergence
+time printed as <code>8.75 s</code> in Dart and <code>8.8 s</code> in the reference &mdash; is gone;
+both probes and both blocks now read <code>8.8 s</code>, and <code>dart test</code> is still
+279 / 0 / 0.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40460087980" style="color:#4de0ff">40460087980</a></td>
+<td><code>f01c32a</code></td><td class="pass">success</td><td>9 / 9. Finding F4 marked resolved in
+&sect;6 with both arms as measured.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40460956532" style="color:#4de0ff">40460956532</a></td>
+<td><code>462ca35</code></td><td class="pass">success</td><td>9 / 9. The <code>blockers.sh</code>
+reclassification of &sect;1.4; verified by local execution, since that script is deliberately not a
+CI step.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40463387905" style="color:#4de0ff">40463387905</a></td>
+<td><code>e894ff0</code></td><td class="pass">success</td><td>9 / 9, and the
+<strong>baseline</strong> for the lock gate: the <code>pubspec.lock is not committed</code> warning
+fires on <strong>seven of nine jobs</strong> &mdash; every job that resolves Dart
+dependencies.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40610830053" style="color:#4de0ff">40610830053</a></td>
+<td><code>991d11c</code> <em>(the owner's)</em></td><td class="pass">success</td>
+<td><strong>Owner action 1 closed, on the gate &sect;5.1 wrote for it:</strong> the same warning fires
+on <strong>none</strong> of the nine jobs, <code>--enforce-lockfile</code> is now the live resolution
+path, and <code>dart test</code> is still 279 / 0 / 0. Run
+<a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40610835443" style="color:#4de0ff">40610835443</a>
+is the <code>pull_request</code> event for the same sha, green as well, so the same commit resolved
+identically twice.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40613897925" style="color:#4de0ff">40613897925</a></td>
+<td><code>61c1476</code></td><td class="blocked">cancelled</td><td>8 / 9 green, the TypeScript job
+cancelled &mdash; and the same for its <code>pull_request</code> twin 40613903311. The concurrency
+group added in <code>0d38edd</code> superseded both when <code>4b81270</code> was pushed minutes
+later, which is what it is for. <strong>This sha therefore has no completed run of its own</strong>;
+it is verified transitively by its successor, which is sound only because it touched two files no job
+reads: a deleted <code>wget-log</code> and <code>.gitignore</code>.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40614121740" style="color:#4de0ff">40614121740</a></td>
+<td><code>4b81270</code></td><td class="pass">success</td><td>9 / 9 on the push event
+and 9 / 9 on the <code>pull_request</code> event (40614127531). The six stale conditionals about the
+lock, corrected; <code>doctor.sh</code> reading the lock's own contents.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40614770959" style="color:#4de0ff">40614770959</a></td>
+<td><code>a34f1eb</code></td><td class="pass">success</td><td>9 / 9. Owner action 1 recorded as closed
+in &sect;5.1, with the warning annotation's disappearance measured on both sides.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40616278770" style="color:#4de0ff">40616278770</a></td>
+<td><code>3fdc638</code></td><td class="pass">success</td><td>9 / 9, and the run the F2 decision pack
+was read out of: <code>npm test</code> <strong>18 files / 480 tests</strong> (six new, from the
+consistency test over six seeds), <code>dart test</code> 279 / 0 / 0 &mdash; which also means the two
+new golden assertions pass in Dart, so both engines agree on the pinned hop counts. Every scenario's
+annotation now carries <code>deliveredWithinThreeHops</code> beside
+<code>deliveredWithinFiveHops</code>.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40617596690" style="color:#4de0ff">40617596690</a></td>
+<td><code>4b760e2</code></td><td class="pass">success</td><td>9 / 9. The re-measured
+acceptance table of &sect;1.6; its seed-42 row agrees with this run's annotation to the unit.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40617971721" style="color:#4de0ff">40617971721</a></td>
+<td><code>757c134</code></td><td class="pass">success</td><td>9 / 9. This report revision: F2 with the
+right population, &sect;1.6, owner action 1 closed.</td></tr>
+<tr><td><a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40618882207" style="color:#4de0ff">40618882207</a></td>
+<td><code>e5bc87b</code></td><td class="pass">success</td><td>Branch head, 9 / 9. The crowd
+re-measurement of &sect;1.7; its seed-42 hop counts (85 within three, 128 within five) are the same
+in this run's Dart annotation and in the local TypeScript measurement.</td></tr>
+</table>
+
+<h3>2.2 What the authoritative engine measured, for the first time</h3>
+<p>Read out of run 40430079404's notice annotations. These are the Dart engine's numbers, not the
+TypeScript reference's &mdash; until today every published figure in <code>docs/06</code>&ndash;<code>docs/09</code>
+came from the reference engine, because nothing could run this one.</p>
+<table>
+<tr><th>arm</th><th class="num">nodes</th><th class="num">delivery</th><th class="num">&le;5 hops</th>
+<th class="num">SUPER</th><th class="num">overhead vs flood-all</th><th class="num">avg hops</th>
+<th class="num">battery %/8 h NORMAL</th><th>gate</th></tr>
+<tr><td><code>campus_quad</code> always-on</td><td class="num">20</td><td class="num">1.000</td>
+<td class="num">0.9867</td><td class="num">0.200 (time-avg 0.2429)</td><td class="num">8.18 %</td>
+<td class="num">2.03</td><td class="num">20.49</td><td class="pass">PASS (gated)</td></tr>
+<tr><td><code>campus_quad</code> duty-cycle</td><td class="num">20</td><td class="num">0.9867</td>
+<td class="num">0.9867</td><td class="num">0.250</td><td class="num">8.25 %</td>
+<td class="num">1.99</td><td class="num pass">9.71</td><td class="pass">PASS (gated)</td></tr>
+<tr><td><code>festival_crowd</code></td><td class="num">60</td><td class="num">0.9467</td>
+<td class="num">0.8533</td><td class="num">0.1833</td><td class="num">12.78 %</td>
+<td class="num">3.01</td><td class="num">23.10</td><td>reported, <code>--no-check</code></td></tr>
+<tr><td><code>sparse_village</code></td><td class="num">12</td><td class="num">0.280</td>
+<td class="num">0.280</td><td class="num">0.1667</td><td class="num">31.91 %</td>
+<td class="num">1.00</td><td class="num">19.88</td><td>reported, <code>--no-check</code></td></tr>
+<tr><td><code>partitioned_pair</code></td><td class="num">10</td><td class="num">0.440</td>
+<td class="num">0.440</td><td class="num">0.200</td><td class="num">24.93 %</td>
+<td class="num">1.00</td><td class="num">15.83</td><td>reported, <code>--no-check</code></td></tr>
+</table>
+<table>
+<tr><th>probe</th><th>what it measured</th></tr>
+<tr><td>SOS</td><td>edge sender <code>node-16</code>, ttl 5, 3 repeats: <strong>19/19 reached
+(100 %)</strong> both component-relative and of all online nodes, last node heard at 522.9 ms,
+4 floods on air, 76 radio receipts collapsing to 19 alerts, none missed in component.</td></tr>
+<tr><td>Groups</td><td>5 members, 5 messages each: scoped flood <strong>100 % delivery at 61.2
+tx/msg</strong> versus per-member unicast 100 % at 128.4 tx/msg &mdash; 2.1&times; cheaper, p95
+1381 ms against 1352 ms.</td></tr>
+<tr><td>History</td><td>20 entries missed by an out-of-range member: without repair 0 recovered;
+with repair <strong>20/20 recovered, converged=false in &gt;300 s</strong> over 2 beacon rounds, at
+166 beacons + 3 requests + 2 replies = 171 packets / <strong>29 750 payload bytes</strong> —
+byte-identical to the TypeScript reference since <code>b67c1c7</code>; it was 30 430 before, which is
+finding F1. One beacon is 156
+characters &rarr; 256 B on BLE, constant in the size of the history. See finding F1 and F4.</td></tr>
+<tr><td>Media</td><td>a 10 MB image crosses 1&ndash;3 hops on Wi-Fi Direct, <strong>3 hops in 33 s</strong>;
+BLE-only unfinished in 15 min; push-to-talk inside budget at every hop count. Queue discipline
+(docs/08 &sect;12.8): a voice note behind a 2 MB file finishes in 13 646 ms under <code>fifo</code>
+and <strong>6 127 ms under <code>class</code></strong>; under <code>halfDuplex</code> a 4-worker file
+transfer reaches 0.9487 delivery and does not finish.</td></tr>
+</table>
+
+<h3>2.3 Local commands actually run, with their results</h3>
+<table>
+<tr><th>command</th><th>result</th></tr>
+<tr><td><code>./tool/ci/daily.sh --fast --json artifacts/ci/daily-remediation.json</code></td>
+<td><strong>INCOMPLETE, exit 2</strong> &mdash; 12 checks passed, 0 failed, 13 could not run
+(all Dart-gated); CI mirror <code>checks</code> PASS, <code>web</code> PASS, <code>dart</code> /
+<code>cli-matrix</code> / <code>probes</code> MISSING; 885 s at <code>3911753</code>. Wrote the first
+line of <code>reports/verification-log.jsonl</code>.</td></tr>
+<tr><td><code>./tool/ci/blockers.sh --json artifacts/blockers-final.json</code></td>
+<td>exit 0 by design &mdash; <strong>16 blocked, 0 repairable-here, 11 ok, 0 unknown</strong> of 27
+rows at <code>0734487</code>; 0 drift rows; roadmap 28 open / 16 closed / 1 closable from here at
+that sha, and <strong>0 closable</strong> at <code>f01c32a</code> once &sect;1.4's reclassification
+landed.</td></tr>
+<tr><td><code>python3 tool/ci/check-docs.py</code> and <code>--self-test</code></td>
+<td>12 checks pass, 409 section citations resolve, 53 make targets, 21 <code>make.ps1</code>
+targets, 15 npm scripts. Self-test: <strong>14 faults, all caught and named</strong>, tree restored
+(was 11 faults and 12 checks at <code>d2fbba3</code>).</td></tr>
+<tr><td><code>check-parity.py</code> / <code>check-dart-balance.py</code> / <code>check-dart-sites.py</code> / <code>check-ps1.py make.ps1</code></td>
+<td>59 shared constants, 0 TypeScript-only, 4 Dart-only, weights summing to 1, inventories identical
+(88 <code>SimConfig</code>, 83 <code>SimulationStats</code>) &middot; 22/22 Dart files balanced
+&middot; all declaration sites consistent, 84 types reachable-checked &middot; <code>ok
+make.ps1</code>. Self-tests 12 / 19 / 12 cases.</td></tr>
+<tr><td><code>npx vitest run src/__tests__/radio-occupancy.test.ts</code></td>
+<td><strong>15 passed</strong> in 16.0 s, including the two new non-vacuity guards.</td></tr>
+<tr><td><code>npm run history</code></td><td>ran clean &mdash; the TypeScript probe's two arms, which
+is how finding F1 and F4 were measured against the Dart output.</td></tr>
+<tr><td><code>npm ci --no-audit --no-fund</code></td><td>101 packages in 2 s;
+<code>core.hooksPath</code> set to <code>.githooks</code> by <code>prepare</code>.</td></tr>
+<tr><td><code>npx tsc --noEmit -p tsconfig.json</code></td><td>clean.</td></tr>
+<tr><td><code>bash -n</code> on all seven <code>tool/ci/*.sh</code></td><td>clean.</td></tr>
+<tr><td>YAML parse + <code>bash -n</code> on every <code>run:</code> block in <code>ci.yml</code></td>
+<td>5 jobs, expected step lists; <strong>26 of 26 blocks parse</strong> after
+<code>${{ &hellip; }}</code> substitution.</td></tr>
+<tr><td>Stub-<code>dart</code> harness for the lockfile conditional</td><td>both branches correct:
+no lock &rarr; <code>pub get</code> plus the warning; lock present &rarr;
+<code>pub get --enforce-lockfile</code>.</td></tr>
+<tr><td><code>--help</code> leakage re-measured on all seven scripts</td><td>0 leaked source lines
+each; every script's last header line still printed.</td></tr>
+<tr><td><code>gh run list</code> / <code>gh api &hellip; /annotations</code></td><td>four runs
+classified; nine notice annotations and two failure annotations read back.</td></tr>
+</table>
+
+<h3>2.4 Not run, and labelled not-run</h3>
+<table>
+<tr><th>check</th><th>state</th><th>why</th></tr>
+<tr><td>13 collector rows: <code>pub-get</code>, <code>analyze</code>, <code>test</code>,
+<code>cli</code>, 5 CLI matrix arms, 4 probes</td><td class="blocked">not-run locally</td>
+<td>No Dart SDK exists in this environment and its download host
+(<code>storage.googleapis.com</code>) is outside the egress allowlist. <strong>All 13 ran in CI
+today and passed</strong> &mdash; the local state is a fact about this machine, not about the
+code.</td></tr>
+<tr><td><code>make.ps1</code> execution</td><td class="blocked">static only</td>
+<td>No PowerShell, and its release asset redirects to <code>objects.githubusercontent.com</code>
+(302, 0 bytes). Checked by <code>check-ps1.py</code> in CI and both local pipelines; never
+executed.</td></tr>
+<tr><td><code>make act</code> (the real YAML in a container)</td><td class="blocked">not-run</td>
+<td>No Docker, no <code>act</code>.</td></tr>
+<tr><td>Evidence probes (<code>--with-evidence</code>)</td><td class="part">not re-run this
+session</td><td>They re-measure every published number and cost ~15 min on top; the daily run used
+<code>--fast</code>. Their last full measurement predates this session and is quoted in
+<code>docs/06</code>&ndash;<code>docs/09</code> from the TypeScript engine.</td></tr>
+<tr><td>Flutter build, device tests, radio tests, store upload</td><td class="blocked">not-run</td>
+<td>No Flutter SDK, no handset, no radio, no store account &mdash; and no <code>app/</code>
+directory to build.</td></tr>
+<tr><td>The concurrency group cancelling a superseded run</td><td class="part">not observed</td>
+<td>Added in <code>0d38edd</code>; the expression parses and the YAML is valid, but no two
+overlapping runs have happened since, so its behaviour is reasoned about rather than
+witnessed.</td></tr>
+</table>
+
+<h2>3. Every blocker, classified</h2>
+<p>Each row of <code>make blockers</code>' six sections at <code>0734487</code>
+(<code>artifacts/blockers-final.txt</code>, 2026-10-27T01:38:21Z), classified as the remediation
+brief asks: resolved, partially resolved, not reproducible, externally blocked, or not
+investigated.</p>
+<table>
+<tr><th>section / row</th><th>classification</th><th>current evidence, and what changed this session</th></tr>
+
+<tr><td><strong>A</strong> <code>dart-sdk</code></td><td class="part">partially resolved</td>
+<td>Still absent locally (<code>storage.googleapis.com</code>: curl exit 35, HTTP 000, 0 bytes), so
+13 collector rows remain not-run here. But the engine is no longer uncompiled: CI ran
+<code>dart analyze</code> clean and the whole Dart suite passing on
+every commit since (279 cases at <code>4e7b412</code>). The blocker moved from "nobody has ever compiled this" to "this machine cannot
+compile it".</td></tr>
+<tr><td><strong>A</strong> <code>flutter-sdk</code>, <code>pub-dev</code></td>
+<td class="blocked">externally blocked</td><td>Unchanged and reproduced: <code>pub.dev</code> curl
+exit 35 / HTTP 000 / 0 bytes, so no new Dart dependency; Flutter absent and there is no
+<code>app/</code> to build. The lock is no longer missing &mdash; the owner committed one at
+<code>991d11c</code> &mdash; but this row stays blocked, because where <code>pub.dev</code> is
+unreachable a lock can be <em>enforced</em> and not <em>regenerated</em>: the file is now a
+dependency of the build that this machine cannot refresh.</td></tr>
+<tr><td><strong>A</strong> <code>powershell</code></td><td class="blocked">externally blocked</td>
+<td>Unchanged: release page HTTP 200, asset redirects to
+<code>objects.githubusercontent.com</code> with 0 bytes delivered. What changed is that the static
+check now runs in CI and in both local pipelines instead of nowhere.</td></tr>
+<tr><td><strong>B</strong> egress, 8 hosts</td><td class="part">4 reachable, 4 blocked</td>
+<td><code>github.com</code>, <code>api.github.com</code>, <code>registry.npmjs.org</code>,
+<code>pypi.org</code> reachable. <code>pub.dev</code>, <code>storage.googleapis.com</code>,
+<code>objects.githubusercontent.com</code> and
+<code>results-receiver.actions.githubusercontent.com</code> blocked &mdash; the last one still
+returns EOF for <code>gh run view --log-failed</code>, which is precisely why
+<code>4350b40</code> publishes numbers as annotations.</td></tr>
+<tr><td><strong>C</strong> remote CI</td><td class="pass">resolved &mdash; externally</td>
+<td>The billing refusal that produced 87 consecutive non-success runs ended during this session, not
+because of anything in this repository: <code>3911753</code> executed and <code>0734487</code> is
+green on all nine jobs. It remains an account-level condition the owner controls, so it is recorded
+as resolved-by-the-environment and could regress at any push.</td></tr>
+<tr><td><strong>C</strong> CI logs</td><td class="blocked">externally blocked</td>
+<td>Undownloadable; annotations are the only channel. Now used deliberately rather than
+accidentally.</td></tr>
+<tr><td><strong>D</strong> hardware: BLE, Wi-Fi Direct, Wi-Fi Aware, <code>adb</code>, iOS</td>
+<td class="blocked">externally blocked</td><td>Unchanged and re-probed: no
+<code>/sys/class/bluetooth</code> entries, 0 wireless PHYs, no <code>iw</code>, no
+<code>adb</code>, a Linux host with no <code>xcrun</code>. Closes 10 roadmap items and nothing here
+can substitute for it.</td></tr>
+<tr><td><strong>D</strong> crowd</td><td class="blocked">externally blocked (not a probe)</td>
+<td>There is no probe for fifteen people carrying phones, and <code>skills/08</code> forbids claiming
+large-scale results without one. Recorded as a fact about the world, not a missing
+script.</td></tr>
+<tr><td><strong>E</strong> <code>git-head</code>, <code>git-worktree</code></td>
+<td class="pass">not reproducible &mdash; clean</td><td>0 drift rows at <code>0734487</code>: HEAD
+equals <code>origin/arena/ff85cb12-dumanmessenger</code>, no tracked file reverted to base content.
+The fourteenth rollback of the branch happened at the start of this session and the fifteenth landed
+mid-turn, between two Windows transcripts; both were repaired with <code>git fetch</code> +
+<code>git reset --mixed</code> (&sect;1.2). The detector did not fire on either, correctly: nothing
+tracked had reverted to base content, only the local ref had moved.</td></tr>
+<tr><td><strong>E</strong> evidence durability</td><td class="pass">resolved</td>
+<td>Was: every artifact git-ignored, so a rollback erased the record of what had been verified. Now:
+<code>reports/verification-log.jsonl</code> is tracked and carries four lines, one of them written by
+<code>daily.sh</code> itself during this session.</td></tr>
+<tr><td><strong>F</strong> roadmap, 28 open items</td><td class="blocked">all 28 externally blocked</td>
+<td>Classification re-read from <code>roadmap/roadmap.md</code>: at <code>0734487</code> it read
+device 10, toolchain 10, people 5, store 2, reachable-from-here 1; at <code>f01c32a</code> it reads
+<strong>device 10, toolchain 10, people 6, store 2, reachable-from-here 0</strong>, because the one
+"reachable" row was misclassified and &sect;1.4 corrects it. Nothing was closed this session, because
+no open item's acceptance criterion can be satisfied without a device, a store account, a toolchain
+this machine lacks, a legal entity, or people. See &sect;4.</td></tr>
+</table>
+
+<h2>4. Roadmap reconciliation</h2>
+<p>All 28 open items, each with the classification <code>blockers.sh</code> derives from
+<code>roadmap/roadmap.md</code> and the rule that produced it, its state after this session, what
+closing it actually depends on, and who has to do it. Line numbers are
+<code>roadmap/roadmap.md</code> lines, which is how <code>make blockers</code> identifies them. The
+16 closed items are unchanged; every open item already carries an inline note recording what exists
+and what does not.</p>
+<table>
+<tr><th>line</th><th>class</th><th>item</th><th>state after this session</th><th>what closing it depends on</th><th>owner</th></tr>
+<tr><td class="num">13</td><td><span class="tag">toolchain</span></td><td>Mono-repo: `app/` Flutter + `transport/android` + `transport/ios` + `core/` Dart pure</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">24</td><td><span class="tag">toolchain</span></td><td>Identity: Ed25519/X25519 keygen + QR add-contact (Briar-style)</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">51</td><td><span class="tag">device</span></td><td>BLE GATT hello: Android GATT server + scanner + 12-byte beacon (DB hash + id)</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
+<tr><td class="num">65</td><td><span class="tag">device</span></td><td>iOS beacon: CoreBluetooth peripheral + central scan</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
+<tr><td class="num">74</td><td><span class="tag">toolchain</span></td><td>Simple UI: peer list + 1:1 chat (plaintext first)</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">84</td><td><span class="tag">device</span></td><td>Permissions flows (Android 12+ new BT perms, location, WiFi)</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
+<tr><td class="num">94</td><td><span class="tag">store</span></td><td>CI + F-Droid/Play internal track + TestFlight</td><td>not started</td><td>a store account, a signing key, and CI minutes</td><td>owner — accounts and signing keys are not delegable</td></tr>
+<tr><td class="num">175</td><td><span class="tag">toolchain</span></td><td>E2EE round 1: Noise_XX 1:1, SAS verify, padding</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">201</td><td><span class="tag">device</span></td><td>Foreground service (Android) + bg mode (iOS) + duty cycling NORMAL vs continuous SUPER (manual toggle first)</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
+<tr><td class="num">211</td><td><span class="tag">device</span></td><td>Battery/performance logging</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
+<tr><td class="num">259</td><td><span class="tag">people</span></td><td>Field test 1: campus quad / office floor mapping: atrium should become SUPER, packet delivery ratio vs flood-all baselin</td><td>not started — and skills/08 forbids claiming large-scale results without it</td><td>people in a physical place — field test, crowd, auditor, launch</td><td>owner + participants</td></tr>
+<tr><td class="num">315</td><td><span class="tag">device</span></td><td>WiFi Direct transport (Android `WifiP2pManager`): createGroup/join, socket relay, auto-select for payloads &gt;1 KB</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
+<tr><td class="num">320</td><td><span class="tag">device</span></td><td>MultipeerConnectivity parity on iOS (Apple-to-Apple files via MPC)</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
+<tr><td class="num">343</td><td><span class="tag">device</span></td><td>Audio pipeline: Opus encoder/decoder, 500 ms frames, 6-12 kbps, push-to-talk UI (hold to record)</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
+<tr><td class="num">363</td><td><span class="tag">toolchain</span></td><td>E2EE for media/voice frames (same Noise session, per-frame nonce)</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">378</td><td><span class="tag">people</span></td><td>External audit prep + panic wipe (one-tap key zeroization)</td><td>not started — and skills/08 forbids claiming large-scale results without it</td><td>people in a physical place — field test, crowd, auditor, launch</td><td>owner + participants</td></tr>
+<tr><td class="num">422</td><td><span class="tag">device</span></td><td>iOS harden: background scan throttling UX (“keep in foreground for mesh”), MPC fallbacks, BLE-only Android↔iOS interop</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
+<tr><td class="num">433</td><td><span class="tag">device</span></td><td>WiFi Aware experiment (Android 26+ &amp; iOS 26 compat probe) — feature-flagged</td><td>not started — no radio, handset or emulator in this environment</td><td>a handset, a radio, or an OS API that exists only on one</td><td>owner + a physical Android / iOS device</td></tr>
+<tr><td class="num">442</td><td><span class="tag">toolchain</span></td><td>Group UX: invite via QR, admin rotate key, leave/rejoin sync</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">462</td><td><span class="tag">people</span></td><td>Performance pass: 50-node density test (emulator + 15 real phones crowded), battery &lt;15%/8h NORMAL</td><td>not started — and skills/08 forbids claiming large-scale results without it</td><td>people in a physical place — field test, crowd, auditor, launch</td><td>owner + participants</td></tr>
+<tr><td class="num">470</td><td><span class="tag">toolchain</span></td><td>Onboarding: 3-slide explainer (no internet needed, keep Bluetooth on, this is short-range not replacement)</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">479</td><td><span class="tag">store</span></td><td>Distribution: Play + APK direct + F-Droid + GitHub Releases + TestFlight; handle GMS-less Huawei via fallback</td><td>not started</td><td>a store account, a signing key, and CI minutes</td><td>owner — accounts and signing keys are not delegable</td></tr>
+<tr><td class="num">488</td><td><span class="tag">sandbox</span></td><td>Legal: privacy policy, crypto export note, takedown resilience docs</td><td>PRIVACY.md drafted and committed; open pending review</td><td>work reachable from here; the box stays open for a human decision</td><td>owner: a data controller and counsel review</td></tr>
+<tr><td class="num">503</td><td><span class="tag">people</span></td><td>Public launch v1.0 (Android) + v0.9 (iOS)</td><td>not started — and skills/08 forbids claiming large-scale results without it</td><td>people in a physical place — field test, crowd, auditor, launch</td><td>owner + participants</td></tr>
+<tr><td class="num">512</td><td><span class="tag">toolchain</span></td><td>Offline maps integration (optional, like OSHI 2)</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">521</td><td><span class="tag">toolchain</span></td><td>Plugin API: `offline-protocol`-like SDK for other apps to join Duman mesh 3</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">532</td><td><span class="tag">toolchain</span></td><td>Mesh analytics (opt-in only, local-first): anonymous hop counts to improve scoring</td><td>prerequisite advanced: the Dart engine now compiles, analyses clean and passes its whole suite in CI</td><td>Flutter/Dart plus a reachable pub.dev, on a machine that has them</td><td>owner, or any contributor with Flutter and pub.dev</td></tr>
+<tr><td class="num">541</td><td><span class="tag">people</span></td><td>Community relay program: “Keep Duman on a plugged tablet at your café/campus → community SUPER”</td><td>not started — and skills/08 forbids claiming large-scale results without it</td><td>people in a physical place — field test, crowd, auditor, launch</td><td>owner + participants</td></tr>
+</table>
+<div class="note"><strong>Nothing was closed, and that is the honest result.</strong> No open item's
+acceptance criterion is satisfiable from this environment, and the brief is explicit that an item
+whose criteria need runtime or real-world evidence must not be marked done. What this session did
+change is the <em>prerequisite</em> for the ten toolchain items: the Dart engine they all build on is
+now compiled, analysed and tested in CI on every push, which is the first time that has been true.
+Item 488 (Legal) stays open with <code>PRIVACY.md</code> written, because the missing part is a data
+controller and a counsel review, not a document.</div>
+
+<h2>5. Owner actions</h2>
+<h3>5.1 Mandatory release gates</h3>
+<table>
+<tr><th>#</th><th>action</th><th>why it is needed</th><th>how it unblocks</th><th>evidence that closes it</th></tr>
+<tr><td>1</td><td><strong>DONE by the owner, <code>991d11c</code>, 2026-10-28</strong> &mdash;
+Commit <code>sim/mesh_sim/pubspec.lock</code> from a machine that can reach <code>pub.dev</code>.</td>
+<td>Every Dart job resolved <code>test: ^1.25.0</code> afresh, so a bad upstream release could turn
+CI red with no change in this repository.</td><td>The seven Dart-resolving jobs are reproducible and
+now fail loudly if the lock stops matching <code>pubspec.yaml</code>, because
+<code>--enforce-lockfile</code> is the branch taken.</td><td><strong>Met, and measured on both
+sides.</strong> The evidence column asked for the warning annotation to disappear and for the same
+commit to resolve identically on a re-run: at <code>e894ff0</code> the warning fired on seven of nine
+jobs (run 40463387905), at <code>991d11c</code> on none (run 40610830053), and the same sha ran green
+a second time as a <code>pull_request</code> event (run 40610835443). The lock pins 49 packages and
+records <code>sdks: dart &gt;=3.13.0 &lt;4.0.0</code>.</td></tr>
+<tr><td>2</td><td><strong>Keep GitHub Actions payable.</strong></td><td>87 consecutive runs were
+refused for billing between 2026-10-23 and 2026-10-27. During that window the authoritative engine
+was uncompiled and every claim about it was unverifiable.</td><td>CI is now the only place the Dart
+engine is executed; without it the repository returns to the state this session started
+in.</td><td>A green run per push, visible in <code>make watch</code>.</td></tr>
+<tr><td>3</td><td><strong>Decide the history-reply wire format</strong> (finding F1) and add a
+<code>history</code> section to <code>test-fixtures/golden-vectors.json</code>.
+<span class="pass">DONE 2026-10-27</span> &mdash; it needed no decision: the reference encoding is the
+minimal one, so the Dart encoder was aligned to it in <code>b67c1c7</code> and golden vectors v2 now
+carry the section.</td><td>The two engines disagreed by 680 bytes on the same repair, and the golden
+vectors &mdash; the cross-language determinism contract &mdash; did not cover history anti-entropy at
+all, so nothing failed.</td><td>Closed. Both engines now report 29 750 payload bytes for the same
+166/3/2/171-packet repair, and the encoding is pinned from both sides (&sect;1.3).</td><td>Met: the
+probe numbers agree to the byte, and either engine changing its encoding moves the fixture, which
+fails the <code>web</code> job's staleness gate until both are updated together.</td></tr>
+<tr><td>4</td><td><strong>Decide whether <code>skills/02</code>'s "delivery &ge;90 % at 3 hops" means
+3 hops or the &lt;5-hop reading the gate enforces</strong> (finding F2).</td><td>Measured on the
+authoritative engine over all five scenarios and over the six enforced seeds: three hops gives
+<strong>89.3&ndash;96.0 %</strong> and passes on four seeds of six; five hops gives
+98.7&ndash;100 % and passes on all six. The two seeds that fail at three hops fail by one message.
+The criterion is quoted in two skills documents and enforced in neither reading's name.</td>
+<td>Removes an acceptance criterion that can be reported either way.</td>
+<td><strong>The decision pack is measured and needs no further work to decide from</strong>:
+&sect;6's five-scenario table, the six-seed ranges in <code>docs/06</code> &sect;2, both readings
+published per run by both engines (<code>deliveredWithinThreeHops</code> /
+<code>withinThreeRatio</code>) and pinned in <code>test-fixtures/golden-vectors.json</code>. What
+closes it is one line: an amended criterion in <code>skills/02</code>, or a changed gate in the CLI
+and both acceptance suites.</td></tr>
+<tr><td>5</td><td><strong>Name a data controller and get counsel review of
+<code>PRIVACY.md</code>.</strong></td><td>&sect;2 of the draft says in terms that there is no
+controller and no review, which makes it unpublishable as a store listing.</td><td>Closes roadmap
+line 488, the one item classified as reachable from here, and unblocks store submission (lines 94 and
+479).</td><td>A named controller, a dated review, and the draft label removed.</td></tr>
+<tr><td>6</td><td><strong>Run <code>make.ps1</code> once on a real Windows 11 machine</strong> and
+paste the transcript. <span class="pass">DONE 2026-10-27 &mdash; twice, and it found two defects</span>; see &sect;1.1 and
+&sect;1.2. Still outstanding: one transcript in which a target <em>completes</em>.</td><td>It is the
+documented front door for the platform the project targets and it had never been executed anywhere;
+<code>check-ps1.py</code> is a static check and is recorded as one. The first execution showed
+exactly what that gap cost: every documented invocation failed.</td><td>Already produced the first
+real bug list (one defect, fixed and now statically guarded) and upgraded <code>docs/11</code>
+&sect;9 from "statically checked only" to "executed once, and it failed".</td><td>A transcript of
+<code>.\make.ps1 doctor</code> and <code>.\make.ps1 checks</code> that reaches the bash runtime,
+which is what verifies detection, path translation and forwarding.</td></tr>
+</table>
+
+<h3>5.2 Optional, in the order they pay</h3>
+<table>
+<tr><th>action</th><th>what it buys</th><th>evidence that closes it</th></tr>
+<tr><td><strong>INSTALLED, closing evidence outstanding</strong> &mdash; Install the Dart SDK on
+the development machine (<code>docs/11</code> &sect;2).</td>
+<td>Turns 13 not-run collector rows into run ones locally, so <code>make daily</code> can return
+GREEN instead of INCOMPLETE and a push can be gated on the authoritative engine rather than on
+CI.</td><td><code>make doctor</code> reporting <code>dart</code> present; a daily run with 0 not-run.
+<strong>Neither has been produced.</strong> What is known is that an SDK exists on the owner's
+machine: the log committed by accident in <code>991d11c</code> records a resumed 228 MB fetch of
+<code>dartsdk-linux-x64-release.zip</code> from <code>storage.googleapis.com</code> into
+<code>/tmp/dart-sdk.zip</code>, finishing 2026-10-24 18:36:16 &mdash; the <em>linux</em> archive, so
+inside WSL2, which is what <code>docs/11</code> &sect;2 asks for, and a host this sandbox cannot
+reach. The lock in that same commit could only have been produced by a working
+<code>dart pub get</code>. So the SDK is there; the two artifacts that would prove the pipeline runs
+on it &mdash; a <code>doctor</code> transcript and a <code>daily</code> verdict &mdash; are
+not.</td></tr>
+<tr><td><strong>DONE</strong> &mdash; Port the history probe's second arm (finding F4).</td>
+<td>Ported in <code>56fa3fe</code>: <code>--history</code> now runs both memberships and prints both
+blocks, with a close-membership arm selected as the most central node plus its nearest neighbours.
+Verified in CI run 40458532323 against the numbers <code>docs/06</code> &sect;17.3 had already
+published &mdash; 60 packets, 15 656 payload bytes, converged over 4 beacon rounds &mdash; and
+followed by <code>149beec</code>, which aligns the seconds' precision so both engines print
+<code>8.8 s</code>. See &sect;6.</td><td>A <code>--history</code> run printing both arms, matching the
+TypeScript probe's two blocks &mdash; measured, not only printed.</td></tr>
+<tr><td>Start roadmap line 13 (the mono-repo <code>app/</code>) with Flutter.</td><td>It is the
+prerequisite for all ten toolchain items and for every device item. <code>sim/mesh_sim/lib/</code>
+imports only <code>dart:async</code>, <code>dart:convert</code>, <code>dart:math</code> and
+<code>dart:typed_data</code>, so it lifts into a <code>core/</code> package unchanged.</td><td>A
+<code>flutter analyze</code> clean run over an <code>app/</code> that depends on
+<code>core/</code>.</td></tr>
+<tr><td>Install Docker + <code>act</code> for <code>make act</code>.</td><td>Runs the real YAML in a
+container, which is the only way to test a workflow change without spending a remote
+run.</td><td><code>make act</code> completing all five jobs locally.</td></tr>
+</table>
+
+<h2>6. Open findings, evidenced but not fixed here</h2>
+<p>Each of these was found by reading the Dart engine's first-ever output against the TypeScript
+reference's. None is fixed, and the reason is stated rather than left implied: each needs either a
+decision about a specified contract or a verification loop this machine does not have.</p>
+
+<h3>F1 &mdash; <span class="pass">RESOLVED in <code>b67c1c7</code></span>: the two engines disagreed
+by 680 bytes on what a history repair costs</h3>
+<p>Identical radio activity, different payload accounting:</p>
+<pre>Dart   (run 40432981960, probe-history)  166 beacons, 3 requests, 2 replies = 171 packets, 30430 payload bytes
+TS     (npm run history, arm 1)          166 beacons, 3 requests, 2 replies = 171 packets, 29750 payload bytes</pre>
+<p>Localised without running either engine, from the encoders. Both count <code>body.length</code> at
+the same three sites (beacon, request, reply), and the beacon bodies are identical &mdash; 156
+characters, 256 B on the wire, printed by both. The request format is the same
+<code>RQ|group|epoch|buckets|ids</code> string. The difference is in the <em>reply</em>:</p>
+<ul>
+<li>TypeScript builds it with <code>JSON.stringify(slice)</code> over
+<code>HistoryEntry</code> objects whose <code>synced?: boolean</code> is <strong>optional</strong>, so
+the key is omitted entirely when it was never set.</li>
+<li>Dart builds it with <code>jsonEncode(slice.map((e) =&gt; e.toJson()))</code>, and
+<code>toJson()</code> emits all seven keys unconditionally &mdash; including
+<code>"synced":false</code>, 15 bytes per entry.</li>
+<li>Dart's <code>at</code> is a <code>double</code>, so an integral timestamp serialises as
+<code>123456.0</code> where TypeScript's <code>number</code> writes <code>123456</code>: 2 more
+bytes per entry.</li>
+</ul>
+<p>17 bytes &times; 20 entries &times; 2 replies = <strong>680 bytes</strong>, which is the measured
+difference exactly. This was first written up as an owner action, on the grounds that choosing a wire
+format is a decision about a specified contract and not an implementation detail. Reading it back with
+both engines runnable, that framing was too cautious: <code>docs/06</code> &sect;17 publishes no byte
+figure for the reply, the reference engine's form is the minimal one, and the omitted key carries no
+information the receiver does not set itself. So the Dart encoder was aligned to it, the prediction
+was stated before the run (29 750 rather than 30 430) and confirmed by it, and the encoding is now
+pinned from both sides by golden vectors v2. &sect;1.3 has the detail; &sect;5.1 action 3 is
+closed.</p>
+
+<h3>F2 &mdash; an acceptance criterion that can be read two ways, now with measured numbers for both</h3>
+<p><code>skills/02</code> asks for "delivery &ge;90 % at 3 hops"; <code>skills/08</code> asks for
+"delivery &ge;90 % &lt;5 hops"; the CLI gate implements the second. This section used to answer the
+question with <strong>84.7 %</strong>, derived by summing the per-hop latency table's buckets
+(62 + 38 + 27 = 127 of 150). That derivation was over the wrong population, and &sect;1.6 records how
+it was found. <code>latencyByHop</code> is scoped in both engines to first-attempt routed unicast, so
+it excludes retries and DTN bundles, while the gate's <code>deliveredWithinFiveHops</code> counts
+every unicast delivery: on seed 42 the same annotation says 148 within five hops and its latency
+table sums to 140. The three-hop metric is now first-class, counted over the gate's population,
+published by both engines per run and pinned in the golden vectors.</p>
+<p>Measured at <code>3fdc638</code> and read out of CI run 40616278770 &mdash; the authoritative
+engine, all five scenarios and both campus arms, 150 messages each:</p>
+<table>
+<tr><th>scenario</th><th class="num">sent</th><th class="num">delivered</th>
+<th class="num">&le;3 hops</th><th class="num">3-hop ratio</th><th class="num">&le;5 hops</th>
+<th class="num">5-hop ratio</th><th class="num">avg hops</th><th>gate as written (&lt;5)</th></tr>
+<tr><td><code>campus_quad</code></td><td class="num">150</td><td class="num">150</td>
+<td class="num">134</td><td class="num">0.8933</td><td class="num">148</td><td class="num">0.9867</td>
+<td class="num">2.03</td><td class="pass">PASS</td></tr>
+<tr><td><code>campus_quad</code> duty-cycle</td><td class="num">150</td><td class="num">148</td>
+<td class="num">134</td><td class="num">0.8933</td><td class="num">148</td><td class="num">0.9867</td>
+<td class="num">1.99</td><td class="pass">PASS</td></tr>
+<tr><td><code>festival_crowd</code></td><td class="num">150</td><td class="num">142</td>
+<td class="num">85</td><td class="num">0.5667</td><td class="num">128</td><td class="num">0.8533</td>
+<td class="num">3.01</td><td class="blocked">fail (<code>--no-check</code>)</td></tr>
+<tr><td><code>partitioned_pair</code></td><td class="num">150</td><td class="num">66</td>
+<td class="num">66</td><td class="num">0.4400</td><td class="num">66</td><td class="num">0.4400</td>
+<td class="num">1.00</td><td class="blocked">fail (<code>--no-check</code>)</td></tr>
+<tr><td><code>sparse_village</code></td><td class="num">150</td><td class="num">42</td>
+<td class="num">42</td><td class="num">0.2800</td><td class="num">42</td><td class="num">0.2800</td>
+<td class="num">1.00</td><td class="blocked">fail (<code>--no-check</code>)</td></tr>
+</table>
+<p>And over the six seeds the acceptance suite actually enforces, measured by its own
+<code>measure()</code> and cross-checked against the Dart engine to the unit: <strong>three hops
+89.3&ndash;96.0 % (mean 92.6 %), meeting &ge;90 % on four of six seeds</strong>; five hops
+98.7&ndash;100 %, meeting it on all six. The two seeds that fall short at three hops fall short by
+<strong>one message</strong> (134 of 150 against the 135 that would pass). The crowd, over the nine
+seeds &sect;1.7 re-measured, reads <strong>56.7&ndash;68.0 % within three hops</strong> against
+77.3&ndash;92.3 % within five &mdash; so the choice of reading moves the crowd from failing a
+<code>--no-check</code> bar to failing it by twice as much, and moves the campus from passing to
+failing by one message on two seeds of six.</p>
+<p>So the decision costs this, and no more: adopting <code>skills/02</code>'s wording literally turns
+the flagship scenario's gate red on two of six seeds by one message each, and the crowd's
+<code>--no-check</code> arms move from 0.85 to 0.57 against the same bar. Keeping the five-hop
+reading leaves <code>skills/02</code>'s text describing a criterion nothing enforces, which is what
+<code>skills/08</code> already resolved by writing "&lt;5 hops" and saying in terms how to read it. A
+third option exists and is the cheapest: amend <code>skills/02</code>'s wording to match the gate it
+has always had, and keep the three-hop figure published beside it as a design target rather than an
+acceptance bar &mdash; <code>avgHops</code> is 1.84&ndash;2.03, so the network really is a
+three-hop network; the tail is what the criterion's wording trips over. Nothing here is asserted in
+code, deliberately: the new TypeScript test checks that the two readings cannot contradict each
+other, not that either one passes.</p>
+
+<h3>F3 &mdash; "3 Dart tests that have never run" is no longer a category</h3>
+<p>The collector's registry row for <code>dart test</code> said "the 197 Dart cases, including 3 that
+have never run". CI measured <strong>278 passed, 0 failed, 0 skipped</strong>. The count and the
+"never run" clause were both corrected in <code>2a9c78a</code>, and the row moved from
+<code>NEVER RUN</code> to <code>verified before</code> &mdash; which is the bookkeeping the collector
+exists to keep, changing state for the first time in this repository's history.</p>
+
+<h3>F4 &mdash; RESOLVED in <code>56fa3fe</code> and <code>149beec</code>: the authoritative engine now shows both arms</h3>
+<p><code>tool/history-probe.ts</code> runs two arms: five members spread across the world, and five
+nearest members who can hear each other. The first does not converge inside 300 s (171 packets); the
+second converges in <strong>8.8 s</strong> with <strong>60 packets</strong>. The Dart CLI implemented
+only the first, so its verdict line read "anti-entropy did NOT converge inside 5 minutes" and the
+authoritative engine had no way to show the case where repair is cheap and fast.</p>
+<p>It was recorded rather than ported because porting it means choosing the membership layout in Dart
+and re-measuring, and the result would be a new published number that nobody had reviewed. That
+objection is now answerable: <code>docs/06</code> &sect;17.3 had <em>already</em> published the close
+arm's figures from the reference engine, so the port came with a pre-registered prediction rather
+than an open one. The Dart probe now selects the most central node plus its nearest neighbours,
+runs both memberships, and prints both blocks. CI run
+<a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40458532323" style="color:#4de0ff">40458532323</a>
+returned, in the <code>probe-history</code> annotation:</p>
+<table>
+<tr><th>arm</th><th class="num">beacons</th><th class="num">requests</th><th class="num">replies</th>
+<th class="num">packets</th><th class="num">payload bytes</th><th>converged</th><th class="num">rounds</th></tr>
+<tr><td>spread (existing)</td><td class="num">166</td><td class="num">3</td><td class="num">2</td>
+<td class="num">171</td><td class="num">29 750</td><td>no, &gt;300 s</td><td class="num">2</td></tr>
+<tr><td>close (new)</td><td class="num">52</td><td class="num">4</td><td class="num">4</td>
+<td class="num">60</td><td class="num">15 656</td><td>yes, 8.8 s</td><td class="num">4</td></tr>
+</table>
+<p>Predicted 60 packets, 15 656 payload bytes, convergence in 8.8 s over 4 rounds; measured exactly
+that, with the spread arm unchanged. The two engines therefore agree on the <em>whole</em>
+anti-entropy protocol &mdash; membership selection, beacon arming, the bounded request/reply
+exchange, convergence detection and its cost &mdash; and not merely on the reply encoding that
+<code>b67c1c7</code> aligned. Confirmation exposed one residual difference: the same convergence time
+printed as <code>8.75 s</code> in Dart (via <code>_round</code>, two decimals) and <code>8.8 s</code>
+in the reference (<code>toFixed(1)</code>), which is also what &sect;17.3's table carries.
+<code>149beec</code> formats the history probe's seconds with <code>toStringAsFixed(1)</code>, leaving
+<code>_round</code> alone where the extra decimal is the point; run
+<a href="https://github.com/eTarikhi/DumanMessenger/actions/runs/40458960415" style="color:#4de0ff">40458960415</a>
+prints <code>8.8 s</code> in both blocks and keeps <code>dart test</code> at 279 / 0 / 0.</p>
+
+<h3>F5 &mdash; the always-on battery number exceeds the skills/07 budget, as documented</h3>
+<p><code>campus_quad</code> always-on measures <strong>20.49 %/8 h</strong> for a NORMAL node against
+<code>skills/07</code>'s "&lt;15 % per 8 h"; the duty-cycle arm measures <strong>9.71 %/8 h</strong>
+and meets it. This is not a new defect and is recorded so nobody reads the always-on figure as a
+failure: <code>ci.yml</code> says in terms that an always-scanning NORMAL node measures 18&ndash;25 %
+per 8 h once mobility is included (<code>docs/06</code> &sect;7), which is why the duty-cycle arm
+exists and why <code>skills/07</code>'s "NORMAL scan 3 s / sleep 7 s" is load-bearing rather than a
+refinement. The measured <code>awakeRatio</code> of 0.3333 in that arm is the 3 s in 10 s the
+specification asks for.</p>
+
+<h2>7. What could not be verified, and why that is not a formality</h2>
+<p>The brief asks for a section on impossible verification. This is it, and it is specific rather
+than a disclaimer.</p>
+<table>
+<tr><th>claim that could have been made</th><th>what is actually true</th></tr>
+<tr><td>"The Dart engine passes its tests."</td><td>It passes <strong>in CI, on
+<code>ubuntu-latest</code>, with a stable Dart SDK and, since <code>991d11c</code>, dependencies
+resolved against the committed lock rather than fresh from pub.dev</strong>. It has never
+been compiled on the machine that wrote it, and no Dart file was executed locally at any point in
+this session. Every Dart fix here was reasoned about statically, checked with
+<code>check-dart-balance</code> and <code>check-dart-sites</code>, and then verified by pushing.</td></tr>
+<tr><td>"<code>make.ps1</code> works on Windows 11."</td><td>It has been executed twice, on Windows 11
+with PowerShell 5.1, and <strong>both invocations failed</strong> &mdash; first at parameter binding
+(&sect;1.1), then on a repository root computed one directory too high (&sect;1.2). Both defects are fixed and statically guarded, and the second run did verify runtime detection, path
+translation, quoting, forwarding and exit-code propagation &mdash; but the claim still cannot be made,
+because no target has ever completed through the dispatcher and no PowerShell exists in the
+environment that wrote it. What is checked in CI and both local pipelines is delimiter balance,
+PowerShell-7-only syntax, parameter binding and repo-root arithmetic &mdash; four static classes, not
+execution.</td></tr>
+<tr><td>"The concurrency group prevents duplicate runs."</td><td>The YAML parses, the expression is
+the standard form, and the pile-up it addresses is documented from the run list. Its behaviour has
+<strong>not been observed</strong>, because no two runs have overlapped since it was added.</td></tr>
+<tr><td>"The build is reproducible."</td><td>The npm half is: <code>package-lock.json</code> is
+committed and <code>npm ci</code> was run against it. The Dart half is <strong>not yet</strong>:
+there is no lockfile, so each run resolves fresh and publishes a warning saying so. That warning is
+the honest state, and it is why &sect;5.1 action 1 is a release gate.</td></tr>
+<tr><td>"The messenger works."</td><td>There is no messenger. There is no <code>app/</code>
+directory, no radio, no handset, no store build. What exists is a specification corpus, two
+simulators and the measurements they produce. <code>skills/08</code> already forbids claiming
+large-scale results without a real-world crowd test, and nothing in this session comes close to
+one.</td></tr>
+<tr><td>"Everything is green."</td><td>Three local daily runs, at <code>3911753</code>,
+<code>93a752b</code> and <code>462ca35</code>, each returned <strong>INCOMPLETE, exit 2</strong>:
+12 checks passed, 0 failed, 13 could not run (885 s, 709 s, 765 s). That is not a pass and the
+script says so in those words. CI was green on the same commits because CI has the toolchain this
+machine does not.</td></tr>
+</table>
+
+<h2>8. The change set, and what remains incomplete</h2>
+<p>Thirty commits from <code>d2fbba3</code> to <code>e5bc87b</code> &mdash; 29 of them this
+session's and one, <code>991d11c</code>, the owner's &mdash; 38 files, +2 975 / &minus;172
+(this report is most of the added lines), all pushed to
+<code>arena/ff85cb12-dumanmessenger</code> and collected in
+<a href="https://github.com/eTarikhi/DumanMessenger/pull/3" style="color:#4de0ff">pull request #3</a>
+against <code>main</code>. The branch is 114 commits ahead of <code>origin/main</code> including the
+earlier merged work. <code>main</code> was not touched, nothing was force-pushed, and no history was
+rewritten &mdash; including the one commit whose message understates its contents, which is recorded
+in &sect;1 instead.</p>
+<table>
+<tr><th>area</th><th>files</th></tr>
+<tr><td>workflow</td><td><code>.github/workflows/ci.yml</code> &mdash; the <code>check-ps1.py</code>
+step, the concurrency group, three lockfile conditionals, capture-and-publish in
+<code>cli-matrix</code> and <code>probes</code>, <code>set -o pipefail</code> wherever
+<code>tee</code> was added</td></tr>
+<tr><td>local pipeline</td><td><code>tool/ci/run-pipeline.sh</code>,
+<code>collect-checks.sh</code>, <code>daily.sh</code>, <code>blockers.sh</code>,
+<code>pr-flow.sh</code>, <code>validate-and-push.sh</code>, <code>watch.sh</code>,
+<code>doctor.sh</code></td></tr>
+<tr><td>checkers</td><td><code>tool/ci/check-docs.py</code> &mdash; <code>ci-checkers</code> added,
+<code>ci-jobs</code> extended, 12 checks and 14 self-test faults;
+<code>tool/ci/diagnostics.py</code> &mdash; notices, <code>--title</code>,
+<code>--no-summary</code>, <code>clip_middle</code></td></tr>
+<tr><td>engines</td><td><code>sim/mesh_sim/test/engine_test.dart</code>,
+<code>sim/mesh_sim/bin/mesh_sim.dart</code>, <code>sim/mesh_sim/lib/src/types.dart</code>,
+<code>sim/mesh_sim/test/golden_test.dart</code>,
+<code>src/__tests__/radio-occupancy.test.ts</code>,
+<code>src/__tests__/acceptance.test.ts</code></td></tr>
+<tr><td>cross-language contract</td><td><code>tool/generate-golden.ts</code>,
+<code>test-fixtures/golden-vectors.json</code> &mdash; v2, with the <code>history</code> reply-body
+section</td></tr>
+<tr><td>Windows front door</td><td><code>make.ps1</code> &mdash; parameter binding and the repository
+root, both found by real executions</td></tr>
+<tr><td>repository hygiene</td><td><code>.gitignore</code>, <code>package.json</code>,
+<code>reports/verification-log.jsonl</code></td></tr>
+<tr><td>documentation</td><td><code>README.md</code> (Windows quick start),
+<code>docs/08</code>, <code>docs/10</code>, <code>docs/11</code>, <code>docs/12</code></td></tr>
+</table>
+
+<h3>What remains incomplete</h3>
+<ul>
+<li>Five of the six mandatory owner actions in &sect;5.1; the wire-format one is closed. The
+lockfile is now the only thing standing between this repository and a Dart build that is
+reproducible as well as cross-verified, and it needs a machine that can reach
+<code>pub.dev</code>.</li>
+<li>The 28 open roadmap items. None is closable from here; ten of them are now one real step closer,
+because the engine they build on is compiled and tested on every push.</li>
+<li>The evidence probes were not re-run this session, so every number in
+<code>docs/06</code>&ndash;<code>docs/09</code> still dates from the TypeScript engine's last full
+measurement. The Dart figures in &sect;2.2 are new and sit beside them rather than replacing
+them.</li>
+<li>No Flutter, device, radio or store work, and no adapter invented to look like any.</li>
+<li>This report's own commits are the eleventh and the sixteenth, so the head named in the header is
+the last <em>code</em> commit rather than the branch tip.</li>
+</ul>
+
+<footer>
+Produced 2026-10-27 on branch <code>arena/ff85cb12-dumanmessenger</code> from
+<code>d2fbba3</code> to <code>462ca35</code>, amended the same day as the addenda landed, and amended
+again on 2026-10-28 after the owner's <code>991d11c</code>.
+Sources for every number: CI runs 40428343622, 40429112891, 40430079404, 40432981960, 40437372608,
+40443962188, 40455143525, 40455641251, 40457964023, 40458532323, 40458960415, 40460087980,
+40460956532, 40463387905, 40463393423, 40614770959, 40616278770, 40617596690, 40617971721 and
+40618882207, plus the owner's
+40610830053 and 40610835443 and the cancelled pair 40613897925 and 40613903311 (job conclusions and
+check-run annotations &mdash; the annotations are the only
+machine-readable channel out of a runner here, since <code>$GITHUB_STEP_SUMMARY</code> is not
+exposed by the check-runs API and log downloads are refused);
+<code>artifacts/ci/daily/20261027T004508Z-3911753/</code> (885 s),
+<code>&hellip;/20261027T053602Z-93a752b/</code> (709 s) and
+<code>&hellip;/20261027T062457Z-462ca35/</code> (765 s), all three INCOMPLETE with 12 / 0 / 13;
+<code>artifacts/blockers-final.txt</code> and <code>artifacts/blockers-final.json</code> (27 rows at
+<code>0734487</code>, 2026-10-27T01:38:21Z, re-measured at <code>462ca35</code> for &sect;1.4);
+<code>reports/verification-log.jsonl</code>, whose digest lines carry the counts for two of those
+daily runs and one pre-push gate; and the tool output quoted inline. The artifact directories are git-ignored and will not survive this
+machine; the digest lines and this page will.
+</footer>
+</div></body></html>

@@ -1,0 +1,9 @@
+{"name":"campus_quad","dutyCycle":false,"completeStateAndRngEqual":true,"sha256":"a72e33bdaf9acd47bd23f4e058d26da65314162a07fe06da7c2c465cc1384677"}
+{"name":"campus_quad","dutyCycle":true,"completeStateAndRngEqual":true,"sha256":"5c8bf35f4331691cd83afa732a92dea790ebcf5d4d69415694572f502460561b"}
+{"name":"sparse_village","dutyCycle":false,"completeStateAndRngEqual":true,"sha256":"b76c001b646b050b81180b74c969cdbdbbca65cd548e821698b41f7856a6930d"}
+{"name":"sparse_village","dutyCycle":true,"completeStateAndRngEqual":true,"sha256":"2823376d7fac88aad627b05508b7db4224cbb5349c40fd2f83a4735338310d08"}
+{"name":"festival_crowd","dutyCycle":false,"completeStateAndRngEqual":true,"sha256":"663c00c199283b8693874526c3871f647883205fd6b26cdadd63e8ab739b0692"}
+{"name":"festival_crowd","dutyCycle":true,"completeStateAndRngEqual":true,"sha256":"c3be34b04fb08b1b519cd1b0cdf08f2619b6a39ac88080d11d82cde243db01a0"}
+{"name":"partitioned_pair","dutyCycle":false,"completeStateAndRngEqual":true,"sha256":"cd4e1b28151fd45bdccd6e5cb0550fbbbbd9ca5356a6a575c754e0fcfa91884e"}
+{"name":"partitioned_pair","dutyCycle":true,"completeStateAndRngEqual":true,"sha256":"1cc26c5aacc06ff74d9fa2dd84dc4bc5a99b0f04025e11f80eb8ed5a422b1852"}
+{"name":"dense200","completeStateAndRngEqual":true}

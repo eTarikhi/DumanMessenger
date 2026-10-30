@@ -1,0 +1,14 @@
+dart analyze — 0 error(s), 0 warning(s), 0 info(s)
+  (no analyzer issues with a location; raw output below if non-empty)
+
+dart test — 277 passed, 1 failed, 0 skipped
+  FAIL test/engine_test.dart: density-derived beacon interval (docs/06 §24.11) costs a dense crowd fewer deferrals under csma, and buys it delivery
+       at test/engine_test.dart:2723:7
+       Expected: a value less than <0>
+           Actual: <0>
+            Which: is not a value less than <0>
+         
+         package:matcher               expect
+
+CLI acceptance (campus_quad, seed 42) — last 15 lines
+  | (no output captured)

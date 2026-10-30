@@ -1,4 +1,6 @@
 # 02 — Technical Architecture & Stack Selection
+
+> 2026-10-29 deployment clarification: Current implementation boundary: only simulator/CLI and Node reference crypto exist; native radios/app/secure persistent storage are not implemented. See [deployment baseline](18-deployment-baseline.md).
 ## Evaluated Paths → Selected Way
 
 ---

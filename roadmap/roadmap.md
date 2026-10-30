@@ -11,7 +11,25 @@
 **Goal:** Repo, beacons, 2-phone text hello.
 
 - [ ] Mono-repo: `app/` Flutter + `transport/android` + `transport/ios` + `core/` Dart pure
+  > **Implementation note (Oct 2026 — `sim/mesh_sim/`, `skills/01`; `make blockers` sections A-B):** the `core/` half of this item already exists, and its purity is verified rather
+  > than claimed: `sim/mesh_sim/lib/` imports only `dart:async`, `dart:convert`, `dart:math` and `dart:typed_data` — no `dart:io`, no `dart:ui`, no Flutter — and `pubspec.yaml` declares
+  > **no runtime dependency at all** (one dev dependency, `test`), so it lifts into `core/` unchanged, which is what `skills/01` claims for the transport seam. `dart:io` appears only in
+  > `bin/mesh_sim.dart`, the CLI, which is not part of `core/`. The seam is also the boundary the two `transport/` directories would implement: six verbs — `startAdvertising`, `scan`,
+  > `connect`, `send`, `onReceive`, `stop` — with `SimulatedMeshTransport` as reference implementation and test double, and the discovery side of it byte-pinned in both engines (item 20).
+  >
+  > **What does not exist is `app/` and the two platform directories, and they cannot be scaffolded meaningfully here.** No Flutter SDK and no `pub.dev` (sections A-B), so files written
+  > against them would be files nobody can build, and an unbuilt scaffold reads as progress in a way that hurts: `pubspec.yaml` is `publish_to: none` at `version: 0.1.0`, so there is not
+  > yet a published compatibility surface either (item 426). What *is* worth recording is that the engine is already shaped for the split — pure Dart behind a six-verb interface — so the
+  > mono-repo's cost is project layout and build tooling, not a rewrite of the mesh.
 - [ ] Identity: Ed25519/X25519 keygen + QR add-contact (Briar-style)
+> **Implementation note (Oct 2026 — `src/crypto/identity.ts`, 87 tests across `src/crypto/`, evidence in `docs/07-e2ee-noise-xx.md` §4, §6):** the cryptographic half is built and measured.
+> `generateIdentity` produces the long-term keypair; `encodeQr`/`decodeQr` carry `pubKey + shortAuthString` exactly as `docs/04` §2 specifies, at 54 base64url characters;
+> `addContactLink`/`parseAddContactLink` implement the `duman://add?pub=...&sas=...` side channel for the not-in-person case; and the eight-character SAS is `identitySas`, Crockford-encoded so
+> it cannot be misread aloud. What is not built is everything that is not cryptography: the secure enclave or Android keystore the keys are supposed to live in, the camera that scans the QR, and
+> the contact UI. There is also **no Dart mirror and there cannot be one here** — the Dart SDK ships no X25519 or ChaCha20 and `pub.dev` was unreachable from the environment this was written in,
+> so the engine's packets are sized and sealed in TypeScript and the Dart side asserts the same sizes against shared golden vectors instead. That is a real gap in the authoritative engine and it
+> is recorded here rather than papered over.
+
 - [x] Transport abstraction `MeshTransport {advertise(), scan(), connect(), send()}`
 > **Implementation note (Oct 2026 — `sim/mesh_sim/lib/src/transport.dart`, `test/transport_test.dart`):** built. This note used to say the interface was app
   work; it is not, and the distinction matters for sequencing. The four verbs are the part of Phase 1 that does not need a phone: what `selectTransport` picks
@@ -31,10 +49,62 @@
 > **What is not built:** the platform implementations (items 20, 21, 215, 220), and the opt-in consent and local-first store that item 350's analytics needs.
   `SimulatedMeshTransport` is a reference and a test double, not a radio.
 - [ ] **BLE GATT hello:** Android GATT server + scanner + 12-byte beacon (DB hash + id)
+  > **Implementation note (Oct 2026 — `sim/mesh_sim/lib/src/transport.dart`, `src/transport.ts`; evidence in `skills/01`):** the **12-byte beacon** third of this item is built, in both
+  > engines, and byte-tested in the one that can execute. Bytes 0..7 are the database digest, big-endian; bytes 8..11 are FNV-1a/32 over the node id — the same hash `docs/06` §17's
+  > group-history anti-entropy folds, shrunk to one packet, so a device recognises a peer from four bytes and learns whether that peer holds anything it is missing by comparing eight, with
+  > no list sent in either direction. It is advertised under `DUMAN_MESH_SVC`, the UUID travels with the payload rather than being baked into the radio code, and `BEACON_BYTES` /
+  > `DUMAN_MESH_SERVICE_UUID` are paired with Dart's `beaconBytes` / `dumanMeshServiceUuid` by `tool/ci/check-parity.py`. One edge the two languages do not share was pinned rather than
+  > left to chance: Dart's `int` is 64-bit **signed**, so a digest of 2^63 or above is negative there and positive in TypeScript, and both write `8000000000000000` because each masks to
+  > unsigned at the point of writing.
+  >
+  > **What is not built is the radio.** The Android GATT server and scanner need a handset, and no machine that has run this code has a Bluetooth adapter (`make blockers`, section D), so
+  > the item's own exit criterion — two Android phones exchanging "hello" over BLE — is not reachable from here, and the Dart tests that assert the beacon have never executed anywhere
+  > because the SDK is not installable (section A). One question the format deliberately leaves open, and which the app layer has to answer: **what** a device digests into `dbHash`. Both
+  > engines take it as a parameter, refreshed as the store changes, because whether it covers the whole message store, one conversation, or the group-history buckets is a decision about
+  > what a greeting should reveal — and `PRIVACY.md` §4.2 is where that gets answered in public.
 - [ ] **iOS beacon:** CoreBluetooth peripheral + central scan
+  > **Implementation note (Oct 2026 — `src/transport.ts`, `sim/mesh_sim/lib/src/transport.dart`; `make blockers` section D):** what CoreBluetooth would advertise is decided and
+  > byte-tested — item 20's note: 12 bytes, digest big-endian in 0..7, FNV-1a/32 of the node id in 8..11, under `DUMAN_MESH_SVC` — and the byte order is the part that had to be fixed
+  > *before* either bridge exists, because a beacon that reads differently on the two platforms matches nobody. So the peripheral side has a specification to write to.
+  >
+  > The bridge itself cannot be written or run here: the host is Linux with no `xcrun` (section D), so Apple's Bluetooth stack is out of reach whatever else is installed. That is not a
+  > provisioning gap this machine could close — an iOS item needs a macOS host and a paired iPhone. One thing the bridge must carry that a beacon format does not: `PRIVACY.md` §4.2 states
+  > what a radio-range observer learns from those twelve bytes (a stable pseudonym, presence, and via the digest whether the device's store changed), which is the content an iOS
+  > permission prompt and its App Store privacy label have to be honest about.
 - [ ] Simple UI: peer list + 1:1 chat (plaintext first)
+  > **Implementation note (Oct 2026 — `src/components/ChatPanel.tsx`, `NodeInspector.tsx`; `make blockers` sections A-B):** built as a desktop surface, not a handset one, and further
+  > along than "simple". `ChatPanel.tsx` is a working peer list and chat: a destination picker over nodes, `BROADCAST` and live group channels, `text`/`broadcast`/`sos` message types,
+  > delivery bubbles rendered straight from simulation state so a reset cannot leave stale ones, a per-message hop trace (item 365), and chunked-file and push-to-talk buttons that are
+  > 1:1-only because both are (items 259, 278). `NodeInspector.tsx` carries the per-peer actions — block and unblock, with the two reaches `docs/06` §22 measures.
+  >
+  > It is **plaintext by construction, and by test**: `src/__tests__/import-graph.test.ts` fails if anything reachable from `App.tsx` imports `src/crypto/`, which is precisely the
+  > "plaintext first" this item asks for and the reason E2EE (item 113) is a separate integration rather than a flag somebody flips. What is missing is the handset app, and it is missing
+  > for the toolchain reason rather than the design one: no Flutter and no `pub.dev` (sections A-B), and this surface is driven by a simulated world rather than a radio, so it can show a
+  > chat and cannot be one.
 - [ ] Permissions flows (Android 12+ new BT perms, location, WiFi)
+  > **Implementation note (Oct 2026 — `PRIVACY.md` §5, `docs/06` §24.15; `make blockers` sections A, D):** the specification half is written. `PRIVACY.md` §5 lists all six permissions
+  > with the reason each exists and what breaks if it is refused, including the one that surprises people: Android requires **location** for BLE scanning at all, which is why a messenger
+  > with no map in it asks for a map permission — and §4.4 records that the only feature using a fix is SOS, which broadcasts it.
+  >
+  > The flows themselves are app code and need a handset (sections A, D): the runtime prompts, the Android 12+ `BLUETOOTH_SCAN` / `BLUETOOTH_CONNECT` split against the legacy permissions,
+  > the rationale screen before the second ask, and the denied-permanently path that has to explain why the app is now useless rather than retrying a prompt the OS will not show. What the
+  > simulator contributes is the number those screens need in order not to lie: throttling or losing the scan is not free, and `docs/06` §24.15 measures the crowd's delivery at **82.5 %**
+  > with a fixed sparse scan interval against **89.4 %** when the interval adapts to density — 6.9 points bought by 76 % more scans per second, with battery moving by 2 % or less in both
+  > directions, i.e. noise, because the drain model charges the duty-cycle window and not each scan event.
 - [ ] CI + F-Droid/Play internal track + TestFlight
+  > **Implementation note (Oct 2026 — `.github/workflows/ci.yml`, `tool/ci/`, `docs/10`, `docs/12`; state probed by `make blockers`):** the **CI** half is written and locally mirrored,
+  > and has not executed. Five jobs — `checks`, `web`, `dart`, `cli-matrix`, `probes` — with `tool/ci/run-pipeline.sh` copying each step from the workflow rather than paraphrasing it, so
+  > a green local run is evidence about the remote one; `tool/ci/collect-checks.sh` collects every check in the repository into one report and labels what could not run as `not-run` rather
+  > than passed; `tool/ci/daily.sh` composes both into one dated artifact with one verdict. `docs/10` §5 documents the mapping and `docs/12` every command.
+  >
+  > It has not run: GitHub Actions refuses every job on this account for **billing** — *"recent account payments have failed or your spending limit needs to be increased"* — with the last
+  > green run at **2026-10-23T08:46:52Z** (`8406717`) and 82 non-success runs since, and `gh run rerun` is refused too. That is an account setting, not a branch change, and no commit
+  > here can fix it; `make blockers` section C measures it on every run so the claim cannot go stale quietly.
+  >
+  > **The three store tracks are not buildable from here at all**, and for two different reasons. F-Droid, the Play internal track and TestFlight each need an account, a signing key and an
+  > artifact — and the artifact needs the toolchain this machine does not have (no Flutter, no Dart SDK, no `pub.dev`: sections A and B). TestFlight additionally needs a macOS host, and
+  > this one is Linux (section D), so the iOS track is unreachable whatever is installed. All three are downstream of item 13's mono-repo and item 382's distribution, which is where the
+  > signing and submission work belongs; what this item contributes today is the pipeline those tracks would run.
 
 **Exit criteria:** 2 Android phones exchange “hello” over BLE, no internet.
 
@@ -58,7 +128,7 @@
 - [x] Store-and-forward OppQueue (7-day expiry, 500 msgs cap)
 > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §8, §17, `docs/08-media-transport-ptt.md` §6`):** implemented in both engines at the specified constants — `OPP_QUEUE_MAX = 500`, `OPP_TTL_MS = 7 days`, Spray-and-Wait
   with `SPRAY_LIMIT = 3` copies — and exercised by the partitioned worlds, where it is the only thing that delivers at
-  all. Opportunistic deliveries are marked `carried` so they stay out of the latency budget that docs/04 §5 writes for
+  all. Opportunistic deliveries are marked `carried` so they stay out of the latency budget that `docs/02` §6 writes for
   routed traffic. Two interactions were measured rather than assumed: a media chunk whose retries run out lands here and
   stalls its sliding window forever unless a watchdog re-sends it (`docs/08` §6), and a heavy file transfer pushed 35
   ordinary messages into store-carry-forward in 300 s (`docs/08` §9).
@@ -129,7 +199,24 @@
   work — sender-key agreement, the channel list UI, persistence — is Phase 1's remaining crypto and
   storage items.
 - [ ] Foreground service (Android) + bg mode (iOS) + duty cycling NORMAL vs continuous SUPER (manual toggle first)
+> **Implementation note (Oct 2026 — `src/simulation.ts` + `sim/mesh_sim`; evidence in `docs/06-simulator-findings.md` §10.3, §24.1, §24.15):** the **duty cycling** third of this item is built,
+> measured and toggleable. `dutyCycleEnabled` with `normalScanWindowMs` 3 s / `normalScanCycleMs` 10 s and `sleepDrainFactor` 0.25 is `skills/07`'s "NORMAL scan 3s/sleep 7s, SUPER continuous"
+> literally, with `awakeRatio` and `scansSkippedAsleep` reporting how much of it actually happened; the visualiser has the toggle plus a per-node battery-saver switch, and `--duty-cycle` is a CLI
+> flag. Measured: NORMAL's 8-hour drain falls from 19-25% to **8.7-12.4%**, which is what puts it under `skills/07`'s 15% budget, and the CI gate asserts that figure in duty-cycle mode only
+> because asserting it on the always-on arm would fail on a true statement about the model. Measured `awakeRatio` is 0.333 on `campus_quad` and 0.306 on `festival_crowd`, so a NORMAL node's
+> effective rate halves while a SUPER's does not — which is most of why the SUPER:NORMAL battery ratio widens from 2.98x to 4.23x when the duty cycle is on (§24.1). §24.15 adds the caveat: the
+> battery model charges the duty-cycle *window*, not the scan events inside it, so a mitigation that works by scanning less cannot be priced here.
+> The other two thirds — the Android foreground service and iOS background mode — are platform work and are not started.
+
 - [ ] Battery/performance logging
+> **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §10.5, §24; format in `docs/09-field-test-plan.md` §4):** the *logging* half is
+> built and the four series `skills/07` asks for are all reported by both engines — battery %/h per role, scans/sec, relays/sec, and wake-locks, the last of which landed with `wakeLocks`,
+> `wakeLockMs`, `wakeLockShareNormal`/`Super` and `radioDemandRatio`, plus per-node `wakeLocksFor`/`wakeLockMsFor` so cost can be attributed to one device. The capture format a phone would
+> write is specified and has a working analyzer: per-device `sample` records every 30 s carrying role, battery, charging, online, awake, peers and txCount, per-message `hop`, `calibration`
+> readings, and a network-wide `topology` record per sample boundary. What is *not* done is the half that needs a phone: real drain measured by Battery Historian against these series, and one
+> structural limit the simulator cannot cross — its battery model is a role-based hourly rate with a duty-cycle multiplier and **no per-event term**, so it cannot price a mitigation that works
+> by doing less of something. That has now bounded three separate measurements (the Wi-Fi Direct group-owner role, a packet on air, and a scan), and §24.14 item 8 has the argument for why the
+> missing term must be calibrated against a device rather than chosen to make a number come out.
 
 **Exit criteria:** 5 Android phones in mesh: A can message C via B relay; broadcast reaches all; airplane mode throughout; <2s 1-hop, <5s 3-hop.
 
@@ -167,7 +254,8 @@
   which cut transmissions **67%/86%/76%** at 50/100/200 nodes and left the 20- and 60-node evidence untouched.
 - [x] Mesh simulator `mesh_sim.dart` (virtual nodes, walls, random walk) → tune weights w1..w5
   - Delivered at `sim/mesh_sim/` (+ TypeScript reference engine and visualiser in `src/`), wired into CI with cross-language golden vectors.
-  - Weights w1..w5 verified as specified (0.30/0.25/0.20/0.15/0.10): `campus_quad` over six seeds gives SUPER 20-25%, delivery 97.3-100%, 97.3-100% within 5 hops, 7-9% of the naive flood-all relay budget, ≤0.22 elections/node/min.
+  - Weights w1..w5 verified as specified (0.30/0.25/0.20/0.15/0.10): `campus_quad` over six seeds gives SUPER 20-25%, delivery 99.3-100%, 98.7-100% within 5 hops and 89.3-96.0% within 3, 8-10% of the naive flood-all relay budget, ≤0.14 elections/node/min, 1.84-2.03 average hops.
+  > Re-measured 2026-10-28 at `3fdc638`, both engines agreeing to the unit against CI run 40616278770. The ranges this line carried before were published at `82d967a` and fifteen commits to the engine had overtaken them. Which of the two hop readings the criterion means is finding F2 — an owner decision, published side by side rather than chosen in code.
   - Three spec defects found while tuning and corrected in `docs/03`: the proximity guard's hard-coded −60 dBm; MPR suppression gated on "heard a SUPER" instead of on coverage (cost 16-29 delivery points in a 60-node crowd); and tq kept per route entry instead of per link, which made the `tq > 0.6` gate reject nearly every route and silently disabled multi-hop unicast. Evidence: `docs/06-simulator-findings.md`.
 - [ ] Field test 1: campus quad / office floor mapping: atrium should become SUPER, packet delivery ratio vs flood-all baseline
 > **Instrumentation note (Oct 2026 — `tool/capture-json.ts` + `tool/field-report.ts`, plan in `docs/09-field-test-plan.md`):** still blocked on
@@ -231,6 +319,15 @@
   Wi-Fi Direct against **6.45 s** on BLE), and a 10 MB image crossing three hops in **33.00 s**. `createGroup`/`join`
   and the socket relay are platform work; the model treats formation as a setup latency, not as a second RF budget.
 - [ ] MultipeerConnectivity parity on iOS (Apple-to-Apple files via MPC)
+  > **Implementation note (Oct 2026 — `src/types.ts`, `src/routing.ts` `selectTransport`; `make blockers` section D):** `multipeer` exists in both engines' `TransportType`
+  > (`{ ble, wifiDirect, multipeer }`) and **no code path ever selects it**: `selectTransport` returns `ble` at or below `BLE_MAX_BYTES` (1 024 B) and `wifiDirect` above it, so no message
+  > in either engine carries `multipeer` and no published measurement covers one. That is stated rather than hidden because the enum member is the seam's placeholder for Apple-to-Apple,
+  > and a reader who assumes it is modelled would assume a parity that was never measured.
+  >
+  > What *is* built is the protocol MultipeerConnectivity would carry: the chunked large-file transport (item 259, `docs/08` §3-§4) with its sliding window, ACKs and resume, measured on the
+  > two radios that exist. MPC itself needs a macOS host and a paired iPhone (section D), and one design question it will raise is already visible in the measurement: `docs/08` §8 shows what
+  > a BLE-only mesh can carry and §12 what one radio changes, so an Apple-to-Apple path that only Apple devices can use has to be sized against a mesh whose reachability is already
+  > bimodal (`docs/06` §24.10) rather than treated as extra capacity for everybody.
 - [x] Chunked large-file protocol (64 KB chunks, ACK, resume)
 > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/08-media-transport-ptt.md` §3, §4, §6):** implemented in both
   engines and measured. 64 KB slices behind a sliding window of 4 unacknowledged chunks, each slice an
@@ -280,6 +377,13 @@
   **100% in all four worlds**; the app-side work (all-transports fan-out, the opt-in listen toggle) is
   still to do. `dart run bin/mesh_sim.dart --sos` prints the reach probe.
 - [ ] External audit prep + panic wipe (one-tap key zeroization)
+> **Implementation note (Oct 2026 — `src/crypto/identity.ts` `panicWipeIdentity`, `src/crypto/session.ts` `panicWipe()`, 31 session tests; evidence in `docs/07-e2ee-noise-xx.md` §7, question 4):** the
+> key-zeroization half is built, including the part that is easy to get wrong. The wipe order is
+> `[recvRatchet, sendRatchet, handshake, lastLeg, transportKeys, sas, identity]` — ratchets before the keys that derived them, identity last — and it is asserted rather than incidental, because an
+> order that leaves a live ratchet behind has not wiped anything. `docs/07` §7's fourth answer also records the two things a wipe cannot do: it cannot revoke a key somebody else still holds, and in JavaScript
+> `zeroize()` is best-effort, since the language gives no guarantee a buffer is not copied or paged. What is not built is the rest of `skills/03`'s "zero keys + overwrite DB + toast": the database
+> overwrite and the UI are app work, and external audit prep is a process rather than a component.
+
 
 **Exit criteria:** 2 phones exchange image <10 MB over WiFi Direct mesh; PTT Opus note plays in <3s 1-hop / <8s 3-hop; SOS reaches all within ttl.
 
@@ -317,7 +421,25 @@
 **Goal:** Shippable to real users.
 
 - [ ] iOS harden: background scan throttling UX (“keep in foreground for mesh”), MPC fallbacks, BLE-only Android↔iOS interop
+  > **Implementation note (Oct 2026 — `docs/06` §10, §24.15, §24.14 item 8; `make blockers` sections A, D):** the throttling half is built in both engines and measured. The duty cycle
+  > (`skills/07`: NORMAL scans 3 s in every 10, SUPER continuous) is what brings NORMAL inside the battery budget — `docs/06` §10 measures **19-25 % per 8 h** always-on against **8.7-12.4 %**
+  > duty-cycled, delivery-neutral on the seed mean — and the adaptive scan interval (`scanIntervalMode`, `docs/05` §1.2's third layer) is built on top of it.
+  >
+  > The measurement is also what the UX string has to be honest about, and it points in two directions at once. "Keep in foreground for mesh" is true, and its price is delivery: letting the
+  > interval follow density instead of fixing it buys the crowd **6.9 points** (82.5 → 89.4 %) for **76 % more scans per second** (58.2 → 102.2), while in a sparse village the same rule
+  > **cuts scans 70 %** (8.29 → 2.45) and moves delivery not at all (26.2 % either way). The battery saving that is supposed to justify throttling is **not measurable in this engine**:
+  > 1.331 → 1.331 %/h sparse and 1.458 → 1.428 %/h in the crowd — 2 % or less, in both directions — because `batteryDrain` charges the duty-cycle *window* and has no per-scan term
+  > (`docs/06` §24.14 item 8, the one gap in the power model that has now bounded three separate measurements). So a background-throttling screen should be written from the delivery number,
+  > not from a battery claim this repository cannot support. The MPC fallbacks and Android↔iOS BLE interop need devices and a macOS host (sections A, D).
 - [ ] WiFi Aware experiment (Android 26+ & iOS 26 compat probe) — feature-flagged
+  > **Implementation note (Oct 2026 — `skills/01`, `docs/08` §8, §12; `make blockers` section D):** nothing here models Wi-Fi Aware, and that is a decision rather than an omission:
+  > `skills/01` records that the engine's `TransportType` is `{ ble, wifiDirect, multipeer }` and deliberately does not gain a fourth member for an experiment that is feature-flagged and
+  > unproven on both platforms. Adding one would rewrite a measured record — every published number in `docs/08` is against those three — for behaviour nobody can exercise.
+  >
+  > What the repository does have is the evidence a compat probe would be read against: `docs/08` §8 for what a BLE-only mesh can actually carry, §12 for what changing the radio changes
+  > (channel access, capture, deferrals), and the seam threshold a third radio would have to sit above or below — 1 024 B, crossed by a 930-character body once padding is counted
+  > (`docs/07` §3, `docs/08` §5.3). The probe itself needs Android 26+ and iOS 26 hardware in the same room (section D), and its interesting result is not throughput but whether a
+  > many-to-many Aware group can join a mesh whose reachability is already bimodal without making it worse (`docs/06` §24.10).
 - [ ] Group UX: invite via QR, admin rotate key, leave/rejoin sync
 > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/06-simulator-findings.md` §14, §17`):** two of the three are implemented and measured in both engines: **admin rotate key** (`rotateGroupKey`, admin-only,
   epoch bumped, stale-epoch copies rejected network-wide) and **leave/rejoin sync** — hash-beacon anti-entropy recovers
@@ -347,8 +469,30 @@
   always-on, 19.4% mobile always-on) — inside skills/07's 15% with the sleep slot, outside it without. A 200-node run
   takes 24.6 s of wall time for 38 s of simulation.
 - [ ] Onboarding: 3-slide explainer (no internet needed, keep Bluetooth on, this is short-range not replacement)
+  > **Implementation note (Oct 2026 — `docs/06` §3, §24.10, §24.15; `PRIVACY.md` §1):** the three claims the slides have to make are all measured, which is worth recording before
+  > somebody words them optimistically. **"No internet needed"** is true by construction — there is no server and no upload path (`docs/04` §2, `PRIVACY.md` §1). **"Keep Bluetooth on"** has
+  > a number: a node that stops scanning leaves the mesh, and `docs/06` §24.15 prices throttled scanning at 6.9 points of crowd delivery. **"This is short-range, not a replacement"** has
+  > two: the radio model's line-of-sight budget is **31.6 m** at the −85 dBm receive threshold, with 12 dB charged per wall in both engines (`docs/06` §3), and a crowd's reach is
+  > **bimodal** — 98 % on every seed whose graph stays in one piece, 54-87 % on the ones that split, with the cleanest split case reaching 55 % while connected in 17 % of in-window samples
+  > (`docs/06` §24.10). The honest third slide is therefore "a room, a quad or a floor", not "a city".
+  >
+  > The slides themselves are app code (section A), and one of them is a privacy notice in miniature: `PRIVACY.md` §4.2 is what the "people nearby can see you are here" slide has to say.
 - [ ] Distribution: Play + APK direct + F-Droid + GitHub Releases + TestFlight; handle GMS-less Huawei via fallback
+  > **Implementation note (Oct 2026 — `docs/04` §7, `PRIVACY.md` §11; `make blockers` sections A-C):** the requirement is written down twice and for a reason that is not only defensive:
+  > APK direct + F-Droid + GitHub Releases alongside any store listing, so that a store removal cannot withdraw the software *or the privacy notice users still need* — `PRIVACY.md` §11 makes
+  > the repository copy authoritative and anything published elsewhere a mirror of it. The GMS-less Huawei fallback is the same argument with a different cause.
+  >
+  > Nothing can be built or signed here: no Flutter or Dart toolchain (sections A-B), no signing key, no store accounts, and the only workflow in `.github/workflows/` is `ci.yml`, which has
+  > not executed a job since **2026-10-23T08:46:52Z** because the account is billing-refused (section C). A release workflow is writable and would be worth writing against a real artifact
+  > rather than a hypothetical one; the artifact needs item 13's mono-repo first, which is why this item sits behind it. What is decided already, and is the part that usually gets decided
+  > too late: which copy of the privacy policy is authoritative, and that the answer has to survive a takedown.
 - [ ] Legal: privacy policy, crypto export note, takedown resilience docs
+  > **Implementation note (Oct 2026 — `PRIVACY.md`):** the three documents this item asks for are written, at the repository root where a store listing and a release artifact look for them,
+  > and each claim in them cites the engineering document behind it. The box stays open for the two parts that are not writing: there is **no data controller** — no legal entity behind this
+  > repository — so GDPR Art. 13's identity-and-contact requirement is unmet and §2 of the policy describes that hole instead of inventing an address; and there has been **no counsel
+  > review**, including of the export classification, which §10 deliberately leaves as a legal question after stating the engineering facts (standard primitives, hand-written Noise_XX over
+  > them, publicly available source). What the policy adds beyond `docs/04` §7 is the part a user needs and a threat model does not say: what every device in radio range can observe, what
+  > the design does not protect against (traffic analysis — measured and null, presence, recall), and what a field-test capture records about the volunteers carrying the phones.
 
 **Exit criteria:** Closed beta 50-100 users at university/festival; Android delivery ratio >90% at 3 hops; iOS companion usable.
 
@@ -358,12 +502,40 @@
 **Goal:** Public launch + community.
 
 - [ ] Public launch v1.0 (Android) + v0.9 (iOS)
+  > **Implementation note (Oct 2026 — `skills/08`, `docs/09`, `docs/06` §24.13; `PRIVACY.md` §2, §10):** gated on every item above and on one rule this repository already wrote for
+  > itself: `skills/08` — **do not claim large-scale results without a real-world crowd test**. The simulator's numbers are acceptance evidence for a modelled world (20-200 nodes, `docs/06`
+  > §15; nine-seed delivery gates at 85.3-98.7 % in the crowd, §24.13) and not launch claims, and `docs/09` exists to be the bridge: capture schema, analyzer, walk protocol, and five
+  > predictions the building can falsify.
+  >
+  > Two non-engineering gates are recorded here because a launch checklist that omits them is a launch that stops at the store form: there is **no data controller** — no legal entity behind
+  > this repository — so the privacy notice cannot be published as it stands (`PRIVACY.md` §2, GDPR Art. 13), and there has been **no counsel review**, including of the export classification
+  > (§10). Both are downstream of nothing in this repository, and both are prerequisites for a v1.0 that a store will accept.
 - [ ] Offline maps integration (optional, like OSHI [2](https://oshi-messenger.com/best-offline-messenger))
+  > **Implementation note (Oct 2026 — `Obstacle` in both engines, `docs/06` §3; `make blockers` sections A-B):** optional in the roadmap, and unreachable here in a specific way. This
+  > engine's geography is rectangles: `Obstacle { x, y, w, h, label }`, with the radio model charging 12 dB per wall crossed and a 31.6 m line-of-sight hop (`docs/06` §3), so a map would
+  > enter this design as obstacles plus a background image — not as tiles, geocoding or routing, none of which the mesh uses. `docs/09` §3.1's calibration walk is how the rectangles get
+  > their numbers in a real building.
+  >
+  > Map tiles are the actual blocker: a large offline artifact fetched from hosts this sandbox cannot reach (section B), with no dependency mechanism available to fetch them (section A). And
+  > nothing in the acceptance criteria needs a map — the roadmap marks the item optional, and no published number in `docs/06`-`docs/09` would change if it were dropped. Worth saying plainly,
+  > because "offline maps" in a messenger with no internet is a feature whose entire cost is the offline part.
 - [ ] Plugin API: `offline-protocol`-like SDK for other apps to join Duman mesh [3](https://www.offlineprotocol.com/guides/quickstart)
+  > **Implementation note (Oct 2026 — `skills/01`, `tool/ci/check-parity.py`; `make blockers` sections A-B):** the shape of the SDK exists and is deliberately narrow: the six-verb
+  > `MeshTransport` seam, implemented by `SimulatedMeshTransport` as reference and test double, with the discovery side now byte-pinned in both engines (item 20). A third-party app joins by
+  > implementing those six verbs against its own radio, and two properties of the seam are what make that safe rather than merely possible — it consumes **no random numbers**, so a world
+  > driven through it is byte-identical to the same world driven by hand and the golden vectors hold, and `connect` **refuses a peer the local scan has not reported**, so a plugin cannot be
+  > handed an oracle about the world it is not allowed to see (`skills/01`).
+  >
+  > What does not exist is everything a plugin *author* needs besides verbs: no versioning policy (`pubspec.yaml` is `version: 0.1.0`, `publish_to: none`, so nothing is published and no
+  > compatibility promise has been made), no documented stability contract for the beacon or packet formats beyond `tool/ci/check-parity.py` keeping the two engines' 59 shared constants
+  > equal, and no distribution channel (item 408). Writing an SDK against an unpublished format that two engines must agree on byte-for-byte is the part that needs the toolchain
+  > (sections A-B) — and the part that needs a decision first is which of those bytes are a promise.
 - [ ] Mesh analytics (opt-in only, local-first): anonymous hop counts to improve scoring
 > **Implementation note (Oct 2026 — `sim/mesh_sim` + `src/`, evidence in `docs/09-field-test-plan.md` §4, §7`):** the format this would ship in is written down and has a working analyzer: `docs/09` §4's JSONL capture carries
-  per-message `hop`, per-device `sample` records and calibration readings, and `tool/field-report.ts` derives hop
-  distribution, latency percentiles, relay counts and an RF-model fit from it. Validated against a synthetic capture
+  per-message `hop`, per-device `sample` records, calibration readings and a network-wide `topology` record per sample boundary, and `tool/field-report.ts` derives hop
+  distribution, latency percentiles, relay counts, an RF-model fit and — since §24.10 showed a 60-node crowd splitting and re-joining inside a window — the connectivity timeline the walk
+  actually had. That last one is printed directly under Traffic rather than in its own corner, because a reach number from a walk during which the network was sometimes in two pieces is a
+  different quantity from the same number from one that never split, and the two must not be compared without saying which was which. Validated against a synthetic capture
   whose ground truth is known, where the fit recovers the model's own parameters exactly (−55.0 dBm at 1 m,
   20.0 dB/decade, 31.6 m line of sight, 0.00 dB residual). What is not built is the opt-in consent and the
   local-first store — and note that the capture deliberately carries no identities, only stable per-device labels.

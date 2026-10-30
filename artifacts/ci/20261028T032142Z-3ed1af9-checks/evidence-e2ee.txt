@@ -1,0 +1,127 @@
+
+> duman-mesh-simulator@0.1.0 e2ee
+> tsc -p tool/tsconfig.golden.json && node -e "require('fs').writeFileSync('tool/.build/package.json','{\"type\":\"commonjs\"}')" && node tool/.build/tool/e2ee-probe.js
+
+Duman Messenger — what E2EE costs on this mesh (docs/07 §2–§4, §7)
+Three sections measure the mesh carrying crypto-shaped messages, which is the part a
+protocol simulator can honestly answer. The fourth runs the reference protocol layer in
+src/crypto/ over OpenSSL and measures the crypto itself.
+
+=== Noise_XX establishment latency (docs/07 §2.1, §2.2) ===
+Each leg is one unicast through the real engine. A leg that has not arrived inside
+8 s is lost (§2.2's budget), and a lost leg means the session was never
+established — retry is per leg, not per handshake, but this measures the first attempt.
+Seeds: 42, 7. Wire size per leg: 256 B, so every leg rides BLE.
+
+--- campus_quad (20 nodes, seed 42) ---
+  hops  pair                     leg 1     leg 2     leg 3     total      status
+  1     node-0 → node-1            232 ms   239 ms   259 ms    730 ms  established
+  2     node-0 → node-10           539 ms   460 ms   404 ms   1403 ms  established
+  3     node-0 → node-14           822 ms   966 ms   740 ms   2528 ms  established
+  4     node-14 → node-3          1013 ms  1114 ms  1005 ms   3132 ms  established
+
+--- campus_quad (20 nodes, seed 7) ---
+  hops  pair                     leg 1     leg 2     leg 3     total      status
+  1     node-0 → node-1            311 ms   261 ms   250 ms    823 ms  established
+  2     node-0 → node-10           458 ms   832 ms   535 ms   1825 ms  established
+  3     node-0 → node-14          4967 ms  1080 ms  1109 ms   7156 ms  established
+  4     (no pair at this distance)
+
+--- festival_crowd (60 nodes, seed 42) ---
+  hops  pair                     leg 1     leg 2     leg 3     total      status
+  1     node-0 → node-1            181 ms   205 ms   296 ms    681 ms  established
+  2     node-0 → node-48           454 ms   429 ms   466 ms   1349 ms  established
+  3     node-0 → node-45           907 ms   585 ms  1036 ms   2528 ms  established
+  4     node-0 → node-29             lost  1742 ms  5541 ms     never  NOT established
+
+--- festival_crowd (60 nodes, seed 7) ---
+  hops  pair                     leg 1     leg 2     leg 3     total      status
+  1     node-0 → node-1            202 ms   301 ms   200 ms    703 ms  established
+  2     node-0 → node-10           439 ms   672 ms   398 ms   1509 ms  established
+  3     node-0 → node-45           853 ms   696 ms  1038 ms   2586 ms  established
+  4     node-0 → node-38          1600 ms     lost  1464 ms     never  NOT established
+
+=== verdict ===
+  2 leg(s) lost inside 8 s — §2.2 is reproduced, and a
+  three-leg session inherits the loss: festival_crowd seed 42, 4 hop(s), -> e; festival_crowd seed 7, 4 hop(s), <- e, ee, s, es
+  every leg that arrived was inside the published per-message budget (< 2000 ms at
+  one hop, < 5000 ms at three). §2.1's conclusion stands: the budget was written for
+  a message, and a session is three of them in series. Two- and four-hop legs are reported but
+  not judged, because no budget is published for either distance.
+
+=== session churn: how often a device meets a new peer (docs/07 §3) ===
+The in-range graph is sampled every 5 s over 10 simulated
+minutes, and a pair counts once however many times it recurs. This is the measurement that
+decides whether a device may handshake on discovery, so it is worth being careful about what
+"per node" means — see the two columns at the end.
+
+  world            nodes   pairs met   of all pairs   peers/node/hour   pairs/node/hour
+                                                        (counted)       (§3's formula)
+  campus_quad       20         103      54% of  190          61.8                30.9
+  festival_crowd    60         711      40% of 1770         142.2                71.1
+  sparse_village    12          18      27% of   66          18.0                 9.0
+
+  Read the counted column for "how many strangers does one device meet". The formula column
+  is what docs/07 §3's table prints (30.6 / 70.2 / 9.0), and it is half the counted figure
+  because a pair meeting is a new peer for *both* of its members. §3's conclusion is not
+  affected — it argues against handshaking on discovery, and twice the churn argues harder —
+  but the number it quotes understates the rate by a factor of two.
+
+=== packet size, padding and the transport boundary (docs/07 §4) ===
+skills/03's packet is header 27 B + nonce 12 B + tag 16 B + from 32 B + ts 8 B = 95 B,
+padded to 256 B blocks, so the wire size is ceil((95 + body) / 256) × 256. BLE carries up to
+1024 B. The heuristic this replaced was 64 + 4 B per character, which crossed the BLE ceiling
+at 241 characters instead of 930 — and transport is what sets per-hop latency in this model.
+
+  body     engine wire   transport      old heuristic   its transport   matches §4
+      0         256 B   BLE                   64 B   BLE           yes
+    241         512 B   BLE                 1028 B   Wi-Fi Direct  yes
+    700        1024 B   BLE                 2864 B   Wi-Fi Direct  yes
+    900        1024 B   BLE                 3664 B   Wi-Fi Direct  yes
+    930        1280 B   Wi-Fi Direct        3784 B   Wi-Fi Direct  yes
+
+  the documented packet first leaves BLE at 930 characters; the old heuristic left at 241.
+
+=== verdict ===
+  §4's table and both crossing points reproduce exactly from the exported constants.
+  Padding makes length uninformative below 161 characters of body and coarse above it.
+
+=== the crypto itself: real sizes and real costs (docs/07 §2.1 note 3, §4, §7.2) ===
+Everything below is measured from src/crypto/, the reference protocol layer over OpenSSL.
+It is not custom crypto — skills/03 forbids that and this probe does not do it — but it is
+real code producing real bytes, so the sizes it reports are not arithmetic on constants.
+
+  §7.2  leg sizes on air                32 / 96 / 64 B
+        largest leg vs a 247 B MTU          96 B, 151 B to spare
+
+  §4    body                                    sealed packet   engine model   agrees
+        0 chars                                        256 B       256 B   yes
+        241 chars                                      512 B       512 B   yes
+        700 chars                                     1024 B      1024 B   yes
+        900 chars                                     1024 B      1024 B   yes
+        929 chars (docs/08 §5.3 BLE ceiling)          1024 B      1024 B   yes
+        930 chars                                     1280 B      1280 B   yes
+        300 emoji (600 code units, 1200 bytes)        1536 B      1536 B   yes
+        (sized by .length the emoji body would be 768 B -> ble, and it does not fit)
+
+  §2.1  one handshake (2 keygen, 3 DH, 4 AEAD)   8936 µs
+        one-hop radio total from §2.1's table   675 ms
+        the CPU is 1.324 % of a one-hop handshake
+        one message sealed (160 B + ratchet)    373.5 µs  → 2677 msg/s, 0.4 MiB/s
+
+  §6    what a SUPER relay that is also a legitimate peer of Alice can read:
+        header   ttl 5, type text, hop 1, destHint e7b7506b9c797d60
+        body     not readable
+        opened with its own legitimate message key   fails (auth-failed)
+        plaintext visible in the bytes on air        no
+
+=== verdict ===
+  Legs are 32/96/64 B and each fits one unfragmented 247 B GATT write (§7.2).
+  Every sealed packet measures what the engine's wireSizeOf predicts, including a body whose
+  code-unit count and byte count disagree (§4).
+  A handshake is 1.324 % CPU and 98.676 % radio at one hop, so §2.1
+  note 3 holds with a number attached: the seconds are the mesh, not the crypto.
+  A relay holding a legitimate key from its own session with the sender reads the header and
+  nothing else (§6 row 1).
+
+PASS — every figure this probe asserts reproduced.

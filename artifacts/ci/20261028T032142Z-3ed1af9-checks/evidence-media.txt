@@ -1,0 +1,833 @@
+
+> duman-mesh-simulator@0.1.0 media
+> tsc -p tool/tsconfig.golden.json && node -e "require('fs').writeFileSync('tool/.build/package.json','{\"type\":\"commonjs\"}')" && node tool/.build/tool/media-probe.js
+
+Duman media transport probe — every number below is measured, not assumed.
+Radios: BLE 80 kbit/s, Wi-Fi Direct 20000 kbit/s (250×, the ratio docs/05 §3.2 claims). Hop latency BLE 120 ms / Wi-Fi 40 ms, jitter 50-200 ms.
+
+=== 1. Air time per hop: what a payload costs on top of hop latency ===
+hopLatencyBleMs 120 already includes one full BLE packet (1024 B), so only the excess is charged.
+payload        BLE 80 kbit/s     Wi-Fi 20 Mbit/s   ratio
+1 KB           0 ms              0 ms              n/a (both 0)
+4 KB           307 ms            1 ms              250
+64 KB          6.45 s            26 ms             250
+7 KB           648 ms            3 ms              250
+44 KB          4.40 s            18 ms             250
+10.0 MB        17.47 min         4.19 s            250
+
+A 500 ms voice frame stays inside one BLE packet up to 16.4 kbit/s (frameBytes = frameMs × kbps / 8 ≤ 1024). docs/05's "6-12 kbps" therefore is not a taste choice: 12 kbps is the fastest documented rate that keeps push-to-talk off the Wi-Fi radio.
+   6 kbit/s →  375 B/frame → ble
+  12 kbit/s →  750 B/frame → ble
+  16 kbit/s → 1000 B/frame → ble
+  24 kbit/s → 1500 B/frame → wifiDirect
+
+=== 2. A 10 MB image over the mesh (docs/05 §3.2: 64 KB slices) ===
+hops  window  chunk    chunks  retrans  transport    time        throughput
+1     4       64 KB    160     0        wifiDirect   7.60 s      11039 kbit/s
+2     4       64 KB    160     15       wifiDirect   17.99 s     4663 kbit/s
+3     4       64 KB    160     0        wifiDirect   33.00 s     2542 kbit/s
+
+--- sliding-window depth, same 10 MB at 1 and 3 hops ---
+window  hops  time        throughput   retrans   per-chunk
+1       1     31.98 s     2623 kbit/s   0         200 ms
+2       1     15.31 s     5479 kbit/s   0         96 ms
+4       1     7.60 s      11039 kbit/s   0         47 ms
+8       1     3.82 s      21942 kbit/s   0         24 ms
+16      1     2.06 s      40734 kbit/s   0         13 ms
+1       3     1.72 min    812  kbit/s   1         646 ms
+2       3     50.30 s     1668 kbit/s   0         314 ms
+4       3     33.00 s     2542 kbit/s   0         206 ms
+8       3     14.48 s     5791 kbit/s   5         91 ms
+16      3     8.63 s      9725 kbit/s   0         54 ms
+
+--- the same file with no Wi-Fi Direct peer: BLE only ---
+A BLE-only mesh cannot carry a 64 KB slice, so skills/05 slices to the BLE MTU
+(512 B) instead, and docs/05 §3.2 has the app auto-reject >5 MB with a
+'move closer to SUPER' hint. This is what that rule protects the user from.
+  1 hop: 20480 × 512 B chunks over ble → did not finish in 15 min
+  2 hops: 20480 × 512 B chunks over ble → did not finish in 15 min
+
+--- what size a BLE-only mesh can still do in a minute ---
+  256 KB    → 32.14 s   (512/512 chunks)
+  1.0 MB    → 2.10 min  (2048/2048 chunks)
+  2.0 MB    → 4.19 min  (4096/4096 chunks)
+  5.0 MB    → >5 min (4896/10240 chunks)
+
+=== 3. Push-to-talk: does the note play in time? ===
+Criterion (roadmap Phase 3): plays in <3 s at 1 hop, <8 s at 3 hops. Measured from the
+moment the button is released to the moment the whole note is playable (last frame in + 200 ms buffer).
+
+note   mode      hops  transport    frames  first audio  play delay   max gap  underruns  retrans
+3 s    streamed  1     ble          6       989 ms       407 ms       518 ms   0          0       PASS(budget 3.00 s)
+3 s    streamed  2     ble          6       1.27 s       585 ms       1.11 s   1          1       PASS(budget 3.00 s)
+3 s    streamed  3     ble          6       1.74 s       1.10 s       576 ms   0          0       PASS(budget 8.00 s)
+3 s    blob      1     wifiDirect   1       3.43 s       427 ms       —        0          0       PASS(budget 3.00 s)
+3 s    blob      2     wifiDirect   1       3.58 s       578 ms       —        0          0       PASS(budget 3.00 s)
+3 s    blob      3     wifiDirect   1       3.99 s       991 ms       —        0          0       PASS(budget 8.00 s)
+10 s   streamed  1     ble          20      989 ms       379 ms       582 ms   0          0       PASS(budget 3.00 s)
+10 s   streamed  2     ble          20      1.27 s       649 ms       1.11 s   1          1       PASS(budget 3.00 s)
+10 s   streamed  3     ble          20      1.74 s       1.22 s       646 ms   0          0       PASS(budget 8.00 s)
+10 s   blob      1     wifiDirect   1       10.35 s      347 ms       —        0          0       PASS(budget 3.00 s)
+10 s   blob      2     wifiDirect   1       10.51 s      512 ms       —        0          0       PASS(budget 3.00 s)
+10 s   blob      3     wifiDirect   1       10.94 s      939 ms       —        0          0       PASS(budget 8.00 s)
+30 s   streamed  1     ble          60      989 ms       488 ms       615 ms   0          0       PASS(budget 3.00 s)
+30 s   streamed  2     ble          60      1.27 s       1.22 s       1.14 s   3          3       PASS(budget 3.00 s)
+30 s   streamed  3     ble          60      1.74 s       1.17 s       739 ms   2          0       PASS(budget 8.00 s)
+30 s   blob      1     wifiDirect   1       30.32 s      318 ms       —        0          0       PASS(budget 3.00 s)
+30 s   blob      2     wifiDirect   1       30.51 s      507 ms       —        0          0       PASS(budget 3.00 s)
+30 s   blob      3     wifiDirect   1       30.66 s      659 ms       —        0          0       PASS(budget 8.00 s)
+
+--- one hop with a Wi-Fi Direct group owner already negotiated ---
+skills/05's modes table puts streaming PTT at 150-300 ms here, and its acceptance
+box at <1 s round trip. The buffer-excluded figure is the one to compare.
+  3 s note: wifiDirect, first audio 909 ms, play delay 292 ms, buffer excluded 92 ms, 0 underruns
+  30 s note: wifiDirect, first audio 909 ms, play delay 347 ms, buffer excluded 147 ms, 0 underruns
+
+--- streaming against a crowd, where the path is longer and lossier ---
+  1 hop: first audio 996 ms, play delay 429 ms, max gap 553 ms, 0 underruns, 0 retransmitted
+  2 hops: first audio 1.28 s, play delay 1.29 s, max gap 1.23 s, 2 underruns, 3 retransmitted
+  3 hops: first audio 1.82 s, play delay 1.21 s, max gap 613 ms, 0 underruns, 0 retransmitted
+
+=== 4. The retry timer: why media cannot use the text plane's 4 s ===
+One lost frame is one hole in the audio. With `ackTimeoutMs` the hole is as long as the
+timer; `mediaAckTimeoutMs` is the media-specific one the engine now uses for chunks.
+
+30 s note, streamed, at 2 hops, mean of three seeds (one pair is not a sample):
+timer       play delay   max gap   underruns  retrans  stalls  notes finished
+4000 ms     833 ms       8.53 s    15         10       0       3/3
+1200 ms     1.82 s       4.03 s    15         15       0       3/3
+600 ms      1.18 s       1.21 s    11         5        0       3/3
+300 ms      30.57 s      1.26 min  25         16       18      3/3
+adapt 1371  1.56 s       2.43 s    15         10       0       3/3
+
+same sweep at 3 hops (a round trip there is longer than 600 ms):
+timer       play delay   max gap   underruns  retrans  stalls  notes finished
+4000 ms     2.19 s       4.97 s    8          1        0       3/3
+2500 ms     1.03 s       3.29 s    6          2        0       3/3
+1200 ms     869 ms       2.97 s    13         4        0       3/3
+600 ms      1.15 s       1.75 s    17         11       0       3/3
+300 ms      1.12 s       1.10 s    17         11       0       3/3
+adapt 3156  1.81 s       3.13 s    14         6        0       3/3
+
+10 MB file at 2 hops, same sweep, mean of three seeds:
+timer       time        throughput   retrans  stalls  files finished
+4000 ms     44.71 s     1876 kbit/s   42       1       3/3
+1200 ms     32.01 s     2620 kbit/s   48       1       3/3
+600 ms      24.73 s     3392 kbit/s   41       0       3/3
+300 ms      24.07 s     3485 kbit/s   33       1       3/3
+adapt 1873  28.89 s     2904 kbit/s   46       0       3/3
+
+=== 5. skills/05 acceptance, measured ===
+[1] 1-hop Wi-Fi PTT round trip 292 ms (buffer excluded: 92 ms) → PASS <1 s; modes table 150-300 ms → outside the band. "Intelligible" is not simulatable: no codec runs here.
+[2] 3-hop BLE voice note over ble: 6/6 frames arrived → intact PASS; play delay 1.10 s, 0 arrival gaps longer than frame+buffer, which is the only proxy available for "decode clean": a gap is a hole the decoder conceals.
+[3] 10 MB over Wi-Fi Direct, receiver offline at 49/160 chunks for 20 s: 160/160 arrived, 6 window stalls (6 while it was away), 0 retransmitted → resumed and completed in 45.02 s PASS
+[ ] 11 MB send → refused (skills/05 "Max 10 MB"); log: refused 11.0 MB to node-12 — over the 10 MB ceiling (skills/05)
+
+=== 6. Contention: does a 10 MB transfer hurt anybody else? ===
+One fixed traffic plan, replayed identically in both arms, mean of three seeds.
+(The first version of this table let each arm draw its own traffic and reported
+ harm that turned out to be the two arms not being the same experiment.)
+
+                        quiet          with a 10 MB file in flight
+messages sent           59.0           59.0
+delivery ratio          0.9944         0.9944
+within 5 hops           0.9944         0.9944
+p95 latency ms          4472           3275
+relay transmissions     1728           5311
+retries sent            11             59
+messages parked         1.0            1.0
+retries exhausted       1.0            1.0
+  per-seed delivery: quiet 0.983, 1.000, 1.000 | busy 0.983, 1.000, 1.000
+  the transfer itself: 10.71 s at 3 hops, extra relay work
+
+Read: delivery, within-5, parked messages and exhausted retries are the same in both arms,
+seed for seed. The only differences are the media's own work — relay transmissions and retries —
+and a p95 that moves because the media run consumes randomness, changing later loss draws.
+That is not an accident of this model being generous: loss is per packet and independent of
+volume, and there is no shared medium, so a chunk occupies the radio in *time* without stopping
+anybody else's transmission from succeeding. Until a channel-access model exists (docs/08 §11),
+media cannot harm text here, and a load gate on transfers would have nothing to protect.
+
+=== 7. Channel access: one radio, half-duplex (docs/08 §12) ===
+`channelAccess: "free"` — the default, and the model every number above was measured
+under — gives a device an infinitely wide radio. `"halfDuplex"` gives it the one radio a
+phone actually has: it cannot start transmitting while a previous packet is on air, and
+cannot receive while transmitting. Nothing else changes.
+
+--- one 10 MB file alone, no other traffic: does the window still buy parallelism? ---
+hops  channel      window  time        throughput   retrans  deferrals  deferred   dropped
+1     free         4       7.60 s      11039        0        0          0 ms       0
+1     halfDuplex   4       1.50 min    930          54       809        19.74 min  198
+2     free         4       17.99 s     4663         15       0          0 ms       0
+2     halfDuplex   4       2.31 min    606          43       1703       29.42 min  388
+3     free         4       33.00 s     2542         0        0          0 ms       0
+3     halfDuplex   4       4.44 min    315          34       6172       106.72 min 6698
+
+--- window depth under half-duplex: air time is serial, so depth cannot help ---
+window  channel      time        throughput   retrans  stalls  dropped
+1       free         31.98 s     2623         0        0       0
+1       halfDuplex   1.53 min    915          0        0       72
+2       free         15.31 s     5479         0        0       0
+2       halfDuplex   1.64 min    854          9        0       67
+4       free         7.60 s      11039        0        0       0
+4       halfDuplex   1.50 min    930          54       1       198
+8       free         3.82 s      21942        0        0       0
+8       halfDuplex   1.27 min    1104         77       1       299
+16      free         2.06 s      40734        0        0       0
+16      halfDuplex   1.22 min    1150         75       1       323
+
+--- a 30 s voice note: half-duplex air time against a 500 ms frame clock ---
+hops  channel      transport    play delay   max gap   underruns  retrans
+One frame is 500 ms of capture and, at 750 B, fits inside a single BLE packet: its air time
+is hop latency plus jitter, about 245 ms a hop. So a note streamed over N hops needs about
+245N ms of radio for every 500 ms of recording — under half the clock at 1 hop, 490 ms at 2
+(no slack left for jitter or a single retransmission), and more than the clock at 3, where
+the queue grows faster than the radio drains it. That is the prediction; the measurement of
+it is below, and it is the sharpest result in this section.
+1     free         ble          488 ms       615 ms    0          0
+1     halfDuplex   ble          449 ms       640 ms    0          0
+2     free         ble          1.22 s       1.14 s    3          3
+2     halfDuplex   ble          54.59 s      52.84 s   29         20
+3     free         ble          1.17 s       739 ms    2          0
+3     halfDuplex   ble          NaN min      2.01 min  27         0
+
+--- the §6 A/B again, this time on a real radio: quiet vs 10 MB in flight ---
+channel        arm                    delivery   within5   p95 ms   relayTx  retries  parked  deferred  dropped
+free           quiet                  0.9944     0.9944    4472     1728     11       1.0     0 ms      0
+free           with a 10 MB file      0.9944     0.9944    3275     5311     59       1.0     0 ms      0
+               per-seed delivery 0.983, 1.000, 1.000; transfer 10.71 s
+halfDuplex     quiet                  0.9831     0.9774    4669     1400     13       1.3     14.83 min 209
+halfDuplex     with a 10 MB file      0.9661     0.9605    9079     2981     309      5.0     42.47 min 2672
+               per-seed delivery 0.966, 0.949, 0.983; transfer NaN min
+
+--- so is a load gate motivated? Shrink the window and ask again ---
+Under `free` there was nothing for a gate to protect (§6). Under a real radio there is, so the
+obvious knob — send the file one chunk at a time instead of four, committing less air time
+ahead — is measured here against both the text traffic and the file itself. Same plan, same
+three seeds, and each run waits for the transfer to finish so both sides are one experiment.
+window          delivery   within5   p95 ms   retries  parked  file time    dropped
+no file         0.9831     0.9774    4669     13       1.3     —            209
+file, window 4  0.9661     0.9605    9079     309      5.0     2.12 min     2672
+file, window 1  0.9774     0.9774    6123     215      3.0     3.10 min     1810
+
+--- the other knob: chunk size, i.e. how much air time one packet commits ---
+A window of 1 still puts a whole 64 KB chunk on air at once. Slicing smaller interleaves text
+between chunks instead of behind them, which is what adaptive fragmentation would do. Same
+plan and seeds, transfer allowed to finish, window held at 4 so the two knobs are separable.
+chunk           delivery   within5   p95 ms   retries  parked  file time    dropped
+64 KB           0.9661     0.9605    9079     309      5.0     2.12 min     2672
+16 KB           0.9605     0.9605    7514     362      4.0     9.25 min     2949
+4 KB            0.9605     0.9605    7560     368      4.3     NaN min      2817
+
+--- the acceptance gates themselves, under a real radio (20-node campus, 3 seeds) ---
+channel        delivery   within5   overhead vs flood-all   SUPER ratio   deferred              dropped
+free           0.9889     0.9889    9.3   %                   21.7  %        0 ms over 0 tx        0
+halfDuplex     0.9444     0.9389    35.5  %                   25.0  %        18.46 min over 1117 tx 443
+
+Gates: skills/02 wants delivery ≥90% at 3 hops and overhead ≤70% of flood-all; skills/08 wants
+delivery ≥90% within 5 hops and overhead down 30% versus naive flood. Both were written against
+an infinitely wide radio, which is why `channelAccess` ships as `free`.
+
+=== 8. Which packet a busy radio takes next (docs/08 §12.8) ===
+All arms are `channelAccess: "halfDuplex"` — with a free radio nothing waits, so there is
+no order to choose. `fifo` is arrival order and ships; `ackFirst` promotes acknowledgements;
+`class` also promotes an SOS and a voice frame above a bulk chunk. Mean of three seeds.
+
+--- text + a 10 MB file ---
+priority    delivery     p95          file         drops        
+fifo        0.9661       9079 ms      2.12 min     2672         
+ackFirst    0.9774       8921 ms      2.42 min     2769         
+class       0.9774       8921 ms      2.42 min     2769         
+
+--- a 30 s note + a 10 MB file ---
+priority    note delay   underruns    file         
+fifo        40.36 s      25.3         2.86 min     
+ackFirst    1.33 min     29.0         2.64 min     
+class       49.26 s      22.7         2.47 min     
+
+--- text + a 30 s note ---
+priority    delivery     
+fifo        0.9487       
+ackFirst    0.9487       
+class       0.9316       
+
+--- an SOS + a 10 MB file ---
+priority    sos latency  
+fifo        8.39 s       
+ackFirst    8.37 s       
+class       8.32 s       
+
+Read: no ordering is free, and each one trades a flow against another. Promoting
+acknowledgements buys text 1.1 points of delivery and 158 ms of p95 and charges the file
+14% for it, because every slice an ACK overtakes is a slice the transfer waits for.
+Promoting voice and an SOS on top of that is the best arm for a note competing with a
+file — 49.26 s of play delay against 1.33 min, and the file itself is fastest there too,
+because bulk chunks are the lowest class of all — and it costs 1.7 points of text delivery
+when a note is in flight instead. What none of them do is rescue push-to-talk on its own:
+the note's air time is the bottleneck at three hops, and no queue order creates air time.
+An SOS is unaffected in every arm, because four floods of a 100-byte packet are not what a
+busy radio is waiting on. Arrival order ships.
+
+=== 9. Receiver contention: the other half of a real radio (docs/08 §12.9) ===
+§12 gave the device one transmitter. The receiver was still infinitely attentive: a node
+on air could hear, and two packets arriving together both landed. `channelCapture: "first"`
+closes both — the receiver locks onto whichever packet arrived first, and a node that is
+transmitting hears nothing — as losses rather than deferrals, because that is what a
+collision is. It is independent of `channelAccess`, so the two mechanisms can be separated.
+
+--- 60 messages at 2 s, nothing else (3 seeds) ---
+transmitter  receiver   delivery   within5   p95 ms   retries  parked  captured  deaf  queue drops  file
+free         none       0.9944     0.9944    4472     11       1.0     0         0     0            —
+free         first      0.9831     0.9774    7534     32       8.7     661       180   0            —
+halfDuplex   none       0.9831     0.9774    4669     13       1.3     0         0     209          —
+halfDuplex   first      0.9718     0.9718    13587    39       13.0    253       233   176          —
+csma         none       0.9661     0.9661    11002    35       5.3     0         0     543          —
+csma         first      0.9266     0.9266    13294    49       8.0     231       2     563          —
+
+--- 60 messages at 2 s, with a 10 MB file in flight (3 seeds) ---
+transmitter  receiver   delivery   within5   p95 ms   retries  parked  captured  deaf  queue drops  file
+free         none       0.9944     0.9944    3275     59       1.0     0         0     0            10.71 s
+free         first      0.8588     0.8588    10314    379      37.3    3625      1256  0            1.98 min
+halfDuplex   none       0.9661     0.9605    9079     309      5.0     0         0     2672         2.12 min
+halfDuplex   first      0.9096     0.9096    11399    293      19.7    511       693   1441         3.28 min
+csma         none       0.9096     0.9096    28740    285      16.3    0         0     2488         3.80 min
+csma         first      0.8757     0.8757    16212    296      27.7    330       7     2995         3.64 min
+
+--- the acceptance gates under all six radios (20-node campus, 3 seeds) ---
+transmitter  receiver   delivery   within5   overhead vs flood-all   SUPER ratio   collisions
+free         none       0.9889     0.9889      9.3 %                  21.7 %          0 dropped
+free         first      0.9056     0.9056     15.8 %                  25.0 %          0 dropped
+halfDuplex   none       0.9444     0.9389     35.5 %                  25.0 %          443 dropped
+halfDuplex   first      0.8556     0.8500     25.5 %                  23.3 %          180 dropped
+csma         none       0.7944     0.7944     80.2 %                  25.0 %          699 dropped
+csma         first      0.7389     0.7389     78.0 %                  23.3 %          562 dropped
+
+Read: the receiver is where contention lives. With a file in flight a transmitter queue
+alone costs text 2.8 points and receiver collisions alone cost 13.6; both together cost 8.5,
+so once collisions exist the queue earns its keep and is worth 4.9 points back, because
+serialising a node's own transmissions removes the overlaps it was causing everybody else.
+Collisions are paid in latency before delivery, because a lost packet is re-sent into an
+idle radio four seconds later. Carrier sense is the third transmitter arm and the surprising
+one: it removes almost every collision a node can hear (§12.10) and still loses delivery
+under load, because waiting is not free in an engine with no backpressure.
+
+--- carrier sense against queue depth: waiting is not free (docs/08 §12.10) ---
+Both transmitters that queue, a receiver in the model, a 10 MB file in flight, and the transmit
+queue deepened. The intuition is that a deeper queue holds what carrier sense makes you wait
+for. It does not: depth holds packets past the point where anybody is waiting for them, so the
+transfer slows and the text tail grows. Retry timers now start when a packet goes on air
+(§12.11), so this is queueing delay rather than duplicate load — and it is still monotonic.
+transmitter  depth   delivery   p95 ms   parked  captured  deaf  queue drops  deferred   file
+halfDuplex   8       0.9096     11399    19.7    511       693   1441         26.07 min  3.28 min
+halfDuplex   32      0.8588     14432    27.0    642       913   1434         78.62 min  3.87 min
+halfDuplex   128     0.8588     19533    23.3    675       961   1334         208.69 min 8.18 min
+csma         8       0.8757     16212    27.7    330       7     2995         67.37 min  3.64 min
+csma         32      0.7966     38597    48.7    386       14    2969         227.40 min 7.12 min
+csma         128     0.7062     55055    65.7    420       18    2799         429.35 min 16.96 min
+
+=== 10. Contention window: the thing carrier sense was missing (docs/08 §12.13) ===
+§12.10 measured carrier sense and found it made things worse, which is not what listening is
+supposed to do. The reason is in the wake-up: every node waiting on a busy medium is woken at
+the instant it clears, so they all find it free together and transmit together. Carrier sense
+synchronised the herd instead of dispersing it. `channelBackoff: "binary"` draws a random
+number of slots before taking a medium that is already free, and doubles the window it draws
+from after a collision — the 802.11 answer, which §12.10 noted it had not modelled.
+
+--- the acceptance gates, with and without the random wait (20-node campus, 3 seeds) ---
+transmitter  backoff  receiver   delivery   within5   overhead   SUPER    drops   deferred   draws
+csma         none     none       0.7944     0.7944     80.2 %    25.0 %    699   3042.0 s        0
+csma         binary   none       0.7889     0.7889     76.4 %    25.0 %    825   2963.0 s     1058
+csma         none     first      0.7389     0.7389     78.0 %    23.3 %    562   2629.6 s        0
+csma         binary   first      0.7500     0.7500     77.3 %    25.0 %    590   2794.6 s     1052
+
+The gate is delivery ≥0.90. `backoff: none` is §12.10's csma arm, repeated here as the control.
+
+--- how wide a window, and against a 10 MB file (3 seeds) ---
+A window that is too narrow does not separate anybody; one that is too wide makes every node
+wait longer than the transmission it is waiting for. Swept against the case that matters: a
+file in flight, collisions modelled, which is where §12.10 lost the most.
+cwMin  slotMs  delivery   p95 ms   captured  deaf  drops  deferred   draws   file
+2      1       0.8475      14549       356     9   2815     74.3 m     2067   4.20 min
+2      5       0.9322      24931       370     7   2762     82.0 m     2152   4.50 min
+4      1       0.8305      21400       394     7   3294     82.4 m     2147   4.21 min
+4      5       0.8701      25689       380     6   3311     84.7 m     2185   4.54 min
+16     1       0.8701      19955       351    10   2444     87.8 m     2158   4.27 min
+16     5       0.9096      19696       319     6   2666     82.6 m     2023   4.69 min
+64     1       0.8644      17744       380     5   2738     86.5 m     2154   5.11 min
+64     5       0.8588      24463       273     6   3466     91.1 m     1884   5.61 min
+
+--- does the best arm hold up? Six seeds, and the spread, not just the mean ---
+The sweep above is not monotonic in either knob: cwMin 2 beats 16 at a 5 ms slot and loses
+to it at a 1 ms slot, and 64 beats 4 at one slot width and loses at the other. A lever whose
+effect reverses when a neighbouring setting changes is a lever whose effect is noise. This
+repository has been wrong that way before — §6's faster-beacon idea looked like +2.6 points
+on three seeds and measured -1.1 on six — so the two arms that cleared the gate are re-run
+on the acceptance suite's six seeds with every seed printed.
+arm                       mean     per-seed delivery  drops   file
+control (no backoff)      0.8672   0.898 0.831 0.898 0.847 0.831 0.898   2215   3.77 min
+binary cwMin 2 slot 5 ms  0.9040   0.915 0.932 0.949 0.847 0.864 0.915   2108   4.07 min
+binary cwMin 16 slot 5 ms 0.8955   0.915 0.847 0.966 0.932 0.797 0.915   1994   4.37 min
+
+Read the per-seed column before the mean. If an arm's seeds straddle the control's, the
+difference between their means is not a property of the backoff.
+
+--- the lever is carrier-sense-only: `halfDuplex` must not move ---
+A node whose own radio is busy is already serialised by its FIFO, and with no shared medium
+there is nobody to contend with. Backoff under `halfDuplex` would be delay for its own sake,
+so the engine ignores it — asserted here rather than assumed.
+halfDuplex + none    delivery 0.9096   draws 0   file 3.28 min
+halfDuplex + binary  delivery 0.9096   draws 0   file 3.28 min
+
+=== 11. Where the shedding happens (docs/08 §12.14) ===
+§12.12 argued that the queue which overflows in a mesh belongs to a relay, and §12.13 found
+that queue drops outnumber receiver collisions about eight to one under carrier sense. Both
+were read off totals. This attributes them: who sheds, what they shed, and — the question
+that decides whether congestion-aware forwarding is even available — whether the shedding
+relay had a peer in range at least as close to the destination as the next hop it chose. If
+it did, the packet could have gone round the congestion. If it did not, the only mechanism
+left is to stop generating the packet, which means propagating pressure to the source.
+transmitter  receiver   media  drops   at a relay   file/voice   alternative existed   file
+halfDuplex   first      no       176       80 %           0 %                9 %          NaN min
+halfDuplex   first      yes     1441       15 %          82 %                3 %          3.28 min
+csma         first      no       563       83 %           0 %                5 %          NaN min
+csma         first      yes     2995       18 %          79 %                9 %          3.64 min
+
+Read the third column first: if the shed packets are mostly file or voice chunks, the thing
+generating the pressure is a transfer window, and the fix that reaches it is pressure
+propagated to the source. The fourth column is the fork in the road — a high share means
+congestion-aware forwarding has somewhere to put the packet, and a low one means it does
+not, so rerouting around a saturated relay is not a mechanism this topology offers.
+
+--- the one-peer case, which is where a sender can throttle itself ---
+Two nodes, one hop, a 1 MB file through a window of 8 into a queue 4 deep, so the transfer
+is committed twice as far ahead as the radio can hold. This is the case §12.12 measured the
+flag on, re-measured here because the mechanism was wrong when it was: the window was floored
+at one, so a throttled sender still handed a packet to a full queue and had it shed, and the
+stall path bypassed the window altogether. A window that can reach zero, a stall path that
+consults the same gate, and a resume when the radio drains are what a socket does.
+depth  backpressure  queue drops  retransmitted  stalls  blocked  file time
+4      off                  25              6       1        0  9.37 s
+4      on                    5              0       0        4  6.04 s
+2      off                  29              7       1        0  6.63 s
+2      on                    7              0       0        4  4.90 s
+
+--- so propagate the pressure to the source, which is where it is ---
+The columns above say the shedding is the source's and the packets are a transfer's, which is
+the case `mediaBackpressure` was built for. §12.12 rejected it on the strength of a crowd run
+and an argument about whose queue overflows; this is the campus arm the argument was about,
+measured instead of reasoned.
+transmitter  backpressure  delivery   within5   p95 ms  parked   drops  at source  chunks  retrans  blocked   file
+halfDuplex   off           0.9096     0.9096     11399    19.7    1441       85 %      82 %      293         0   3.28 min
+halfDuplex   on            0.8814     0.8757     13029    21.7    1401       78 %      76 %      266         5   3.10 min
+csma         off           0.8757     0.8757     16212    27.7    2995       82 %      79 %      296         0   3.64 min
+csma         on            0.8927     0.8927     28488    16.0    2113       70 %      66 %      241        14   4.41 min
+
+If the source is really where the pressure is, `on` should cut the drop count by most of the
+share in the "at source" column and pay for it in file time. If it cuts the drops and does not
+move delivery, the shed packets were ones nobody was waiting for any more.
+
+=== 12. The capture effect: bracketing the receiver instead of guessing it (docs/08 §12.15) ===
+§12.9 gave the receiver two models and neither is a real radio. `none` takes everything
+however busy it is, which is optimistic; `first` locks onto whichever packet arrived first and
+never lets a strong one survive a weak one, which is pessimistic. Real receivers do the third
+thing: they demodulate the stronger signal *through* the weaker one when the margin is enough.
+`strongest` models that, and the point of measuring it is not to pick a winner but to turn a
+point estimate into a bracket — `first` bounds the loss from above, `none` from below, and a
+field test lands somewhere between.
+
+--- 60 messages at 2 s, nothing else (3 seeds) ---
+transmitter  receiver     delivery   within5   p95 ms   captured  takeovers  deaf  queue drops  at source  file
+halfDuplex   none         0.9831     0.9774    4669     0         0          0     209          16%        —
+halfDuplex   first        0.9718     0.9718    13587    253       0          233   176          20%        —
+halfDuplex   strongest    0.9661     0.9661    12739    319       50         269   198          24%        —
+csma         none         0.9661     0.9661    11002    0         0          0     543          17%        —
+csma         first        0.9266     0.9266    13294    231       0          2     563          17%        —
+csma         strongest    0.9266     0.9209    20669    231       44         1     414          18%        —
+
+--- 60 messages at 2 s, with a 10 MB file in flight (3 seeds) ---
+transmitter  receiver     delivery   within5   p95 ms   captured  takeovers  deaf  queue drops  at source  file
+halfDuplex   none         0.9661     0.9605    9079     0         0          0     2672         81%        2.12 min
+halfDuplex   first        0.9096     0.9096    11399    511       0          693   1441         85%        3.28 min
+halfDuplex   strongest    0.9040     0.9040    10739    480       87         672   1281         85%        2.68 min
+csma         none         0.9096     0.9096    28740    0         0          0     2488         68%        3.80 min
+csma         first        0.8757     0.8757    16212    330       0          7     2995         82%        3.64 min
+csma         strongest    0.8870     0.8870    16814    333       49         8     2925         83%        4.94 min
+
+Read `takeovers` against `captured`: a takeover is not a rescue, it moves the loss from the
+newcomer to the incumbent, so `captured` counts both. What the capture effect can actually
+buy back is the part of `first`'s loss that was a strong packet being killed by a weak one.
+
+--- six seeds, 10 MB in flight: mean and worst ---
+transmitter  receiver     mean      worst     takeovers  captured  queue drops  file
+halfDuplex   none         0.9689    0.9153    0          0         2258         1.95 min
+halfDuplex   first        0.9209    0.8475    0          510       984          3.13 min
+halfDuplex   strongest    0.8983    0.8644    90         488       821          3.00 min
+csma         none         0.9181    0.8136    0          0         2075         3.52 min
+csma         first        0.8672    0.8305    0          352       2215         3.77 min
+csma         strongest    0.8672    0.7458    58         359       2075         4.41 min
+
+=== 12b. How much margin the capture effect needs (csma, 10 MB in flight, six seeds) ===
+A margin of 0 dB is loudest-wins and should take the most receivers over; a large margin
+should stop taking any over at all and converge on `first`. If the delivery column is not
+monotone in the margin, the mechanism is not doing what it says. Six seeds and the worst
+one beside the mean, because on three this table showed a monotone improvement toward a
+0 dB margin that the six-seed receiver table did not confirm.
+margin dB    takeovers  captured   mean      worst     p95 ms   queue drops  file
+0            167        391        0.8757    0.7797    17859    1782         4.01 min
+3            100        392        0.8898    0.8305    17621    1807         4.06 min
+6            58         359        0.8672    0.7458    18526    2075         4.41 min
+12           16         373        0.8616    0.7966    18432    1981         4.23 min
+20           2          355        0.8701    0.7966    18692    2012         3.83 min
+
+=== 14. Occupancy: what a radio is busy for is not how long a packet takes to arrive ===
+The shipped model charges every packet a calibrated hop latency — 120 ms on BLE, which
+serializationMs's own comment says already includes one full-sized GATT write — plus the
+excess over 1 024 B. That is right at 1 024 B and wrong below it, so a short text pays
+what a media chunk pays, and a beacon paid it too while having no size at all.
+
+Beacons now have one, derived from the fields docs/03 §4 says an OGM carries: fixed
+  46 B + 32 B per advertised neighbour + 33 B per route entry, bounded by the
+  advertise limits the engine enforces (30 neighbours, 8 routes).
+  A typical beacon (10 neighbours, 8 routes) is 630 B = 63.0 ms of airtime, about half the flat
+  120 ms it was charged. A fully loaded one is 1270 B, which is over the 1024 B BLE ceiling —
+  so a dense node's beacon would ride Wi-Fi Direct. Nothing sized beacons before, so
+  nothing noticed. docs/06 §24.6.
+
+  mean of 3 seeds, 30 messages injected over 60 s after a 90 s settle
+
+  scenario         channel      occupancy     radio demand   wake time     delivery   queue drops   deferrals
+  campus_quad      free         hop-latency           4.23x     84.60 min     100.0%             0           0
+  campus_quad      free         airtime               1.92x     38.46 min     100.0%             0           0
+
+  campus_quad      csma         hop-latency           4.16x     83.22 min      98.7%           507        3886
+  campus_quad      csma         airtime               1.88x     37.66 min     100.0%           361        2067
+
+  festival_crowd   free         hop-latency           8.56x    513.79 min      95.8%             0           0
+  festival_crowd   free         airtime               5.69x    341.48 min      95.8%             0           0
+
+  festival_crowd   halfDuplex   hop-latency           8.10x    485.72 min      77.9%          3767        2513
+  festival_crowd   halfDuplex   airtime               5.50x    330.08 min      75.9%          3672        2610
+
+  festival_crowd   csma         hop-latency           7.56x    453.78 min      71.5%          3929       13540
+  festival_crowd   csma         airtime               5.59x    335.26 min      81.9%          3813        6382
+
+  Three things this says, and one it does not.
+
+  Sizing packets properly roughly halves the demanded radio time — campus_quad 3.9x to
+  1.7x, festival_crowd 8.4x to 5.8x — and it does not make the demand physical. Above 1
+  the model asks for more airtime than exists, so the over-subscription docs/06 §24.3
+  measured is only partly the flat per-packet charge: the dominant term is the *volume*
+  of beacon receptions and the gossip that follows them, which a per-packet correction
+  cannot touch. At 60 nodes every node beaconing every 2 s is a real protocol finding
+  about docs/03 §1's interval, not a simulator artefact.
+
+  Under the shipped free/none baseline the two models are the same world: nothing reads
+  occupancy there except the wake-lock accounting, so delivery, latency, overhead and
+  every count are bit-identical and only the telemetry moves. radio-occupancy.test.ts
+  asserts that field by field, which is what makes the knob safe to ship defaulted off.
+
+  Where contention *is* modelled the two diverge, and §12's published numbers were
+  measured under the flat charge — but not uniformly in one direction, which is the part
+  worth not smoothing over. Under csma, sizing packets properly cuts crowd deferrals by
+  about half (13 540 to 6 382) and lifts crowd delivery 71.5% to 81.9%, and on
+  campus_quad it takes delivery from 98.7% to 100% with 29% fewer queue drops. Under
+  half-duplex in the same crowd it goes the other way: delivery 77.9% to 75.9% and
+  deferrals up 4%. A radio that frees sooner transmits sooner, and whether that helps
+  depends on whether the model lets it hear anyone first — csma does, half-duplex does
+  not. This probe reports the disagreement and does not claim to have established why.
+  What follows is that §12's contention magnitudes are a property of the occupancy
+  model they were measured under, not of the mesh.
+
+  What this does not say: that the flat model is wrong about latency. Delivery still
+  takes a hop latency per hop under both models, because that is what docs/02 §6's budget
+  measures and it is unchanged here. Only the busy-radio duration moved.
+
+
+=== 15. The beacon interval: docs/03 says 2 s and nothing in the corpus says why ===
+§24.6 found the control plane alone asks for several times one radio's airtime at 60
+nodes, priced correctly. The interval is the lever that follows, and it has a hard
+ceiling: neighbour scores expire at NEIGHBOR_SCORE_TTL_MS 30 s, so an interval near
+that leaves one missed beacon — and BLE links lose packets routinely — long enough to
+drop a neighbour that is still there. Priced under radioOccupancy: airtime, because
+the question is capacity and the flat charge would put the same artefact in every arm.
+
+  campus_quad (20 nodes), mean of 8 seeds
+
+  interval   radio demand   delivery   broadcast reach   overhead   avg hops   avg latency   OGMs sent   MPR suppressed   route expiries   per-seed broadcast reach
+  2 s (spec)        1.97x     100.0%             94.9%       888%       1.88        977 ms       35560              121               38   95 95 95 95 94 95 95 95
+  5 s               0.82x      98.3%             95.0%       855%       1.81        761 ms       14093              105               57   95 95 95 95 95 95 95 95
+  12 s              0.37x     100.0%             94.9%       775%       1.89        710 ms        5907               93               74   95 94 95 95 95 95 95 95
+  25 s              0.19x     100.0%             94.9%       697%       1.92        923 ms        2734               87               85   95 95 95 95 95 95 95 95
+
+  Stretching the interval from the specified 2 s to 25 s cuts demanded radio time
+   1.97x → 0.19x and OGM transmissions 13.0× , and it costs delivery
+  100.0% → 100.0% with broadcast reach  94.9% → 94.9%. Whether that trade is
+  worth making is a density question, so both worlds are printed rather than one
+  verdict: at 20 nodes and at 60 the same lever does not do the same thing.
+
+  festival_crowd (60 nodes), mean of 8 seeds
+
+  interval   radio demand   delivery   broadcast reach   overhead   avg hops   avg latency   OGMs sent   MPR suppressed   route expiries   per-seed broadcast reach
+  2 s (spec)        5.66x      92.0%             86.5%      2319%       2.62        1.81 s      224159              523             1149   98 98 98 79 79 54 87 98
+  5 s               2.31x      94.8%             88.5%      2301%       2.80        1.69 s       88397              551             1288   98 98 98 68 65 86 97 98
+  12 s              1.03x      87.5%             80.4%      2662%       2.59        2.74 s       36459              698             1260   70 98 98 93 55 70 61 98
+  25 s              0.60x      79.2%             82.6%      2811%       2.63        1.22 s       17961              687             1154   97 97 98 68 96 55 50 98
+
+  Stretching the interval from the specified 2 s to 25 s cuts demanded radio time
+   5.66x → 0.60x and OGM transmissions 12.5× , and it costs delivery
+   92.0% → 79.2% with broadcast reach  86.5% → 82.6%. Whether that trade is
+  worth making is a density question, so both worlds are printed rather than one
+  verdict: at 20 nodes and at 60 the same lever does not do the same thing.
+
+  The interval is not the only lever, and docs/03 §4 already names the other one: "a
+  real deployment advertises 2-byte aliases (~60 B for 30 neighbours)", where this
+  engine advertises the full 32-byte public key. §24.6 derived what that costs — a fully
+  loaded beacon is 1 270 B on public keys and 130 B on aliases, over the BLE ceiling in
+  the first case and far under it in the second. Since beacon *reception* dominates
+  demanded radio time, the encoding may be the bigger lever, so here both are measured at
+  the specified interval rather than either being asserted.
+
+  beacon size, typical (10 neighbours, 8 routes): 630 B on public keys, 90 B on aliases
+  beacon size, at both advertise limits (30, 8):  1270 B on public keys, 130 B on aliases (BLE ceiling 1024 B)
+
+  scenario                     encoding     radio demand   delivery   broadcast reach   OGMs sent
+  campus_quad (20 nodes)       32 B public key        1.97x     100.0%             94.9%       35560
+  campus_quad (20 nodes)       2 B alias (§4)        0.34x     100.0%             94.9%       35560
+  festival_crowd (60 nodes)    32 B public key        5.66x      92.0%             86.5%      224159
+  festival_crowd (60 nodes)    2 B alias (§4)        0.78x      92.0%             86.5%      224159
+
+  Aliases cut the beacon, not the number of beacons, so `OGMs sent` is the same in both
+  rows and only the demand moves. The two levers are not interchangeable: an alias
+  shortens every beacon in a dense world without making any route staler, while a longer
+  interval thins them and trades freshness for airtime. Which one a deployment should
+  pull first is answered by the two tables above rather than argued here.
+
+  What neither tests: an interval that *adapts* to density, which is what the two
+  scenario tables together argue for and which docs/03 §1 does not propose. Making the
+  beacon interval a function of peer count is a routing change with its own convergence
+  question — a node that slows its beacons because it has many neighbours is exactly the
+  node its neighbours most need to hear from — so it is named here as the follow-up
+  rather than swept. docs/06 §24.7.
+
+
+=== 16. Why a 60-node crowd has two modes, and the two explanations that failed ===
+§24.8 found `festival_crowd` bimodal: broadcast reach lands either near 98% or between
+50 and 79%, and which seeds are weak differs per arm. Two explanations are obvious, and
+both are testable here — one from the radio graph, one from the forwarding policy.
+
+  Hypothesis 1: the crowd partitions, so a broadcast cannot reach everyone.
+
+  interval   seed     reach   components (largest first)
+  2 s        42         98%   [60] of 60
+  2 s        7          98%   [60] of 60
+  2 s        1234       98%   [60] of 60
+  2 s        99         79%   [40, 20] of 60  <-- SPLIT
+  2 s        2024       79%   [60] of 60
+  2 s        31337      54%   [40, 20] of 60  <-- SPLIT
+  2 s        555        87%   [60] of 60
+  2 s        8          98%   [60] of 60
+
+  12 s       42         70%   [60] of 60
+  12 s       7          98%   [60] of 60
+  12 s       1234       98%   [60] of 60
+  12 s       99         93%   [60] of 60
+  12 s       2024       55%   [60] of 60
+  12 s       31337      70%   [60] of 60
+  12 s       555        61%   [60] of 60
+  12 s       8          98%   [60] of 60
+
+  Partly true and not the story. At 2 s two of eight seeds split 40/20, and both are
+  weak-reach seeds — so for those the ceiling is the component the sender is in, not a
+  routing failure. But a weak seed at 2 s (2024, 79%) is fully connected, and at 12 s
+  **all eight worlds are connected** while reach still spans 55-98%. Partitioning
+  explains two rows of sixteen and cannot explain the mode.
+
+  Hypothesis 2: stale two-hop views make MPR suppress the only path.
+
+  interval   policy      reach   delivery   MPR suppressed   overhead   per-seed reach
+  2 s        mpr          86.5%      92.0%              523      2319%   98 98 98 79 79 54 87 98
+  2 s        flood-all    81.8%      90.5%                0     17728%   98 98 98 66 98 42 55 98
+
+  12 s       mpr          80.4%      87.5%              698      2662%   70 98 98 93 55 70 61 98
+  12 s       flood-all    84.8%      91.0%                0     14857%   98 98 98 91 65 53 77 98
+
+  Refuted. `flood-all` suppresses nothing at all and spends roughly six times the
+  overhead, and the weak mode survives it: per-seed reach under flood-all still reads
+  42%, 55% and 66% at 2 s, where MPR gave 79%, 54% and 87%. At 2 s flooding is
+  *worse* on the mean (81.8% against 86.5%) despite unlimited retransmission. A
+  forwarding policy that cannot be improved by removing the forwarding policy is not
+  what is limiting reach.
+
+  Hypothesis 3: the graph measured at the *end* of the window is not the graph the
+  broadcasts had to cross. Sampled 6 times inside it, 10 s apart.
+
+  interval   seed     reach   connected samples   mean largest component   largest at the end
+  2 s        42         98%             100% of 6                    100%                100%
+  2 s        7          98%             100% of 6                    100%                100%
+  2 s        1234       98%              83% of 6                    100%                100%
+  2 s        99         79%              50% of 6                     94%                 67%
+  2 s        2024       79%              83% of 6                     94%                100%
+  2 s        31337      54%              17% of 6                     72%                 67%
+  2 s        555        87%              67% of 6                     93%                100%
+  2 s        8          98%             100% of 6                    100%                100%
+
+  12 s       42         70%              83% of 6                     94%                100%
+  12 s       7          98%             100% of 6                    100%                100%
+  12 s       1234       98%             100% of 6                    100%                100%
+  12 s       99         93%              83% of 6                     94%                100%
+  12 s       2024       55%              17% of 6                     72%                100%
+  12 s       31337      70%              67% of 6                     89%                100%
+  12 s       555        61%              50% of 6                     79%                100%
+  12 s       8          98%             100% of 6                    100%                100%
+
+  Confirmed, and it reverses the verdict on hypothesis 1. Reach tracks the connectivity
+  *inside* the window, not the snapshot after it: every seed connected for all six
+  samples reaches 98%, and every seed that was split for any of them lands between 54%
+  and 93%, in proportion to how much of the window was split. At 12 s seed 2024 is
+  connected for 17% of samples with a mean largest component of 72% — and reaches 55%,
+  while the end-of-window table reports it as fully connected, because the crowd had
+  re-joined by then. So the two modes are one phenomenon: 60 mobile nodes in this area
+  split and re-join repeatedly, a broadcast sent while the graph is split cannot reach
+  the other side, and reach averaged over the window lands wherever the split left it.
+
+  Hypothesis 1 was not wrong about the mechanism, only about when to look for it, and
+  the end-of-window component table it used cannot see a partition that has healed.
+  Hypothesis 2 stays refuted: flooding does not help, because a broadcast cannot cross a
+  gap that exists at the moment it is sent, however many copies are made.
+
+  What this leaves untested, and worth naming: a receiver asleep inside its duty-cycle
+  window when the broadcast passes, which scansSkippedAsleep would quantify per seed, and
+  queue shedding under the crowd's own load, which §12.14 measured as mostly the source's
+  own. Neither is needed to explain the bimodality now. docs/06 §24.10.
+
+  One thing that fell out and is worth keeping: MPR's overhead against flood-all in the
+  densest scenario, on eight seeds, is 2 319% against 17 728% at 2 s and 2 662% against
+  14 857% at 12 s — **13% and 18% of flood-all**, against skills/02's acceptance target
+  of ≤70%, while delivering *more* reach at 2 s. That target is met here by a wide
+  margin, and this is the first place it has been measured in a 60-node world.
+
+
+=== 17. Deriving the beacon interval from density: the follow-up §24.7 argued for ===
+§24.7 found no single interval serving both densities: at 20 nodes stretching 2 s to 25 s
+costs nothing and cuts demanded radio time tenfold, while at 60 nodes 5 s beats the
+specified 2 s and everything longer degrades delivery. The obvious follow-up is to derive
+the interval per node instead of choosing one, stretching it in proportion to peer count
+so the receptions a node imposes stay constant, anchored so ten peers reproduces the
+specified 2 s. Eight seeds, three scenarios, priced under radioOccupancy: airtime.
+
+  scenario              mode      delivery    reach   radio demand   OGMs sent   connected   largest   per-seed delivery
+  sparse_village   fixed        26.2%    24.8%          0.17x        3210                    0%                     33%   39 21 17 15 19 45 25 29
+  sparse_village   density      27.8%    24.9%          0.53x       10728                    0%                     33%   30 23 26 38 29 23 32 22
+                   Δ          1.6 pts                   3.11x       3.34x    topology comparable: yes
+
+  campus_quad      fixed       100.0%    94.9%          1.97x       35560                  100%                    100%   100 100 100 100 100 100 100 100
+  campus_quad      density      99.3%    95.0%          2.37x       43965                  100%                    100%   100 100 100 100 100 95 100 100
+                   Δ         -0.7 pts                   1.20x       1.24x    topology comparable: yes
+
+  festival_crowd   fixed        92.0%    86.5%          5.66x      224159                   76%                     94%   96 96 96 85 87 77 100 100
+  festival_crowd   density      83.4%    77.6%          3.31x      131914                   49%                     85%   94 91 100 68 57 65 91 100
+                   Δ         -8.7 pts                   0.58x       0.59x    topology comparable: NO — read §24.10 first
+
+  festival_crowd static fixed        74.4%    71.8%          5.55x      212914                   50%                     81%   95 96 92 62 55 45 50 100
+  festival_crowd static density      76.9%    74.9%          3.10x      119681                   50%                     81%   90 88 96 63 54 67 57 100
+                   Δ          2.4 pts                   0.56x       0.56x    topology comparable: yes
+
+  Read the last line of each pair before the rest, because it decides whether the pair
+  means anything. §24.10 showed reach tracks the largest in-window component, so two
+  arms whose connectivity differs are not a comparison of what was changed.
+
+  sparse_village and campus_quad are comparable — both modes land in the same topology
+  — and in both the derived interval buys no delivery and costs airtime: 3.1x the
+  demanded radio time for 1.6 points in the village, 1.2x for a loss of 0.7 on campus.
+  The mechanism is the clamp's floor: a node with three peers beacons every 500 ms,
+  four times the specified rate, to hold a reception load nobody was struggling with.
+
+  festival_crowd is where the derived interval saves airtime, 5.7x down to 3.3x, and it
+  is exactly where the comparison cannot be read: the two modes land in different
+  topologies (mean largest component 94% against 85%), so the 8.6-point delivery gap
+  cannot be attributed to the interval. That is not a defence of the lever — it is the
+  reason the verdict rests on the two scenarios where the topology is comparable.
+
+  The fourth pair is the one that settles it, and it was added after the first three.
+  With mobility off the two arms share a topology by construction — same connected share,
+  same mean largest component, and the same per seed, not only on average — so the
+  comparison isolates the interval instead of measuring which mode each seed landed in.
+  There the derived interval takes 44% off the demanded radio time and 44% off the
+  beacons, which is what the rule does and so does not depend on any seed. Read the
+  per-seed delivery column before believing anything else about it: better on four
+  seeds, worse on three, level on one, with most of the +2.5-point mean coming from one
+  seed going 45 to 67. Reach is the stronger claim, equal or better in seven of eight.
+  So the lever is cheaper and does not cost reach, and it does not buy delivery; the
+  mobile crowd cannot say anything at all, because changing the beacon schedule diverges
+  a bimodal world and eight seeds cannot resolve that.
+
+  What ships is still fixed, and now for a more precise reason than §24.11 gave: the
+  lever is shown to help where the topology can be held equal and shown to be unreadable
+  where it cannot, and the shipped condition is the one where it cannot. Turning it on
+  would mean changing docs/03 §4's 2 s on evidence from a static network. docs/06
+  §24.11-§24.12.
+
+
+=== 18. Adaptive scan intervals: docs/05 §1.2's third row, and what the engine can charge for ===
+§1.2's mitigation table lists three layers and its third is "Adaptive scan intervals —
+
+scan interval scales with peer density: dense = shorter interval (peers stable), sparse =
+
+longer (fewer discoveries expected)", with the expected impact "reduces redundant
+
+wake-ups". `scanIntervalMode: "density"` implements it, anchored so ten peers reproduces
+
+the configured interval and clamped to a quarter..four times it. Eight seeds.
+
+  scenario         duty   mode      NORMAL %/h   SUPER %/h   scans/s   awake   scans slept   delivery
+  sparse_village   on     fixed           1.331       1.875      8.29   25.7%           451      26.2%
+  sparse_village   on     density         1.331       1.875      2.45   25.7%           136      26.2%
+                          Δ                0.0%        0.0%      -70%                          0.0 pts
+  sparse_village   off    fixed           2.745       1.875     15.80  100.0%             0      26.2%
+  sparse_village   off    density         2.745       1.875      4.72  100.0%             0      26.2%
+                          Δ                0.0%        0.0%      -70%                          0.0 pts
+
+  campus_quad      on     fixed           1.284       7.223     21.85   27.9%           660      97.9%
+  campus_quad      on     density         1.254       7.362     19.42   27.2%           549      98.9%
+                          Δ               -2.3%        1.9%      -11%                          1.0 pts
+  campus_quad      off    fixed           2.610       6.935     32.85  100.0%             0     100.0%
+  campus_quad      off    density         2.606       7.282     28.54  100.0%             0     100.0%
+                          Δ               -0.2%        5.0%      -13%                          0.0 pts
+
+  festival_crowd   on     fixed           1.458       7.038     58.17   30.7%          2064      82.5%
+  festival_crowd   on     density         1.428       6.998    102.19   29.8%          3564      89.4%
+                          Δ               -2.1%       -0.6%       76%                          6.8 pts
+  festival_crowd   off    fixed           2.856       7.196     92.13  100.0%             0      92.0%
+  festival_crowd   off    density         2.863       6.967    160.11  100.0%             0      97.8%
+                          Δ                0.2%       -3.2%       74%                          5.8 pts
+
+  Two results, and the second is the one that matters.
+
+  The row does what it says. Scans per second fall about 70% in sparse_village (8.29 to
+  2.45 with the duty cycle on, 15.80 to 4.72 without) and rise about 75% in
+  festival_crowd (58.2 to 102.2, and 92.1 to 160.1), with campus_quad in between at
+  -11%. Sparse scans less, dense scans sooner, anchored at ten peers.
+
+  And the claimed benefit is not measurable in this engine. Look at the battery columns:
+  cutting scans by 70% in sparse_village changes NORMAL drain from 1.331 to 1.331 %/h and
+  SUPER from 1.875 to 1.875 — identical to three decimals — because `batteryDrain` charges
+  the duty-cycle *window* (`isAwake`, `sleepDrainFactor`) and not the scan events inside
+  it. Everywhere else the battery moves by 2% or less and in both directions, which is
+  noise. So 'reduces redundant wake-ups' is true of the wake-up count and invisible to
+  only currency §1.2 states its impact in. This is the third time this document has hit the
+  same wall: §24.1 found no cost for the Wi-Fi Direct group-owner role, §24.3 found no
+  per-packet term, and here there is no per-scan term. The battery model is a role-based
+  hourly rate, and a mitigation that works by doing less of something cannot be priced by
+  it. Saying so is the finding; inventing a millijoule-per-scan constant to make the row
+  evaluate would be measuring a guess.
+
+  What the row does buy is delivery, and it buys it by *spending* wake-ups rather than
+  saving them: +6.8 points in festival_crowd with the duty cycle on (82.5 to 89.4%) and +5.8
+  without (92.0 to 97.8%), +1.0 on campus, nothing in the sparse village where there is
+  little to discover either way. That inverts §1.2's framing for the dense case — there,
+  'dense = shorter interval' is a delivery lever with a battery cost the engine cannot
+  charge, not a saving. Whether the trade is worth making needs a device, and §1.2's own
+  mitigation table is where that question belongs. docs/06 §24.15.
+
+
+Done.

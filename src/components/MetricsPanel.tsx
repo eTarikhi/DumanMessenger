@@ -95,6 +95,28 @@ export function MetricsPanel({ stats, dutyCycleEnabled, nodes, config }: Props) 
             <Counter label="Scans/s" value={stats.scansPerSec.toFixed(1)} />
             <Counter label="Relays/s" value={stats.relaysPerSec.toFixed(1)} />
             <Counter label="Elections" value={`${stats.electionEvents}`} />
+            {/* skills/07's fourth telemetry item. Charged only for durations the engine
+                already computed for its contention model, so no cost per lock is invented
+                — docs/06 §24. The share is a split between roles rather than a percentage
+                of the clock, because the demand ratio beside it says why that reading
+                would not survive. */}
+            <Counter
+              label="Wake locks"
+              value={`${stats.wakeLocks}`}
+              hint="One acquisition per transmission and per reception, held for as long as that packet occupies the radio (docs/06 §24)"
+            />
+            <Counter
+              label="SUPER radio share"
+              value={`${stats.wakeLockShareSuper.toFixed(0)}%`}
+              accent="#ffb84d"
+              hint="Share of the network's demanded radio time held by SUPERs. They are a minority of the nodes, so more than their share is the expected direction — but the documented 4x battery gap between roles is a constant in src/rf.ts, and this measures about 1.14x (docs/06 §24.1)"
+            />
+            <Counter
+              label="Radio demand"
+              value={`${stats.radioDemandRatio.toFixed(1)}×`}
+              accent={stats.radioDemandRatio > 1 ? "#ff7b72" : "#4de0ff"}
+              hint="Demanded radio time divided by the radio time that exists (nodes x window). Above 1 the model over-subscribes: a beacon is charged one hop latency at every peer that hears it, and reception dominates. Counts elsewhere in this panel are exact; durations are the model's (docs/06 §24.3)"
+            />
             {dutyCycleEnabled && (
               <>
                 <Counter label="Awake" value={`${(stats.awakeRatio * 100).toFixed(0)}%`} accent="#4de0ff" />
@@ -446,9 +468,22 @@ function RoleDrain({
   );
 }
 
-function Counter({ label, value, accent = "#eaf2ff" }: { label: string; value: string; accent?: string }) {
+function Counter({
+  label,
+  value,
+  accent = "#eaf2ff",
+  hint,
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+  /** Native tooltip. Used where a number needs its caveat to travel with it. */
+  hint?: string;
+}) {
   return (
-    <div style={{ padding: "5px 9px", borderRadius: 8, background: "rgba(255,255,255,0.03)", border: "1px solid #1e2a3a" }}>
+    <div
+      title={hint}
+      style={{ padding: "5px 9px", borderRadius: 8, background: "rgba(255,255,255,0.03)", border: "1px solid #1e2a3a" }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: accent, fontFamily: "monospace" }}>{value}</div>
       <div style={{ fontSize: 10, color: "#9fb0c3" }}>{label}</div>
     </div>

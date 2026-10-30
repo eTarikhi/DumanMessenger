@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { MeshSimulation, createNodes, type SimConfig } from "../simulation";
 import { buildScenario, campusQuad, festivalCrowd, scenarioNames, sparseVillage } from "../scenarios";
 import { createRng } from "../rng";
+import type { HistoryEntry } from "../types";
 
 /**
  * Acceptance criteria, transcribed from the repo's own targets:
@@ -22,11 +23,9 @@ import { createRng } from "../rng";
  *   docs/03-smart-router-algorithm.md §5 (election)
  *     "hysteresis: prevent SUPER flapping"
  *
- * Reading of the two delivery clauses: "delivery >=90% <5 hops" means at least
- * 90% of *sent* messages arrive within five radio hops, and "delivery >=90% at
- * 3 hops" means the 90% bar holds in a network whose typical path is ~3 hops
- * (asserted separately via avgHops). Both are measured on unicast traffic;
- * ACKs and broadcasts are excluded so control traffic cannot inflate the ratio.
+ * Owner decision (2026-10-28): five-hop delivery is the primary objective;
+ * three-hop delivery is diagnostic. The existing five-hop gate is unchanged.
+ * The denominator is successful unicast sends, excluding control traffic.
  */
 
 const SEEDS = [42, 7, 1234, 99, 2026, 555];
@@ -74,8 +73,12 @@ interface RunResult {
   deliveredUnicast: number;
   withinFiveHops: number;
   overFiveHops: number;
+  /** `skills/02`'s reading of the same criterion, over the same population. */
+  withinThreeHops: number;
+  overThreeHops: number;
   deliveryRatio: number;
   withinFiveRatio: number;
+  withinThreeRatio: number;
   superRatio: number;
   relayTx: number;
   overheadVsFlood: number;
@@ -101,6 +104,9 @@ function measure(cfg: SimConfig, withFloodBaseline = true): RunResult {
 
   const uni = sim.deliveries.filter((d) => d.type !== "ack" && d.type !== "broadcast");
   const withinFiveHops = uni.filter((d) => d.hops <= 5).length;
+  // Same gate population, including retries and DTN. Three hops is diagnostic
+  // by owner decision, not a threshold or the first-attempt latency population.
+  const withinThreeHops = uni.filter((d) => d.hops <= 3).length;
 
   let baselineRelays = sim.stats.totalForwarded;
   let routeFloodRelays = sim.stats.totalForwarded;
@@ -143,8 +149,11 @@ function measure(cfg: SimConfig, withFloodBaseline = true): RunResult {
     deliveredUnicast: uni.length,
     withinFiveHops,
     overFiveHops: uni.length - withinFiveHops,
+    withinThreeHops,
+    overThreeHops: uni.length - withinThreeHops,
     deliveryRatio: uni.length / Math.max(1, sent),
     withinFiveRatio: withinFiveHops / Math.max(1, sent),
+    withinThreeRatio: withinThreeHops / Math.max(1, sent),
     superRatio: sim.stats.superRatio,
     relayTx: sim.stats.totalForwarded,
     overheadVsFlood: sim.stats.totalForwarded / Math.max(1, baselineRelays),
@@ -184,10 +193,19 @@ describe("skills/02 + skills/08 acceptance — campus quad, 20 nodes", () => {
     expect(r.avgHops).toBeLessThanOrEqual(3);
   });
 
+  it.each(SEEDS)("seed %i reports the three-hop reading without gating on it", (seed) => {
+    const r = results.get(seed)!;
+    // Owner selected five hops as primary; retain consistency checks for three.
+    expect(r.withinThreeHops).toBeLessThanOrEqual(r.withinFiveHops);
+    expect(r.withinFiveHops).toBeLessThanOrEqual(r.deliveredUnicast);
+    expect(r.overThreeHops).toBe(r.deliveredUnicast - r.withinThreeHops);
+    expect(r.withinThreeRatio).toBeCloseTo(r.withinThreeHops / Math.max(1, r.sent), 12);
+  });
+
   it.each(SEEDS)("seed %i uses <=70% of the naive flood-all relay budget", (seed) => {
     const r = results.get(seed)!;
     // The documented bar is 70%. Measured against a genuinely naive baseline
-    // (no route table, no suppression) the engine sits at 7-9%, so the real
+    // (no route table, no suppression) the engine sits at 8-10%, so the real
     // margin is pinned separately from the loose bar: a regression that doubles
     // the relay count should fail here instead of hiding inside 70%.
     expect(r.overheadVsFlood).toBeLessThanOrEqual(0.7);
@@ -245,6 +263,40 @@ describe("dense crowd (docs/02 §6: 50+ nodes)", () => {
     expect(r.deliveryRatio).toBeGreaterThanOrEqual(0.85);
   });
 
+  it("holds its delivery bar on seeds the gate above does not use", () => {
+    // The two crowd gates above run seeds 42, 7 and 1234. `docs/06` §24.8-§24.10 found this
+    // scenario is bimodal — broadcast reach lands near 98% or between 50 and 79% depending on
+    // how much of the window the network spends in one piece — and those three seeds are among
+    // the strong ones, so a gate calibrated on them could have been passing on luck. Measured
+    // across nine seeds with this harness (150 messages, shipped config), delivery reads:
+    //
+    //   42 94.7 · 7 94.7 · 1234 96.7 · 99 88.7 · 2024 85.3 · 2026 93.3 · 31337 93.3 ·
+    //   555 94.0 · 8 98.7   (percent)
+    //
+    // Every one clears the 0.85 bar the gate above asserts, so the bar is not seed-lucky —
+    // but the weakest clears it by **0.3 points**, and the three seeds in use sit about ten
+    // points above it. In-window connectivity over the same nine ranges from 33% to 100%, and
+    // delivery does not track it the way broadcast reach does: seed 31337 is in one piece a
+    // third of the window and still delivers 93.3%, because a unicast can be carried and
+    // retried where a broadcast simply cannot cross a gap that exists when it is sent.
+    //
+    // So this asserts 0.80 rather than 0.85 over the nine: a floor with real margin (5.3
+    // points on the weakest seed) that would still catch a regression in the weak mode, which
+    // is what the gates above cannot see. Asserting 0.85 here would be asserting a boundary
+    // the scenario reaches, and it would fail on a change that moved one seed by half a point.
+    for (const seed of [42, 7, 1234, 99, 2024, 2026, 31337, 555, 8]) {
+      const r = measure(festivalCrowd(seed), false);
+      expect(r.deliveryRatio, `seed ${seed}`).toBeGreaterThanOrEqual(0.8);
+      // The other three crowd bars have real headroom on every seed, so they are worth
+      // asserting widely rather than on one: SUPER ratio 15.0-21.7% against a 10-30% gate,
+      // avgHops 2.49-3.08 against <=4, and flap 0.07-0.16 per node per minute against <=1.
+      expect(r.superRatio, `seed ${seed}`).toBeGreaterThanOrEqual(0.1);
+      expect(r.superRatio, `seed ${seed}`).toBeLessThanOrEqual(0.3);
+      expect(r.avgHops, `seed ${seed}`).toBeLessThanOrEqual(4);
+      expect(r.flapPerNodeMin, `seed ${seed}`).toBeLessThanOrEqual(1);
+    }
+  });
+
   it("costs MPR nothing against the same engine without suppression", () => {
     // docs/05 §"Duman's hybrid selection": MPR suppression must cut redundant
     // transmissions without costing delivery. Suppression gated on *coverage*
@@ -253,19 +305,20 @@ describe("dense crowd (docs/02 §6: 50+ nodes)", () => {
     // here, because a SUPER three clusters away still silenced this node.
     //
     // The yardstick is `route-flood`, not `flood-all`. Naive epidemic flooding
-    // does reach 100% in this crowd — by spending 7-9x the relays — so
+    // does reach 100% in this crowd — by spending 7.8-9.5x the relays — so
     // "within 5 points of flood-all" would demand epidemic redundancy from a
     // routing engine and measure nothing about MPR. And the bound is on the
     // mean across seeds: 150 messages through a chaotic 60-node world carries
     // several points of run-to-run variance, which a per-seed bound mistakes
-    // for a regression. Measured mean gap: -0.9 points.
+    // for a regression. Measured mean gap: -0.2 points (re-measured 2026-10-28; it was -0.9 when this
+    // comment was written, and the bound below is what survived the drift).
     const gaps: number[] = [];
     for (const seed of [42, 7, 1234]) {
       const r = measure(festivalCrowd(seed));
       gaps.push(r.deliveryRatio - r.routeFloodDeliveryRatio);
-      // 12-14% of the naive flood budget; the documented bar is 70%.
+      // 10.6-12.8% of the naive flood budget (was 12-14% at `82d967a`); the documented bar is 70%.
       expect(r.overheadVsFlood).toBeLessThanOrEqual(0.2);
-      // MPR's own marginal cut on top of routing: 42-50% measured.
+      // MPR's own marginal cut on top of routing: 45-55% measured (42-50% at `82d967a`).
       expect(r.overheadVsRouteFlood).toBeLessThanOrEqual(0.7);
       expect(r.sim.stats.mprSuppressed).toBeGreaterThan(1000);
       expect(r.deliveryRatio).toBeGreaterThanOrEqual(0.85);
@@ -318,6 +371,7 @@ describe("golden vectors shared with sim/mesh_sim (Dart)", () => {
     rng: { seed: number; fixedPointScale: number; values: number[] };
     spawn: { scenario: string; seed: number; nodes: Array<Record<string, unknown>> };
     run: { scenario: string; seed: number; messages: number; gapMs: number; expect: Record<string, number> };
+    history: { note: string; entries: HistoryEntry[]; replyBody: string; replyBytes: number };
   };
 
   it("reproduces the mulberry32 stream bit-for-bit", () => {
@@ -345,6 +399,37 @@ describe("golden vectors shared with sim/mesh_sim (Dart)", () => {
       expect(node.stationary).toBe(g.stationary);
       expect(node.charging).toBe(g.charging);
     });
+  });
+
+  it("serialises an anti-entropy reply exactly as the fixture says", () => {
+    // Built here rather than read back out of the fixture, so a change to HistoryEntry's shape
+    // moves this assertion instead of moving the fixture and the assertion together. This is the
+    // TypeScript half of the contract sim/mesh_sim/test/golden_test.dart asserts from the other
+    // side: the same three entries must serialise to the same bytes in both languages, because a
+    // repair that costs different bytes on the two engines is two protocols.
+    //
+    // The two rules being pinned are the ones that diverged when CI first ran the Dart engine:
+    // no `synced` key unless it is true (JSON.stringify drops undefined, so `synced?: boolean`
+    // costs nothing until a copy actually arrives by repair), and no decimal point on an integral
+    // `at` (a JS number writes 1200 where a Dart double writes 1200.0).
+    const entries: HistoryEntry[] = [
+      { msgId: "grp-1:0:node-3", groupId: "grp-1", from: "node-3", at: 1200, body: "first", epoch: 0 },
+      { msgId: "grp-1:1:node-7", groupId: "grp-1", from: "node-7", at: 1500.5, body: "second", epoch: 0 },
+      {
+        msgId: "grp-1:2:node-3",
+        groupId: "grp-1",
+        from: "node-3",
+        at: 2400,
+        body: "repaired copy",
+        epoch: 1,
+        synced: true,
+      },
+    ];
+    const body = JSON.stringify(entries);
+    expect(body).toBe(fixture.history.replyBody);
+    expect(body.length).toBe(fixture.history.replyBytes);
+    expect(body).not.toContain('"synced":false');
+    expect(body).not.toContain("1200.0");
   });
 
   it("reproduces the reference run", () => {
@@ -379,6 +464,8 @@ describe("golden vectors shared with sim/mesh_sim (Dart)", () => {
     expect(transitions).toBe(e.roleTransitions);
     expect(sim.stats.totalQueued).toBe(e.totalQueued);
     expect(uni.reduce((s, d) => s + d.hops, 0)).toBe(e.sumHopCounts);
+    expect(uni.filter((d) => d.hops <= 5).length).toBe(e.deliveredWithinFiveHops);
+    expect(uni.filter((d) => d.hops <= 3).length).toBe(e.deliveredWithinThreeHops);
 
     // Floating aggregates: tolerance absorbs last-ULP differences between the
     // JS and Dart libm implementations of log10/sin/cos/sqrt.

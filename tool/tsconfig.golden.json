@@ -21,11 +21,23 @@
     "generate-golden.ts",
     "media-probe.ts",
     "history-probe.ts",
+    "e2ee-probe.ts",
+    "rate-probe.ts",
+    "cover-probe.ts",
     "capture-json.ts",
-    "field-report.ts"
+    "field-report.ts",
+    "routing-benchmark.ts",
+    "routing-targeted.ts",
+    "routing-shadow.ts",
+    "routing-evolve.ts",
+    "routing-contact-bound.ts",
+    "routing-diagnose.ts",
+    "routing-epoch-experiment.ts",
+    "routing-reliability.ts"
   ],
   "exclude": [
     "../src/**/*.tsx",
-    "../src/__tests__/**"
+    "../src/__tests__/**",
+    "../src/crypto/__tests__/**"
   ]
 }

@@ -20,8 +20,161 @@ const int sprayLimit = 3;
 const double mprWaitDefaultMs = 300;
 const int inboxMax = 200;
 
+// --- abuse limits (docs/04 §6), mirroring `src/routing.ts` ---------------------
+
+/// docs/04 §6: "Max 5 broadcasts / minute per node; SUPERs drop excess."
+///
+/// Named with a `Default` suffix because `SimConfig` has a field of the plain name,
+/// and `this.broadcastPerMinuteCap = broadcastPerMinuteCap` in a constructor default
+/// would be self-referential. Same reason `mprWaitDefaultMs` is spelled that way.
+const int broadcastPerMinuteCapDefault = 5;
+
+/// docs/04 §6: "Cap relay to 30 msgs/min per source; ignore floods."
+const int relayPerSourcePerMinuteCapDefault = 30;
+
+/// Both caps in docs/04 §6 are stated per minute. Written as the same expression as
+/// the TypeScript engine so `check-parity.py` compares them textually.
+const double rateWindowMs = 60 * 1000;
+
+/// One token bucket, per (enforcer, source) pair.
+class RateBucket {
+  RateBucket(this.tokens, this.atMs);
+
+  double tokens;
+  double atMs;
+}
+
+/// Outcome of one [admitByRate] call.
+class RateDecision {
+  const RateDecision(this.ok, this.reason, this.tokensLeft, this.retryInMs);
+
+  final bool ok;
+
+  /// Empty when admitted; otherwise the reason, for the capture log.
+  final String reason;
+  final double tokensLeft;
+  final double retryInMs;
+}
+
+/// Take one token from `buckets[key]`, creating the bucket full if it is new.
+///
+/// A token bucket rather than a per-minute tally because docs/04 §6 states a *rate*:
+/// a tumbling counter admits 5 broadcasts in the last second of one minute and 5 in
+/// the first second of the next, which is ten in two milliseconds without ever
+/// breaking a per-minute count. The bucket refills continuously at [cap] per
+/// [rateWindowMs] and bursts up to [cap].
+///
+/// Pure except for the map it is handed, which is what makes the two limits
+/// unit-testable without constructing a mesh. Mirror of `admitByRate` in
+/// `src/routing.ts`.
+RateDecision admitByRate(
+    Map<String, RateBucket> buckets, String key, int cap, double nowMs) {
+  if (cap <= 0) {
+    return const RateDecision(true, '', double.infinity, 0);
+  }
+  var bucket = buckets[key];
+  if (bucket == null) {
+    bucket = RateBucket(cap.toDouble(), nowMs);
+    buckets[key] = bucket;
+  }
+  final elapsed = nowMs - bucket.atMs;
+  if (elapsed > 0) {
+    bucket.tokens =
+        math.min(cap.toDouble(), bucket.tokens + elapsed * cap / rateWindowMs);
+    bucket.atMs = nowMs;
+  } else if (elapsed < 0) {
+    // The clock went backwards — a metrics reset, or a map reused across runs.
+    // Grant no refill and resynchronise rather than subtracting tokens.
+    bucket.atMs = nowMs;
+  }
+  if (bucket.tokens < 1) {
+    final retry = (1 - bucket.tokens) / cap * rateWindowMs;
+    return RateDecision(
+        false,
+        'rate limit: $cap per minute exceeded, next token in '
+            '${(retry / 1000).toStringAsFixed(1)} s',
+        bucket.tokens,
+        retry);
+  }
+  bucket.tokens -= 1;
+  return RateDecision(true, '', bucket.tokens, 0);
+}
+
+/// Whether a message counts against the relay cap.
+///
+/// Control-plane traffic does not, and the arithmetic is why: docs/03 §1 beacons an
+/// OGM every 2 s, which is exactly 30 per minute per source — the cap docs/04 §6
+/// states. Counting beacons does not drop a source's first data message; it does
+/// something slower and worse. The bucket refills one token per 2 s and the beacon
+/// spends it, so the sustained budget for everything else is zero and data traffic
+/// runs off the initial burst alone: 29 messages in ten minutes instead of 300, a
+/// 90 % cut caused by the node's own routing protocol. `ack` and `sync` are exempt
+/// for the same reason — a rate-limited acknowledgement turns one lost packet into a
+/// retransmission storm. Mirror of `countsAgainstRelayCap` in `src/routing.ts`.
+bool countsAgainstRelayCap(MeshMessage msg) =>
+    msg.type != MsgType.ogm &&
+    msg.type != MsgType.ack &&
+    msg.type != MsgType.sync;
+
+/// Whether a local block (`docs/04` §6: "Block/mute peer locally (ignore msgs from
+/// pubKey)") applies to this message. Mirror of `isBlockableTraffic` in `src/routing.ts`.
+///
+/// Control plane is excluded because blocking an ACK makes the blocked peer retransmit —
+/// more airtime, the opposite of the point — and blocking an OGM removes the peer from the
+/// blocker's routing table, which is a routing change disguised as a privacy setting. SOS
+/// is excluded because §6 gives it opt-in listening and §11's collapsing instead, and the
+/// asymmetry is not close: showing one SOS from a blocked peer costs a notification, and
+/// suppressing a real one costs a life.
+bool isBlockableTraffic(MeshMessage msg) =>
+    countsAgainstRelayCap(msg) && msg.type != MsgType.sos;
+
 /// Text < 1 KB rides BLE; larger payloads need Wi-Fi Direct (docs/02 §3.1).
 const int bleMaxBytes = 1024;
+
+/// One OGM's field widths, derived from [Ogm] and docs/03 §4 the way [packetOverheadBytes]
+/// derives the sealed packet's 95 B from skills/03's layout — a beacon's size has to come
+/// from the fields it actually carries, not from a guess.
+///
+/// 32 is the X25519 public-key width docs/07 §4 specifies, the same field
+/// [packetOverheadBytes] spells as `from`.
+const int ogmIdBytes = 32;
+const int ogmSeqBytes = 4;
+const int ogmScoreBytes = 4;
+
+/// `isSuper`, `declinedRouter` and `hopCount` at 1 B each, `peerCount` at 2 B.
+const int ogmFlagBytes = 1 + 1 + 1 + 2;
+
+/// `batteryBucket` is `(battery * 10).floor()`, so 0-10 fits one byte.
+const int ogmBatteryBytes = 1;
+
+/// One `bestHopTo` entry: a destination id and its hop count. Spelled as literals, like
+/// [packetOverheadBytes], because `check-parity.py` compares the two engines' non-scalar
+/// initialisers as *text* and identifier case is the one thing the two languages cannot
+/// agree on. `engine_test.dart` ties each of these to the named widths, so a width change
+/// fails a test instead of silently propagating.
+const int ogmHopEntryBytes = 32 + 1;
+
+/// The part of a beacon that does not depend on how much it advertises:
+/// `ogmIdBytes + ogmSeqBytes + ogmScoreBytes + ogmFlagBytes + ogmBatteryBytes`. The
+/// originator's own id is always the full 32-byte public key — an alias cannot identify a
+/// sender nobody has heard from yet, which is the whole purpose of a beacon — so only the
+/// *advertised* neighbours and route entries are affected by [SimConfig.ogmAliasBytes].
+const int ogmFixedBytes = 32 + 4 + 4 + (1 + 1 + 1 + 2) + 1;
+
+/// What one beacon costs on air, in bytes. OGMs ride `_beacon` rather than `_onAir`, so they
+/// had no size at all and every duration charged to a beacon was a hop latency by default.
+/// A beacon is not a small packet: it carries the MPR neighbour set that makes two-hop
+/// coverage knowable, plus up to eight route advertisements.
+int ogmWireBytes(int neighborCount, int bestHopCount,
+        [int aliasBytes = ogmIdBytes]) =>
+    ogmFixedBytes +
+    math.max(0, neighborCount).toInt() * math.max(0, aliasBytes).toInt() +
+    math.max(0, bestHopCount).toInt() * (math.max(0, aliasBytes).toInt() + 1);
+
+/// A beacon at both advertise limits, which is what a dense mesh actually sends:
+/// `ogmWireBytes(mprNeighborAdvertiseLimit, bestHopAdvertiseLimit)`, spelled out for
+/// `check-parity.py` and tied back to the limits by a test.
+const int ogmMaxWireBytes = 46 + 30 * 32 + 8 * 33;
 
 const String broadcastAddress = 'BROADCAST';
 
@@ -33,7 +186,14 @@ const int padBlockBytes = 256;
 
 /// Everything around the body in one encrypted packet, from `skills/03`'s layout:
 /// `header {msgId16, ttl, type, destHint8, hop}` = 27 B, `aead {nonce12, tag16}` =
-/// 28 B, and inside the ciphertext `from` 32 B + `ts` 8 B. 95 B before the body.
+/// 28 B, and inside the ciphertext `from` 32 B + `ts` 6 B + `len` 2 B. 95 B before
+/// the body.
+///
+/// `ts` is 6 bytes and not the 8 `docs/07` §4 writes, and the 2 that frees up hold
+/// the body length: zero padding is ambiguous for a binary body, and a media chunk
+/// can legitimately end in `0x00`. Six-byte milliseconds run to the year 10889.
+/// The total is unchanged, so every published size survives — see
+/// `src/crypto/packet.ts`, which serialises this packet for real.
 const int packetOverheadBytes = 27 + 12 + 16 + 32 + 8;
 
 /// Wire size of one message, in bytes, as the transport selector sees it.
@@ -49,6 +209,51 @@ int wireSizeOf(int bodyChars) {
   final raw = packetOverheadBytes + (bodyChars < 0 ? 0 : bodyChars);
   return ((raw + padBlockBytes - 1) ~/ padBlockBytes) * padBlockBytes;
 }
+
+/// Length of [text] in UTF-8 bytes, not in UTF-16 code units.
+///
+/// A packet carries bytes and `String.length` counts code units, so the two agree
+/// only for ASCII — which is why this went unnoticed: every name in the spawn
+/// table, every body the traffic generator produces and every fixture body in
+/// `test-fixtures/golden-vectors.json` is ASCII. They disagree the moment a user
+/// types Turkish, Arabic, Devanagari, CJK or an emoji, and the disagreement is
+/// optimistic, which is the dangerous direction: the number picks the transport
+/// and the transport sets the per-hop latency every finding is reported against.
+///
+/// Counted by hand rather than through `utf8.encode` for two reasons. It allocates
+/// nothing, and it writes the lone-surrogate rule down explicitly (U+FFFD, three
+/// bytes) instead of depending on what `utf8.encode` does with malformed input —
+/// it throws by default, and the TypeScript engine's `TextEncoder` replaces. Both
+/// engines implement the replacement, so they agree by construction rather than by
+/// coincidence. Mirror of `utf8ByteLength` in `src/routing.ts`.
+int utf8ByteLength(String text) {
+  var bytes = 0;
+  for (var i = 0; i < text.length; i++) {
+    final unit = text.codeUnitAt(i);
+    if (unit < 0x80) {
+      bytes += 1;
+    } else if (unit < 0x800) {
+      bytes += 2;
+    } else if (unit >= 0xD800 && unit <= 0xDBFF && i + 1 < text.length) {
+      final low = text.codeUnitAt(i + 1);
+      if (low >= 0xDC00 && low <= 0xDFFF) {
+        bytes += 4; // a valid surrogate pair is one 4-byte character
+        i += 1;
+        continue;
+      }
+      bytes += 3; // a lone high surrogate encodes as U+FFFD
+    } else {
+      bytes += 3; // BMP above U+07FF, and any lone surrogate
+    }
+  }
+  return bytes;
+}
+
+/// Wire size of a body given as text. This is what [createMessage] uses.
+///
+/// [wireSizeOf] stays for callers that already hold a byte count — media chunks,
+/// whose payload size is declared rather than padded (docs/08 §8).
+int wireSizeOfBody(String body) => wireSizeOf(utf8ByteLength(body));
 
 /// Same 32-bit string hash as the TypeScript engine, so `destHint` matches
 /// across languages (it appears in golden vectors).
@@ -90,7 +295,8 @@ MeshMessage createMessage(
 }) {
   // A chunk's size is the payload it carries, not the empty body it was built
   // from — and that size is what picks the transport and the air time.
-  final wireBytes = sizeBytes ?? wireSizeOf(body.length);
+  // Bytes, not code units: see [utf8ByteLength].
+  final wireBytes = sizeBytes ?? wireSizeOfBody(body);
   return MeshMessage(
     id: id,
     type: type,

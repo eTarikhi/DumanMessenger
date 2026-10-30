@@ -10,6 +10,8 @@ const sandboxed = process.env.ALLOW_ANY_DEV_HOST === "1";
 
 export default defineConfig({
   plugins: [react()],
+  base: "./",
+  build: { sourcemap: false },
   server: {
     host: sandboxed ? "0.0.0.0" : undefined,
     allowedHosts: sandboxed ? true : undefined,

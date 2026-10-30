@@ -1,4 +1,4 @@
-import type { MeshNode, Obstacle, Vec2 } from "./types";
+import type { MeshNode, NodeId, Obstacle, Vec2 } from "./types";
 import type { Rng } from "./rng";
 import { chance, randRange } from "./rng";
 
@@ -166,6 +166,53 @@ export function peersInRange(node: MeshNode, allNodes: MeshNode[], p: RfParams):
   for (const n of allNodes) {
     if (n.id !== node.id && n.isOnline && canReach(node, n, p)) out.push(n);
   }
+  return out;
+}
+
+/**
+ * The radio graph's connected components, as node-id lists, largest first.
+ *
+ * One walk with two consumers, which is why it lives here rather than in either of them:
+ * `MeshSimulation.componentSizes` samples it during a run to report how much of a window the
+ * network spent in one piece (`docs/06` §24.10), and `MeshCanvas` draws it so a split is
+ * visible rather than inferable. Two walks would eventually disagree, and a disagreement
+ * between what the metric says and what the picture shows is the kind of bug nobody finds.
+ *
+ * An offline node is a component of one, and that needs forcing. `peersInRange` filters the
+ * *far* end on `isOnline` but never the near one, so an offline node still lists its online
+ * neighbours while listing nothing in theirs — an asymmetric edge that a depth-first search
+ * happily follows, absorbing a dead phone into a live component and reporting a network in one
+ * piece while a node in it cannot hear anybody. A component is supposed to mean "these nodes
+ * can exchange packets", so the adjacency of an offline node is emptied here.
+ *
+ * That is a semantic choice and not a correction to a published number: every run behind
+ * `docs/06` §24.10-§24.13 reported all nodes online, so both readings give the same answer
+ * there, and `connectivity.test.ts` asserts the premise rather than assuming it.
+ */
+export function radioComponents(allNodes: MeshNode[], p: RfParams): NodeId[][] {
+  const adj = new Map<NodeId, NodeId[]>();
+  for (const node of allNodes) {
+    adj.set(
+      node.id,
+      node.isOnline ? peersInRange(node, allNodes, p).map((n) => n.id) : []
+    );
+  }
+  const seen = new Set<NodeId>();
+  const out: NodeId[][] = [];
+  for (const node of allNodes) {
+    if (seen.has(node.id)) continue;
+    const component: NodeId[] = [];
+    const stack = [node.id];
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      component.push(id);
+      for (const nb of adj.get(id) ?? []) if (!seen.has(nb)) stack.push(nb);
+    }
+    out.push(component);
+  }
+  out.sort((a, b) => b.length - a.length);
   return out;
 }
 

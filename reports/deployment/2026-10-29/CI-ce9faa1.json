@@ -1,0 +1,74 @@
+{
+  "run": 40870982058,
+  "sourceSha": "ce9faa1eddace2856aed22421d01b9b21ac613c8",
+  "result": "failure",
+  "note": "Checks API annotations; workflow log/archive download blocked by host allowlist. GitHub may limit individual annotations.",
+  "annotations": [
+    {
+      "title": "npm test",
+      "path": ".github",
+      "start_line": 17,
+      "message": "\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 11 \u23af\u23af\u23af\u23af\u23af\u23af\u23af Test Files 5 failed | 21 passed (26) Tests 11 failed | 510 passed (521) "
+    },
+    {
+      "title": "src/__tests__/simulation.test.ts > cap-aware community-relay promotion, measured and rejected (docs/06 \u00a719.4) > exempting tablets from the cap elects all six and pushes the ratio to the top of the band",
+      "path": "src/__tests__/simulation.test.ts",
+      "start_line": 2771,
+      "message": "Error: Test timed out in 5000ms.\nIf this is a long-running test, pass a timeout value as the last argument or configure it globally with \"testTimeout\".\n \u276f src/__tests__/simulation.test.ts:2771:3\n\n"
+    },
+    {
+      "title": "src/__tests__/simulation.test.ts > community relays (roadmap Phase 5: a plugged tablet in a caf\u00e9) > elects the plugged tablets and moves relay work off other people's batteries",
+      "path": "src/__tests__/simulation.test.ts",
+      "start_line": 2104,
+      "message": "Error: Test timed out in 5000ms.\nIf this is a long-running test, pass a timeout value as the last argument or configure it globally with \"testTimeout\".\n \u276f src/__tests__/simulation.test.ts:2104:3\n\n"
+    },
+    {
+      "title": "src/__tests__/simulation.test.ts > protocol behaviour > scale: the documented 10-200 node range (skills/08) > runs at the top of the range, and the fallback does not go quadratic",
+      "path": "src/__tests__/simulation.test.ts",
+      "start_line": 771,
+      "message": "Error: Test timed out in 5000ms.\nIf this is a long-running test, pass a timeout value as the last argument or configure it globally with \"testTimeout\".\n \u276f src/__tests__/simulation.test.ts:771:5\n\n"
+    },
+    {
+      "title": "src/__tests__/scan-interval.test.ts > adaptive scan intervals (docs/05 \u00a71.2, layer 3) > clamps, so one peer does not stop a node scanning and a crowd does not pin it awake",
+      "path": "src/__tests__/scan-interval.test.ts",
+      "start_line": 71,
+      "message": "Error: Test timed out in 5000ms.\nIf this is a long-running test, pass a timeout value as the last argument or configure it globally with \"testTimeout\".\n \u276f src/__tests__/scan-interval.test.ts:71:3\n\n"
+    },
+    {
+      "title": "src/__tests__/scan-interval.test.ts > adaptive scan intervals (docs/05 \u00a71.2, layer 3) > scans more in a dense world, which is what the row says and what it costs",
+      "path": "src/__tests__/scan-interval.test.ts",
+      "start_line": 50,
+      "message": "Error: Test timed out in 5000ms.\nIf this is a long-running test, pass a timeout value as the last argument or configure it globally with \"testTimeout\".\n \u276f src/__tests__/scan-interval.test.ts:50:3\n\n"
+    },
+    {
+      "title": "src/__tests__/radio-occupancy.test.ts > radioOccupancy > costs a dense crowd fewer deferrals and buys it delivery, once contention is modelled",
+      "path": "src/__tests__/radio-occupancy.test.ts",
+      "start_line": 195,
+      "message": "Error: Test timed out in 5000ms.\nIf this is a long-running test, pass a timeout value as the last argument or configure it globally with \"testTimeout\".\n \u276f src/__tests__/radio-occupancy.test.ts:195:3\n\n"
+    },
+    {
+      "title": "src/__tests__/connectivity.test.ts > the density-derived beacon interval (docs/06 \u00a724.11) > holds the topology still, and there the derived interval is cheaper without losing reach",
+      "path": "src/__tests__/connectivity.test.ts",
+      "start_line": 155,
+      "message": "Error: Test timed out in 5000ms.\nIf this is a long-running test, pass a timeout value as the last argument or configure it globally with \"testTimeout\".\n \u276f src/__tests__/connectivity.test.ts:155:3\n\n"
+    },
+    {
+      "title": "src/__tests__/acceptance.test.ts > dense crowd (docs/02 \u00a76: 50+ nodes) > costs MPR nothing against the same engine without suppression",
+      "path": "src/__tests__/acceptance.test.ts",
+      "start_line": 300,
+      "message": "Error: Test timed out in 5000ms.\nIf this is a long-running test, pass a timeout value as the last argument or configure it globally with \"testTimeout\".\n \u276f src/__tests__/acceptance.test.ts:300:3\n\n"
+    },
+    {
+      "title": "src/__tests__/acceptance.test.ts > dense crowd (docs/02 \u00a76: 50+ nodes) > holds its delivery bar on seeds the gate above does not use",
+      "path": "src/__tests__/acceptance.test.ts",
+      "start_line": 266,
+      "message": "Error: Test timed out in 5000ms.\nIf this is a long-running test, pass a timeout value as the last argument or configure it globally with \"testTimeout\".\n \u276f src/__tests__/acceptance.test.ts:266:3\n\n"
+    },
+    {
+      "title": "src/__tests__/acceptance.test.ts > dense crowd (docs/02 \u00a76: 50+ nodes) > stays stable and cheap at 60 nodes",
+      "path": "src/__tests__/acceptance.test.ts",
+      "start_line": 257,
+      "message": "Error: Test timed out in 5000ms.\nIf this is a long-running test, pass a timeout value as the last argument or configure it globally with \"testTimeout\".\n \u276f src/__tests__/acceptance.test.ts:257:3\n\n"
+    }
+  ]
+}

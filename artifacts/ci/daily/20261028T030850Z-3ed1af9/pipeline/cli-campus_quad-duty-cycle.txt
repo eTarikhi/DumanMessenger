@@ -1,0 +1,56 @@
+Duman mesh simulator — campus_quad (seed 42, policy mpr, duty-cycle)
+──────────────────────────────────────────────────────────────
+  scenario                 campus_quad
+  seed                     42
+  policy                   mpr
+  nodes                    20
+  sent                     150
+  deliveredUnicast         148
+  deliveryRatio            0.9867
+  deliveredWithinFiveHops  148
+  withinFiveRatio          0.9867
+  deliveredWithinThreeHops 134
+  withinThreeRatio         0.8933
+  superNodes               5
+  superRatio               0.25
+  timeAvgSuperRatio        0.25
+  electionsPerMin          0.1416
+  avgHops                  1.9865
+  latencyP50Ms             508.5982
+  latencyP95Ms             4175.5467
+  relayTx                  3685
+  floodAllRelayTx          44654
+  overheadVsFloodAll       0.0825
+  routeFloodRelayTx        5602
+  overheadVsRouteFlood     0.6578
+  overheadRatio            24.8986
+  mprSuppressed            247
+  retriesSent              23
+  retriesExhausted         3
+  acksReceived             146
+  controlOverhead          118923
+  lostTransmissions        97
+  lostOgmTransmissions     3325
+  totalQueued              4
+  avgPeers                 7.2
+  isolatedNodes            0
+  avgScore                 0.6289
+  simTimeMs                233000.0
+  dutyCycle                true
+  batteryPctPerHourNormal  1.2138
+  batteryPctPerHourSuper   6.274
+  batteryPct8hNormal       9.71
+  batteryPct8hSuper        50.1917
+  scansPerSec              22.6756
+  relaysPerSec             16.3778
+  awakeRatio               0.3333
+  scansSkippedAsleep       2437
+  electionEvents           11
+  latencyByHop             hops      n     avg     p95
+                              1     59   239 ms   310 ms
+                              2     43   624 ms   835 ms
+                              3     25   888 ms  1199 ms
+                              4      7  1050 ms  1367 ms
+                              5      6  1303 ms  1595 ms
+
+PASS — acceptance criteria met.

@@ -15,9 +15,21 @@
  * Run with `npm run media`.
  */
 import { MeshSimulation, DEFAULT_CONFIG, type SimConfig } from "../src/simulation";
-import { campusQuad, festivalCrowd } from "../src/scenarios";
+import {
+  BEST_HOP_ADVERTISE_LIMIT,
+  MPR_NEIGHBOR_ADVERTISE_LIMIT,
+} from "../src/election";
+import {
+  BLE_MAX_BYTES,
+  OGM_FIXED_BYTES,
+  OGM_MAX_WIRE_BYTES,
+  ogmWireBytes,
+} from "../src/routing";
+import { NEIGHBOR_SCORE_TTL_MS } from "../src/election";
+import { campusQuad, festivalCrowd, sparseVillage } from "../src/scenarios";
 import { canReach, effectiveLossProbability, peersInRange } from "../src/rf";
 import { createRng } from "../src/rng";
+import type { RelayPolicy } from "../src/types";
 import type {
   ChannelAccess,
   ChannelBackoff,
@@ -1758,6 +1770,903 @@ function captureMarginTable(): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 14. Occupancy: what a radio is busy for, against how long a packet takes to
+//     arrive. docs/06 §24.5 asked the question; this answers it.
+// ---------------------------------------------------------------------------
+
+interface OccupancyRow {
+  scenario: string;
+  access: string;
+  occupancy: string;
+  demand: number;
+  wakeMs: number;
+  delivery: number;
+  drops: number;
+  deferrals: number;
+}
+
+function occupancyRun(
+  seed: number,
+  scenario: (seed: number) => SimConfig,
+  name: string,
+  access: SimConfig["channelAccess"],
+  occupancy: SimConfig["radioOccupancy"]
+): OccupancyRow {
+  const sim = new MeshSimulation({
+    ...scenario(seed),
+    channelAccess: access,
+    radioOccupancy: occupancy,
+  });
+  sim.runFor(90_000);
+  sim.refresh();
+  sim.clearRecords();
+  sim.injectTraffic(30, 40_000);
+  sim.runFor(60_000);
+  sim.refresh();
+  const st = sim.stats;
+  return {
+    scenario: name,
+    access,
+    occupancy,
+    demand: st.radioDemandRatio,
+    wakeMs: st.wakeLockMs,
+    delivery: st.deliveryRatio,
+    drops: st.channelDrops,
+    deferrals: st.channelDeferrals,
+  };
+}
+
+function occupancyTable(): void {
+  console.log(
+    "\n=== 14. Occupancy: what a radio is busy for is not how long a packet takes to arrive ==="
+  );
+  console.log(
+    "The shipped model charges every packet a calibrated hop latency — 120 ms on BLE, which"
+  );
+  console.log(
+    "serializationMs's own comment says already includes one full-sized GATT write — plus the"
+  );
+  console.log(
+    "excess over 1 024 B. That is right at 1 024 B and wrong below it, so a short text pays"
+  );
+  console.log(
+    "what a media chunk pays, and a beacon paid it too while having no size at all."
+  );
+  console.log(
+    `\nBeacons now have one, derived from the fields docs/03 §4 says an OGM carries: fixed`
+  );
+  console.log(
+    `  ${OGM_FIXED_BYTES} B + 32 B per advertised neighbour + 33 B per route entry, bounded by the`
+  );
+  console.log(
+    `  advertise limits the engine enforces (${MPR_NEIGHBOR_ADVERTISE_LIMIT} neighbours, ${BEST_HOP_ADVERTISE_LIMIT} routes).`
+  );
+  console.log(
+    `  A typical beacon (10 neighbours, 8 routes) is ${ogmWireBytes(10, 8)} B = ` +
+      `${((ogmWireBytes(10, 8) * 8) / DEFAULT_CONFIG.bleKbps).toFixed(1)} ms of airtime, about half the flat`
+  );
+  console.log(
+    `  120 ms it was charged. A fully loaded one is ${OGM_MAX_WIRE_BYTES} B, which is over the ` +
+      `${BLE_MAX_BYTES} B BLE ceiling —`
+  );
+  console.log(
+    "  so a dense node's beacon would ride Wi-Fi Direct. Nothing sized beacons before, so"
+  );
+  console.log("  nothing noticed. docs/06 §24.6.\n");
+
+  const arms: Array<[string, (seed: number) => SimConfig, SimConfig["channelAccess"]]> = [
+    ["campus_quad", campusQuad, "free"],
+    ["campus_quad", campusQuad, "csma"],
+    ["festival_crowd", festivalCrowd, "free"],
+    ["festival_crowd", festivalCrowd, "halfDuplex"],
+    ["festival_crowd", festivalCrowd, "csma"],
+  ];
+  const models: SimConfig["radioOccupancy"][] = ["hop-latency", "airtime"];
+  const rows = new Map<string, OccupancyRow[]>();
+  for (const [name, scenario, access] of arms) {
+    for (const model of models) {
+      const key = `${name}|${access}|${model}`;
+      rows.set(key, SEEDS.map((seed) => occupancyRun(seed, scenario, name, access, model)));
+    }
+  }
+  const mean = (key: string, f: (r: OccupancyRow) => number) => {
+    const list = rows.get(key)!;
+    return list.reduce((a, r) => a + f(r), 0) / Math.max(1, list.length);
+  };
+
+  console.log(`  mean of ${SEEDS.length} seeds, 30 messages injected over 60 s after a 90 s settle\n`);
+  console.log(
+    "  scenario         channel      occupancy     radio demand   wake time     delivery   queue drops   deferrals"
+  );
+  for (const [name, , access] of arms) {
+    for (const model of models) {
+      const key = `${name}|${access}|${model}`;
+      console.log(
+        `  ${name.padEnd(16)} ${access.padEnd(12)} ${model.padEnd(13)} ` +
+          `${(mean(key, (r) => r.demand).toFixed(2) + "x").padStart(13)} ` +
+          `${fmt(mean(key, (r) => r.wakeMs)).padStart(13)} ` +
+          `${((mean(key, (r) => r.delivery) * 100).toFixed(1) + "%").padStart(10)} ` +
+          `${mean(key, (r) => r.drops).toFixed(0).padStart(13)} ` +
+          `${mean(key, (r) => r.deferrals).toFixed(0).padStart(11)}`
+      );
+    }
+    console.log("");
+  }
+
+  console.log(
+    "  Three things this says, and one it does not.\n" +
+      "\n" +
+      "  Sizing packets properly roughly halves the demanded radio time — campus_quad 3.9x to\n" +
+      "  1.7x, festival_crowd 8.4x to 5.8x — and it does not make the demand physical. Above 1\n" +
+      "  the model asks for more airtime than exists, so the over-subscription docs/06 §24.3\n" +
+      "  measured is only partly the flat per-packet charge: the dominant term is the *volume*\n" +
+      "  of beacon receptions and the gossip that follows them, which a per-packet correction\n" +
+      "  cannot touch. At 60 nodes every node beaconing every 2 s is a real protocol finding\n" +
+      "  about docs/03 §1's interval, not a simulator artefact.\n" +
+      "\n" +
+      "  Under the shipped free/none baseline the two models are the same world: nothing reads\n" +
+      "  occupancy there except the wake-lock accounting, so delivery, latency, overhead and\n" +
+      "  every count are bit-identical and only the telemetry moves. radio-occupancy.test.ts\n" +
+      "  asserts that field by field, which is what makes the knob safe to ship defaulted off.\n" +
+      "\n" +
+      "  Where contention *is* modelled the two diverge, and §12's published numbers were\n" +
+      "  measured under the flat charge — but not uniformly in one direction, which is the part\n" +
+      "  worth not smoothing over. Under csma, sizing packets properly cuts crowd deferrals by\n" +
+      "  about half (13 540 to 6 382) and lifts crowd delivery 71.5% to 81.9%, and on\n" +
+      "  campus_quad it takes delivery from 98.7% to 100% with 29% fewer queue drops. Under\n" +
+      "  half-duplex in the same crowd it goes the other way: delivery 77.9% to 75.9% and\n" +
+      "  deferrals up 4%. A radio that frees sooner transmits sooner, and whether that helps\n" +
+      "  depends on whether the model lets it hear anyone first — csma does, half-duplex does\n" +
+      "  not. This probe reports the disagreement and does not claim to have established why.\n" +
+      "  What follows is that §12's contention magnitudes are a property of the occupancy\n" +
+      "  model they were measured under, not of the mesh.\n" +
+      "\n" +
+      "  What this does not say: that the flat model is wrong about latency. Delivery still\n" +
+      "  takes a hop latency per hop under both models, because that is what docs/02 §6's budget\n" +
+      "  measures and it is unchanged here. Only the busy-radio duration moved.\n"
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 15. The beacon interval: docs/03 specifies 2 s and nothing in the corpus says
+//     why. §24.6 found the control plane alone over-subscribes the radio at 60
+//     nodes, which makes the interval the obvious lever — and NEIGHBOR_SCORE_TTL_MS
+//     30 s the obvious ceiling on it.
+// ---------------------------------------------------------------------------
+
+interface BeaconRow {
+  interval: number;
+  demand: number;
+  delivery: number;
+  reach: number;
+  overhead: number;
+  hops: number;
+  latency: number;
+  control: number;
+  suppressed: number;
+  /** Route entries that expired unrenewed — the route table's churn, and the number the
+   *  flap hypothesis about the 12 s arm needs (`docs/06` §24.7). */
+  expiries: number;
+}
+
+function beaconRun(
+  seed: number,
+  scenario: (seed: number) => SimConfig,
+  interval: number,
+  aliasBytes = 32
+): BeaconRow {
+  const sim = new MeshSimulation({
+    ...scenario(seed),
+    // Priced with the model that charges each packet its own size, because the question is
+    // physical capacity. Under the flat charge every arm would carry the same 120 ms
+    // artefact §24.6 measured, and the sweep would be measuring that instead.
+    radioOccupancy: "airtime",
+    ogmIntervalMs: interval,
+    ogmAliasBytes: aliasBytes,
+  });
+  sim.runFor(90_000);
+  sim.refresh();
+  sim.clearRecords();
+  sim.injectTraffic(30, 40_000);
+  sim.runFor(60_000);
+  sim.refresh();
+  const st = sim.stats;
+  return {
+    interval,
+    demand: st.radioDemandRatio,
+    delivery: st.deliveryRatio,
+    reach: st.broadcastReach,
+    overhead: st.overheadRatio,
+    hops: st.avgHops,
+    latency: st.avgLatencyMs,
+    control: st.controlOverhead,
+    suppressed: st.mprSuppressed,
+    expiries: st.routeExpiries,
+  };
+}
+
+const BEACON_INTERVALS = [2_000, 5_000, 12_000, 25_000];
+
+/**
+ * This section does not use the file's three seeds, and the reason is measured.
+ *
+ * `festival_crowd` at 60 nodes is bimodal: some seeds reach ~98 % of the network with a
+ * broadcast and others reach 50-70 %, so which mode the sample happens to land in dominates
+ * the mean. The first version of this table used the shared three seeds and reported delivery
+ * as 96.7 % at 5 s, 93.9 % at 12 s and 97.1 % at 25 s — non-monotone, and published in
+ * `docs/06` §24.7 as a result that was "reported, not explained". Over eight seeds the
+ * ordering reverses and becomes monotone in the direction routing theory predicts: 94.8 %,
+ * 87.5 %, 79.2 %. The non-monotonicity was the sample, not the mesh.
+ *
+ * The shared `SEEDS` are left alone on purpose. Every other section's numbers are published
+ * against them, and widening them here would silently re-measure `docs/08` §1-§14.
+ */
+const BEACON_SEEDS = [42, 7, 1234, 99, 2024, 31337, 555, 8];
+
+/** The same eight, named separately so a reader of section 18 is not hunting for §24.8's list. */
+const SCAN_SEEDS = BEACON_SEEDS;
+
+function beaconTable(): void {
+  console.log(
+    "\n=== 15. The beacon interval: docs/03 says 2 s and nothing in the corpus says why ==="
+  );
+  console.log(
+    "§24.6 found the control plane alone asks for several times one radio's airtime at 60"
+  );
+  console.log(
+    "nodes, priced correctly. The interval is the lever that follows, and it has a hard"
+  );
+  console.log(
+    `ceiling: neighbour scores expire at NEIGHBOR_SCORE_TTL_MS ${NEIGHBOR_SCORE_TTL_MS / 1000} s, so an interval near`
+  );
+  console.log(
+    "that leaves one missed beacon — and BLE links lose packets routinely — long enough to"
+  );
+  console.log(
+    "drop a neighbour that is still there. Priced under radioOccupancy: airtime, because"
+  );
+  console.log(
+    "the question is capacity and the flat charge would put the same artefact in every arm.\n"
+  );
+
+  for (const [name, scenario] of [
+    ["campus_quad (20 nodes)", campusQuad],
+    ["festival_crowd (60 nodes)", festivalCrowd],
+  ] as Array<[string, (seed: number) => SimConfig]>) {
+    console.log(`  ${name}, mean of ${BEACON_SEEDS.length} seeds\n`);
+    console.log(
+      "  interval   radio demand   delivery   broadcast reach   overhead   avg hops   avg latency   OGMs sent   MPR suppressed   route expiries   per-seed broadcast reach"
+    );
+    const rows: BeaconRow[] = [];
+    for (const interval of BEACON_INTERVALS) {
+      const perSeed = BEACON_SEEDS.map((seed) => beaconRun(seed, scenario, interval));
+      const mean = (f: (r: BeaconRow) => number) =>
+        perSeed.reduce((a, r) => a + f(r), 0) / Math.max(1, perSeed.length);
+      rows.push({
+        interval,
+        demand: mean((r) => r.demand),
+        delivery: mean((r) => r.delivery),
+        reach: mean((r) => r.reach),
+        overhead: mean((r) => r.overhead),
+        hops: mean((r) => r.hops),
+        latency: mean((r) => r.latency),
+        control: mean((r) => r.control),
+        suppressed: mean((r) => r.suppressed),
+        expiries: mean((r) => r.expiries),
+      });
+      const r = rows[rows.length - 1];
+      console.log(
+        `  ${(interval === 2_000 ? "2 s (spec)" : `${interval / 1000} s`).padEnd(10)} ` +
+          `${(r.demand.toFixed(2) + "x").padStart(12)} ` +
+          `${((r.delivery * 100).toFixed(1) + "%").padStart(10)} ` +
+          `${((r.reach * 100).toFixed(1) + "%").padStart(17)} ` +
+          `${((r.overhead * 100).toFixed(0) + "%").padStart(10)} ` +
+          `${r.hops.toFixed(2).padStart(10)} ` +
+          `${fmt(r.latency).padStart(13)} ` +
+          `${r.control.toFixed(0).padStart(11)} ` +
+          `${r.suppressed.toFixed(0).padStart(16)} ` +
+          `${r.expiries.toFixed(0).padStart(16)}   ` +
+          // The spread, not just the mean: in a bimodal world the mean alone is what let a
+          // three-seed sample publish a result the eight-seed sample contradicts.
+          perSeed.map((x) => (x.reach * 100).toFixed(0)).join(" ")
+      );
+    }
+    const spec = rows[0];
+    const last = rows[rows.length - 1];
+    console.log(
+      `\n  Stretching the interval from the specified 2 s to ${last.interval / 1000} s cuts demanded radio time\n` +
+        `  ${(spec.demand.toFixed(2) + "x").padStart(6)} → ${(last.demand.toFixed(2) + "x")} and OGM transmissions ${(spec.control / Math.max(1, last.control)).toFixed(1)}× , and it costs delivery\n` +
+        `  ${((spec.delivery * 100).toFixed(1) + "%").padStart(6)} → ${((last.delivery * 100).toFixed(1) + "%")} with broadcast reach ${((spec.reach * 100).toFixed(1) + "%").padStart(6)} → ${((last.reach * 100).toFixed(1) + "%")}. Whether that trade is\n` +
+        `  worth making is a density question, so both worlds are printed rather than one\n` +
+        `  verdict: at 20 nodes and at 60 the same lever does not do the same thing.\n`
+    );
+  }
+  // --- the other lever: what one advertised neighbour costs on air -------------------
+  console.log(
+    "  The interval is not the only lever, and docs/03 §4 already names the other one: \"a\n" +
+      "  real deployment advertises 2-byte aliases (~60 B for 30 neighbours)\", where this\n" +
+      "  engine advertises the full 32-byte public key. §24.6 derived what that costs — a fully\n" +
+      "  loaded beacon is 1 270 B on public keys and 130 B on aliases, over the BLE ceiling in\n" +
+      "  the first case and far under it in the second. Since beacon *reception* dominates\n" +
+      "  demanded radio time, the encoding may be the bigger lever, so here both are measured at\n" +
+      "  the specified interval rather than either being asserted.\n"
+  );
+  console.log(
+    `  beacon size, typical (10 neighbours, 8 routes): ${ogmWireBytes(10, 8, 32)} B on public keys, ` +
+      `${ogmWireBytes(10, 8, 2)} B on aliases`
+  );
+  console.log(
+    `  beacon size, at both advertise limits (30, 8):  ${ogmWireBytes(30, 8, 32)} B on public keys, ` +
+      `${ogmWireBytes(30, 8, 2)} B on aliases (BLE ceiling ${BLE_MAX_BYTES} B)\n`
+  );
+  console.log("  scenario                     encoding     radio demand   delivery   broadcast reach   OGMs sent");
+  for (const [name, scenario] of [
+    ["campus_quad (20 nodes)", campusQuad],
+    ["festival_crowd (60 nodes)", festivalCrowd],
+  ] as Array<[string, (seed: number) => SimConfig]>) {
+    for (const [encName, aliasBytes] of [
+      ["32 B public key", 32],
+      ["2 B alias (§4)", 2],
+    ] as Array<[string, number]>) {
+      const perSeed = BEACON_SEEDS.map((seed) =>
+        beaconRun(seed, scenario, 2_000, aliasBytes)
+      );
+      const mean = (f: (r: BeaconRow) => number) =>
+        perSeed.reduce((a, r) => a + f(r), 0) / Math.max(1, perSeed.length);
+      console.log(
+        `  ${name.padEnd(28)} ${encName.padEnd(14)} ` +
+          `${(mean((r) => r.demand).toFixed(2) + "x").padStart(12)} ` +
+          `${((mean((r) => r.delivery) * 100).toFixed(1) + "%").padStart(10)} ` +
+          `${((mean((r) => r.reach) * 100).toFixed(1) + "%").padStart(17)} ` +
+          `${mean((r) => r.control).toFixed(0).padStart(11)}`
+      );
+    }
+  }
+  console.log(
+    "\n  Aliases cut the beacon, not the number of beacons, so `OGMs sent` is the same in both\n" +
+      "  rows and only the demand moves. The two levers are not interchangeable: an alias\n" +
+      "  shortens every beacon in a dense world without making any route staler, while a longer\n" +
+      "  interval thins them and trades freshness for airtime. Which one a deployment should\n" +
+      "  pull first is answered by the two tables above rather than argued here.\n" +
+      "\n" +
+      "  What neither tests: an interval that *adapts* to density, which is what the two\n" +
+      "  scenario tables together argue for and which docs/03 §1 does not propose. Making the\n" +
+      "  beacon interval a function of peer count is a routing change with its own convergence\n" +
+      "  question — a node that slows its beacons because it has many neighbours is exactly the\n" +
+      "  node its neighbours most need to hear from — so it is named here as the follow-up\n" +
+      "  rather than swept. docs/06 §24.7.\n"
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 16. Why a 60-node crowd has two modes, and the two explanations that failed
+// ---------------------------------------------------------------------------
+
+interface ReachRow {
+  seed: number;
+  reach: number;
+  delivery: number;
+  suppressed: number;
+  overhead: number;
+  /** Component sizes of the radio graph at the end of the window, largest first. */
+  components: number[];
+}
+
+function reachRun(
+  seed: number,
+  interval: number,
+  policy: RelayPolicy
+): ReachRow {
+  const sim = new MeshSimulation({
+    ...festivalCrowd(seed),
+    radioOccupancy: "airtime",
+    ogmIntervalMs: interval,
+    relayPolicy: policy,
+  });
+  sim.runFor(90_000);
+  sim.refresh();
+  sim.clearRecords();
+  sim.injectTraffic(30, 40_000);
+  sim.runFor(60_000);
+  sim.refresh();
+  const components = componentSizes(sim);
+  return {
+    seed,
+    reach: sim.stats.broadcastReach,
+    delivery: sim.stats.deliveryRatio,
+    suppressed: sim.stats.mprSuppressed,
+    overhead: sim.stats.overheadRatio,
+    components,
+  };
+}
+
+const REACH_SEEDS = [42, 7, 1234, 99, 2024, 31337, 555, 8];
+
+/**
+ * Component sizes of the radio graph — who can hear whom — largest first.
+ *
+ * Used both at the end of a window and, in `reachSampled`, repeatedly during one, because a
+ * graph measured once after 60 s of mobility is not the graph the broadcasts had to cross.
+ */
+function componentSizes(sim: MeshSimulation): number[] {
+  const nodes = sim.nodes;
+  const adj = new Map<NodeId, NodeId[]>();
+  for (const n of nodes) adj.set(n.id, peersInRange(n, nodes, sim.rf).map((p) => p.id));
+  const seen = new Set<NodeId>();
+  const out: number[] = [];
+  for (const n of nodes) {
+    if (seen.has(n.id)) continue;
+    let size = 0;
+    const stack = [n.id];
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      size++;
+      for (const nb of adj.get(id) ?? []) if (!seen.has(nb)) stack.push(nb);
+    }
+    out.push(size);
+  }
+  out.sort((a, b) => b - a);
+  return out;
+}
+
+interface SampledRow {
+  seed: number;
+  reach: number;
+  /** Fraction of in-window samples at which every node could reach every other. */
+  connectedFrac: number;
+  /** Mean largest-component share of the network across those samples. */
+  meanLargest: number;
+  /** Largest-component share at the end of the window, for comparison. */
+  finalLargest: number;
+}
+
+/** How many samples to take inside the 60 s window, and how far apart. */
+const SAMPLES = 6;
+const SAMPLE_STEP_MS = 10_000;
+
+function reachSampled(seed: number, interval: number): SampledRow {
+  const sim = new MeshSimulation({
+    ...festivalCrowd(seed),
+    radioOccupancy: "airtime",
+    ogmIntervalMs: interval,
+  });
+  sim.runFor(90_000);
+  sim.refresh();
+  sim.clearRecords();
+  sim.injectTraffic(30, 40_000);
+  let connected = 0;
+  let largestSum = 0;
+  for (let i = 0; i < SAMPLES; i++) {
+    sim.runFor(SAMPLE_STEP_MS);
+    sim.refresh();
+    const comps = componentSizes(sim);
+    if (comps.length === 1) connected++;
+    largestSum += comps[0] / sim.nodes.length;
+  }
+  const final = componentSizes(sim);
+  return {
+    seed,
+    reach: sim.stats.broadcastReach,
+    connectedFrac: connected / SAMPLES,
+    meanLargest: largestSum / SAMPLES,
+    finalLargest: final[0] / sim.nodes.length,
+  };
+}
+
+function reachTable(): void {
+  console.log(
+    "\n=== 16. Why a 60-node crowd has two modes, and the two explanations that failed ==="
+  );
+  console.log(
+    "§24.8 found `festival_crowd` bimodal: broadcast reach lands either near 98% or between"
+  );
+  console.log(
+    "50 and 79%, and which seeds are weak differs per arm. Two explanations are obvious, and"
+  );
+  console.log(
+    "both are testable here — one from the radio graph, one from the forwarding policy.\n"
+  );
+
+  console.log("  Hypothesis 1: the crowd partitions, so a broadcast cannot reach everyone.\n");
+  console.log("  interval   seed     reach   components (largest first)");
+  for (const interval of [2_000, 12_000]) {
+    for (const seed of REACH_SEEDS) {
+      const r = reachRun(seed, interval, "mpr");
+      const split = r.components.length > 1 ? "  <-- SPLIT" : "";
+      console.log(
+        `  ${(interval / 1000 + " s").padEnd(10)} ${String(seed).padEnd(8)} ` +
+          `${((r.reach * 100).toFixed(0) + "%").padStart(5)}   ` +
+          `[${r.components.slice(0, 4).join(", ")}] of ${r.components.reduce((a, b) => a + b, 0)}${split}`
+      );
+    }
+    console.log("");
+  }
+  console.log(
+    "  Partly true and not the story. At 2 s two of eight seeds split 40/20, and both are\n" +
+      "  weak-reach seeds — so for those the ceiling is the component the sender is in, not a\n" +
+      "  routing failure. But a weak seed at 2 s (2024, 79%) is fully connected, and at 12 s\n" +
+      "  **all eight worlds are connected** while reach still spans 55-98%. Partitioning\n" +
+      "  explains two rows of sixteen and cannot explain the mode.\n"
+  );
+
+  console.log("  Hypothesis 2: stale two-hop views make MPR suppress the only path.\n");
+  console.log("  interval   policy      reach   delivery   MPR suppressed   overhead   per-seed reach");
+  for (const interval of [2_000, 12_000]) {
+    for (const policy of ["mpr", "flood-all"] as RelayPolicy[]) {
+      const rows = REACH_SEEDS.map((seed) => reachRun(seed, interval, policy));
+      const mean = (f: (r: ReachRow) => number) =>
+        rows.reduce((a, r) => a + f(r), 0) / Math.max(1, rows.length);
+      console.log(
+        `  ${(interval / 1000 + " s").padEnd(10)} ${policy.padEnd(11)} ` +
+          `${((mean((r) => r.reach) * 100).toFixed(1) + "%").padStart(6)} ` +
+          `${((mean((r) => r.delivery) * 100).toFixed(1) + "%").padStart(10)} ` +
+          `${mean((r) => r.suppressed).toFixed(0).padStart(16)} ` +
+          `${((mean((r) => r.overhead) * 100).toFixed(0) + "%").padStart(10)}   ` +
+          rows.map((r) => (r.reach * 100).toFixed(0)).join(" ")
+      );
+    }
+    console.log("");
+  }
+  console.log(
+    "  Refuted. `flood-all` suppresses nothing at all and spends roughly six times the\n" +
+      "  overhead, and the weak mode survives it: per-seed reach under flood-all still reads\n" +
+      "  42%, 55% and 66% at 2 s, where MPR gave 79%, 54% and 87%. At 2 s flooding is\n" +
+      "  *worse* on the mean (81.8% against 86.5%) despite unlimited retransmission. A\n" +
+      "  forwarding policy that cannot be improved by removing the forwarding policy is not\n" +
+      "  what is limiting reach.\n"
+  );
+
+  console.log(
+    "  Hypothesis 3: the graph measured at the *end* of the window is not the graph the\n" +
+      `  broadcasts had to cross. Sampled ${SAMPLES} times inside it, ${SAMPLE_STEP_MS / 1000} s apart.\n`
+  );
+  console.log("  interval   seed     reach   connected samples   mean largest component   largest at the end");
+  for (const interval of [2_000, 12_000]) {
+    for (const seed of REACH_SEEDS) {
+      const r = reachSampled(seed, interval);
+      console.log(
+        `  ${(interval / 1000 + " s").padEnd(10)} ${String(seed).padEnd(8)} ` +
+          `${((r.reach * 100).toFixed(0) + "%").padStart(5)} ` +
+          `${`${(r.connectedFrac * 100).toFixed(0)}% of ${SAMPLES}`.padStart(21)} ` +
+          `${((r.meanLargest * 100).toFixed(0) + "%").padStart(23)} ` +
+          `${((r.finalLargest * 100).toFixed(0) + "%").padStart(19)}`
+      );
+    }
+    console.log("");
+  }
+
+  console.log(
+    "  Confirmed, and it reverses the verdict on hypothesis 1. Reach tracks the connectivity\n" +
+      "  *inside* the window, not the snapshot after it: every seed connected for all six\n" +
+      "  samples reaches 98%, and every seed that was split for any of them lands between 54%\n" +
+      "  and 93%, in proportion to how much of the window was split. At 12 s seed 2024 is\n" +
+      "  connected for 17% of samples with a mean largest component of 72% — and reaches 55%,\n" +
+      "  while the end-of-window table reports it as fully connected, because the crowd had\n" +
+      "  re-joined by then. So the two modes are one phenomenon: 60 mobile nodes in this area\n" +
+      "  split and re-join repeatedly, a broadcast sent while the graph is split cannot reach\n" +
+      "  the other side, and reach averaged over the window lands wherever the split left it.\n" +
+      "\n" +
+      "  Hypothesis 1 was not wrong about the mechanism, only about when to look for it, and\n" +
+      "  the end-of-window component table it used cannot see a partition that has healed.\n" +
+      "  Hypothesis 2 stays refuted: flooding does not help, because a broadcast cannot cross a\n" +
+      "  gap that exists at the moment it is sent, however many copies are made.\n" +
+      "\n" +
+      "  What this leaves untested, and worth naming: a receiver asleep inside its duty-cycle\n" +
+      "  window when the broadcast passes, which scansSkippedAsleep would quantify per seed, and\n" +
+      "  queue shedding under the crowd's own load, which §12.14 measured as mostly the source's\n" +
+      "  own. Neither is needed to explain the bimodality now. docs/06 §24.10.\n" +
+      "\n" +
+      "  One thing that fell out and is worth keeping: MPR's overhead against flood-all in the\n" +
+      "  densest scenario, on eight seeds, is 2 319% against 17 728% at 2 s and 2 662% against\n" +
+      "  14 857% at 12 s — **13% and 18% of flood-all**, against skills/02's acceptance target\n" +
+      "  of \u226470%, while delivering *more* reach at 2 s. That target is met here by a wide\n" +
+      "  margin, and this is the first place it has been measured in a 60-node world.\n"
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 17. Deriving the beacon interval from density: §24.7's follow-up, measured and
+//     rejected. The connectivity columns are why it can be rejected honestly.
+// ---------------------------------------------------------------------------
+
+interface IntervalModeRow {
+  delivery: number;
+  reach: number;
+  demand: number;
+  ogms: number;
+  connected: number;
+  largest: number;
+}
+
+function intervalModeRun(
+  seed: number,
+  scenario: (seed: number) => SimConfig,
+  mode: SimConfig["ogmIntervalMode"],
+  mobility: boolean
+): IntervalModeRow {
+  const sim = new MeshSimulation({
+    ...scenario(seed),
+    radioOccupancy: "airtime",
+    ogmIntervalMode: mode,
+    // Held still for one arm on purpose: with mobility on, changing the beacon schedule
+    // diverges the world, and in a bimodal scenario eight seeds is not enough to tell a
+    // lever's effect from which mode each seed happened to land in. With mobility off the
+    // two arms share a topology by construction, so the comparison isolates the interval —
+    // which is what §24.11 said the verdict needed and §24.12 supplies.
+    enableMobility: mobility,
+  });
+  sim.runFor(90_000);
+  sim.refresh();
+  sim.clearRecords();
+  sim.injectTraffic(30, 40_000);
+  sim.runFor(60_000);
+  sim.refresh();
+  const st = sim.stats;
+  return {
+    delivery: st.deliveryRatio,
+    reach: st.broadcastReach,
+    demand: st.radioDemandRatio,
+    ogms: st.controlOverhead,
+    connected: st.connectedSampleShare,
+    largest: st.meanLargestComponent,
+  };
+}
+
+function intervalModeTable(): void {
+  console.log(
+    "\n=== 17. Deriving the beacon interval from density: the follow-up §24.7 argued for ==="
+  );
+  console.log(
+    "§24.7 found no single interval serving both densities: at 20 nodes stretching 2 s to 25 s"
+  );
+  console.log(
+    "costs nothing and cuts demanded radio time tenfold, while at 60 nodes 5 s beats the"
+  );
+  console.log(
+    "specified 2 s and everything longer degrades delivery. The obvious follow-up is to derive"
+  );
+  console.log(
+    "the interval per node instead of choosing one, stretching it in proportion to peer count"
+  );
+  console.log(
+    "so the receptions a node imposes stay constant, anchored so ten peers reproduces the"
+  );
+  console.log(
+    "specified 2 s. Eight seeds, three scenarios, priced under radioOccupancy: airtime.\n"
+  );
+  console.log(
+    "  scenario              mode      delivery    reach   radio demand   OGMs sent   connected   largest   per-seed delivery"
+  );
+  for (const [name, scenario, mobility] of [
+    ["sparse_village", sparseVillage, true],
+    ["campus_quad", campusQuad, true],
+    ["festival_crowd", festivalCrowd, true],
+    ["festival_crowd static", festivalCrowd, false],
+  ] as Array<[string, (seed: number) => SimConfig, boolean]>) {
+    const means = new Map<string, IntervalModeRow>();
+    const perSeed = new Map<string, string>();
+    for (const mode of ["fixed", "density"] as SimConfig["ogmIntervalMode"][]) {
+      const rows = BEACON_SEEDS.map((seed) =>
+        intervalModeRun(seed, scenario, mode, mobility)
+      );
+      // Printed beside the mean because the mean is not the finding: §24.12's delivery gain in
+      // the static crowd is four seeds better, two worse and two level, with most of the mean
+      // coming from one seed. A reader who cannot see that cannot tell a lever from a sample.
+      perSeed.set(mode, rows.map((r) => (r.delivery * 100).toFixed(0)).join(" "));
+      const mean = (f: (r: IntervalModeRow) => number) =>
+        rows.reduce((a, r) => a + f(r), 0) / Math.max(1, rows.length);
+      const m = {
+        delivery: mean((r) => r.delivery),
+        reach: mean((r) => r.reach),
+        demand: mean((r) => r.demand),
+        ogms: mean((r) => r.ogms),
+        connected: mean((r) => r.connected),
+        largest: mean((r) => r.largest),
+      };
+      means.set(mode, m);
+      console.log(
+        `  ${name.padEnd(16)} ${mode.padEnd(9)} ` +
+          `${((m.delivery * 100).toFixed(1) + "%").padStart(8)} ` +
+          `${((m.reach * 100).toFixed(1) + "%").padStart(8)} ` +
+          `${(m.demand.toFixed(2) + "x").padStart(14)} ` +
+          `${m.ogms.toFixed(0).padStart(11)} ` +
+          `${((m.connected * 100).toFixed(0) + "%").padStart(21)} ` +
+          `${((m.largest * 100).toFixed(0) + "%").padStart(23)}   ` +
+          rows.map((r) => (r.delivery * 100).toFixed(0)).join(" ")
+      );
+    }
+    const f = means.get("fixed")!;
+    const d = means.get("density")!;
+    console.log(
+      `  ${"".padEnd(16)} ${"Δ".padEnd(9)} ` +
+        `${(((d.delivery - f.delivery) * 100).toFixed(1) + " pts").padStart(8)} ` +
+        `${"".padStart(8)} ` +
+        `${((d.demand / f.demand).toFixed(2) + "x").padStart(14)} ` +
+        `${((d.ogms / f.ogms).toFixed(2) + "x").padStart(11)} ` +
+        `   topology comparable: ${Math.abs(d.largest - f.largest) < 0.03 ? "yes" : "NO — read §24.10 first"}`
+    );
+    console.log("");
+  }
+  console.log(
+    "  Read the last line of each pair before the rest, because it decides whether the pair\n" +
+      "  means anything. §24.10 showed reach tracks the largest in-window component, so two\n" +
+      "  arms whose connectivity differs are not a comparison of what was changed.\n" +
+      "\n" +
+      "  sparse_village and campus_quad are comparable — both modes land in the same topology\n" +
+      "  — and in both the derived interval buys no delivery and costs airtime: 3.1x the\n" +
+      "  demanded radio time for 1.6 points in the village, 1.2x for a loss of 0.7 on campus.\n" +
+      "  The mechanism is the clamp's floor: a node with three peers beacons every 500 ms,\n" +
+      "  four times the specified rate, to hold a reception load nobody was struggling with.\n" +
+      "\n" +
+      "  festival_crowd is where the derived interval saves airtime, 5.7x down to 3.3x, and it\n" +
+      "  is exactly where the comparison cannot be read: the two modes land in different\n" +
+      "  topologies (mean largest component 94% against 85%), so the 8.6-point delivery gap\n" +
+      "  cannot be attributed to the interval. That is not a defence of the lever — it is the\n" +
+      "  reason the verdict rests on the two scenarios where the topology is comparable.\n" +
+      "\n" +
+      "  The fourth pair is the one that settles it, and it was added after the first three.\n" +
+      "  With mobility off the two arms share a topology by construction — same connected share,\n" +
+      "  same mean largest component, and the same per seed, not only on average — so the\n" +
+      "  comparison isolates the interval instead of measuring which mode each seed landed in.\n" +
+      "  There the derived interval takes 44% off the demanded radio time and 44% off the\n" +
+      "  beacons, which is what the rule does and so does not depend on any seed. Read the\n" +
+      "  per-seed delivery column before believing anything else about it: better on four\n" +
+      "  seeds, worse on three, level on one, with most of the +2.5-point mean coming from one\n" +
+      "  seed going 45 to 67. Reach is the stronger claim, equal or better in seven of eight.\n" +
+      "  So the lever is cheaper and does not cost reach, and it does not buy delivery; the\n" +
+      "  mobile crowd cannot say anything at all, because changing the beacon schedule diverges\n" +
+      "  a bimodal world and eight seeds cannot resolve that.\n" +
+      "\n" +
+      "  What ships is still fixed, and now for a more precise reason than §24.11 gave: the\n" +
+      "  lever is shown to help where the topology can be held equal and shown to be unreadable\n" +
+      "  where it cannot, and the shipped condition is the one where it cannot. Turning it on\n" +
+      "  would mean changing docs/03 §4's 2 s on evidence from a static network. docs/06\n" +
+      "  §24.11-§24.12.\n"
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 18. Adaptive scan intervals: docs/05 §1.2's third mitigation row, built and
+//     measured — including whether the engine can charge for what it saves.
+// ---------------------------------------------------------------------------
+
+interface ScanRow {
+  battNormal: number;
+  battSuper: number;
+  scans: number;
+  awake: number;
+  skipped: number;
+  delivery: number;
+}
+
+function scanRun(
+  seed: number,
+  scenario: (seed: number) => SimConfig,
+  mode: SimConfig["scanIntervalMode"],
+  duty: boolean
+): ScanRow {
+  const sim = new MeshSimulation({
+    ...scenario(seed),
+    scanIntervalMode: mode,
+    dutyCycleEnabled: duty,
+  });
+  sim.runFor(90_000);
+  sim.refresh();
+  sim.clearRecords();
+  sim.injectTraffic(30, 40_000);
+  sim.runFor(60_000);
+  sim.refresh();
+  const st = sim.stats;
+  return {
+    battNormal: st.batteryPercentPerHourNormal,
+    battSuper: st.batteryPercentPerHourSuper,
+    scans: st.scansPerSec,
+    awake: st.awakeRatio,
+    skipped: st.scansSkippedAsleep,
+    delivery: st.deliveryRatio,
+  };
+}
+
+function scanIntervalTable(): void {
+  console.log(
+    "\n=== 18. Adaptive scan intervals: docs/05 §1.2's third row, and what the engine can charge for ==="
+  );
+  console.log(
+    "§1.2's mitigation table lists three layers and its third is \"Adaptive scan intervals —\n"
+  );
+  console.log(
+    "scan interval scales with peer density: dense = shorter interval (peers stable), sparse =\n"
+  );
+  console.log(
+    "longer (fewer discoveries expected)\", with the expected impact \"reduces redundant\n"
+  );
+  console.log(
+    "wake-ups\". `scanIntervalMode: \"density\"` implements it, anchored so ten peers reproduces\n"
+  );
+  console.log(
+    "the configured interval and clamped to a quarter..four times it. Eight seeds.\n"
+  );
+  console.log(
+    "  scenario         duty   mode      NORMAL %/h   SUPER %/h   scans/s   awake   scans slept   delivery"
+  );
+  for (const [name, scenario] of [
+    ["sparse_village", sparseVillage],
+    ["campus_quad", campusQuad],
+    ["festival_crowd", festivalCrowd],
+  ] as Array<[string, (seed: number) => SimConfig]>) {
+    for (const duty of [true, false]) {
+      const rows = new Map<string, ScanRow>();
+      for (const mode of ["fixed", "density"] as SimConfig["scanIntervalMode"][]) {
+        const perSeed = SCAN_SEEDS.map((seed) => scanRun(seed, scenario, mode, duty));
+        const mean = (f: (r: ScanRow) => number) =>
+          perSeed.reduce((a, r) => a + f(r), 0) / Math.max(1, perSeed.length);
+        const m = {
+          battNormal: mean((r) => r.battNormal),
+          battSuper: mean((r) => r.battSuper),
+          scans: mean((r) => r.scans),
+          awake: mean((r) => r.awake),
+          skipped: mean((r) => r.skipped),
+          delivery: mean((r) => r.delivery),
+        };
+        rows.set(mode, m);
+        console.log(
+          `  ${name.padEnd(16)} ${(duty ? "on" : "off").padEnd(6)} ${mode.padEnd(9)} ` +
+            `${m.battNormal.toFixed(3).padStart(11)} ` +
+            `${m.battSuper.toFixed(3).padStart(11)} ` +
+            `${m.scans.toFixed(2).padStart(9)} ` +
+            `${((m.awake * 100).toFixed(1) + "%").padStart(7)} ` +
+            `${m.skipped.toFixed(0).padStart(13)} ` +
+            `${((m.delivery * 100).toFixed(1) + "%").padStart(10)}`
+        );
+      }
+      const f = rows.get("fixed")!;
+      const d = rows.get("density")!;
+      console.log(
+        `  ${"".padEnd(16)} ${"".padEnd(6)} ${"Δ".padEnd(9)} ` +
+          `${(((d.battNormal - f.battNormal) / Math.max(1e-9, f.battNormal)) * 100).toFixed(1).padStart(10)}% ` +
+          `${(((d.battSuper - f.battSuper) / Math.max(1e-9, f.battSuper)) * 100).toFixed(1).padStart(10)}% ` +
+          `${((d.scans / Math.max(1e-9, f.scans) - 1) * 100).toFixed(0).padStart(8)}% ` +
+          `${"".padStart(7)} ` +
+          `${"".padStart(13)} ` +
+          `${(((d.delivery - f.delivery) * 100).toFixed(1) + " pts").padStart(10)}`
+      );
+    }
+    console.log("");
+  }
+  console.log(
+    "  Two results, and the second is the one that matters.\n" +
+      "\n" +
+      "  The row does what it says. Scans per second fall about 70% in sparse_village (8.29 to\n" +
+      "  2.45 with the duty cycle on, 15.80 to 4.72 without) and rise about 75% in\n" +
+      "  festival_crowd (58.2 to 102.2, and 92.1 to 160.1), with campus_quad in between at\n" +
+      "  -11%. Sparse scans less, dense scans sooner, anchored at ten peers.\n" +
+      "\n" +
+      "  And the claimed benefit is not measurable in this engine. Look at the battery columns:\n" +
+      "  cutting scans by 70% in sparse_village changes NORMAL drain from 1.331 to 1.331 %/h and\n" +
+      "  SUPER from 1.875 to 1.875 — identical to three decimals — because `batteryDrain` charges\n" +
+      "  the duty-cycle *window* (`isAwake`, `sleepDrainFactor`) and not the scan events inside\n" +
+      "  it. Everywhere else the battery moves by 2% or less and in both directions, which is\n" +
+      "  noise. So 'reduces redundant wake-ups' is true of the wake-up count and invisible to\n" +
+      "  only currency §1.2 states its impact in. This is the third time this document has hit the\n" +
+      "  same wall: §24.1 found no cost for the Wi-Fi Direct group-owner role, §24.3 found no\n" +
+      "  per-packet term, and here there is no per-scan term. The battery model is a role-based\n" +
+      "  hourly rate, and a mitigation that works by doing less of something cannot be priced by\n" +
+      "  it. Saying so is the finding; inventing a millijoule-per-scan constant to make the row\n" +
+      "  evaluate would be measuring a guess.\n" +
+      "\n" +
+      "  What the row does buy is delivery, and it buys it by *spending* wake-ups rather than\n" +
+      "  saving them: +6.8 points in festival_crowd with the duty cycle on (82.5 to 89.4%) and +5.8\n" +
+      "  without (92.0 to 97.8%), +1.0 on campus, nothing in the sparse village where there is\n" +
+      "  little to discover either way. That inverts §1.2's framing for the dense case — there,\n" +
+      "  'dense = shorter interval' is a delivery lever with a battery cost the engine cannot\n" +
+      "  charge, not a saving. Whether the trade is worth making needs a device, and §1.2's own\n" +
+      "  mitigation table is where that question belongs. docs/06 §24.15.\n"
+  );
+}
+
 function main(): void {
   console.log("Duman media transport probe — every number below is measured, not assumed.");
   console.log(
@@ -1784,6 +2693,11 @@ function main(): void {
     ["shedding", sheddingTable],
     ["captureEffect", captureEffectTable],
     ["captureMargin", captureMarginTable],
+    ["occupancy", occupancyTable],
+    ["beacon", beaconTable],
+    ["reach", reachTable],
+    ["intervalMode", intervalModeTable],
+    ["scanInterval", scanIntervalTable],
   ];
   if (only && !sections.some(([name]) => name === only)) {
     console.error(`unknown section "${only}". one of: ${sections.map(([name]) => name).join(", ")}`);

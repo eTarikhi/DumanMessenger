@@ -552,6 +552,22 @@ radio a phone actually has.
 > yet and made queueing look substantially worse than it is. §12.11 documents the defect
 > and what each table said before it was fixed; the tables below are the corrected ones.
 
+> **Every number in this section is also a property of one occupancy model** (`docs/06`
+> §24.6). A packet here holds a radio for the calibrated hop latency — 120 ms on BLE —
+> whatever its size, because `hopLatencyBleMs` was calibrated to include one full-sized GATT
+> write. That is right at 1 024 B and over-charges everything below it: a 256 B padded text
+> is 25.6 ms of airtime at the modelled bit rate, and a beacon (which §24.6 derives at 630 B
+> typically) is 63 ms. Charging each packet its own size instead, behind
+> `radioOccupancy: "airtime"`, moves this section's magnitudes considerably and **not always
+> the same way**: under `csma` in `festival_crowd` delivery goes 68.5 % → 74.1 % and
+> deferrals halve (12 649 → 6 707) over eight seeds, and `campus_quad` reaches 100 % on all
+> eight with broadcast reach 57.8 % → 81.6 %; under `half-duplex` in the same crowd delivery
+> goes the other way by about two points, on a three-seed measurement that `docs/06` §24.8
+> says is too thin to quote a magnitude from.
+> The *directions* below survive — a queue still earns back what collisions cost, capture
+> still takes over as the margin rises, a media load gate still costs what it says it costs —
+> but the drop and deferral counts are the flat-charge world's, and are quoted here as such.
+
 `channelAccess: "free"` ships and is the default: an infinitely wide radio, exactly what
 every number in this document before §12 was measured under, golden vectors byte-identical
 included. `"halfDuplex"` gives each device one transmitter doing one thing at a time —
@@ -725,17 +741,26 @@ would silently redefine every acceptance number in the roadmap.
   note cannot keep up with its own capture clock on one radio (§12.3). Either the path is
   capped at two hops for streaming and longer notes are sent as blobs, or voice gets
   priority in the transmit queue — which §12.8 measures, and which does not rescue it.
-* The receiver is modelled by `channelCapture` (§12.9) and it is where most of the contention
-  lives. Carrier sense is modelled too (§12.10) and is the pessimistic arm.
+* The receiver is modelled by `channelCapture`, and it is where most of the contention lives.
+  §12.9 gave it two arms — `none`, which takes everything however busy it is, and `first`, which
+  locks onto whichever packet arrived first and is the pessimistic bound that produced the
+  13.6-point figure every later section quotes. §12.15 added the third, `strongest`, which lets a
+  newcomer that is enough stronger take the receiver over. Carrier sense is modelled too (§12.10)
+  and is the pessimistic arm on the transmitter side.
 * Backpressure is modelled at the sender only (§12.12), where it halves a one-peer
   transfer's drops and its time, and does nothing for a mesh — because the queue that
   overflows in a mesh belongs to a relay.
-* Still unmodelled, with the direction of each error named: a capture effect that compares
-  signal strengths rather than arrival order (optimistic), a contention window with random
-  backoff (pessimistic — two nodes that defer for each other are separated only by event
-  ordering), RTS/CTS for the hidden terminal (optimistic, and a test pins that carrier sense
-  cannot fix it), and backpressure from the radio to the layers above it (§12.10's verdict:
-  the missing half).
+* Modelled after this list was first written, each with a measurement behind it and neither of
+  them a rescue: the capture effect that compares signal strengths rather than arrival order
+  (`channelCapture: "strongest"` with `channelCaptureRatioDb`, §12.15 — it moves the loss from the
+  newcomer to the incumbent instead of removing it, and one packet is lost either way); and the
+  contention window with random backoff (`channelBackoff: "binary"`, §12.13 — queue drops run
+  1 994–3 466 against 273–394 receiver collisions, roughly eight packets shed at the buffer for
+  every one the window prevents, so the binding loss is buffering and not collision).
+* Still unmodelled, with the direction of each error named: RTS/CTS for the hidden terminal
+  (optimistic, and a test pins that carrier sense cannot fix it), and backpressure from a *relay's*
+  radio up to the layers above it — the half of §12.10's verdict that §12.12 deliberately did not
+  build, because a sender can throttle itself and a relay has no way to tell the sender to.
 
 ### 12.8 Which packet a busy radio takes next
 
@@ -1301,7 +1326,7 @@ npm run media                                            # TypeScript probe, eve
 npm run media -- backoff                                 # one section; also `shedding`, `captureEffect`, `captureMargin`. The whole probe is minutes of simulation
 dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media --no-check
 npm test                                                 # 276 TS tests, incl. 18 media cases and the 29-case §12 radio block
-cd sim/mesh_sim && dart test                             # 197 Dart cases, incl. 18 media and test/channel_test.dart
+cd sim/mesh_sim && dart test                             # the Dart suite, incl. 18 media cases and test/channel_test.dart
 ```
 
 Engine surface: `sendFile(from, to, bytes, {chunkBytes, window, transport})`,

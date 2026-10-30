@@ -1,0 +1,37 @@
+{
+  "baselineCheckout": "c74b164d0a7c76a59572ef23d2648d4f36106050",
+  "runtimeImplementationVerified": "19024abcba6d7ba83ee86c981781715536d7fde3",
+  "rawCapturesFromWorkingDevelopmentTree": true,
+  "trainingCodeHashMatchesCommit": "adac00d",
+  "traffic": {
+    "messages": 150,
+    "gapMs": 1500,
+    "drainMs": 0,
+    "type": "text",
+    "plan": "existing acceptance traffic PRNG salt"
+  },
+  "instrumentationByFile": {
+    "targeted.json": {
+      "motionSeed": null,
+      "selectorOptions": null
+    },
+    "exogenous.json": {
+      "motionSeed": 31415,
+      "selectorOptions": null
+    },
+    "final-holdout.json": {
+      "motionSeed": null,
+      "selectorOptions": null
+    },
+    "shadow.json": {
+      "mode": "shadow",
+      "seed": 505,
+      "modelSHA256": "ef63fbf524cb9ad056a0bd91fb1360330ad87c2518b64af74a748b47b4319c95"
+    }
+  },
+  "datasetSHA256": "ee968856730ff99025953e59021a51a29033c1ff14c7b21b0fb31816d6b903b8",
+  "modelSHA256": "ef63fbf524cb9ad056a0bd91fb1360330ad87c2518b64af74a748b47b4319c95",
+  "exposedAuditSeed": 606,
+  "finalUntouchedSeed": 909,
+  "noModelRetuningOnHoldout": true
+}

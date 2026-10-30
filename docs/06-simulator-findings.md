@@ -6,7 +6,7 @@
 
 **Status:** engine implemented in two languages and executed in CI; every
 `skills/02` + `skills/08` simulator criterion met on the 20-node case they name,
-at **7-9%** of the naive-flood relay budget (§2). Power policy, the duty cycle and
+at **8-10%** of the naive-flood relay budget (§2). Power policy, the duty cycle and
 the Phase 2 telemetry are implemented and measured (§10) — the duty cycle is what
 brings NORMAL inside `skills/07`'s 15%-per-8h budget. SOS mode (roadmap Phase 3),
 hop transparency (roadmap Phase 4) and group channels (roadmap Phase 1) are
@@ -39,7 +39,9 @@ reproduces a run exactly — which is what makes the numbers below meaningful.
 
 - `skills/02` — *"Simulator 20 nodes: SUPER ratio 15-25%, delivery ≥90% at 3 hops, overhead ≤70% of flood-all."*
 - `skills/08` — *"CI simulator: 20-node seed → delivery ≥90% <5 hops, overhead ↓30% vs naive flood."*
-- `docs/04` §5 — latency budget *"1 hop < 2 s; 3 hops < 5 s"*.
+- `docs/02` §6 *Key Metrics to Hit* — latency budget *"Text delivery < 2s (1 hop), < 5s (3 hops)"*,
+  restated as the roadmap's Phase 1 exit criteria. (This line used to cite `docs/04` §5, which is
+  *Relay Privacy* and contains no latency figure; the budget is not published for 2 hops or 4.)
 - `docs/03` §5 — *"hysteresis: prevent SUPER flapping."*
 
 `delivery ≥90% <5 hops` is read as: **at least 90% of sent messages arrive
@@ -53,20 +55,42 @@ which is the baseline both criteria name.
 
 ### Measured — `campus_quad`, 20 nodes, 150 messages
 
-| seed | SUPER | delivery | ≤5 hops | relays: mpr / route-flood / flood-all | vs naive | vs route-only | flap/node·min | p95 |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 42 | 25% | 97.3% | 146/150 | 4 239 / 6 902 / 46 104 | **9%** | 61% | 0.06 | 1257 ms |
-| 7 | 25% | 98.7% | 148/150 | 3 315 / 4 638 / 47 998 | **7%** | 71% | 0.06 | 4537 ms |
-| 1234 | 25% | 100% | 150/150 | 4 959 / 7 408 / 52 770 | **9%** | 67% | 0.12 | 1141 ms |
-| 99 | 20% | 100% | 149/150 | 4 621 / 7 317 / 50 391 | **9%** | 63% | 0.08 | 4307 ms |
-| 2026 | 25% | 99.3% | 149/150 | 3 855 / 4 949 / 49 918 | **8%** | 78% | 0.22 | 1450 ms |
-| 555 | 25% | 97.3% | 146/150 | 4 168 / 7 065 / 47 538 | **9%** | 59% | 0.09 | 4536 ms |
+| seed | SUPER | delivery | ≤3 hops | ≤5 hops | relays: mpr / route-flood / flood-all | vs naive | vs route-only | flap/node·min | avg hops | p95 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 42 | 20% | 100% | 134/150 | 148/150 | 3 652 / 5 574 / 44 654 | **8%** | 66% | 0.08 | 2.03 | 4191 ms |
+| 7 | 25% | 99.3% | 139/150 | 149/150 | 4 271 / 5 071 / 46 018 | **9%** | 84% | 0.06 | 1.84 | 4395 ms |
+| 1234 | 25% | 100% | 144/150 | 150/150 | 4 755 / 7 357 / 50 877 | **9%** | 65% | 0.09 | 1.91 | 1114 ms |
+| 99 | 20% | 100% | 142/150 | 149/150 | 4 923 / 6 971 / 47 676 | **10%** | 71% | 0.08 | 1.94 | 4318 ms |
+| 2026 | 25% | 100% | 134/150 | 150/150 | 4 131 / 6 269 / 46 896 | **9%** | 66% | 0.14 | 2.01 | 1468 ms |
+| 555 | 20% | 100% | 140/150 | 150/150 | 4 444 / 6 334 / 45 242 | **10%** | 70% | 0.05 | 1.89 | 1226 ms |
 
-All four criteria hold on all six seeds: delivery ≥90%, ≥90% within five hops,
-SUPER 15-25%, no flapping — and **7-9% of the naive flood relay budget**, a
-91-93% reduction against the 30% required. MPR suppression is worth a further
-22-41% on top of routing (the "vs route-only" column). Most of the total saving
-is the routing layer, which is exactly why both columns are published (§6).
+*Provenance: re-measured 2026-10-28 at `3fdc638` with the acceptance suite's own `measure()` — six
+seeds, 150 messages, `channelAccess: "free"`, `channelCapture: "none"` — and cross-checked against
+the authoritative engine: CI run 40616278770's annotation for `campus_quad` seed 42 reports `relayTx` 3652, `routeFloodRelayTx` 5574,
+`floodAllRelayTx` 44654 and `latencyP95Ms` 4190.9395, the same numbers to the unit. It replaces a
+table published at `82d967a` that fifteen commits to `src/simulation.ts`, `src/routing.ts` and
+`src/election.ts` had overtaken: that one read delivery 97.3-100%, 146-150 within five hops and
+4 239 relays on seed 42. Nothing detects a stale measurement automatically — `check-docs.py`
+verifies that a citation resolves, not that the number behind it is current — so this table was
+wrong for four days in the direction that made the engine look worse than it is.*
+
+All four criteria hold on all six seeds: delivery ≥90% (**99.3-100%**, mean 99.9%), ≥90% within five
+hops (**98.7-100%**, mean 99.6%), SUPER 15-25% (**20-25%**), no flapping (**≤0.14** role changes per
+node per minute) — and **8-10% of the naive flood relay budget** (mean 9.3%), a 91% reduction
+against the 30% required. MPR suppression is worth a further **16-35%** on top of routing (the
+"vs route-only" column, mean 70%). Most of the total saving is the routing layer, which is exactly
+why both columns are published (§6).
+
+**Read at three hops — the wording `skills/02`'s acceptance box actually uses — the same six seeds
+give 89.3-96.0% (mean 92.6%), and two of the six fall short of 90% by one to two messages.** At five
+hops all six pass. Both readings are published per run (`deliveredWithinThreeHops` /
+`deliveredWithinFiveHops` in the Dart CLI's report, `withinThreeRatio` / `withinFiveRatio` in the
+acceptance suite) and pinned in `test-fixtures/golden-vectors.json`, so which one the criterion means
+is a decision to make, not a measurement to commission: finding **F2**,
+`reports/2026-10-27-remediation-report.html` §6. Do not derive either reading from `latencyByHop` —
+that table is scoped to first-attempt routed unicast (§17, and the comment in `simulation.ts` that
+builds it), so on seed 42 it holds 140 deliveries within five hops against the gate's 148, the eight
+missing being retries and DTN bundles.
 
 These are the numbers *after* the coverage gate in §5 and the tq fix in §6; the
 earlier "heard a SUPER" rule scored better on overhead only because it was
@@ -83,7 +107,7 @@ docs/02 §6 asks for, measured with the same three arms.
 | 7 | 18% | 95.3% | 134/150 | 37 400 / 74 574 / 286 597 | **13%** | 50% | 2.74 | 4756 ms |
 | 1234 | 22% | 91.3% | 124/150 | 35 737 / 84 841 / 299 466 | **12%** | 42% | 2.99 | 6352 ms |
 
-Naive flooding does reach 100% delivery here — for **7-9× the relays**. That
+Naive flooding does reach 100% delivery here — for **7.8-9.5× the relays**. That
 trade is the whole argument for a routing layer, and it is why the crowd's
 suppression test measures MPR against `route-flood` instead of demanding
 epidemic-level redundancy from a routing engine (§7).
@@ -282,7 +306,10 @@ still be fresh for a neighbour we have not heard it from.
 **Effect on the reference run** (golden vectors — `campus_quad`, seed 42, 20
 messages): delivery 18/20 → **20/20**, relays 383 → **253**, p95 latency
 1363 → **950 ms**. In the crowd: delivery 88.7-93.3% → **91.3-95.3%**,
-within-5-hops 80-85% → **82.7-89.3%**.
+within-5-hops 80-85% → **82.7-89.3%**. *(That is this fix's before/after, measured when it landed;
+the crowd re-measured 2026-10-28 reads 85.3-98.7% delivery over nine seeds and 77.3-92.3% within
+five hops — see "Still open" below, which carries the current figures and says which of them were
+re-measured and which were not.)*
 
 ### The baseline this exposed
 
@@ -292,14 +319,19 @@ arm began using the route table too, and the campus overhead ratio climbed to
 71-78%: the baseline had got better, not the engine worse. `flood-all` is now
 naive by construction — consulted before the route table — and `route-flood`
 exists so MPR's marginal contribution can be quoted separately. Both columns are
-in §2, because quoting only the 7-9% would hide that most of it is routing.
+in §2, because quoting only the 8-10% would hide that most of it is routing.
 
 ### Still open
 
-In the 60-node crowd **82.7-89.3%** of sent messages arrive within five hops
-(average 2.6-3.0, p95 4.8-6.4 s), against 97.3-100% in the 20-node case the
-criteria actually name. The tail is 9-12 messages arriving at exactly six hops —
-the ceiling a data `ttl` of 5 allows — plus 7-11 that expire.
+In the 60-node crowd **77.3-92.3%** of sent messages arrive within five hops (mean 86.0%) and
+**56.7-68.0%** within three (mean 63.3%), over the nine seeds the acceptance suite measures, at
+2.49-3.08 average hops — against 98.7-100% within five and 89.3-96.0% within three in the 20-node
+case the criteria actually name. Seed 42 reads 128 of 150 within five hops and 85 within three in
+both engines: the TypeScript measurement locally and CI run 40616278770's Dart annotation agree to
+the message, which is the cross-check §2's table now carries for the campus. *This paragraph
+previously read 82.7-89.3% within five hops, measured at `82d967a`; the range above is re-measured 2026-10-28 at `757c134`.* The tail decomposition beside it — 9-12 messages arriving at exactly six hops, the ceiling a data
+`ttl` of 5 allows, plus 7-11 that expire — was **not** re-measured and still describes the engine as
+of `82d967a`; §16 below is the analysis that supersedes it.
 
 **§16 takes this apart and closes the investigation.** Over six seeds the figure is
 84.1%, and the tail decomposes into 2.2% geometric (BFS distance ≥ 6 at send time),
@@ -351,7 +383,7 @@ Two rules follow, both learned the hard way (§6). A baseline must not silently
 share the mechanism under test — `flood-all` consulting the route table made the
 overhead ratio meaningless the moment routing started working. And a suppression
 mechanism must be judged against the arm that differs from it by suppression
-only: naive epidemic flooding reaches 100% delivery in the crowd by spending 7-9×
+only: naive epidemic flooding reaches 100% delivery in the crowd by spending 7.8-9.5×
 the relays, so "within 5 points of flood-all" is not a test of MPR, it is a
 demand for epidemic redundancy. That comparison is also made on the **mean across
 seeds**, because 150 messages through a chaotic 60-node world carries several
@@ -416,6 +448,14 @@ means real drift:
   float aggregates use a tolerance; spawn geometry uses 1e-6.
 - **`destHint`.** Both engines use the same 32-bit string hash
   (`h = h*31 + charCode`, truncated to 8 hex chars) so routing hints agree.
+  This is **not** the `destHint8` of `docs/04` §4 and `skills/03` — that one is the
+  first 8 bytes of `SHA-256(destPubKey)`, implemented as `destHintBytes` in
+  `src/crypto/identity.ts`. The engine's field is a routing decoration that appears in
+  golden vectors, so it cannot be changed to match the spec without moving every
+  vector in both languages; what changed instead is the comment on `MeshMessage`,
+  which described it as a truncated hash of the destination pubkey and was wrong twice
+  over. Neither field hides an identity, and `docs/07` §6 says why: a truncated hash of
+  a public key is a prefix of the `nodeId` that `docs/02` §2 broadcasts every 2 s.
 
 ## 10. Power policy: the sleep slot is what makes the battery budget work
 
@@ -525,14 +565,27 @@ stay where they are.
 showing a net gain), `scansPerSec`, `relaysPerSec`, `scansSkippedAsleep`,
 `awakeRatio`, `electionEvents` (`skills/02`: *"DO log `electionEvents` for
 tuner"*), and `latencyByHop` — count/avg/p95 per hop bucket for first-attempt
-non-DTN unicast, the same scope as the docs/04 §5 budget, so a retry (a whole ACK
+non-DTN unicast, the same scope as the `docs/02` §6 latency budget, so a retry (a whole ACK
 timeout) or a DTN bundle (a meeting time, not a transport time) cannot smear the
 distribution. The React visualiser renders these in a metrics dashboard panel;
 `dart run bin/mesh_sim.dart --json` emits them, including the hop table.
 
-Wake-locks (`skills/07`'s fourth telemetry item) are deliberately **not**
-modelled: they are an Android API artefact with no mesh-protocol counterpart, and
-a simulator that invented a number for it would be measuring its own guess.
+Wake-locks (`skills/07`'s fourth telemetry item) were deliberately **not**
+modelled when this section was written: they are an Android API artefact with no
+mesh-protocol counterpart, and a simulator that invented a number for it would be
+measuring its own guess.
+
+> **Amendment (Oct 2026 — superseded by §24).** Wake-locks are now counted, and the
+> objection above is what shaped how. It applies to *inventing a cost per lock*, which is
+> still not done: the accounting charges only durations the engine already computed for its
+> contention model — `occupied` on the way out, `airTime` on the way in — plus one beacon
+> duration at the engine's existing per-hop unit. Summing a number the model already
+> produces is accounting, not guessing. What §24 then found is the reason the accounting was
+> worth adding: it shows the model demanding **3.9×** the radio time that exists, and it
+> shows the documented 4× battery gap between roles resting on a calibrated constant in
+> `src/rf.ts` while the counted activity supports **1.14×**. Both findings are against this
+> engine's own assumptions, which is the opposite of a simulator measuring its own guess —
+> and neither was reachable while the fourth telemetry item went unreported.
 
 
 ---
@@ -710,7 +763,10 @@ Dart job compares against the same fixture, so agreement is checked, not assumed
 - The per-seed `mpr / route-flood ≤ 0.85` pin measured **0.947** on seed 42 after
   the guard. Cause, from the cold-start A/B: `route-flood` is the arm that floods
   most, so it was the arm most inflated by the amplifier — on that seed its
-  transmissions fell 37% (6 902 → 4 315) while MPR's fell 4% (4 239 → 4 087).
+  transmissions fell 37% (6 902 → 4 315) while MPR's fell 4% (4 239 → 4 087). *(Those two ratios are
+  that A/B's, on the engine as it stood at `82d967a`; the same seed on the current engine gives
+  3 652 mpr / 5 574 route-flood, a ratio of 0.655, and the six-seed mean is 0.70 against the ≤0.80
+  pin. What is quoted here is history, and the pin that survived is the mean-based one.)*
   Part of the previously measured advantage was *the amplifier being proportional
   to how much you flood*. Six-seed means: `mpr/route-flood` 0.752 → **0.736**,
   `mpr/flood-all` 0.085 → 0.093. The cut is now pinned on the **mean** (≤ 0.80)
@@ -1201,6 +1257,14 @@ Five members, 20 messages, one member out of radio range for the whole conversat
 | 5 nearest nodes | 20 of 20 links, connected | 20/20 | **yes, 8.8 s** | 4 | 60 | 15.7 KB |
 | either, with `historyBeaconMs: 0` | — | **0/20** | no | 0 | 0 | 0 |
 
+Both arms are printed by both engines: `npm run history` and
+`dart run bin/mesh_sim.dart --history` each report the spread membership and the five nearest, with
+and without repair. The Dart CLI ran only the spread arm until the authoritative engine could be
+executed at all, which meant the one engine the roadmap builds on could demonstrate a repair that
+never converges and not one that does; the table above was, at that point, a TypeScript result. The
+payload column is now the same number in both languages, to the byte, which is the encoding contract
+§17.6 describes and golden vectors v2 pins.
+
 Repair is **transitive**, which the capture log shows directly: in a three-member line a
 copy the middle member lost reaches it from the sender — `field team: Amir-0 and
 Bianca-1 disagree on bucket 1 (20 vs 19 entries) — requesting` — and then reaches the
@@ -1262,6 +1326,19 @@ Sync packets are counted apart (`sentSync`, `historyBeacons`, `historyRequests`,
 excluded from `deliveryRatio` and from the chat log, and reported on the dashboard. A
 node with no groups arms no beacon chain, so a run that never creates a group consumes no
 extra randomness: **the golden vectors are byte-identical** in both languages.
+
+That promise covered the RNG, the spawn geometry and a groupless run — which is to say it did not
+cover the one thing a repair actually puts on air. The first CI run that compiled the Dart engine
+made the gap measurable: both engines reported the same 166 beacons, 3 requests, 2 replies and 171
+packets for the same history probe, and different payload bytes, **30 430 against 29 750**. Two
+encoding details, worth seventeen bytes an entry across forty entries: Dart emitted `"synced":false`
+for every entry, where the reference's `synced?: boolean` is `undefined` until a copy arrives by
+repair and `JSON.stringify` drops it — fifteen bytes to say nothing the receiver does not already
+know, since it sets the flag itself; and an integral `at` went out as `1200.0` from a Dart `double`
+where a JS `number` writes `1200`. Golden vectors **v2** added a `history` section carrying those
+entries and the exact reply body, asserted by `src/__tests__/acceptance.test.ts` and
+`sim/mesh_sim/test/golden_test.dart` from either side, so the next divergence is a failing test in
+whichever language moved rather than a difference in probe output.
 
 ---
 
@@ -1654,7 +1731,7 @@ sender (§11) and carrying cannot substitute for topology.
 
 Note the two p95 columns' worth of difference in the crowd: **6.6 s over routed deliveries
 against 17.8 s over all of them**. That gap is the `carried` flag doing its job — keeping
-opportunistic deliveries out of the latency budget `docs/04` §5 writes for routed traffic —
+opportunistic deliveries out of the latency budget `docs/02` §6 writes for routed traffic —
 and this is the measurement that shows why the separation has to exist rather than being a
 bookkeeping preference.
 
@@ -1731,3 +1808,1278 @@ Two new counters, `bundlesPruned` and `dtnSuperCarries`, so both of the above ca
 without re-deriving them from logs. Queue events are attributed per node, and a test asserts
 that the originator's own queue matches its own queue events — which is how the
 multi-carrier case became visible in the first place.
+
+## 21. Abuse limits: `docs/04` §6's two caps, and the number in it that cannot be used as written
+
+`docs/04` §6 answers a battery-drain attack and a spam channel with two numbers: *"Max 5
+broadcasts / minute per node; SUPERs drop excess"* and *"Cap relay to 30 msgs/min per
+source; ignore floods"*. Neither engine enforced either. Both do now — `admitByRate` in
+`src/routing.ts` and its Dart mirror, off by default, three `SimConfig` knobs
+(`rateLimits`, `broadcastPerMinuteCap`, `relayPerSourcePerMinuteCap`), two counters
+(`rateBroadcastDrops`, `rateRelayDrops`) and `--rate-limits` on the CLI. Everything below
+is re-runnable with **`npm run rate`** (`tool/rate-probe.ts`, sections `honest` and
+`flood`); the unit behaviour is pinned by 14 TypeScript tests and 10 Dart ones.
+
+### 21.1 A token bucket, because §6 states a rate and a tally does not enforce one
+
+Both caps are token buckets — one per (enforcer, source) pair, refilling continuously at
+`cap` per minute and bursting up to `cap`. A per-minute counter would satisfy the sentence
+and not the intent: 5 broadcasts in the last second of one minute and 5 in the first second
+of the next is ten in two milliseconds while never breaking a per-minute count. The bucket
+holds one entry per source, so memory is bounded by `nodeCount`, which `skills/08` caps at
+200, and a source that goes quiet simply sits with a full bucket — the correct state.
+
+The state lives on the simulation, not on `MeshNode`, which is why the golden vectors are
+byte-identical: no field is added to the cross-language node contract, so no draw order and
+no fixture moves.
+
+### 21.2 The relay cap as written would be switched off by the routing protocol
+
+This is the finding. `docs/03` §1 beacons an OGM every 2 s, which is **30 per minute per
+source** — exactly the cap `docs/04` §6 states. Counting beacons does not drop a node's
+first data message, which is what it looks like it would do; it does something slower and
+worse. The bucket refills one token every 2 s and the beacon spends it every 2 s, so the
+*sustained* budget for everything else is zero and data traffic runs off the initial burst
+alone.
+
+Simulated over ten minutes, one beacon and one attempted data message per 2 s slot:
+
+| beacons count against the cap | data messages admitted in 10 min |
+| --- | --- |
+| yes | **29** |
+| no | **300** |
+
+A 90 % cut in a node's sustained data rate, caused by its own routing protocol, on a
+network where nobody is abusing anything. So `ogm`, `ack` and `sync` are exempt — the same
+three types `src/crypto/packet.ts`'s `isSealedType` treats as control plane, and for the
+same reason in the `ack` case: an acknowledgement that is rate-limited turns one lost packet
+into a retransmission storm. This is a correction to the number as written, not a relaxation
+of it. The cap still applies to everything a user sends, which is what "ignore floods" means,
+and the probe checks that a 100-message burst is still refused at 30.
+
+### 21.3 A compliant network loses nothing
+
+Three seeds, `campus_quad` (20 nodes), 30 honest unicasts over two minutes, caps on:
+
+| seed | delivery | broadcast reach | overhead | transmissions | broadcast drops | relay drops |
+| --- | --- | --- | --- | --- | --- | --- |
+| 42 | 100.0 % | 95.0 % | 952.9 % | 1 315 | **0** | **0** |
+| 7 | 100.0 % | 95.0 % | 566.3 % | 1 495 | **0** | **0** |
+| 11 | 100.0 % | 95.0 % | 647.7 % | 1 127 | **0** | **0** |
+
+Identical to the caps-off arm in every column, which the probe asserts rather than prints.
+That is the property the design rests on: a limit that costs honest traffic is not shippable.
+The engine's own generator sends 15 unicasts/min network-wide and each node beacons 30
+OGM/min — the first is half the relay cap and the second is exempt, so neither binds.
+
+### 21.4 What a 12× flooder costs, and what the caps are worth
+
+One node sends 60 broadcasts in 60 s — twelve times the documented cap — while the same 30
+honest unicasts are in flight. Mean of three seeds:
+
+| arm | honest delivery | broadcast reach | overhead | transmissions |
+| --- | --- | --- | --- | --- |
+| no flood, caps off | 100.0 % | 95.0 % | 722.3 % | 1 312 |
+| no flood, caps on | 100.0 % | 95.0 % | 722.3 % | 1 312 |
+| flood, caps off | 100.0 % | 94.9 % | 468.5 % | **6 084** |
+| flood, caps on | 100.0 % | 76.9 % | 482.3 % | **4 929** |
+
+Three results, and only the first two are what the section is for:
+
+- **The caps fire.** 211 suppressions summed over the enforcing SUPERs (one flood broadcast
+  heard by four SUPERs over cap is four suppressions, which is why the sum exceeds the 60
+  messages sent), plus 4–23 relay-cap refusals per seed. Zero in every unflooded arm.
+- **They cost airtime.** Transmissions under flood fall 6 084 → 4 929, **−19 %**, and the
+  flood's own broadcast reach falls 94.9 % → 76.9 %. On a device whose battery budget
+  `skills/07` sets at under 15 % per 8 h, a fifth of the radio's work disappearing is the
+  whole point of the mechanism.
+- **They do not improve honest delivery, and in this world they cannot.** Honest unicast
+  delivery is **100 % in all four arms**. A 20-node campus mesh absorbs one 12× flooder
+  without dropping a single unicast, so there is nothing for the caps to rescue. This is a
+  null result and it is reported as one: the caps are a battery and airtime control, not a
+  delivery control, and `docs/04` §6 lists them under *Abuse & Safety* rather than under
+  routing for what turns out to be a good reason.
+
+Two columns need their denominators stated, because both mislead on their own. `overhead`
+*rises* 13.8 points with the caps on: it is transmissions per delivered message, and a
+suppressed flood copy is a transmission that never becomes a delivery, so capping a flood can
+raise the ratio while removing work. And broadcast reach under flood with caps on is
+**76.9 %**, not the 8.3 % that 5-of-60 admitted messages would imply — which is §21.5.
+
+### 21.5 Only SUPERs enforce — and the scope is a knob, measured both ways
+
+`docs/04` §6 says *"SUPERs drop excess"*, so that is the default, and the gap it leaves is
+worth more than the cap is. A NORMAL node neither relays far nor filters, so a flooder still
+reaches its own one-hop neighbourhood in full: the cap bounds **how far** a flood travels,
+not **whether its neighbours see it**. For the abuse §6 is actually worried about — a
+neighbour spamming the pager channel — one hop is the whole attack.
+
+Closing that gap means every node enforcing, which is a rule `docs/04` does not contain. So
+rather than silently replacing §6's rule with a better-sounding one, or merely recording the
+gap, it ships as a knob — `broadcastCapScope: "super" | "all"` in the engine,
+`--broadcast-cap-scope super|all` on the Dart CLI — defaulting to `"super"`, and `npm run
+rate flood` runs both. Three seeds, `campus_quad`, 20 nodes, one node sending 60 broadcasts
+in 60 s against a cap of 5/min:
+
+| arm | flood's broadcast reach | transmissions | suppressions |
+| --- | ---: | ---: | ---: |
+| caps off | 94.9 % | 6 084 | — |
+| caps on, `"super"` (§6's rule) | 76.9 % | 4 929 | 211 |
+| caps on, `"all"` | **21.2 %** | **2 304** | 396 |
+
+Enforcing everywhere removes **62 %** of the airtime the flood caused and drops its reach
+from 94.9 % to 21.2 %, while honest delivery stays at 100 % in all three arms. The residual
+21.2 % is not leakage: the honest broadcasts in the same window are counted in that reach too,
+and the first 5 of the flooder's own 60 are inside its budget — which is also why neither
+scope can reach the 8.3 % that 5 admitted of 60 sent would imply on its own.
+
+The honest section runs both scopes as well, and the cost is nil under each: zero broadcast
+and zero relay drops on all three seeds, delivery and overhead identical to caps-off. So the
+finding is that §6's rule is not wrong, only narrow — it protects the multi-hop mesh from a
+distant flooder and leaves a node's immediate neighbours unprotected, and the fix costs the
+honest network nothing. `"all"` is the better default on this evidence; it is not switched on,
+because §6 says what it says and changing a specified security rule is a spec change, which is
+a decision for whoever owns the document and not for an engine finding.
+
+### 21.6 SOS is exempt, deliberately
+
+SOS travels to `BROADCAST` like everything else on the pager channel, so the obvious
+implementation — gate on `to === "BROADCAST"` — would cap an emergency channel at 5/min.
+`docs/04` §6 already gives SOS its own two mechanisms (opt-in listening, and §11's collapsing
+of a repeated flood into one alert that only moves forward in time), and a real emergency is
+exactly the case where a rate limit does the most harm. The gate therefore keys on
+`type === "broadcast"`, and a test pins that twelve SOS messages in a second produce zero
+suppressions.
+
+---
+
+## 22. Blocking a peer locally: what "locally" costs, and who pays
+
+`docs/04` §6 opens with a bullet that neither engine implemented: *"Block/mute peer locally
+(ignore msgs from pubKey)."* With no moderation server there is nothing to appeal to and
+nothing to synchronise, so a block is one device's decision — and the interesting question is
+not whether it works but **whether it stays that local**. Both engines now carry a blocklist
+(`blockPeer` / `unblockPeer` / `isBlocked` / `blockedPeers`), a `blockedDrops` counter, and a
+`blocked` hop action in the audit trail, and the reach of a block is a knob:
+
+- **`blockScope: "delivery"`** — the default, and the literal reading of *"ignore msgs"*. The
+  blocking node does not put the message in its inbox, and the mesh carries it for everyone
+  else exactly as before.
+- **`blockScope: "relay"`** — also refuses to forward. This is what §6's *battery-drain*
+  bullet means by *"ignore floods"*: a blocker stops paying airtime and battery for someone it
+  blocked. It costs the blocked source a route wherever the blocker was a relay.
+
+### 22.1 Two exclusions, neither of them a relaxation
+
+`isBlockableTraffic` is `countsAgainstRelayCap(msg) && msg.type !== "sos"` — user traffic only,
+minus emergencies. Both exclusions are load-bearing:
+
+- **Control plane (`ogm`, `ack`, `sync`) is not blockable.** Blocking an ACK does not silence
+  anybody; it makes the blocked peer retransmit, because it never learns its message arrived —
+  more airtime, which is the opposite of the point. Blocking an OGM is worse: it removes the
+  peer from the blocker's routing table, changes MPR selection, and can cost a third party a
+  route through a node that merely dislikes one of its neighbours. A block is a filter on what
+  a user sees, not a routing change.
+- **SOS is not blockable.** §6 already gives SOS opt-in listening and §11's collapsing, and the
+  asymmetry is not close: showing one SOS from a blocked peer costs a notification the user
+  opted into, and suppressing a real one costs a life.
+
+Note that SOS stays inside `countsAgainstRelayCap` — it is user traffic for the *relay cap* and
+exempt from the *block*. The two predicates are deliberately not the same set.
+
+### 22.2 Measured
+
+`npm run rate block`: three seeds, `campus_quad`, 20 nodes, one source sending 24 broadcasts in
+24 s while **9 of the other 19 nodes block it** — half the network blocking, so the other half
+is there to show whether a block stays local. Means over the three seeds:
+
+| | no blocklist | `delivery` (default) | `relay` |
+| --- | ---: | ---: | ---: |
+| spam reaching the nodes that blocked it | 240.0 | **0.0** | **0.0** |
+| spam reaching the nodes that did not | 216.0 | **216.0** | 199.0 |
+| SOS reaching the nodes that blocked it | 10.0 | **10.0** | **10.0** |
+| a unicast from the blocked source to its blocker | 1.0 | **0.0** | **0.0** |
+| everything else at the bystanders | 54.7 | 65.7 | 66.7 |
+| ACKs received / bundles gossip-pruned | 27.0 / 0.0 | 24.0 / 0.0 | 23.0 / 0.0 |
+| transmissions | 3 728 | 3 619 | **3 268** |
+| `blockedDrops` | 0 | 253–267 | 230–271 |
+
+The feature and its exemptions are exact: the blockers' inboxes hold nothing from the blocked
+sender under either scope, a unicast in the *other* direction still arrives (blocking filters
+what a user sees, not what a user may send), and the SOS reaches all 10 blockers in every arm —
+including under `relay`, which refuses to forward and still must not refuse an emergency.
+
+`relay` is why the knob exists: **352 fewer transmissions per seed, 9.7 % of the network's
+airtime**, that `delivery` spends forwarding someone the forwarder has blocked. The price is on
+line 2 — 17 of the blocked sender's copies per seed stop reaching nodes that never blocked it,
+because a blocker that will not forward is a hole in that source's routes. Whether that trade is
+worth it is a policy question, so both ship and the default is the one that cannot censor
+anybody.
+
+### 22.3 Two numbers that move and are not costs of blocking
+
+The probe asserts less than its first version did, because two assertions were wrong:
+
+- **The network delivery ratio moves (385.1 % → 398.7 %) and must.** It is a whole-network
+  ratio whose numerator counts the blocked sender's own messages to the nodes that blocked it,
+  so a *working* block removes deliveries from it by construction. Reading that line as "a block
+  costs the network delivery" inverts the result. (Its absolute value is above 100 % because
+  broadcast receipts count per recipient; the column is comparable across arms and not
+  interpretable as a percentage of messages.)
+- **Unrelated traffic at the bystanders moves (54.7 → 65.7) and the obvious explanation is
+  false.** The guess was ACK-gossip pruning: an ignored message is not acknowledged, and an ACK
+  is what prunes a bundle out of every carrier that overheard it, so carriers would hold copies
+  longer and deliver more. The `bundlesPruned` column is printed precisely to test that and it
+  is **zero in every arm** — §20.5 had already measured pruning as essentially never firing, and
+  it does not fire here either. What does hold is the arithmetic underneath it: an ACK not sent
+  is a transmission not made, and a transmission not made is an RNG draw not spent. Jitter, the
+  MPR wait and backoff are all drawn per transmission, so the two worlds diverge at the first
+  ignored message and unrelated counts differ the way any two different random sequences do.
+  The direction is not a property of blocking, and the probe reports it instead of asserting it.
+
+What survives as an assertion is the direction that matters: **a block never removes a copy from
+a device that did not block** (line 2, `delivery` ≥ no blocklist). It is asserted as an
+inequality rather than an equality because 216 is 24 messages × 9 bystanders — saturation — so
+equality there says the ceiling was reached in both arms, not that the two worlds are identical.
+
+### 22.4 Where the state lives
+
+The blocklist is on the simulation, not on `MeshNode`, for the same reason the rate buckets are:
+it adds no field to the cross-language node contract, and it is inert while empty, so a shipped
+run and every golden vector are byte-identical whether or not the feature exists. Keys are node
+ids, which is what *"from pubKey"* means on air — `docs/07` §4 derives
+`destHint8 = SHA-256(pubKey)[0:8]` and a node id carries that hint, so blocking a pubKey and
+blocking a node id are the same act. The CLI exposes `--block-scope` but has no way to populate a
+blocklist, so the flag exists to be measured by the probe rather than run by hand.
+
+---
+
+## 23. Dummy beacons: a rejected lever, and the observable that rejected it
+
+`docs/04` §5 asks for two traffic-analysis mitigations in one line: *"random jitter 50-200 ms
+before forwarding, dummy beacons at low rate"*. The jitter half has shipped unconditionally
+since the engine's first version — `jitterMinMs` / `jitterMaxMs`, drawn per forward, and the
+reason `docs/02` §6's latency budget has a spread rather than a point. The dummy beacons did
+not exist. They do now: `coverTraffic` and `coverIntervalMs` in both engines, a `cover` event
+kind, a `coverTx` counter, and `--cover-traffic` / `--cover-interval` on the Dart CLI. A cover
+packet is one radio burst that carries nothing — it increments the sending node's `txCount`,
+which is what a passive observer counts, creates no routing state, delivers nothing, and is
+never acknowledged, because a dummy that had to be ACKed would not be a dummy.
+
+**The measurement says it buys nothing here, so it ships off.** This is the eighteenth rejected
+lever in this document and the first one rejected by a security mitigation rather than a
+routing idea.
+
+### 23.1 What the sweep measures
+
+`npm run cover sweep`: three seeds, `campus_quad`, 20 nodes. One ordinary node (index 3, so
+not a node the election favours) sends a burst of 12 broadcasts over 60 s while every other
+node sends one unicast. The observer sees nothing but **transmission counts per node** over a
+120 s window and names whichever node transmitted most. Two statistics:
+
+- **rank** — the target's position in that ordering, 1 being most conspicuous;
+- **conspicuousness** — the target's count as a z-score against all nodes, i.e. how far it
+  stands out from the median in standard deviations. Zero means invisible in that statistic.
+
+Means over three seeds:
+
+| cover interval | `coverTx` | transmissions | vs off | delivery | observer named the target | rank | conspicuousness |
+| --- | ---: | ---: | ---: | ---: | :---: | ---: | ---: |
+| off | 0 | 1 073 | — | 100.0 % | **0 / 3** | 7.0 | 0.844 |
+| 60 s | 60 | 1 127 | +5.0 % | 100.0 % | 0 / 3 | 6.7 | 0.959 |
+| 30 s | 100 | 1 203 | +12.1 % | 100.0 % | 0 / 3 | 6.7 | 0.750 |
+| 10 s | 320 | 1 392 | +29.7 % | 100.0 % | 0 / 3 | 7.0 | 0.791 |
+| 5 s | 640 | 1 784 | **+66.2 %** | 100.0 % | 0 / 3 | 7.3 | 0.866 |
+
+The cost column is monotone and real: dummy beacons are transmissions, and 5 s intervals add
+two thirds to the network's airtime. The benefit columns are flat. The z-score moves by
+hundredths in no direction — 0.844 → 0.959 → 0.750 → 0.791 → 0.866 — and the rank by a
+third of a position, which with 20 nodes and three seeds is noise.
+
+### 23.2 Why it is null: the sender was already hidden
+
+The column that explains the other two is *"observer named the target"*: **0 / 3 with cover
+off**. In a dense 20-node mesh every node relays, and relay traffic dominates each node's
+transmission count, so a 12-message burst does not make its sender the top transmitter — the
+target ranks 7th of 20 before a single dummy beacon exists. Cover traffic cannot hide a sender
+who is already hidden; it can only add to the pile.
+
+That is a statement about **this observable in this topology**, not about cover traffic in
+general, and the difference matters:
+
+- The premise is that relaying swamps origination. A sparse or partitioned world relays far
+  less (§12 and §16 both measure topologies where a node hears one or two peers), so the
+  observer's accuracy there is an open question and the 0 / 3 column is the thing to re-read
+  before generalising.
+- The observable is a **count**. This engine gives beacons no length at all, so an adversary
+  doing length-based traffic analysis — arguably the more realistic one against encrypted
+  payloads — is not modelled here, and defending against it would need *padded* cover rather
+  than *counted* cover. `src/crypto/packet.ts` pads to a 256-byte block for exactly this
+  reason on the payload side; there is no equivalent on the beacon side.
+- The battery model is a role-based hourly rate (`NORMAL_DRAIN_PER_HOUR` in `src/rf.ts`) with
+  no per-packet term, so the cost of cover traffic shows up in airtime and in nothing else.
+  Neither this probe nor `skills/07`'s *"Battery %/h per role"* can price a per-packet
+  mitigation, which bounds what any battery number in this repository can say about one.
+
+### 23.3 The assertion that had to be removed
+
+The probe's first version asserted the benefit: *"the tightest cover interval must make the
+sender less conspicuous than no cover at all."* Its first honest run failed, and the failure
+was the result rather than a bug. The assertion is gone and the numbers are reported instead,
+which is the discipline §1 states for all eighteen levers — a check that only passes when the
+numbers flatter the feature is how a rejected lever gets published as a win.
+
+What the section still asserts is what makes the knob shippable rather than what makes it
+useful: `coverTx` is 0 when the knob is off (so no golden vector and no published number
+moves), transmissions rise monotonically as the interval tightens (a dummy beacon that costs
+nothing is not on air), and delivery does not collapse in any arm. Delivery is asserted in the
+weak form — a floor, not an equality — because cover packets consume RNG draws, so the arms
+are different worlds, and an equality there would be the same mistake `npm run rate block`
+made twice before §22.3 corrected it.
+
+### 23.4 What is shipped
+
+The knob stays in both engines, off by default, with the sweep reproducible in one command. A
+mitigation that this topology does not need is not a mitigation that no topology needs, and
+removing it would make the next person re-derive the null result from scratch. `docs/04` §5
+keeps its sentence — it is a requirement, and this section is the evidence about one
+implementation of it — with a note pointing here.
+
+---
+
+## 24. Wake-locks: the fourth telemetry item, and what it says about the battery model
+
+`skills/07` asks for four telemetry series: *"Battery %/h per role, scans/sec, relays/sec,
+wake-locks"*. Three shipped with the roadmap Phase 2 metrics dashboard. Wake-locks did not,
+which left unmeasured the one item that could explain *why* the battery numbers differ by
+role. Both engines now count them: one acquisition per transmission and per reception, held
+for as long as that packet occupies the radio — `occupied` on the way out, `airTime` on the
+way in, durations the engine already computes for the receiver model, so this is accounting
+rather than a new radio model and it works under the shipped `channelAccess: "free"`
+baseline where `txUntil`/`rxUntil` are never maintained. Beacons are counted too, at one
+`hopLatencyBleMs` each, because on an idle network beaconing is the only radio activity
+there is.
+
+`campus_quad`, 20 nodes, three channel and duty-cycle arms, 30 messages injected over a
+60 s window after a 90 s settle. **Seed 42 alone** — this table was measured before §24.8
+established that a single seed should not be quoted for a demand figure, and the three-seed
+means from `npm run media occupancy` are 4.23× under free and 4.16× under csma rather than the 3.90×
+and 3.99× below. Seed-to-seed variation in this quantity on `campus_quad` is about 8 %, so
+nothing in §24.1-§24.3 changes sign or scale, but the number to quote is §24.6's table, which
+carries its seed count:
+
+| arm | wake locks | radio time demanded | NORMAL share | SUPER share | `radioDemandRatio` | battery %/h N / S |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `free`, duty off | 37 906 | 4 680 339 ms | 71.3 % | **28.7 %** | **3.90×** | 2.29 / 6.82 |
+| `free`, duty on | 34 226 | 4 231 497 ms | 73.3 % | 26.7 % | 3.53× | 1.32 / 5.60 |
+| `csma`, duty off | 38 964 | 4 788 135 ms | 69.7 % | 30.3 % | 3.99× | 2.49 / 5.88 |
+
+Three findings, in descending order of how much they change what this repository claims.
+
+### 24.1 What the 4× battery gap between roles rests on
+
+> **Correction (same day, hours after this subsection was first written).** Its first version
+> was titled *"the activity says 1.14×"* and concluded that this engine "cannot currently
+> justify the 4×". Both were wrong, and the error is worth keeping visible because it is
+> easy to repeat: it compared a SUPER's share of **packet-level radio demand** with its share
+> of **nodes**, and presented that ratio as an estimate of the role's *energy* gap. They are
+> different quantities. The role gap in this engine lives overwhelmingly in **scan duty**,
+> which the wake-lock accounting deliberately excludes (§24's header) to avoid double-counting
+> a reception inside a scan window — so a packet-only measure was never going to see it. The
+> measured numbers below are unchanged; the claim built on them is replaced.
+
+What the gap actually rests on, in three parts:
+
+1. **A constant sets the scale.** `src/rf.ts` has `SUPER_DRAIN_PER_HOUR = (0.15 / 8) * 4`,
+   calibrated to `docs/05` §1.2's target that a NORMAL node survives 8 h at ≤15 % drain and a
+   SUPER costs roughly four times as much. That 4 is an assumption, and saying so is the part
+   of the original claim that stands.
+2. **A mechanism the engine does model moves the same way, and amplifies it.** `skills/07`'s
+   duty cycle — NORMAL `scan 3s/sleep 7s`, SUPER continuous — is implemented, and an asleep
+   node pays `sleepDrainFactor` **0.25** of its rate. Measured `awakeRatio` is **0.333** on
+   `campus_quad` and **0.306** on `festival_crowd`, so a NORMAL node's effective rate is
+   `0.333 × 1 + 0.667 × 0.25 = 0.50` of full — halved — while a SUPER's is untouched at 1.0.
+   Switching the duty cycle on therefore *widens* the measured gap rather than narrowing it:
+   the **battery** ratio — a different quantity from §24.3's radio-demand ratio, which happens to
+   read 4.23× over three seeds too, and the coincidence is worth flagging so the two are not
+   conflated — goes from **2.98×** to **4.23×** on `campus_quad` (2.29/6.82 → 1.32/5.60
+   %/h) and reaches **5.51×** on `festival_crowd`. The scan-duty ratio alone, `1 / awakeRatio`,
+   is **3.00×** and **3.27×** — the same order as the constant, from a mechanism rather than
+   from calibration.
+3. **Packet-level demand adds a little.** SUPERs are 5 of 20 nodes and hold **28.7 %** of
+   demanded radio time, a ratio of **1.14** over their share of the nodes. That is the right
+   reading of the 1.14 figure: SUPERs do somewhat more packet radio work than their numbers
+   imply, which is the direction `skills/02` predicts. It is not an estimate of the energy
+   gap and must not be quoted as one.
+
+What genuinely remains unmodelled is narrower than the original claim said: the Wi-Fi Direct
+**group-owner role costs nothing** in this engine, and a real GO keeps a group alive whether
+or not it is forwarding. So the honest statement is that the 4× is a calibrated constant
+*whose direction and rough magnitude an implemented mechanism independently reproduces*, and
+that the one role cost still missing is the GO's.
+
+### 24.2 The duty cycle saves 42 % of battery and 10 % of *packet* radio time
+
+Switching `dutyCycleEnabled` on moves NORMAL drain from 2.29 to 1.32 %/h — a 42 % saving —
+while demanded *packet* radio time falls only from 4 680 339 to 4 231 497 ms, **10 %**, and
+wake-lock acquisitions from 37 906 to 34 226.
+
+That is not a disagreement between two models of the same thing, which is how this subsection
+first read it. The 42 % is `1 − (awakeRatio + (1 − awakeRatio) × sleepDrainFactor)` = `1 −
+0.50`: the whole scan window, priced at 0.25 while asleep. The 10 % is only the receptions an
+asleep scanner misses (`scansSkippedAsleep`; `awakeRatio` reports the window share directly).
+The two figures measure different scopes — all radio duty against packet duty — and the
+packet scope excludes scan windows by construction, so it *cannot* show the battery saving.
+Read together they say something useful: **most of what the duty cycle saves is the scanning
+itself, not the traffic it causes a node to miss**, at roughly four to one on `campus_quad`.
+That is the mechanism `skills/07`'s budget depends on, and it is why CI gates the <15 % per
+8 h figure in `--duty-cycle` mode only.
+
+### 24.3 The model demands four times the airtime that exists
+
+`radioDemandRatio` is total demanded radio time over `nodes × window`. On seed 42 it reads
+**3.90** under the shipped baseline and 3.99 under `csma`; over three seeds, 4.23× and 4.16×
+(§24.6). Either way the engine asks for roughly four times the radio
+time that physically exists, and it does so under every channel model, because the dominant
+term is *reception*: one beacon every 2 s from each of 20 nodes, charged one 120 ms hop
+latency at each of the ~10 peers that hear it, plus the gossip retransmissions that follow.
+
+`hopLatencyBleMs` is a calibrated **latency** that, per `serializationMs`'s own comment,
+already includes one GATT write of a full-sized packet. It is the right unit for "what a hop
+costs end to end" and the engine's contention model (`docs/08` §12) uses it as an occupancy
+for exactly that reason. It is not the right unit for "how long a radio was busy hearing a
+beacon", which on real BLE is a millisecond or two of airtime, not 120 ms of hop latency.
+
+Nothing published before this section is invalidated by that, because almost every airtime
+figure in this repository is a **count** — transmissions, suppressions, packets shed — and
+counts are exact. What it bounds is any *duration*: §12's deferral and collision windows, §8's
+serialization figures, and the milliseconds in the table above are all the model's durations
+rather than a device's, and they are roughly 4× over-subscribed at 20 nodes. That is why this
+section reports wake locks as a **split between roles**, which is a ratio and survives the
+over-subscription, and publishes `radioDemandRatio` beside it rather than letting a reader
+turn the milliseconds into a percentage of a device's day.
+
+The arithmetic pins the defect more narrowly than "a latency is used as an occupancy".
+`bleKbps` is 80, so a full-sized 1 024-byte packet really does take `1024 × 8 / 80 = 102 ms` —
+which is *why* `hopLatencyBleMs` can be 120 and `serializationMs` can charge only the excess
+over `BLE_MAX_BYTES`: the base latency is calibrated to one full-sized GATT write, and the two
+are consistent at that size. What is not consistent is that occupancy is therefore
+**size-independent below 1 024 bytes**: a short text and a 1 KB media chunk both hold the radio
+for 120 ms here, where at the modelled bit rate a 256-byte padded text is 25.6 ms and a full
+packet 102.4 ms.
+
+> **Correction (§24.6).** This paragraph's example was a *"40-byte beacon"*, and it was wrong
+> in a way that matters: beacons are the largest routine packet in the system, not the
+> smallest. An OGM carries its MPR neighbour set and up to eight route advertisements, which
+> §24.6 derives at **630 B** typically and **1 270 B** at the advertise limits — 63 ms and
+> 127 ms of airtime. So the flat 120 ms is within a factor of two of a typical beacon's real
+> cost and about right for a fully loaded one; the over-charge falls on **small data packets**,
+> and the conclusion that follows ("the over-subscription is almost entirely small packets
+> being charged a large packet's occupancy") is wrong for beacons specifically. §24.6 measures
+> what happens when every packet is charged its own size, and the over-subscription only
+> halves.
+
+### 24.5 The next question this leaves
+
+Charging occupancy proportionally — `sizeBytes × 8 / kbps`, from constants the engine already
+has — is a small change to two expressions (`occupied` in `onAir`, `airTime` in the receive
+path), and it would make `radioDemandRatio` physically readable for the first time. It is not
+made here, for one reason: **beacons have no size in this engine at all**, and §24.3 shows
+beacon *reception* is the dominant term. A proportional model applied only to messages would
+leave the dominant term on the flat 120 ms and report a demand ratio that looks fixed without
+being so. Doing it properly needs an OGM byte size derived from the fields `docs/03` §1 says a
+beacon carries — originator, sequence number, score and the MPR neighbour set — in the same
+way `PACKET_OVERHEAD_FROM_FIELDS` re-derives the sealed packet's 95 bytes rather than
+asserting it. That is a modelling change with published consequences, since §12's contention
+arms were measured under the flat occupancy and would have to be re-run and re-read beside it,
+so it is recorded as the next question rather than started halfway. **§24.6 answers it.**
+
+Until then the rule for reading this repository's numbers is the one §24.3 states: **counts are
+exact, durations are the model's**, and `radioDemandRatio` is published beside any duration so
+a reader can see the factor by which the model over-subscribes the radio.
+
+### 24.4 What ships
+
+`wakeLocks`, `wakeLockMs`, `wakeLockShareNormal`, `wakeLockShareSuper` and `radioDemandRatio`
+in `SimulationStats` in both engines, with per-node accessors (`wakeLocksFor`,
+`wakeLockMsFor`) so a caller can attribute cost to a specific device — which is what pricing
+`docs/04` §6's battery-drain attack needs, and what the tests use to show that 30 broadcasts
+concentrated on one node cost its neighbours more radio time than the same 30 spread evenly.
+The accounting consumes no RNG, so every golden vector is unchanged.
+
+### 24.6 The answer: beacons have a size now, and occupancy is a knob
+
+`radioOccupancy` selects between the two readings of "how long does this packet hold a radio":
+
+- `"hop-latency"` ships, unchanged, and is what every number in this repository was measured
+  under: the calibrated hop latency plus serialization of whatever exceeds a full BLE packet.
+- `"airtime"` charges `bytes × 8 / kbps` for the **whole** packet, from the rate constants the
+  engine already had (`bleKbps` 80, `wifiDirectKbps` 20 000), and sizes beacons from the
+  fields `docs/03` §4 says an OGM carries.
+
+Delivery latency is untouched: `airTime` keeps its hop-latency base in both models, because
+that is what `docs/02` §6's budget measures. Only the busy-radio duration — the one `csma`,
+the capture model and the wake-lock accounting read — changes. Under the shipped `free`/`none`
+baseline nothing reads it at all except the accounting, so `radio-occupancy.test.ts` asserts
+field by field that `totalDelivered`, `totalForwarded`, `deliveryRatio`, `broadcastReach`,
+`overheadRatio`, `mprSuppressed`, `controlOverhead`, `sentUnicast` and `sentBroadcast` are
+**identical** between the two models while `wakeLockMs` is not, and that the acquisition
+*count* is identical too, since only durations changed. That is what makes the knob safe to
+add defaulted off.
+
+**The derived beacon.** `ogmWireBytes` follows `PACKET_OVERHEAD_FROM_FIELDS`'s precedent and
+re-derives the size from field widths instead of asserting one: `nodeId` 32 B, `seq` 4 B,
+`score` 4 B, `isSuper`/`declinedRouter`/`hopCount` 1 B each, `peerCount` 2 B, `batteryBucket`
+1 B — 46 B fixed — plus 32 B per advertised neighbour and 33 B per `bestHopTo` entry, bounded
+by the limits the engine actually enforces (`MPR_NEIGHBOR_ADVERTISE_LIMIT` 30,
+`BEST_HOP_ADVERTISE_LIMIT` 8, now exported so a size bound cannot drift from the real one).
+
+| beacon | bytes | airtime at 80 kbit/s | charged before |
+| --- | ---: | ---: | ---: |
+| fixed fields only | 46 B | 4.6 ms | 120 ms |
+| typical (10 neighbours, 8 routes) | **630 B** | **63.0 ms** | 120 ms |
+| at both advertise limits (30, 8) | **1 270 B** | 127.0 ms | 120 ms |
+
+The last row is a finding of its own: **a fully loaded beacon is 1 270 B, which is over the
+1 024 B BLE ceiling**, so `selectTransport` would put a dense node's beacons on Wi-Fi Direct.
+Nothing sized beacons before, so nothing noticed.
+
+> **Qualified by §24.7.** This is a property of advertising the *public key*, which is what
+> this engine puts in an OGM and what the 32 B above assumes. `docs/03` §4 already says a real
+> deployment advertises 2-byte aliases instead, and §24.7 measures that encoding: the same
+> fully loaded beacon is **130 B**, a sixth of the BLE ceiling rather than a quarter over it.
+> The finding therefore stands as a warning about one encoding, not as a defect in the
+> protocol, and the spec decision it pointed at has already been made in `docs/03` §4.
+
+**Measured** (`npm run media occupancy`, three seeds, 30 messages over a 60 s window after a
+90 s settle):
+
+| scenario | channel | occupancy | radio demand | wake time | delivery | queue drops | deferrals |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| campus_quad | free | hop-latency | 4.23× | 84.60 min | 100.0 % | 0 | 0 |
+| campus_quad | free | **airtime** | **1.92×** | 38.46 min | 100.0 % | 0 | 0 |
+| campus_quad | csma | hop-latency | 4.16× | 83.22 min | 98.7 % | 507 | 3 886 |
+| campus_quad | csma | **airtime** | 1.88× | 37.66 min | **100.0 %** | **361** | **2 067** |
+| festival_crowd | free | hop-latency | 8.56× | 513.79 min | 95.8 % | 0 | 0 |
+| festival_crowd | free | **airtime** | **5.69×** | 341.48 min | 95.8 % | 0 | 0 |
+| festival_crowd | halfDuplex | hop-latency | 8.10× | 485.72 min | 77.9 % | 3 767 | 2 513 |
+| festival_crowd | halfDuplex | **airtime** | 5.50× | 330.08 min | **75.9 %** | 3 672 | 2 610 |
+| festival_crowd | csma | hop-latency | 7.56× | 453.78 min | 71.5 % | 3 929 | 13 540 |
+| festival_crowd | csma | **airtime** | 5.59× | 335.26 min | **81.9 %** | 3 813 | **6 382** |
+
+Four things this says.
+
+1. **Sizing packets properly halves the demand and does not make it physical.** 4.23× → 1.92×
+   on campus_quad, 8.56× → 5.69× in the crowd. Still above 1 everywhere, so §24.3's
+   over-subscription is only *partly* the flat per-packet charge: the dominant term is the
+   volume of beacon receptions and the gossip that follows them, which no per-packet
+   correction can touch.
+
+   > **Corrected by §24.7.** This finding went one step further and blamed the beacon
+   > *interval*: "at 60 nodes with `docs/03` §1's 2 s interval, the control plane alone asks
+   > for several times the airtime one radio has, even priced correctly — a finding about the
+   > beacon interval at density". The interval is a lever, but it is not the binding one, and
+   > the residual demand is an artefact of the **encoding** this engine uses for the neighbour
+   > list. With the 2-byte aliases `docs/03` §4 prescribes, the same crowd at the same
+   > specified 2 s interval measures **0.79×** — inside the radio budget — with delivery and
+   > broadcast reach unchanged. §24.7 has both tables.
+2. **Under the shipped baseline the two models are the same world**, as the test above pins.
+3. **Under contention they diverge, and not uniformly.** csma gains — in the table above,
+   crowd delivery 71.5 % → 81.9 % and campus 98.7 % → 100 % — while half-duplex in the same
+   crowd goes the other way, 77.9 % → **75.9 %**. A radio that frees sooner transmits sooner,
+   and whether that helps depends on whether the model lets it listen first — csma does,
+   half-duplex does not. The disagreement is reported rather than explained; nothing here
+   establishes the mechanism.
+
+   > **The csma magnitudes above are three-seed and §24.8 re-measures them on eight**, because
+   > `festival_crowd` turns out to be bimodal and three seeds cannot see through it. Every
+   > direction holds and one strengthens: crowd delivery 68.5 % → **74.1 %** with deferrals
+   > 12 649 → 6 707, and campus 94.5 % → **100.0 % on all eight seeds** with broadcast reach
+   > 57.8 % → 81.6 %. The crowd's +10.4 points was optimistic; +5.6 is the number to quote.
+4. **Therefore `docs/08` §12's contention magnitudes are a property of the occupancy model
+   they were measured under**, not of the mesh. Its directions survive — a queue still earns
+   back what collisions cost, capture still takes over as the margin rises — but a reader
+   quoting §12's drop and deferral counts is quoting the flat-charge world, and §12 now says
+   so.
+
+What ships is the default: `"hop-latency"`, every published number where it was, golden
+vectors byte-identical, and the alternative measured rather than asserted.
+
+### 24.7 The two levers on the control plane: interval and encoding
+
+`npm run media beacon`, priced under `radioOccupancy: "airtime"` throughout — under the flat
+charge every arm would carry the same 120 ms artefact and the sweep would be measuring that
+instead. **Eight seeds**, not the three the rest of this probe uses; §24.8 explains why, and
+what the three-seed version of this table got wrong. Both tables print the per-seed spread
+beside the mean for the same reason.
+
+**The interval.** `docs/03` §4 specifies a 2 s beacon and nothing in the corpus says why. It
+has a hard ceiling in the engine: neighbour scores expire at `NEIGHBOR_SCORE_TTL_MS` 30 s, so
+an interval near that leaves one missed beacon — and BLE links lose packets routinely — long
+enough to drop a neighbour that is still there.
+
+`campus_quad`, 20 nodes:
+
+| interval | radio demand | delivery | broadcast reach | overhead | avg hops | avg latency | OGMs sent | MPR suppressed | route expiries | per-seed reach |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| **2 s (spec)** | 1.97× | 100.0 % | 94.9 % | 888 % | 1.88 | 977 ms | 35 560 | 121 | 38 | 95 95 95 95 94 95 95 95 |
+| 5 s | 0.82× | 98.3 % | 95.0 % | 855 % | 1.81 | 761 ms | 14 093 | 105 | 57 | 95 95 95 95 95 95 95 95 |
+| 12 s | 0.37× | 100.0 % | 94.9 % | 775 % | 1.89 | 710 ms | 5 907 | 93 | 74 | 95 94 95 95 95 95 95 95 |
+| 25 s | 0.19× | 100.0 % | 94.9 % | 697 % | 1.92 | 923 ms | 2 734 | 87 | 85 | 95 95 95 95 95 95 95 95 |
+
+`festival_crowd`, 60 nodes:
+
+| interval | radio demand | delivery | broadcast reach | overhead | avg hops | avg latency | OGMs sent | MPR suppressed | route expiries | per-seed reach |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| **2 s (spec)** | 5.66× | 92.0 % | 86.5 % | 2 319 % | 2.62 | 1.81 s | 224 159 | 523 | 1 149 | 98 98 98 79 79 54 87 98 |
+| 5 s | 2.31× | **94.8 %** | 88.5 % | 2 301 % | 2.80 | 1.69 s | 88 397 | 551 | 1 288 | 98 98 98 68 65 86 97 98 |
+| 12 s | 1.03× | 87.5 % | 80.4 % | 2 662 % | 2.59 | 2.74 s | 36 459 | 698 | 1 260 | 70 98 98 93 55 70 61 98 |
+| 25 s | 0.60× | 79.2 % | 82.6 % | 2 811 % | 2.63 | 1.22 s | 17 961 | 687 | 1 154 | 97 97 98 68 96 55 50 98 |
+
+Look at the last column before reading any of the others. `festival_crowd` does not have a
+broadcast reach; it has two, roughly 98 % and roughly 55-70 %, and which one a seed lands in
+decides the mean. Every arm shows both modes and **not the same seeds in each** — at 2 s the
+weak seeds are 99, 2024 and 31337, at 25 s they are 2024, 31337 and 555 — so even a paired
+comparison of means carries several points of sampling noise in a 60-node world.
+
+At 20 nodes the interval barely matters, and the per-seed column says why its mean can be
+trusted: every seed reaches 94-95 %, so that world is unimodal and eight of eight agree.
+Stretching the interval 12.5× cuts demanded radio time tenfold (1.97× → 0.19×), delivery stays
+at 100 % in three of the four arms, reach never leaves ~95 %, and route expiries rise only from
+38 to 85 across the whole window — the soft state sits comfortably inside its 30 s TTL at every
+interval tested, which is why nothing degrades.
+
+At 60 nodes the ordering is monotone past 5 s, and **the specified interval is not the best
+arm**: 5 s delivers 94.8 % against 2 s's 92.0 %, then 12 s falls to 87.5 % and 25 s to 79.2 %,
+with demand falling 5.66× → 0.60× along the way. So the crowd does trade freshness for airtime,
+at roughly 1.5 points of delivery per halving of demanded radio time past the 5 s optimum.
+
+> **Retraction.** The three-seed version of this table, published earlier the same day, read
+> 95.8 / 96.7 / 93.9 / 97.1 % and was described as non-monotone, with 25 s "recovering" and the
+> dip at 12 s called *the signature of routes going stale*. The recovery does not exist. Over
+> eight seeds 25 s is the **worst** arm, and the ordering is the one routing theory predicts.
+> The non-monotonicity was the sample, not the mesh: three of the eight seeds land in the weak
+> mode and *which* three differs from arm to arm, so a three-seed mean can be ordered almost
+> arbitrarily. §24.8 keeps the measurement that showed it, and `npm run media beacon` now runs
+> eight seeds and prints the spread beside the mean.
+
+**Route churn refutes the flap hypothesis.** The obvious story for a mid-range interval doing
+worst is that entries expire and are re-learned repeatedly, so the table flaps. `routeExpiries`
+was added to test exactly that, and it says no: the crowd expires **1 149 / 1 288 / 1 260 /
+1 154** route entries at 2 / 5 / 12 / 25 s — flat, and if anything highest at 5 s, the *best*
+arm. Churn in a dense mobile crowd is dominated by nodes walking out of range, not by the
+beacon interval, and stretching the interval 12.5× moves it by less than 12 %. The 12 s dip was
+never a mechanism; it was sampling, and the counter that was built to explain it is what says
+so. At 20 nodes, where mobility is low, expiries do rise monotonically with the interval
+(38 → 57 → 74 → 85), which is the behaviour the hypothesis predicted and the place it does not
+matter.
+
+**The encoding.** `docs/03` §4 says *"a real deployment advertises 2-byte aliases (~60 B for
+30 neighbours)"*. This engine advertises the 32-byte X25519 public key, which is what
+`ogmWireBytes` assumed above. `ogmAliasBytes` makes that a measured dimension rather than an
+assumption; the originator's own id stays 32 B either way, because an alias cannot identify a
+sender nobody has heard from yet.
+
+| scenario | encoding | typical beacon | max beacon | radio demand | delivery | broadcast reach | OGMs sent |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| campus_quad (20) | 32 B public key | 630 B | 1 270 B | 1.97× | 100.0 % | 94.9 % | 35 560 |
+| campus_quad (20) | **2 B alias (§4)** | **90 B** | **130 B** | **0.34×** | 100.0 % | 94.9 % | 35 560 |
+| festival_crowd (60) | 32 B public key | 630 B | 1 270 B | 5.66× | 92.0 % | 86.5 % | 224 159 |
+| festival_crowd (60) | **2 B alias (§4)** | **90 B** | **130 B** | **0.78×** | 92.0 % | 86.5 % | 224 159 |
+
+These two arms are identical in delivery, reach and OGM count **by construction**, not by
+measurement luck: the encoding changes how a beacon is *priced*, and nothing in the engine
+transmits one differently, so the two runs are the same world read with different units. That
+is what makes this the clean lever of the two — it cannot perturb routing, and
+`radio-occupancy.test.ts` asserts the identity rather than assuming it.
+
+**The encoding is the bigger lever, and it is very nearly free.** Aliases cut the beacon, not the number of
+beacons — `OGMs sent` is identical in both rows, so nothing about route freshness, election
+convergence or MPR coverage changes — and demanded radio time falls 5.8× in the crowd and on
+campus alike. At the *specified* 2 s interval, with the encoding the specification itself
+prescribes, the control plane at 60 nodes fits inside the radio budget at **0.78×**. The
+over-subscription this section started from was never a property of the protocol; it was a
+property of this simulator putting public keys on the air.
+
+The two levers are not interchangeable, and that is the practical conclusion. An alias
+shortens every beacon in a dense world and costs nothing measurable. A longer interval thins
+them and trades freshness for airtime — visibly, at 60 nodes, where 12 s costs 9 points of
+broadcast reach. A deployment should pull the encoding first and treat the interval as a
+second-order control, which is the opposite of what §24.6's finding 1 implied.
+
+#### What the aliases themselves cost, which the table above does not charge
+
+Calling the encoding free was the first draft's word and it is not quite right: a 2-byte alias is
+only readable by a node that already knows the binding, so the bindings have to be distributed,
+and that is airtime the table above does not account for. It can be bounded from numbers already
+measured here rather than guessed.
+
+One binding is an alias plus the key it stands for, so 2 + 32 = **34 B**, and it has to reach
+every node that will read a beacon containing it — the owner's 1-hop neighbours, the same audience
+as the beacon itself. Bindings are needed once per *new* neighbour relationship, and §24.7's route
+expiry column measures how often those turn over in the crowd: **1 149 expiries per 60 s across 60
+nodes**, about 19 per node per minute. So the mapping traffic is
+
+    19 bindings/min × 34 B = 646 B/min per node, heard by ~15 neighbours ≈ 9 700 B/min
+
+against the saving, which accrues on every beacon rather than every new neighbour:
+
+    30 beacons/min × (630 − 90) B = 16 200 B/min per node, heard by ~15 ≈ 243 000 B/min
+
+The binding distribution costs roughly **4 %** of what the aliases save, at the crowd's measured
+churn rate — about 25:1 — so the 5.66× → 0.78× above becomes roughly 5.66× → 0.81× once charged.
+The lever survives its own overhead with most of a factor of seven to spare, and it survives it
+*because* bindings are rare relative to beacons even in a world where neighbours turn over every
+three seconds. What would break the argument is a network whose neighbour set churns faster than
+its beacon rate, and no scenario in this repository has one.
+
+Two things this arithmetic is not. It is first-order: it prices bytes on air and not the state a
+node must keep, the lookup on receipt, or the window in which a freshly-met neighbour is
+advertised by key because its binding has not propagated yet. And it is a bound derived from this
+engine's own counters, not a measurement of an implemented alias protocol — implementing one is
+still the state-sync change §24.7 describes, and this paragraph only says the change is worth
+making rather than that it has been made.
+
+**What ships.** `ogmAliasBytes` defaults to 32 — what the engine actually transmits — so no
+published number moves and the golden vectors are byte-identical. The 2 B arm is a measurement
+of a design `docs/03` §4 already specifies, not a change to this engine's encoding, and
+adopting it in the simulator would mean modelling aliases as a real routing change: a node
+would have to learn the alias↔key binding before it could use one, which is a new
+state-sync question and not a constant.
+
+**The follow-up §24.6 named survives, and is better supported than before.** An interval that
+adapts to density was proposed because the two scenario tables disagreed about what the
+interval should be. On eight seeds they disagree sharply and in opposite directions: at 20
+nodes 25 s costs nothing at all and buys a tenfold cut in demanded radio time, while at 60
+nodes the specified 2 s is beaten by 5 s and everything longer degrades delivery. There is no
+single right interval for both, which is the argument for deriving it. Under the prescribed
+alias encoding both densities fit inside the budget at the specified interval, so the case is
+about headroom and battery rather than feasibility — and the convergence objection still
+stands: a node that slows its beacons because it has many neighbours is exactly the node its
+neighbours most need to hear from. It remains unimplemented.
+
+### 24.8 Three seeds is not enough for a 60-node crowd, and this is not the first time
+
+`festival_crowd` is bimodal. Across eight seeds and four beacon intervals, broadcast reach
+lands either near 98 % or between 50 and 79 %, and which mode a seed takes is not stable across
+arms:
+
+| broadcast reach | 42 | 7 | 1234 | 99 | 2024 | 31337 | 555 | 8 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| at 2 s | 98 | 98 | 98 | 79 | 79 | 54 | 87 | 98 |
+| at 5 s | 98 | 98 | 98 | 68 | 65 | 86 | 97 | 98 |
+| at 12 s | 70 | 98 | 98 | 93 | 55 | 70 | 61 | 98 |
+| at 25 s | 97 | 97 | 98 | 68 | 96 | 55 | 50 | 98 |
+
+Three of the eight seeds are weak in most arms, but not the same three, so a mean over any
+small sample is dominated by which mode the sample happened to hit. The probe's shared seed
+list is `[42, 7, 1234]` — three of the four strongest seeds in this table, near 98 % at 2 s and
+5 s, and *including* the one seed (42) that collapses to 70 % at 12 s. That is exactly how the
+three-seed table came to look non-monotone: it sampled the 12 s arm's bad seed alongside the
+other arms' good ones.
+
+`campus_quad` is not bimodal — all eight seeds reach 94-95 % at every interval — so its
+three-seed numbers were sound and moved by less than a point on reseeding. The problem is
+specific to the 60-node crowd, which is also the world this repository leans on most for its
+density claims.
+
+This document has been here before. §11 records *"a tuning change that three seeds would have
+justified and six refute"*, and §12.15 prints six seeds with the worst one beside the mean
+*"because on three this table showed a monotone improvement"* toward a conclusion that did not
+survive. §24.7 is the third instance and the first where the artefact had already been
+published in this file before it was caught.
+
+**The rule that follows**, and that `npm run media beacon` now implements: in a world that can
+land in either of two modes, print the per-seed spread beside the mean, and do not report an
+ordering between arms on a sample too small to contain both modes. Where a section's numbers
+predate that rule and rest on `festival_crowd`, they carry their seed count — as §24.6's now do
+— and it is the direction that should be quoted rather than the magnitude.
+
+### 24.9 Why the crowd has two modes: two explanations tested, both failed
+
+§24.8 established that `festival_crowd` is bimodal and left it at that. Two explanations are
+obvious enough to be worth testing before accepting the bimodality as a fact about the world,
+and `npm run media reach` tests both.
+
+**Hypothesis 1 — the crowd partitions, so a broadcast simply cannot reach everyone.** The
+radio graph at the end of each window, by seed:
+
+| interval | seed | 42 | 7 | 1234 | 99 | 2024 | 31337 | 555 | 8 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 s | reach | 98 | 98 | 98 | **79** | **79** | **54** | 87 | 98 |
+| 2 s | components | 60 | 60 | 60 | **40 + 20** | 60 | **40 + 20** | 60 | 60 |
+| 12 s | reach | **70** | 98 | 98 | 93 | **55** | **70** | **61** | 98 |
+| 12 s | components | 60 | 60 | 60 | 60 | 60 | 60 | 60 | 60 |
+
+Partly true, and not the story — **as this table measures it**. At 2 s two of eight seeds split
+**40 + 20** and both are weak-reach seeds, so for those two the ceiling is the component the
+sender happens to be in rather than any routing failure. But seed 2024 reaches 79 % in a *fully
+connected* world, and at 12 s **all eight worlds are connected** while reach still spans
+55-98 %, so on this evidence partitioning explains two rows of sixteen and cannot be the mode.
+
+> **Superseded by §24.10.** That verdict is an artefact of *when* the graph was measured. These
+> components are counted once, after the 60 s window, and a crowd that splits and re-joins
+> during the window looks connected by then. Sampled inside the window, partitioning explains
+> essentially all of the bimodality, including seed 2024 at 12 s and every connected-but-weak
+> row above. The mechanism hypothesis 1 proposed was right; the measurement could not see it.
+
+**Hypothesis 2 — stale two-hop views make MPR suppress the only path to part of the network.**
+The prediction is sharp: if wrong suppression is the mechanism, removing suppression entirely
+must restore reach. `relayPolicy: "flood-all"` removes it, eight seeds:
+
+| interval | policy | reach | delivery | MPR suppressed | overhead | per-seed reach |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| 2 s | `mpr` | **86.5 %** | 92.0 % | 523 | 2 319 % | 98 98 98 79 79 54 87 98 |
+| 2 s | `flood-all` | 81.8 % | 90.5 % | 0 | 17 728 % | 98 98 98 66 **98** **42** 55 98 |
+| 12 s | `mpr` | 80.4 % | 87.5 % | 698 | 2 662 % | 70 98 98 93 55 70 61 98 |
+| 12 s | `flood-all` | 84.8 % | 91.0 % | 0 | 14 857 % | 98 98 98 91 65 53 77 98 |
+
+Refuted. Flooding suppresses nothing and spends roughly **six times** the overhead, and the
+weak mode walks straight through it: per-seed reach under `flood-all` still reads 42 %, 55 %
+and 66 % at 2 s, where MPR gave 79 %, 54 % and 87 %. At 2 s flooding is *worse on the mean*
+(81.8 % against 86.5 %) despite unlimited retransmission, and it moves different seeds than
+MPR does — 2024 recovers to 98 % while 31337 falls to 42 %. A limit that cannot be lifted by
+removing the policy that was blamed for it is not that policy's doing.
+
+**So the weak mode is not suppression**, and on the evidence in this subsection it is not
+topology either. Three candidates were left untested and named rather than guessed at — the
+third of which §24.10 then tests and confirms:
+
+- a receiver inside its duty-cycle sleep window when the broadcast passes, which the crowd's
+  density makes likely and `scansSkippedAsleep` would quantify per seed;
+- queue shedding under the crowd's own load, which §12.14 measured as mostly the source's own
+  shedding and which a 60-node world with 30 injected messages may hit differently;
+- the fact that reach is averaged over a 60 s window in which a 60-node crowd's graph is still
+  moving, so the component table above — measured at the *end* of the window — is not the graph
+  each broadcast had to cross. The two split seeds at 2 s may be split for part of the window
+  and joined for the rest, or the reverse.
+
+The third is the one that changes how the metric should be read, and it is testable by sampling
+connectivity during the window rather than after it. §24.10 does exactly that.
+
+### 24.10 The two modes are one phenomenon: the crowd splits and re-joins during the window
+
+`npm run media reach` samples the radio graph **six times inside** the 60 s window, 10 s apart,
+and reports the fraction of samples at which every node could reach every other, the mean
+largest-component share across them, and the largest-component share at the end for comparison:
+
+| interval | seed | reach | connected samples | mean largest component | largest at the end |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 2 s | 42 | 98 % | 100 % of 6 | 100 % | 100 % |
+| 2 s | 7 | 98 % | 100 % of 6 | 100 % | 100 % |
+| 2 s | 1234 | 98 % | 83 % of 6 | 100 % | 100 % |
+| 2 s | 99 | 79 % | 50 % of 6 | 94 % | **67 %** |
+| 2 s | 2024 | 79 % | 83 % of 6 | 94 % | 100 % |
+| 2 s | 31337 | **54 %** | **17 % of 6** | **72 %** | **67 %** |
+| 2 s | 555 | 87 % | 67 % of 6 | 93 % | 100 % |
+| 2 s | 8 | 98 % | 100 % of 6 | 100 % | 100 % |
+| 12 s | 42 | 70 % | 83 % of 6 | 94 % | 100 % |
+| 12 s | 7 | 98 % | 100 % of 6 | 100 % | 100 % |
+| 12 s | 1234 | 98 % | 100 % of 6 | 100 % | 100 % |
+| 12 s | 99 | 93 % | 83 % of 6 | 94 % | 100 % |
+| 12 s | 2024 | **55 %** | **17 % of 6** | **72 %** | 100 % |
+| 12 s | 31337 | 70 % | 67 % of 6 | 89 % | 100 % |
+| 12 s | 555 | 61 % | 50 % of 6 | 79 % | 100 % |
+| 12 s | 8 | 98 % | 100 % of 6 | 100 % | 100 % |
+
+Reach tracks the connectivity *inside* the window and not the snapshot after it. Every seed
+connected for all six samples reaches **98 %** — five of five, at both intervals. Every seed
+split for any of them lands between 54 % and 93 %, in proportion to how much of the window was
+split. The cleanest case is seed 2024 at 12 s: connected for **17 %** of samples with a mean
+largest component of **72 %**, reaching **55 %** — and reported as fully connected in §24.9's
+end-of-window table, because the crowd had re-joined by the time it was drawn.
+
+So the bimodality of §24.8 is one phenomenon, not two: 60 mobile nodes in this area split and
+re-join repeatedly, a broadcast sent while the graph is split cannot reach the other side
+however it is forwarded, and `broadcastReach` averaged over the window lands wherever the
+splits left it. Seeds differ in how much of the window they spend split, which is what made the
+weak seeds look different from arm to arm and made a three-seed mean orderable almost at
+random.
+
+This settles all three candidates and corrects two verdicts:
+
+- **Partitioning — confirmed, with the caveat that it is transient.** §24.9 rejected it because
+  the end-of-window graph had healed. Measured during the window it explains the mode.
+- **MPR over-suppression — still refuted, and now for a better reason.** Flooding cannot help,
+  because a broadcast cannot cross a gap that exists at the instant it is sent, however many
+  copies are made. The `flood-all` arm's own numbers show this: it moves *different* seeds than
+  MPR does (2024 recovers to 98 %, 31337 falls to 42 %), which is what re-scheduling traffic
+  into a moving graph looks like, not what fixing a suppression rule looks like.
+- **Averaging over a moving graph — confirmed as the reason the metric reads bimodally.** This
+  is the one that changes how a number should be read: `broadcastReach` over a window in a
+  mobile crowd is a *time-average over a changing topology*, and quoting it without the
+  in-window connectivity beside it invites exactly the misreading §24.9 made.
+
+What is still untested and no longer needed to explain the bimodality: receivers asleep inside
+a duty-cycle window when a broadcast passes (`scansSkippedAsleep` would quantify it per seed),
+and queue shedding under the crowd's own load (§12.14 measured that as mostly the source's
+own).
+
+**The practical consequence for this repository.** Any `festival_crowd` number that rests on
+`broadcastReach` or `deliveryRatio` should be read beside the in-window connectivity, or over
+enough seeds that both modes appear — which is what §24.8 asks for and what `npm run media
+beacon` and `npm run media reach` now do. `campus_quad` does not have this problem: all eight
+seeds are connected throughout and reach 94-95 % at every interval tested.
+
+**And the engine now reports it, so the next measurement cannot forget to.** "Read it beside
+the reach" is advice, and advice is what §24.9 failed to follow, so the sampling that produced
+the table above moved into the engine rather than staying in a probe: `connectivitySampleMs`
+(5 s by default, `0` to disable, `--connectivity-sample` on the Dart CLI) samples the radio
+graph from the physics tick and reports `connectivitySamples`, `connectedSampleShare` and
+`meanLargestComponent` in `SimulationStats` beside the reach they qualify, and
+`componentSizes()` is public so a caller can ask directly. The React status bar renders it as
+*Connected in-window* immediately to the right of *Broadcast reach*, which is the only place it
+does any good.
+
+Three properties were worth insisting on, and `connectivity.test.ts` pins all three:
+
+- **It cannot change what it measures.** Sampling reads the graph and writes counters — no
+  random number, no queued event. A run that samples and a run that does not agree on
+  `totalDelivered`, `totalForwarded`, `deliveryRatio`, `broadcastReach`, `overheadRatio`,
+  `controlOverhead`, `routeExpiries` and `wakeLocks`, field by field. That is why it is on by
+  default, which is unusual for this repository and only safe because of that test. It is
+  sampled from the physics tick rather than from its own event for the same reason: a queue
+  entry carries a sequence number, and two events at the same instant are ordered by it, so
+  adding one could reorder unrelated events.
+- **Disabled reads as connected, not as broken.** With zero samples both shares are 1, so a
+  consumer comparing them against a threshold is not told the network was never in one piece.
+- **It reproduces the finding.** Seed 2024 in `festival_crowd` is whole at the end of the
+  window — `componentSizes()` returns `[60]` — while `connectedSampleShare` is below 1 and
+  `meanLargestComponent` below 0.95, which is §24.9's mistake and its correction expressed as
+  one assertion pair. If a future change made the in-window sample agree with the end-of-window
+  snapshot, that test would fail, and it would fail on the thing that mattered.
+
+**What fell out on the way, and is worth more than the question.** The overhead column is the
+first measurement of `skills/02`'s acceptance target — *"overhead ≤70 % of flood-all"* — in the
+densest scenario this repository has, on eight seeds: MPR holds overhead to **13 %** of
+flood-all at 2 s (2 319 % against 17 728 %) and **18 %** at 12 s, while at 2 s delivering
+*more* reach than flooding does. The target is met by a factor of five, and the earlier
+measurements of it were on 20 nodes.
+
+### 24.11 Deriving the beacon interval from density: §24.7's follow-up, measured and rejected
+
+§24.7 ended with an argument rather than a conclusion. On eight seeds the two densities
+disagreed sharply and in opposite directions about what the beacon interval should be — at 20
+nodes 25 s costs nothing and cuts demanded radio time tenfold, at 60 nodes 5 s beats the
+specified 2 s and everything longer degrades delivery — so no single interval serves both,
+"which is the argument for deriving it". `ogmIntervalMode: "density"` derives it.
+
+The rule holds the receptions a node imposes on its neighbourhood constant: at interval `I`
+with `p` peers a node causes `p / I` receptions per millisecond, so setting `I` proportional to
+`p` keeps that product where the reference density puts it. It is anchored rather than
+invented — a node with `ogmDensityReferencePeers` (10, the median `campus_quad` produces)
+beacons at exactly the specified 2 s, so §4's number is not replaced, it becomes what the
+reference density does — and clamped to `[ogmIntervalMs / 4, NEIGHBOR_SCORE_TTL_MS / 2]`, the
+ceiling being two chances per soft-state TTL so one lost beacon cannot expire a neighbour that
+is still there.
+
+`npm run media intervalMode`, eight seeds, priced under `radioOccupancy: "airtime"`:
+
+| scenario | mode | delivery | reach | radio demand | OGMs sent | connected in-window | mean largest component |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| sparse_village | fixed | 26.2 % | 24.8 % | 0.17× | 3 210 | 0 % | 33 % |
+| sparse_village | **density** | 27.8 % | 24.9 % | **0.53×** | **10 728** | 0 % | 33 % |
+| | *Δ* | *+1.6 pts* | | *3.11× cost* | *3.34×* | | *comparable* |
+| campus_quad | fixed | 100.0 % | 94.9 % | 1.97× | 35 560 | 100 % | 100 % |
+| campus_quad | **density** | 99.3 % | 95.0 % | **2.37×** | **43 965** | 100 % | 100 % |
+| | *Δ* | *−0.7 pts* | | *1.20× cost* | *1.24×* | | *comparable* |
+| festival_crowd | fixed | 92.0 % | 86.5 % | 5.66× | 224 159 | 76 % | 94 % |
+| festival_crowd | **density** | 83.4 % | 77.6 % | **3.31×** | **131 914** | **49 %** | **85 %** |
+| | *Δ* | *−8.7 pts* | | *0.58× (saves)* | *0.59×* | | ***not comparable*** |
+
+**Read the last column before the rest.** §24.10 showed that reach tracks the largest in-window
+component, so two arms that land in different topologies are not a comparison of whatever was
+changed between them. That is what makes the verdict here honest rather than convenient:
+
+- In `sparse_village` and `campus_quad` both modes land in the same topology — 33 % and 100 %
+  largest component respectively, in-window connectivity identical — so those two rows *are* a
+  comparison, and the derived interval loses both. It buys 1.6 points of delivery in the village
+  for **3.11×** the demanded radio time and 3.34× the beacons, and on campus it costs 0.7 points
+  and 1.20× the airtime for nothing. The mechanism is the clamp's floor: a node with three peers
+  beacons every 500 ms, four times the specified rate, to hold a reception load nobody was
+  struggling with. Deriving the interval cuts both ways, and in a sparse world it cuts upward.
+- In `festival_crowd` the derived interval saves 42 % of the demanded radio time and 41 % of the
+  beacons, which is the only place it does what it was designed to do — and it is exactly the
+  place the comparison cannot be read. The two modes land in different topologies (mean largest
+  component 94 % against 85 %, in-window connectivity 76 % against 49 %), so the 8.7-point
+  delivery gap cannot be attributed to the interval. It may be mostly the partitioning; §24.10
+  says that is what a gap of that shape usually is.
+
+**So the follow-up is rejected**, and the verdict rests on the two scenarios where the topology
+is comparable rather than on the one where the lever looks best.
+
+> **Revised by §24.12.** "Rejected" was too strong, and the paragraph below that says the lever
+> is "not shown to help" in a crowd was missing the one comparison that could show it. Holding
+> the crowd's topology equal — mobility off, so both arms share a graph by construction, and per
+> seed rather than only on average — the derived interval takes **44 % off the demanded radio
+> time and 44 % off the beacons**, and is **equal or better on reach in seven of eight seeds**.
+> It is not harmful, and the airtime saving is real.
+>
+> What §24.12 does *not* support, and an earlier draft of this note claimed, is a delivery win:
+> the +2.5-point mean is better on four seeds, worse on three and level on one, and most of it is
+> a single seed. So the lever is cheaper and reach-neutral-to-better where it can be measured,
+> not better all round — and the shipped mobile condition remains the one where nothing can be
+> measured at all. `ogmIntervalMode` ships
+`"fixed"`, the specified 2 s stays, the golden vectors are byte-identical, and the flag exists so
+this table is reproducible rather than so the mode can be turned on. This is the nineteenth
+rejected lever in this document and the first rejected by a metric that had been added one commit
+earlier: without `connectedSampleShare` and `meanLargestComponent` the crowd row would have read
+as a lever that saves 42 % of the airtime at a cost of 8.7 delivery points, which is a trade worth
+arguing about, and the argument would have been about a topology difference nobody had measured.
+
+What would change the verdict is not a better rule but a fairer comparison: the crowd needs the
+two modes seeded into the *same* topology before the interval can be blamed for anything, which
+means either fixing node positions (`enableMobility: false`) or averaging over enough seeds that
+the mode split washes out. §24.12 does the first.
+
+### 24.12 Holding the topology still: the derived interval wins, and mobility is what connects a crowd
+
+§24.11's crowd comparison could not be read because the two arms landed in different topologies.
+`enableMobility: false` removes that as a variable: with positions fixed, the radio graph is the
+same graph in both arms, so a difference in delivery is a difference caused by the beacon
+interval and nothing else. Eight seeds, `festival_crowd`, `radioOccupancy: "airtime"`:
+
+| topology | mode | delivery | reach | radio demand | OGMs sent | connected in-window | mean largest component |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| static | fixed | 74.4 % | 71.8 % | 5.55× | 212 914 | **50 %** | **81 %** |
+| static | **density** | **76.9 %** | **74.9 %** | **3.10×** | **119 681** | **50 %** | **81 %** |
+| mobile | fixed | 92.0 % | 86.5 % | 5.66× | 224 159 | 76 % | 94 % |
+| mobile | density | 83.4 % | 77.6 % | 3.31× | 131 914 | 49 % | 85 % |
+
+The two static arms share a topology exactly — 50 % connected in-window and 81 % mean largest
+component in both, and identical *per seed* rather than only on average (100 / 100 / 100 / 58 /
+67 / 67 / 58 / 100 % largest component in both arms) — so the row is readable. What it says is
+narrower than the first draft of this section claimed, and the per-seed spread is why
+`npm run media intervalMode` now prints it beside every mean:
+
+| seed | 42 | 7 | 1234 | 99 | 2024 | 31337 | 555 | 8 | mean |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| delivery, fixed | 95 | 96 | 92 | 62 | 55 | 45 | 50 | 100 | 74.4 % |
+| delivery, density | 90 | 88 | 96 | 63 | 54 | **67** | 57 | 100 | 76.9 % |
+| reach, fixed | 95 | 93 | 98 | 46 | 44 | 53 | 48 | 98 | 71.8 % |
+| reach, density | 96 | 97 | 98 | 55 | 54 | 54 | 47 | 98 | 74.9 % |
+
+- **Airtime: a robust win, and structural rather than sampled.** 5.55× → 3.10× demanded radio
+  time and 212 914 → 119 681 beacons, both −44 %. Fewer beacons is what the rule *does*, so this
+  does not depend on any seed.
+- **Reach: equal or better in seven of eight seeds**, worse by one point in the eighth. The mean
+  is +3.1 points. This is the strongest claim the delivery-side data supports.
+- **Delivery: not a win.** Better on four seeds, worse on three, level on one, and the +2.5-point
+  mean is mostly seed 31337 going 45 → 67. The first draft of this section called the lever a win
+  "on every column at once" and cited the delivery mean; the mean is one seed's, and a per-seed
+  table is what shows that. §24.8's rule applies to a section written an hour after §24.8.
+
+So §24.11's "rejected" was too strong — the lever is cheaper and does not cost reach — and this
+section's first verdict was too strong in the other direction. What is left is a lever that buys a
+44 % cut in control-plane airtime at reach-neutral-to-better and delivery-neutral, in a network
+whose topology is held still.
+
+The mobile pair still cannot be read, and now the reason is sharper than "the worlds diverged":
+changing the beacon schedule changes which random numbers are drawn and therefore where 60 nodes
+are, and in a bimodal scenario that reassigns seeds between modes. Eight seeds cannot separate a
+lever's effect from a mode reassignment, and the static arm is what it looks like when the
+question is asked somewhere the reassignment cannot happen.
+
+**What fell out of the static arm is more interesting than the lever.** Compare the two `fixed`
+rows: the *mobile* crowd delivers 92.0 % and is in one piece 76 % of the window, while the
+*static* crowd delivers 74.4 % and is in one piece only 50 % of the time. Same 60 nodes, same
+area, same beacon interval — the only difference is that one of them moves.
+
+So in `festival_crowd`, **mobility is what connects the network**. The scenario spawns nodes in
+clusters, and left alone those clusters are separate components for half of any window; nodes
+wandering between them are the bridges, and §24.10's "splits and re-joins" is the same fact seen
+from the other end — the re-joining is movement. That inverts the usual framing of a DTN
+scenario, where mobility is the difficulty the protocol has to survive: here it is the mechanism
+by which a clustered crowd becomes one network at all, worth 17.6 points of delivery and 26
+points of in-window connectivity. It also bounds how far §24.12's static result travels — a
+static crowd is not a slower version of a mobile one, it is a *worse-connected* one, and a lever
+validated in the first has not been validated in the second.
+
+**What ships, and why.** `ogmIntervalMode` still ships `"fixed"`, and the reason is no longer
+that the lever lost. It is that what the lever buys — 44 % less control-plane airtime, reach
+neutral-to-better, delivery neutral — is measured on a topology the shipped scenario does not
+have, and the thing a reader would most want it to buy, delivery, is not bought anywhere. Turning
+it on would mean changing `docs/03` §4's 2 s beacon on evidence from a network that is partitioned
+half the time, for an airtime saving nobody has shown buys anything the user can see. The honest
+next step is not a default change but a comparison that keeps mobility and removes the mode
+reassignment — many more seeds, or a mobility model whose draws do not depend on the beacon
+schedule — and neither is cheap. Until then the flag is there, both tables are reproducible with
+`npm run media intervalMode` including their per-seed spreads, and the verdict is recorded as
+*cheaper where it can be measured, unmeasurable where it ships, and not shown to deliver more*.
+
+### 24.13 What the seed sensitivity means for the acceptance gates
+
+§24.8 and §24.10 are about how to read a measurement. This is about the tests that *gate* the
+build, because two of them run on `festival_crowd` and therefore on the bimodal world.
+
+`src/__tests__/acceptance.test.ts` asserts, for the dense crowd, that delivery is ≥ 0.85, SUPER
+ratio is 10-30 %, average hops ≤ 4 and role flapping ≤ 1 per node per minute — on seeds 42, 7
+and 1234. Those are three of the strongest seeds in §24.10's table, so the first question is
+whether the gates pass because the engine meets them or because the seeds were kind. Measured
+across nine seeds with the same harness (150 messages, shipped configuration):
+
+| seed | 42 | 7 | 1234 | 99 | 2024 | 2026 | 31337 | 555 | 8 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| delivery | 94.7 % | 94.7 % | 96.7 % | 88.7 % | **85.3 %** | 93.3 % | 93.3 % | 94.0 % | 98.7 % |
+| SUPER ratio | 18.3 % | 20.0 % | 21.7 % | 15.0 % | 15.0 % | 18.3 % | 16.7 % | 20.0 % | 21.7 % |
+| avg hops | 3.01 | 2.78 | 2.81 | 2.71 | 2.69 | 3.08 | 2.49 | 2.82 | 2.75 |
+| flap / node / min | 0.12 | 0.09 | 0.16 | 0.09 | 0.09 | 0.12 | 0.07 | 0.11 | 0.14 |
+| connected in-window | 89 % | 87 % | 93 % | **51 %** | **51 %** | 96 % | **33 %** | 80 % | 100 % |
+
+**All nine clear the 0.85 delivery bar**, so the bar is not seed-lucky — and the other three
+gates have real headroom everywhere (SUPER ratio 15.0-21.7 % against a 10-30 % gate, hops
+2.49-3.08 against ≤ 4, flap 0.07-0.16 against ≤ 1). But the weakest seed clears delivery by
+**0.3 points**, while the three seeds the gate uses sit about ten points above it. A gate that
+passes on three strong seeds by ten points and on the weakest of nine by a third of a point is
+not measuring the same margin it appears to be.
+
+**Delivery does not track connectivity the way broadcast reach does**, and that is the more
+useful half of the table. Seed 31337 is in one piece for a third of the window and still
+delivers 93.3 %, while seeds 99 and 2024 are in one piece half the time and deliver the two
+worst ratios. §24.10's "reach tracks the largest in-window component" is a statement about
+*broadcasts*, and it does not carry over: a unicast can be queued, retried and carried by a node
+walking between clusters, so it tolerates a partition that a broadcast simply cannot cross. Any
+argument that moves from reach to delivery — including the one §24.11's crowd row invited — has
+to make that step explicitly.
+
+`acceptance.test.ts` now asserts the crowd's delivery bar over all nine seeds at **0.80** rather
+than adding a second 0.85 gate. The lower floor has 5.3 points of margin on the weakest seed and
+still catches a regression in the weak mode, which the three-seed gate cannot see; asserting
+0.85 over nine would be asserting a boundary the scenario actually reaches, and would fail on any
+change that moved one seed by half a point. The other three bars are asserted over all nine as
+well, since their headroom is wide enough that doing so costs nothing and covers the weak mode.
+
+### 24.14 What follows for the control plane, on this evidence
+
+§24 ran to thirteen subsections because each measurement changed what the next one should ask.
+Collected in one place, since a reader should not have to reconstruct the order:
+
+1. **Advertise aliases in beacons, not public keys.** The largest lever measured anywhere in this
+   document, and the only one that is close to free: 5.66× → 0.78× demanded radio time at 60
+   nodes with the *same* beacon count, delivery and reach unchanged (§24.7), and it survives the
+   cost of distributing the bindings by about 25:1 even at the crowd's measured churn (§24.7's
+   binding arithmetic). `docs/03` §4 already prescribes it. Nothing implements it, and
+   implementing it is a state-sync change rather than a constant — which is the one item on this
+   list worth building.
+2. **Leave the beacon interval at 2 s.** No single interval serves both densities (§24.7), the
+   derived one is cheaper only where the topology can be held still and is not shown to buy
+   delivery anywhere (§24.11-§24.12), and once beacons carry aliases the specified interval
+   already fits inside the radio budget at 60 nodes. The pressure to change it was an artefact of
+   the encoding.
+3. **Do not add cover traffic.** Rejected (§23): an observer counting transmissions names a
+   12-message burst's sender 0 times in 3 seeds *with cover off*, because relaying already
+   dominates every node's count, and tightening to 5 s costs 66 % more airtime to move a z-score
+   from 0.844 to 0.866.
+4. **Price occupancy by size in any future contention work.** The flat 120 ms charge is right at a
+   full 1 024 B packet and wrong below it — a 256 B padded text is 25.6 ms of airtime — so §12's
+   drop and deferral magnitudes belong to the flat-charge world. Its *directions* survive; under
+   `csma` in a crowd, sizing packets halves deferrals and lifts delivery 68.5 % → 74.1 %, and on
+   campus it reaches 100 % on all eight seeds (§24.6).
+5. **Report in-window connectivity beside reach, and use eight seeds in a crowd.** A 60-node crowd
+   is bimodal because it splits and re-joins during the window (§24.10); a graph sampled after the
+   window cannot see it (§24.9), and three seeds published an ordering that eight reversed
+   (§24.8). `connectedSampleShare` and `meanLargestComponent` are in `SimulationStats`, the capture
+   schema carries a `topology` record, and the visualiser draws the split.
+6. **Treat mobility as a connectivity mechanism, not only as a difficulty.** The same 60 nodes in
+   the same area deliver 92.0 % moving and 74.4 % standing still, and are in one piece 76 % of the
+   window against 50 %, because the scenario spawns clusters and wandering nodes are the bridges
+   (§24.12). A field test that asks people to stand still measures a worse-connected network, and
+   `docs/09` §5 now says so.
+7. **Do not read a unicast number off a broadcast one.** In a partitioned world they diverge: one
+   seed in one piece a third of the window still delivered 93.3 %, while a broadcast cannot cross a
+   gap that exists when it is sent (§24.13). §24.11 nearly made that inference and was corrected by
+   the per-seed table.
+8. **The battery model is the one structural gap left, and it has now been measured three
+   times.** `SUPER_DRAIN_PER_HOUR = (0.15 / 8) * 4` sets the role gap's scale; the duty cycle the
+   same skill specifies reproduces the *direction* at 3.00-3.27× (`awakeRatio` 0.30-0.33 against
+   `sleepDrainFactor` 0.25) and widens the measured ratio to 4.23× when it is on (§24.1). What the
+   model has is a role-based hourly rate with a duty-cycle multiplier, and what it therefore cannot
+   express is any cost that accrues *per event*:
+
+   - the Wi-Fi Direct group-owner role costs nothing (§24.1), though `docs/05` §1.2 names it as one
+     of *"the two dominant power drains"*;
+   - a packet on air costs nothing (§24.3), which is why wake-locks are reported as a role split
+     rather than a percentage of the clock — the model demands about 4.2× the airtime that exists
+     on `campus_quad` over three seeds (3.9× on seed 42 alone, which is what §24.1-§24.3 quote),
+     and 1.9× once packets are priced by size;
+   - a scan costs nothing (§24.15), which is why cutting scans by 70 % moves NORMAL drain from
+     1.331 to 1.331 %/h and `docs/05` §1.2's *"reduces redundant wake-ups"* cannot be evaluated
+     here at all.
+
+   The consequence is narrower than it sounds and worth stating exactly: this engine can compare
+   **what one role costs relative to another**, and it can compare **how much radio work a
+   configuration does**, but it cannot convert the second into the first. Every mitigation in
+   `docs/05` §1.2 that works by doing *less* of something — adaptive scanning, tearing a group
+   down, beaconing less often — is therefore unpriceable here, and the three subsections above are
+   three separate discoveries of that one fact. Building the missing dimension needs a per-event
+   energy term calibrated against a device (Battery Historian on a phone holding a group against
+   one that does not, which is what `docs/05` §1.2's own note asks for), not a constant chosen to
+   make a mitigation row evaluate; §24's amendment to §10.5 is the argument for refusing that
+   second route.
+
+Items 1 and 8 are work, and item 8 is the larger of the two: item 1 is a protocol change with a
+known shape, while item 8 is a missing dimension in the model that has now silently bounded three
+separate measurements and will bound the next one too. Items 2, 3 and 7 are decisions not to do
+work, which is the more common output of a measurement and the one most often lost. Items 4, 5 and
+6 are rules for reading anything else in this document.
+
+### 24.15 Adaptive scan intervals: `docs/05` §1.2's third row, built — and unpriceable here
+
+`docs/05` §1.2's mitigation table has three layers. Its third — *"Adaptive scan intervals: scan
+interval scales with peer density: dense = shorter interval (peers stable), sparse = longer (fewer
+discoveries expected)"*, expected impact *"reduces redundant wake-ups"* — was documented and never
+built. `scanIntervalMode: "density"` builds it, anchored so ten peers reproduces the configured
+interval and clamped to `[base / 4, base × 4]`. `npm run media scanInterval`, eight seeds:
+
+| scenario | duty | mode | NORMAL %/h | SUPER %/h | scans/s | awake | scans slept | delivery |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| sparse_village | on | fixed | 1.331 | 1.875 | 8.29 | 25.7 % | 451 | 26.2 % |
+| sparse_village | on | **density** | **1.331** | **1.875** | **2.45** | 25.7 % | 136 | 26.2 % |
+| sparse_village | off | fixed | 2.745 | 1.875 | 15.80 | 100 % | 0 | 26.2 % |
+| sparse_village | off | **density** | **2.745** | **1.875** | **4.72** | 100 % | 0 | 26.2 % |
+| campus_quad | on | fixed | 1.284 | 7.223 | 21.85 | 27.9 % | 660 | 97.9 % |
+| campus_quad | on | **density** | 1.254 | 7.362 | 19.42 | 27.2 % | 549 | 98.9 % |
+| campus_quad | off | fixed | 2.610 | 6.935 | 32.85 | 100 % | 0 | 100.0 % |
+| campus_quad | off | **density** | 2.606 | 7.282 | 28.54 | 100 % | 0 | 100.0 % |
+| festival_crowd | on | fixed | 1.458 | 7.038 | 58.17 | 30.7 % | 2 064 | 82.5 % |
+| festival_crowd | on | **density** | 1.428 | 6.998 | **102.19** | 29.8 % | 3 564 | **89.4 %** |
+| festival_crowd | off | fixed | 2.856 | 7.196 | 92.13 | 100 % | 0 | 92.0 % |
+| festival_crowd | off | **density** | 2.863 | 6.967 | **160.11** | 100 % | 0 | **97.8 %** |
+
+**The rule does what §1.2 specifies.** Scans per second fall about 70 % in `sparse_village` (8.29 →
+2.45 with the duty cycle on, 15.80 → 4.72 without) and rise about 75 % in `festival_crowd` (58.2 →
+102.2, 92.1 → 160.1), with `campus_quad` in between at −11 % — sparse scans less, dense scans
+sooner, and the anchor holds because campus sits near the reference density.
+
+**The benefit it claims is not measurable in this engine, and that is the finding.** Cutting scans
+by 70 % in `sparse_village` changes NORMAL drain from **1.331 to 1.331 %/h** and SUPER from **1.875
+to 1.875** — identical to three decimals, with the duty cycle on *and* off. Everywhere else the
+battery moves by 2 % or less and in both directions, which is noise. The reason is in `src/rf.ts`:
+`batteryDrain` charges the duty-cycle *window* — `isAwake(node) ? 1 : sleepDrainFactor` — and not
+the scan events inside it, so a node that scans three times a second and one that scans fifteen
+cost the same while both are awake.
+
+This is the third time this document has met the same wall, and the three are the same wall:
+§24.1 found the engine charges nothing for the Wi-Fi Direct group-owner role, §24.3 found no
+per-packet term in the drain model, and here there is no per-scan term. **The battery model is a
+role-based hourly rate with a duty-cycle multiplier, so a mitigation that works by doing less of
+something cannot be priced by it.** Saying that is the finding. Inventing a millijoule-per-scan
+constant so the row would evaluate is precisely what §24's amendment to §10.5 refused to do, and
+it would produce a number that looks measured and is not.
+
+**What the row does buy is delivery, and it buys it by spending wake-ups rather than saving
+them:** +6.8 points in `festival_crowd` with the duty cycle on (82.5 → 89.4 %) and +5.8 without
+(92.0 → 97.8 %), +1.0 on `campus_quad`, and nothing in the sparse village where there is little to
+discover either way. For the dense case that inverts §1.2's framing — there, *"dense = shorter
+interval"* is a delivery lever whose battery cost this engine cannot charge, not a saving. Whether
+the trade is worth making is a device question, and §1.2's own mitigation table is where it belongs.
+
+Note also what the two directions cost and earn, because it is the cleanest statement yet of why
+§24.11's rejected beacon rule and this one are not in conflict. In the sparse village, scanning
+70 % less often costs nothing and earns nothing — there is little to discover. In the crowd,
+scanning 75 % more often earns nearly seven points of delivery. Scanning is a *local* cost bought
+for a *local* benefit, so spending it where the neighbourhood is dense pays; beaconing is a local
+cost imposed on *every neighbour*, so spending it where the neighbourhood is dense is exactly
+backwards. Same word "density", opposite sign, and the sign comes from who pays.
+
+Ships `"fixed"`, so no published number moves and the golden vectors are byte-identical.

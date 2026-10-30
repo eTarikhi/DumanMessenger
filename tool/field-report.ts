@@ -26,6 +26,11 @@ interface Rec {
   battery?: number;
   charging?: boolean;
   online?: boolean;
+  /** `topology` records: the radio graph at one sample boundary (`docs/09` §4). */
+  nodes?: number;
+  components?: number;
+  largest?: number;
+  connected?: boolean;
   awake?: boolean;
   distanceM?: number;
   walls?: number;
@@ -84,6 +89,52 @@ interface Delivery {
  * engines use, computed from the log rather than from engine state, because on the day
  * of a field test the log is all there is.
  */
+interface Connectivity {
+  samples: number;
+  /** Samples at which every node could reach every other. */
+  connected: number;
+  connectedShare: number;
+  /** Mean share of the network inside the largest component across the samples. */
+  meanLargestShare: number;
+  /** The worst single sample, because a mean hides the split that bounded a broadcast. */
+  worstLargestShare: number;
+}
+
+const NO_CONNECTIVITY: Connectivity = {
+  samples: 0,
+  connected: 0,
+  connectedShare: NaN,
+  meanLargestShare: NaN,
+  worstLargestShare: NaN,
+};
+
+/**
+ * What the `topology` records say about the walk.
+ *
+ * This exists because a capture cannot be read without it. `docs/06` §24.10 measured a
+ * 60-node crowd splitting and re-joining inside a window, so broadcast reach lands near 98%
+ * when the network stays in one piece and 50-79% when it does not — and §24.9 drew the wrong
+ * conclusion from a graph reconstructed *after* the run, because a partition that has healed
+ * looks exactly like one that never happened. A field capture has the same failure mode
+ * available to it, so the analyzer reports the in-window timeline rather than leaving reach to
+ * be interpreted against a topology nobody recorded.
+ */
+function connectivity(recs: Rec[]): Connectivity {
+  const t = recs.filter(
+    (r) => r.kind === "topology" && typeof r.nodes === "number" && r.nodes > 0
+  );
+  if (t.length === 0) return NO_CONNECTIVITY;
+  const connected = t.filter((r) => r.connected === true).length;
+  const shares = t.map((r) => (r.largest ?? 0) / (r.nodes ?? 1));
+  return {
+    samples: t.length,
+    connected,
+    connectedShare: connected / t.length,
+    meanLargestShare: shares.reduce((a, b) => a + b, 0) / shares.length,
+    worstLargestShare: Math.min(...shares),
+  };
+}
+
 function delivery(recs: Rec[]): Delivery {
   const firstTx = new Map<string, number>();
   let relayTx = 0;
@@ -296,6 +347,7 @@ function main(): void {
   const recs = load(runPath);
   const meta = recs.find((r) => r.kind === "meta");
   const d = delivery(recs);
+  const c = connectivity(recs);
   const e = elections(recs);
   const b = battery(recs);
   const rf = rfFit(recs);
@@ -318,8 +370,37 @@ function main(): void {
   );
 
   console.log("\nTraffic");
+  // The criteria in the column to the right are skills/02's and skills/08's, and both are
+  // written for a 20-node network ("Simulator 20 nodes: ... delivery >=90% at 3 hops"). Judging
+  // a 60-node capture against them prints a FAIL that is a category error rather than a defect,
+  // so say which network the criteria belong to before printing them. docs/06 §24.13 measured
+  // what the crowd's own floor is: delivery 85.3-98.7% over nine seeds, with the weakest
+  // clearing the 20-node bar by 0.3 points, which is why the wider gate asserts 0.80 there.
+  const captureNodes = typeof meta?.["nodes"] === "number" ? (meta["nodes"] as number) : null;
+  if (captureNodes !== null && captureNodes !== 20) {
+    console.log(
+      `  this capture has ${captureNodes} nodes; the criteria below are skills/02's and skills/08's,` +
+        ` which are written for a 20-node network.`
+    );
+    console.log(
+      `  A FAIL here is a category error before it is a defect — see docs/06 §24.13 for what a` +
+        ` ${captureNodes}-node crowd's own floor measures.`
+    );
+  }
   row("messages sent / delivered", `${d.sent} / ${d.delivered}`, "—", null);
   row("delivery ratio", d.ratio.toFixed(4), "≥ 0.90 (skills/02, skills/08)", d.ratio >= 0.9);
+  if (c.samples > 0 && c.connected < c.samples) {
+    // Not a caveat buried at the bottom: the criterion above was just judged, and in a world
+    // that spent part of the walk split, a broadcast could not have crossed the gap however
+    // well the protocol behaved. §24.13 measured the two quantities diverging — one seed in
+    // one piece a third of the window still delivered 93.3% — so delivery survives a split
+    // better than reach does, and neither may be inferred from the other.
+    console.log(
+      `  the network split during ${c.samples - c.connected} of ${c.samples} samples ` +
+        `(worst: ${(c.worstLargestShare * 100).toFixed(0)}% of nodes in one piece). ` +
+        `Broadcast reach is bounded by that; unicast delivery is not, but read both against it.`
+    );
+  }
   row("within 5 hops", `${d.within5}/${d.delivered}`, "≥ 90% of sent", d.within5 / Math.max(1, d.sent) >= 0.9);
   row("latency p50 / p95", `${d.p50Ms.toFixed(0)} / ${d.p95Ms.toFixed(0)} ms`, "< 2 s 1-hop, < 5 s 3-hop", null);
   row("relay transmissions", `${d.relayTx}`, "—", null);
@@ -337,6 +418,56 @@ function main(): void {
     );
   } else {
     console.log("  no flood-all baseline given: the overhead criterion cannot be judged.");
+  }
+
+  // Placed directly after Traffic because it qualifies it: a reach or delivery number from a
+  // walk during which the network was sometimes in two pieces is a different quantity from the
+  // same number from a walk during which it was never split, and the two should not be compared
+  // with each other or with a simulator prediction without saying which one it was.
+  console.log("\nConnectivity during the walk (docs/06 §24.10)");
+  if (c.samples === 0) {
+    console.log(
+      "  no `topology` records in this capture, so nothing below can be read against the state\n" +
+        "  of the network. That is not a neutral omission: a graph reconstructed after the walk\n" +
+        "  cannot show a partition that healed, and §24.9 drew exactly the wrong conclusion from\n" +
+        "  one. Emit a `topology` record at every `sample` boundary — docs/09 §4 has the shape,\n" +
+        "  and `npm run field:capture` produces a reference file that includes them."
+    );
+  } else {
+    row("topology samples", `${c.samples}`, "one per sample boundary", null);
+    row(
+      "in one piece",
+      `${c.connected}/${c.samples} (${(c.connectedShare * 100).toFixed(0)}%)`,
+      "—",
+      null
+    );
+    row(
+      "mean largest component",
+      `${(c.meanLargestShare * 100).toFixed(0)}% of nodes`,
+      "bounds broadcast reach",
+      null
+    );
+    row(
+      "worst largest component",
+      `${(c.worstLargestShare * 100).toFixed(0)}% of nodes`,
+      "—",
+      null
+    );
+    if (c.connected === c.samples) {
+      console.log(
+        "  never split, so reach and delivery here are comparable with a connected simulator\n" +
+          "  arm — which is what campus_quad is, and what festival_crowd is not."
+      );
+    } else {
+      console.log(
+        "  split during part of the walk. Broadcast reach is bounded by the largest component\n" +
+          "  at the moment each broadcast was sent, so a reach below the criterion may be a\n" +
+          "  topology result rather than a protocol one; unicast delivery is more robust,\n" +
+          "  because a message can be queued, retried and carried between clusters. Do not\n" +
+          "  infer either from the other (§24.13), and do not compare this walk with one that\n" +
+          "  never split without saying which was which."
+      );
+    }
   }
 
   console.log("\nElection and power");

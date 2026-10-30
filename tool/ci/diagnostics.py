@@ -12,7 +12,14 @@ Three output formats:
   github  `::error file=...,line=...::` workflow commands plus a `$GITHUB_STEP_SUMMARY`
           section. This is what CI consumes, and it is why a red Dart build here reports
           the analyzer, the test failures *and* the CLI metrics with real file paths —
-          the runner's generic problem matcher loses the paths.
+          the runner's generic problem matcher loses the paths. It also republishes the
+          captured CLI metrics and the `dart test` tally as *notice* annotations, because
+          a green run's numbers are otherwise unreadable from anywhere that cannot reach
+          `results-receiver.actions.githubusercontent.com`: the step summary is not exposed
+          by the check-runs API and the log archive is not downloadable, so annotations are
+          the only channel through which "what did the authoritative engine measure" can
+          leave the runner. `--no-summary` skips the step summary, which is what the
+          per-scenario arms want: they have no analyzer or test output to summarise.
   text    a readable report for a terminal. The default when not in CI.
   json    machine-readable, for `validate-and-push.sh` to record what actually failed.
 
@@ -32,6 +39,7 @@ import sys
 from typing import Any, Dict, List, Optional, Tuple
 
 MAX_ANALYZE_ANNOTATIONS = 20
+DEFAULT_TITLE = "CLI acceptance (campus_quad, seed 42)"
 MAX_TEST_ANNOTATIONS = 20
 CLIP_AT = 1200
 
@@ -52,6 +60,21 @@ def escape(text: str) -> str:
 def clip(text: str, limit: int = CLIP_AT) -> str:
     text = text.strip()
     return text if len(text) <= limit else text[:limit] + " …(clipped)"
+
+
+def clip_middle(text: str, limit: int = 3500) -> str:
+    """Clip keeping both ends.
+
+    The CLI prints its metrics table first and its acceptance verdict last, so a head-only clip
+    would publish the numbers and drop the thing that says whether they passed.
+    """
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    head = int(limit * 0.45)
+    tail = int(limit * 0.45)
+    return (text[:head] + "\n…(%d characters clipped)…\n" % (len(text) - head - tail)
+            + text[-tail:])
 
 
 def analyze_issues(text: str) -> List[Tuple[str, str, str, str, str, str]]:
@@ -164,7 +187,8 @@ def analyze_severity_counts(issues: List[Tuple[str, str, str, str, str, str]]) -
     return out
 
 
-def emit_github(analyze_out: str, test_out: str, cli_out: str) -> Dict[str, Any]:
+def emit_github(analyze_out: str, test_out: str, cli_out: str,
+                title: str = DEFAULT_TITLE, no_summary: bool = False) -> Dict[str, Any]:
     """Workflow commands on stdout, narrative into $GITHUB_STEP_SUMMARY."""
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY") or os.devnull
     issues = analyze_issues(analyze_out)
@@ -206,17 +230,29 @@ def emit_github(analyze_out: str, test_out: str, cli_out: str) -> Dict[str, Any]
         )
         emitted += 1
 
-    tail = "\n".join(test_out.splitlines()[-25:]) or test_out
-    with open(summary_path, "a", encoding="utf-8") as summary:
-        summary.write("### dart analyze\n\n```\n%s\n```\n\n" % analyze_out)
-        summary.write("### dart test — failures\n\n```\n%s\n```\n\n" % failing_test_text(test_out))
-        summary.write("### dart test — tail\n\n```\n%s\n```\n\n" % tail)
-        summary.write("### CLI acceptance (campus_quad, seed 42)\n\n```\n%s\n```\n" % cli_out)
+    # The two notices below are the reason a green run is worth anything to somebody who cannot
+    # download its logs. Both are unconditional: the tally says how much of the Dart suite
+    # actually ran, and the metrics are the acceptance criteria the roadmap quotes.
+    totals = test_summary(test_out)
+    if totals["passed"] or totals["failed"] or totals["skipped"]:
+        print("::notice title=dart test::%d passed, %d failed, %d skipped"
+              % (totals["passed"], totals["failed"], totals["skipped"]))
+    if cli_out and cli_out != "(no output captured)":
+        print("::notice title=%s::%s" % (escape(title), escape(clip_middle(cli_out))))
+
+    if not no_summary:
+        tail = "\n".join(test_out.splitlines()[-25:]) or test_out
+        with open(summary_path, "a", encoding="utf-8") as summary:
+            summary.write("### dart analyze\n\n```\n%s\n```\n\n" % analyze_out)
+            summary.write("### dart test — failures\n\n```\n%s\n```\n\n" % failing_test_text(test_out))
+            summary.write("### dart test — tail\n\n```\n%s\n```\n\n" % tail)
+            summary.write("### %s\n\n```\n%s\n```\n" % (title, cli_out))
 
     return {"analyze_issues": issues, "test_failures": failures}
 
 
-def emit_text(analyze_out: str, test_out: str, cli_out: str) -> Dict[str, Any]:
+def emit_text(analyze_out: str, test_out: str, cli_out: str,
+              title: str = DEFAULT_TITLE, no_summary: bool = False) -> Dict[str, Any]:
     issues = analyze_issues(analyze_out)
     failures = test_failures(test_out)
     counts = analyze_severity_counts(issues)
@@ -250,7 +286,7 @@ def emit_text(analyze_out: str, test_out: str, cli_out: str) -> Dict[str, Any]:
         print("  (no failing tests parsed)")
 
     print("")
-    print("CLI acceptance (campus_quad, seed 42) — last 15 lines")
+    print("%s — last 15 lines" % title)
     for line in (cli_out.splitlines()[-15:] or ["(no output captured)"]):
         print("  | %s" % line)
 
@@ -266,6 +302,11 @@ def main() -> int:
     parser.add_argument("--format", choices=("github", "text", "json"),
                         default="github" if os.environ.get("GITHUB_ACTIONS") else "text")
     parser.add_argument("--out", help="also write the parsed result as JSON to this path")
+    parser.add_argument("--title", default=DEFAULT_TITLE,
+                        help="what the CLI capture is: the notice title and the summary heading")
+    parser.add_argument("--no-summary", action="store_true",
+                        help="do not append to $GITHUB_STEP_SUMMARY — for jobs whose only "
+                             "capture is one CLI run, which is the per-scenario arms")
     args = parser.parse_args()
 
     analyze_out = read(args.analyze)
@@ -273,7 +314,8 @@ def main() -> int:
     cli_out = read(args.cli)
 
     if args.format == "github":
-        parsed = emit_github(analyze_out, test_out, cli_out)
+        parsed = emit_github(analyze_out, test_out, cli_out,
+                             title=args.title, no_summary=args.no_summary)
     elif args.format == "json":
         parsed = {
             "analyze": analyze_severity_counts(analyze_issues(analyze_out)),
@@ -287,7 +329,7 @@ def main() -> int:
         }
         print(json.dumps(parsed, indent=2))
     else:
-        parsed = emit_text(analyze_out, test_out, cli_out)
+        parsed = emit_text(analyze_out, test_out, cli_out, title=args.title)
 
     if args.out:
         record = {

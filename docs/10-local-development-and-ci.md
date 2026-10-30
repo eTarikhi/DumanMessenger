@@ -28,7 +28,7 @@ this document and those scripts were written for.
 | --- | --- | --- | --- |
 | **Node.js** | **22.x** | `actions/setup-node` pins `node-version: 22` in `ci.yml` | no |
 | **npm** | 10.x (ships with Node 22) | CI runs `npm ci`, which needs `package-lock.json` | no |
-| **Dart SDK** | **stable, ≥ 3.4.0** | `dart-lang/setup-dart` pins `stable`; `sim/mesh_sim/pubspec.yaml` pins `sdk: ^3.4.0` | no — see §2 |
+| **Dart SDK** | **3.13.7 for CI reproduction** | CI compiler pinned; pubspec `^3.4.0` but committed lock requires ≥3.13 | no — see §2 |
 | **Git** | 2.30+ | the push gate inspects ancestry before pushing | no |
 | **Python 3** | 3.9+ | `tool/ci/diagnostics.py`, shared with the workflow | no |
 | **`gh`** (GitHub CLI) | 2.x, authenticated | `make watch` / `make diagnose` read remote runs | yes |
@@ -87,7 +87,7 @@ echo 'export PATH="$PATH:/usr/lib/dart/bin"' >> ~/.bashrc && source ~/.bashrc
 **Any platform, no package manager**
 
 Download `dartsdk-<os>-<arch>-release.zip` from
-`https://storage.googleapis.com/dart-archive/channels/stable/release/latest/sdk/`, unzip it
+`https://storage.googleapis.com/dart-archive/channels/stable/release/3.13.7/sdk/`, unzip it
 anywhere, and put its `bin/` directory on `PATH`.
 
 Then fetch the package's dependencies once:
@@ -111,7 +111,11 @@ make install-hooks   # pre-push gate; skips a push that would fail CI
 make ci              # the whole pipeline, locally
 ```
 
-`make install-hooks` sets `core.hooksPath` to `.githooks`, which keeps the hook in version
+`npm ci` now does this for you: `package.json`'s `prepare` script runs `git config
+core.hooksPath .githooks`, which is the first command every setup path in this document and in
+`docs/11` §1 already tells a new machine to run. Before that the gate was opt-in and a fresh clone
+had none, because git will not install a hook by itself. `make install-hooks` sets the same
+`core.hooksPath` to `.githooks`, which keeps the hook in version
 control where it can be reviewed and updated, instead of in `.git/hooks` where it is invisible
 and per-clone. Bypass a single push with `git push --no-verify`.
 
@@ -152,7 +156,7 @@ re-measuring eleven others to get at it.
 ## 5. Running the CI pipeline locally
 
 ```bash
-make ci          # all four jobs
+make ci          # all five jobs
 make ci-fast     # typecheck, unit tests, dart analyze, dart test
 make web         # one job
 make dart
@@ -195,8 +199,19 @@ order it runs it — including three behaviours that are easy to drop and expens
 | `2` | partial — only with `--allow-missing-dart` |
 | `64` | bad usage |
 
+> **Through `make`, codes `1` and `2` are both reported as `2`.** GNU make exits `2` for any recipe
+> failure and has no way to hand a recipe's own status back, so the `1`-versus-`2` distinction —
+> failed versus partial, which is the whole point of having two codes — does not survive the `make`
+> front door. Measured rather than inferred: `./tool/ci/run-pipeline.sh --job dart` exits `1`,
+> `make dart` exits `2`, and `run-pipeline.sh --job dart --allow-missing-dart` exits `2`, so on a
+> machine with no Dart SDK the two verdicts are indistinguishable through `make` alone. It survives
+> when you call the script directly, and on Windows through `.\make.ps1`, which runs the script
+> rather than `make` for every target in its script table. If you are scripting against a verdict,
+> call the script; if you are reading a report, the verdict is printed in it either way.
+
 **A job that could not run is a failure, never a silent skip.** On a machine without the Dart
-SDK, `make ci` exits `1` and marks three of four jobs `MISSING`. That is the single most
+SDK, `make ci` fails and marks three of five jobs `MISSING` — the pipeline exits `1` and make
+reports `2`, for the reason above. That is the single most
 important design decision in `tool/ci/`: a green local run that quietly omitted the authoritative
 engine would be worse than no local run at all, because it is the kind of thing you stop checking.
 
@@ -220,6 +235,263 @@ artifacts/ci/20261023T193803Z-ab7e7ff-push/
 
 `artifacts/` is git-ignored: these are a local record, not a deliverable, and committing them
 would mean every push carried the previous push's logs.
+
+### Every check at once: `make checks`
+
+`run-pipeline.sh` is a mirror of the workflow, and the mirror is the point: §10 maps each of its
+steps onto the workflow step it copies, so a green local run is evidence about the remote one.
+Adding checks to it would break that claim. So the superset lives in its own script.
+
+```bash
+make checks            # every check, one pass, one report
+make checks-list       # what it would run — runs nothing
+make checks-evidence   # also reproduce the numbers published in docs/06–docs/09 (slow)
+
+# Or both halves at once, which is what a daily run should use:
+make daily             # the CI mirror + every check + the evidence probes, one DAILY.md (~27 min)
+make daily-fast        # the same, minus the evidence probes (measured 11.5 min without Dart)
+make daily-checks      # the full CI mirror + every check, no re-measuring
+```
+
+Every run also appends **one line to `reports/verification-log.jsonl`**, which is tracked — the
+only verification record in this repository that survives a wiped sandbox. Everything else it
+produces lands under `artifacts/`, which `.gitignore` excludes, so the evidence about a given sha
+was destroyed by exactly the event it exists to explain. The line is a digest and not a log:
+verdict, exit codes, per-check counts, tool versions, elapsed seconds and the artifact directory
+name, about 300 bytes, no captured output. It is uncommitted when written, because the sha it
+describes is already committed, and the script prints `git add reports/verification-log.jsonl`
+rather than committing on your behalf.
+
+Three differences from `make ci` matter:
+
+**1. It records which checks have never been run.** Every check has a registry row —
+`name | label | verified-before? | what it catches` — and `make checks-list` prints it:
+
+```
+── dart — Dart authoritative engine — NEVER COMPILED on the current tree
+  pub-get                  NEVER RUN      dart pub get
+                           catches: the package resolving at all — this has never been run on this tree
+  analyze                  NEVER RUN      dart analyze (errors and warnings fail)
+                           catches: whether the radio-model and byte-counting mirrors COMPILE at all
+```
+
+This is the reason the script exists. Remote CI has been refused for billing since `8406717`, and
+the workspace that produced the Dart capture-effect mirror had no Dart SDK. An entire half of the
+repository reached `main` without ever being compiled. A wall of green means very little when some
+of the checks behind it have never executed anywhere, so the report separates
+`success` / `failure` / `not-run` in the console table, in a `verified before?` column, and in the
+JSON — and `(first ever run)` is printed next to a check that passes for the first time.
+
+**2. It never stops early.** A failure in check 3 does not hide check 4; everything is collected
+and reported together, which is what you want when a run costs minutes and you cannot watch it.
+
+**3. It writes something you can send back.** After the console table it prints a paste-back block:
+
+```
+DUMAN-CHECKS 82d967a 2026-10-24T02:29:05Z node=22.22.3 dart=MISSING
+ts.npm-ci=success
+ts.test=success(Tests  276 passed)
+dart.analyze=not-run(no Dart SDK)
+--- why nothing could run ---
+no check failed; 4 could not run for want of a toolchain:
+missing: the Dart SDK is not installed
+```
+
+When something *did* fail, that trailer becomes `--- first failure detail ---` with the tail of the
+capture, and `--- dart diagnostics ---` with `file:line:col` locations from `diagnostics.py` — the
+same parser CI publishes as annotations. The block prefers a real failure over a whole-group skip,
+so a missing toolchain earlier in the list cannot bury the output that explains the break.
+
+The Markdown report goes to `artifacts/ci/<run>/REPORT.md` (`--report` to choose), the JSON to
+`--json`. Groups are `docs`, `ts`, `dart`, `cli`, `probes`, `evidence`; the first five run by default and
+`evidence` is opt-in because it re-runs every published measurement, minutes each.
+
+`docs` runs first and needs no toolchain at all, which is why it carries five checks rather than
+one — on a machine where nothing else can run, this group still gives an answer. A sixth row runs
+their self-tests, which is not a sixth check so much as evidence the other five are not broken.
+
+1. **`drift`** — `tool/ci/check-docs.py`, asking whether every command these documents tell you to
+   run actually exists, reading the answer out of the programs rather than out of the prose. It is
+   here because this repository keeps making that mistake: two probe section names were once
+   documented that `tool/media-probe.ts` does not have, and four real Dart CLI flags were missing
+   from the cheat sheet. `make check-docs` runs it alone. Every check has a fault injected into a
+   copy of the tree by `--self-test`, which prints its own case count, and two of them were added
+   the same day as the thing they guard. **`ci-jobs`** asks whether `.github/workflows/ci.yml` and
+   `run-pipeline.sh`'s `JOBS_ALL` still name the same jobs. They are maintained in two places by hand, and the local
+   pipeline's whole claim to be evidence about the remote one rests on them agreeing — a job in the
+   workflow the pipeline does not run means a green local run says nothing about it, and a job the
+   pipeline runs that the workflow does not means CI is laxer than the local gate.
+   **`section-counts`** asks whether a documented *number* of probe sections equals the number the
+   probe has, and it was written for a defect found by accident: the README said `npm run media`
+   had 17 sections for as long as the probe had eighteen, and every check passed, because a count
+   is not a name and `media-sections` only reads names.
+   **`ci-checkers`** asks a question one level down from `ci-jobs`: the workflow's `checks` job,
+   `run-pipeline.sh`'s `job_checks` and `collect-checks.sh`'s `docs` group are three hand-kept lists
+   of the same scripts, and comparing only job *names* cannot see a step missing inside one of them.
+   That is how `check-ps1.py` came to be run by nothing automated at all — it had a `make` target and
+   three lists that did not mention it. The check compares the three sets, and also asks whether any
+   `tool/ci/check-*.py` on disk is run by none of them, because a checker with a target and no
+   automation is indistinguishable from no checker. Two subtleties its self-test forced out: a step
+   *label* naming a script is not an invocation (every entry point labels its step that way, and
+   counting mentions let a deleted invocation pass), and a `--self-test` run is not running the check.
+   **`ci-jobs`** also requires every job in `JOBS_ALL` to be described by `run-pipeline.sh --list`
+   and named by its `--job` help line, because §10 tells a reader `--list` prints the mapping "from
+   the script itself" — and the `checks` job, the one whose purpose is catching drift, was in
+   neither.
+2. **`dart-balance`** — `tool/ci/check-dart-balance.py`, delimiter balance across all 22 Dart
+   sources in `sim/mesh_sim`, needing no Dart SDK. `make dart-balance` runs it alone. It is not
+   `dart analyze` and does not claim to be; it exists for exactly the situation this repository is
+   in, where the authoritative engine is written in a language no machine in the pipeline can
+   compile.
+3. **`parity`** — `tool/ci/check-parity.py`, asking whether the two engines still agree.
+   `make parity` runs it alone. This is the check the current pipeline most
+   needs and least expects: `make golden` catches a changed constant on the TypeScript side
+   and `dart test` on the Dart side, and **neither can run where there is no Dart SDK**, which is
+   everywhere in this pipeline right now. It asks three questions, and the third is stricter than
+   the first two on purpose.
+
+   It pairs **every constant it can match by name** across `src/*.ts` and `sim/mesh_sim/lib/src/*.dart`
+   (`make parity` prints the count, split into the ones compared numerically and the ones compared by
+   expression, which is why no number is written here — three in this section had gone stale while
+   every check still passed) —
+   including module-private ones, since Dart's `_pdrWindow` and TypeScript's `PDR_WINDOW` are the
+   same contract. It does **not** require the two constant inventories to match, because they are
+   not supposed to: `broadcastAddress`, `defaultConfig` and `ln10` have no TypeScript counterpart
+   by design (`make parity` lists the one-sided names on both sides, and reading that list is how
+   `mask` was found missing from this sentence), and a check demanding symmetry would need an
+   exception list long enough to hide what it was for. One-sided names are listed rather than failed, which is how the checker found
+   `MPR_WAIT_MS` / `mprWaitDefaultMs` — a synonym pair it had been silently skipping.
+
+   It reads `docs/03` §3's coverage-score weight vector out of both engines, requiring the five
+   weights to match each other and sum to 1 — if they do not, the 0.60 promote and 0.50 demote
+   thresholds mean something other than what §3 says.
+
+   And it requires two *type* inventories to be **identical**: `SimConfig` and `SimulationStats`,
+   field for field, with none one-sided — both counts printed by `make parity` and by
+   `make dart-sites`, and both larger than the numbers this paragraph used to carry, which is what
+   happens to a count in prose when a feature adds knobs. Both were verified to match exactly
+   before the rule was written, which is what makes it safe for the rule to fail rather than
+   report. The mistake it exists for is the easiest to make in a two-engine repository and the
+   hardest to see without a compiler: a knob added to one engine and not the other, so an
+   experiment that set it silently configured half the contract; or a statistic only one engine
+   reports, so `--json` and the React dashboard are not the same contract on both sides and a
+   consumer reads `undefined` from one of them. Nothing else in the pipeline would notice either.
+
+   The rule does **not** extend to the shared enums, and the reason is not that they cannot be
+   parsed. They can: mask comments and strings on both sides, walk to the *matching* brace rather
+   than the first one at column zero, and every one of the thirteen enums named on both sides
+   agrees on its member count today — `ChannelAccess` 3, `ChannelBackoff` 2, `ChannelCapture` 3,
+   `ChannelPriority` 3, `EventKind` 14, `ForwardMode` 6, `HopAction` 7, `MeshLogKind` 13,
+   `MsgType` 8, `PeerNorm` 2, `RelayPolicy` 3, `Role` 2, `TransportType` 3. (Two earlier attempts
+   at that parse disagreed with this list because they read prose out of doc comments and stopped
+   at the wrong brace, which is why the numbers were measured before being written down.)
+
+   The obstacle is that the two languages are *supposed* to spell the members differently, in
+   three ways at once: Dart cannot use `super` or `class` as identifiers, so `Role.superNode` is
+   TypeScript's `"SUPER"` and `ChannelPriority.byClass` is its `"class"`; Dart writes lowerCamel
+   where TypeScript writes kebab-case (`halfDuplex` / `"half-duplex"`, `waitMpr` / `"wait-mpr"`,
+   `floodAll` / `"flood-all"`); and Dart's `EventKind.ackTimeout` is TypeScript's `"acktimeout"`.
+   Eight of the enums also exist in TypeScript only as unnamed unions inline in `SimConfig`, so
+   they cannot be paired by name at all. Comparing them would need an alias table covering all
+   three conventions — precisely the exception list long enough to hide what the check was for,
+   which is why the constant inventories are reported rather than required to match. Measuring the
+   counts by hand once, and writing the result here, costs less and lies less.
+4. **`dart-sites`** — `tool/ci/check-dart-sites.py`, asking whether the Dart engine's *repeated*
+   declarations are all present. `make dart-sites` runs it alone. The Dart engine repeats every
+   `SimConfig` field at up to five places (declaration, constructor parameter, `copyWith`
+   parameter, `copyWith` body) and every `SimulationStats` field at four (declaration,
+   `required this.` parameter, `toJson()` entry, and the construction site in `_computeStats`),
+   plus one `case` per `EventKind` value. The sites are hundreds of lines apart, `sim/mesh_sim`
+   cannot be compiled here, and the failure modes are not all loud: a stats field missing from
+   `toJson()` compiles and runs and simply never appears in `--json` output — which is what
+   commit `f18c5c6` found 32 of — and a `copyWith` parameter with no body assignment compiles and
+   *silently keeps the old value*, so an experiment that thinks it set a knob did not. It walks a
+   comment-and-string-masked copy of the file at identical offsets, because doc comments inside a
+   parameter list contain unbalanced parentheses, and it understands all three member shapes Dart
+   uses here: block bodies, bodyless `const` constructors, and expression bodies
+   (`copyWith({...}) => SimConfig(...)`). It also resolves **every qualified reference in the
+   package** — 748 of them against 84 declared types — so a receiver that is not a declared type
+   and an enum member that does not exist are both caught. Those are the two mistakes a compiler
+   catches instantly and nothing else here could see, and both were typed into `sim/mesh_sim` for
+   real during the week the check was written: `OgmiIntervalMode` for `OgmIntervalMode`, and a stub
+   function referencing a `_Never` type that did not exist. Each was found by hand and fixed before
+   commit, which is luck rather than a process. The scan runs on masked text, so a `Role.normal` in
+   a doc comment is not a reference — a fact the self-test depends on, since one of its faults had
+   to be re-aimed at a use in code after its first occurrence turned out to be inside a comment.
+   `values` and `index` are allowed on every enum because Dart provides them, and five SDK types
+   with static members are allowlisted by name; the failure message tells a maintainer to add a
+   sixth deliberately rather than loosen the rule, because a permissive version of this check
+   cannot see the typo it exists for.
+
+   Two things it does **not** check, both measured before being declined. It does not verify that a
+   called *function* exists: 321 distinct call sites against a regex-collected declaration set
+   leaves 13 names unresolved, of which six are `package:test` matchers, one is the `catch`
+   keyword, and six are local helpers declared inside test bodies in forms the declaration regex
+   cannot see. That is what separates it from the type and import checks, whose undeclared surfaces
+   measured five and zero — Dart's function *declaration* syntax (nested, closures bound to
+   variables, `async`, getters, extensions) is varied enough that a regex declaration set is
+   incomplete, and an incomplete declaration set produces false positives rather than misses.
+   Nor does it check argument counts or types, for the same reason plus Dart's optional,
+   positional-optional and named parameters. Six names to allowlist and six declaration forms to
+   support is a parser, and a check that needs one should not pretend otherwise.
+
+   The same reasoning was applied to a fifth question before it was added: is every type a file
+   names reachable from that file's *own* imports? Dart resolves names through `import` and
+   `export` and nothing else, so using a type from `types.dart` inside `simulation.dart` without
+   importing it is a compile error, and it is the error a cross-file feature introduces silently —
+   which is what every feature added this month was, putting a new enum in one file and using it
+   from another. Measured first, and the measurement was wrong the first time: parsing import
+   specifiers from the masked copy finds none at all, because a specifier *is* a string literal
+   and masking strings is what lets the reference check ignore prose. That reported 193 problems
+   on a clean tree and looked like a check worth abandoning; parsed from the raw text with the
+   barrel's exports followed one hop, it reports zero and is worth having. Both numbers are
+   recorded here because the difference between them is the whole judgement, and a reader who
+   only saw the second would not know the first was a bug in the measurement rather than in the
+   engine.
+5. **`ps1`** — `tool/ci/check-ps1.py make.ps1`. The Windows entry point has 21 targets (`check-docs.py`
+   prints the count, so a stale number here is detectable; a line count is not) that no Linux runner can execute and no PowerShell-less sandbox can even parse, so this is a
+   *static* check in four classes: delimiter balance; PowerShell-7-only syntax (`??`, `?.`, the
+   ternary, `&&`/`||` as pipeline chain operators, `$PSStyle`) that fails on the Windows PowerShell
+   5.1 that Windows 11 actually ships, with a message that does not say "your PowerShell is too old";
+   a pass-through parameter PowerShell cannot bind positionally — a `ValueFromRemainingArguments`
+   parameter with no `Position`, or one whose siblings stay positionally bindable; and a repository
+   root computed by climbing above the directory that holds the script. Neither of the last two is
+   theoretical. On 2026-10-27 the first real Windows 11 execution of `.\make.ps1 doctor` failed with
+   *Cannot validate argument on parameter 'Runtime'*, and the second — after that was fixed, on the
+   same machine, minutes later — failed with `bash: /mnt/c/Users/…/Git-Clones/tool/ci/doctor.sh: No
+   such file or directory`, because the script took the parent of its own directory as the repository
+   root. A pass is still never evidence the script ran, and both times it ran the reason it failed was
+   something this check did not yet cover; each failure became a class. See `docs/11` §3 and §9. Until it was wired into this group it had a `make` target and no automation:
+   the workflow, the CI mirror and the collector all skipped it, so the front door was checked only
+   when a human typed `make check-ps1`.
+6. **`checker-self-test`** — the `--self-test` modes of the four checkers that have one
+   (`check-ps1.py` does not). `check-docs.py` injects a fault per defect class into a copy of the
+   tree and requires each to be caught *and named* — 14 cases today, three of them added the same day
+   as the drift they guard; `check-dart-balance.py` runs 19 snippets, 12 of which are clean and must
+   not alarm; `check-parity.py` breaks a synthetic two-engine fixture in 12 ways;
+   `check-dart-sites.py` breaks the real engine in memory in 12 ways and requires each to be named.
+   Every one of those four numbers is printed by the tool that owns it, and all four were read off that output rather than
+   carried over from an earlier revision of this paragraph — which is how two of them came to be
+   wrong by one while every check still passed. This row exists because all
+   four checkers have found bugs in themselves: `check-docs.py` caught its own
+   `.sh`-stem regex and `make help`'s digit-blind grep, `check-dart-balance.py` caught itself
+   holding a string delimiter beside the stack instead of in the frame, which made it report
+   `mesh_sim.dart`'s usage text as an unterminated string, and `check-dart-sites.py` caught itself
+   brace-walking into a parameter list so it never saw a body, missing expression-bodied members
+   altogether, then reporting four correctly formatted `copyWith` assignments as broken because
+   `dart format` had wrapped them across two lines, and — on the day the reference check was added
+   — reporting **265 false positives** because its enum parser matched to the first `}` at column
+   zero, which over-runs a one-line enum like `enum ChannelAccess { free, halfDuplex, csma }` and
+   swallows the declarations after it. That parser had been harmless while its only consumer was
+   `EventKind`, which is multi-line, and became wrong the moment a second check depended on it. A
+   check that reports 265 problems on a clean tree gets ignored, and then it is worse than no
+   check at all. A check that always passes is
+   indistinguishable from a broken one, and nothing else in the pipeline would notice.
+
+Exit codes: `0` everything passed · `1` something failed **or could not run** · `64` bad usage.
+There is no `2` here. `run-pipeline.sh` grades the machine as well as the code, which is why it has
+a `partial` verdict and `--allow-missing-dart`; this script grades the code only, and a check it
+could not run is a check that did not pass.
 
 ---
 
@@ -320,8 +592,8 @@ make pr-branch BRANCH=fix/your-change      # create the branch, then the whole f
 The judgement is in the merge step, and it is deliberately **not** "local validation passed, so
 merge". Local validation gates *opening* the PR: it is fast and it stops you publishing something
 broken. It is not sufficient for *merging*, because a local run is only as broad as the toolchain
-installed locally — a machine with no Dart SDK verifies one job out of four and cannot tell you the
-authoritative engine builds.
+installed locally — a machine with no Dart SDK verifies two jobs out of five (`checks` and `web`)
+and cannot tell you the authoritative engine builds.
 
 So `--merge-on` chooses what evidence a merge may rest on:
 
@@ -366,9 +638,17 @@ is not readable through the API at all. Fetching them takes three calls with a j
 name, which is fiddly enough that it does not get done by hand. `make diagnose` does it and prints
 the analyzer errors and failing tests with real `file:line:col` locations.
 
+**Superseded runs are cancelled.** `ci.yml` has a `concurrency` group per ref with
+`cancel-in-progress` true for every ref but `main`, because successive pushes used to start one
+pipeline each and six runs piled up in the 45 minutes while one feature landed — each already
+superseded by the next before it had finished, which on a repository paying per minute is waste and
+on a repository whose Actions is refused is six identical refusals in `make watch` instead of one.
+A cancelled run is reported by `gh` as `cancelled`, not `failure`, and means nothing about the code;
+the run for a merged commit on `main` is the record of what landed and is never cancelled.
+
 **It distinguishes a build failure from an infrastructure refusal.** A job can fail without ever
 running, and this repository has had exactly that. `watch.sh` checks for the billing message
-before reporting anything else, because four jobs that never started are not four failures:
+before reporting anything else, because five jobs that never started are not five failures:
 
 ```
 error: these jobs never started: GitHub Actions is refused for billing reasons.
@@ -417,9 +697,13 @@ prints the job count from the workflow so a new job is at least visible.
 returns the pipeline's exit code. It deliberately contains no pipeline logic. A second
 implementation of the same policy — in PowerShell, or anywhere else — is a second thing that can
 drift from the workflow while still looking green, which is the failure this section exists to
-prevent. `tool/ci/check-ps1.py` statically checks it (delimiter balance, and PowerShell-7-only
-syntax that fails on the Windows PowerShell 5.1 Windows 11 ships) because it cannot be executed on a
-Linux runner. See `docs/11-windows-11-workflow.md`.
+prevent. `tool/ci/check-ps1.py` statically checks it (delimiter balance, PowerShell-7-only syntax
+that fails on the Windows PowerShell 5.1 Windows 11 ships, parameter binding that would make the
+documented invocation fail, and a repo root computed from a false assumption about where the script
+lives — the last two each found by a real Windows execution) because it cannot be executed on a Linux
+runner. That check runs in the workflow's `checks` job, in `run-pipeline.sh --job checks` and
+in `make checks`; it used to run in none of them, which is the drift `ci-checkers` in §5 now exists
+to catch. See `docs/11-windows-11-workflow.md`.
 
 **The diagnostics parser is one file both sides call.** `tool/ci/diagnostics.py` used to be an
 inline heredoc inside `ci.yml`. That meant the local runner either duplicated it — and then the
@@ -473,12 +757,18 @@ and a bug in a *reporter* should not fail an otherwise green build.
 
 | `ci.yml` job | step | local equivalent |
 | --- | --- | --- |
+| `checks` | Documentation drift | `python3 tool/ci/check-docs.py` |
+| | Dart delimiter balance | `python3 tool/ci/check-dart-balance.py` |
+| | Cross-language parity | `python3 tool/ci/check-parity.py` |
+| | Dart declaration sites | `python3 tool/ci/check-dart-sites.py` |
+| | PowerShell static check | `python3 tool/ci/check-ps1.py make.ps1` |
+| | Checker self-tests | the same four scripts with `--self-test` |
 | `web` | `npm ci` | `npm ci --no-audit --no-fund` |
 | | Typecheck | `npx tsc --noEmit -p tsconfig.json` |
 | | Unit + acceptance tests | `npm test` |
 | | Golden vectors are up to date | `npm run golden` + `git diff --quiet -- test-fixtures/golden-vectors.json` |
 | | Production build | `npm run build` |
-| `dart` | `dart pub get` | `cd sim/mesh_sim && dart pub get` |
+| `dart` | Resolve Dart dependencies | `cd sim/mesh_sim && dart pub get --enforce-lockfile` — the lock is committed (`991d11c`), so this is the branch every run takes; plain `dart pub get` plus a warning annotation is the fallback for a checkout with no lock |
 | | Analyze *(continue-on-error)* | `dart analyze` → `artifacts/…/dart-analyze.txt` |
 | | Tests *(continue-on-error)* | `dart test --reporter expanded` → `dart-test.txt` |
 | | CLI acceptance *(continue-on-error)* | `dart run bin/mesh_sim.dart --scenario campus_quad --seed 42` → `dart-cli.txt` |
@@ -489,3 +779,146 @@ and a bug in a *reporter* should not fail an otherwise green build.
 
 `./tool/ci/run-pipeline.sh --list` prints this mapping from the script itself, so the table above
 and the runner cannot disagree for long.
+
+---
+
+## 11. What this machine cannot do
+
+`make doctor` asks whether a machine can verify this repository. `make blockers`
+(`tool/ci/blockers.sh`) asks the other question — the one that decides when work on this project
+stops: **why is it not finished?** The two overlap on the Dart SDK and nowhere else, because most
+of what stops this project is not a missing tool. It is an egress rule, a refused CI account, a
+radio that does not exist in a container, and fifteen people standing in a quad.
+
+```bash
+make blockers                              # 27 rows, about 20 s
+./tool/ci/blockers.sh --strict             # exit 3 if a row this machine *can* fix is wrong
+./tool/ci/blockers.sh --json artifacts/blockers.json
+.\make.ps1 blockers                        # Windows
+```
+
+Every row is measured when the script runs, and the measurement is printed next to the verdict,
+so a conclusion can be disputed by reading its evidence instead of trusting the prose. The one
+row that cannot be probed says so in the evidence column rather than inventing a number.
+
+### The six sections, and what they found on 2026-10-26
+
+**A · toolchain.** `dart` absent, and its SDK host unreachable — `storage.googleapis.com` →
+`curl exit 35, HTTP 000, 0 bytes`. That is the load-bearing one: `sim/mesh_sim` is the
+authoritative engine, **22 Dart files / 15 200 lines**, and not one of them has ever been
+compiled on the machine that wrote them. `flutter` absent, so the roadmap's `app/` cannot be
+built, run or screenshotted. `pub.dev` unreachable, so `pubspec.yaml` is frozen at what it
+already lists — no Opus codec, no SQLite plugin, no BLE plugin — and `pubspec.lock` still cannot be
+*generated* here. Since `991d11c` it no longer has to be: the owner committed one, resolved on a
+machine that could reach pub.dev (49 packages, `sdks: dart >=3.13.0 <4.0.0`), so CI resolves with
+`--enforce-lockfile` and Dart dependency resolution is reproducible from anywhere that has the SDK,
+not only from a machine that can reach pub.dev. The warning annotation that used to say otherwise
+fired on seven of nine jobs — every job that resolves Dart dependencies — at `e894ff0`, and on none
+at `991d11c`; that before/after is the acceptance gate `docs/11` §2 wrote for this in advance. `pwsh` absent *and not
+installable*: the release page answers (`HTTP 200`) and the asset redirects to
+`objects.githubusercontent.com`, which is outside the egress allowlist, yielding `0 bytes` — so
+`make.ps1` and the whole of `docs/11` are checked statically by `check-ps1.py`; the two executions
+anywhere — both on Windows 11, 2026-10-27 — failed, first at parameter binding and then on a repo
+root computed one directory too high, which are the defects `check-ps1.py`'s third and fourth classes
+now catch. That static check is now part of all three entry points rather than
+something a person had to remember to run. `node v22.22.3` and `python3 3.11.2` are present, which is why the TS
+reference engine and the five stdlib-only checkers do run here.
+
+**B · egress.** Eight hosts probed, four blocked: `pub.dev`, `storage.googleapis.com`,
+`objects.githubusercontent.com`, `results-receiver.actions.githubusercontent.com`. Redirects are
+followed and the delivered byte count is read, because a 302 with nothing behind it is the exact
+shape of the failure here — a probe that stopped at the first response would report the Dart SDK
+as installable. The last of the four is why CI log download fails: `gh run view --log-failed`
+returns empty, and the only machine-readable channel left is check-run annotations
+(`make diagnose`).
+
+**C · remote CI.** The newest run is `failure … classified 'billing'` — jobs are refused before
+they start, with *"recent account payments have failed or your spending limit needs to be
+increased"*, and `gh run rerun` is refused too. The last green run was **2026-10-23T08:46:52Z**
+(`8406717`), with **82 non-success runs since**. So every verification claim after that timestamp
+is local-only: `run-pipeline.sh` mirrors the workflow step for step, but nothing has executed it.
+This is not fixable from a branch; it needs the account's billing settings.
+
+**D · hardware.** No `/sys/class/bluetooth` entries, no wireless phy under `/sys/class/net`, no
+`iw`, no `adb`, and a Linux host with no `xcrun`. That closes the BLE GATT hello, the iOS beacon,
+Wi-Fi Direct, Wi-Fi Aware, the permissions and foreground-service work, and every iOS item —
+including the v0.9 launch, because Apple's toolchain does not run on Linux at all. One row is not
+a probe and is labelled that way: a crowd of fifteen people carrying phones. `skills/08` already
+forbids claiming large-scale results without it.
+
+**E · repository.** The rollback signature, and the only section whose rows this machine can fix.
+`git-head` compares HEAD with `origin/<branch>` and separates *ahead* from *behind*, because only
+behind is drift: unpushed local commits are the normal state of a working turn, and flagging them
+would make `--strict` fail between every commit and its push. `git-worktree` is deliberately
+narrower than "is the tree dirty" — dirt is ordinary work in progress, whereas a tracked file
+whose content is **byte-identical to the base commit** is a snapshot restored from before the work
+landed, and committing it pushes a revert. Both signatures were tested by fabricating them:
+reverting `README.md` to its base content, and resetting HEAD to `origin/main`.
+
+**F · roadmap.** All 28 open items read out of `roadmap/roadmap.md` and classified by what closing
+them would take, each printed with the rule that matched it so the classification can be argued
+with row by row: **5 need people** (field test, crowd, external audit, launch, community relay),
+**2 a store account and signing key**, **10 a handset or an OS API**, **10 the Dart/Flutter
+toolchain**, and **1 can be written from here** — line 383, the privacy policy, whose crypto-export
+half is already in `docs/04` §7. The list is regenerated on every run and deliberately never
+transcribed into a document: a table copied by hand is stale the day a roadmap line moves, and this
+one reads the file.
+
+That one item was then written, the same day the classifier named it: `PRIVACY.md`, at the root
+where a store listing expects it. The box stays open, and the reason is in the roadmap note — a
+privacy policy needs a data controller and this repository has no legal entity behind it, so
+Article 13's identity-and-contact requirement is unmet, and it needs counsel, which is not
+engineering work. The classifier's answer was therefore right and incomplete in the useful way: it
+found the only open item whose *documents* could be produced here, and producing them exposed the
+two things that cannot be. `make blockers` still reports 28 open items; it does not know, and
+should not guess, that one of them is now waiting on a lawyer rather than on a compiler.
+
+### Why it is not a row in `make checks`
+
+It always exits 0. "This machine has no Dart SDK" is a fact about the machine rather than a defect
+in the repository, and a row that can only pass would sit in a pass/fail table as a permanent pass
+— the opposite of what it is for. `--strict` is the exception: exit 3 on the three rows this
+machine can actually fix (a rolled-back HEAD, a stale working tree, no `node_modules`), which is a
+pre-push question and not a daily one.
+
+`daily.sh` runs it as **step 0**, before both halves, and it does not affect the verdict. It runs
+first for one reason: if HEAD has been rolled back to the branch point, the twenty minutes that
+follow would measure a checkout that is not the pushed one, and the report should say so before
+spending them. When that is the situation, `DAILY.md` opens its blocker section with a callout
+naming the rows, and `daily.json` records them under `blockers.driftRows` with
+`blockers.checkoutSuspect: true`.
+
+### The three reasons the work stops, in the order they cost time
+
+1. **The verification pass competes with the work for the same hours.** `npx vitest run` is 461
+   tests and took **383 s** on this machine on 2026-10-26; the collector with evidence probes is
+   about twenty minutes; the daily run about twelve without them. Re-proving what was already
+   proved is not free, so the checks are collected into one dated artifact
+   (`tool/ci/daily.sh`, `--prune N`, previous-run deltas) instead of being paid inline every round.
+2. **The sandbox is rolled back between turns, and the rollback leaves no trace in the
+   repository.** `node_modules` and `artifacts/` are wiped, and the local `.git` is reset to the
+   branch point, so pushed work is present only as uncommitted files that look exactly like new
+   work. It happened fifteen times on this branch by 2026-10-27 — twice while this section was being
+   written, once while a Windows transcript was being answered — and
+   each time it costs a `git fetch`, a `git reset --mixed origin/<branch>`, an `npm ci` and a
+   re-run of the suite before anything new can be written. Section E exists to detect it in about
+   two seconds instead of at the end of a twenty-minute run. What a rollback cannot erase is
+   `reports/verification-log.jsonl` (§5): counts and verdicts rather than captures, so "which shas
+   were verified, and what was missing when they were" still has an answer afterwards.
+3. **What is left is not code that can be written here.** Sections A–D are the reason, and section
+   F prices it: of 28 open roadmap items, **none** is closable from this machine and all 28 need
+   hardware, a store account, a toolchain that is not installable, a legal entity, or a crowd.
+   Section F said 1 until 2026-10-27, when the row it counted — line 488, the legal documents —
+   was reclassified from `sandbox` to `people`: `PRIVACY.md` had been written after the rule, and
+   its own note keeps the box open for a data controller and counsel review, which is not writing.
+   A classifier that contradicts the note it classifies is worse than none, so the count is 0. The remainder is not deferred
+   work — it is the part of this project that was never going to happen inside a container. What
+   *can* be produced here is the specification, the two engines, the checks and the measurements,
+   for whoever has the phones.
+
+### What the report deliberately does not claim
+
+It does not say the project cannot be finished; it says which parts cannot be finished *here*, and
+what each of those parts would need. On a machine with the Dart SDK, a handset and a CI account
+that pays, section A shrinks to one row, section C goes green, and section F still lists the crowd
+— because that row has no probe and never will.

@@ -1,0 +1,85 @@
+{
+  "analyze_issues": [],
+  "test_failures": [
+    {
+      "name": "loading test/acceptance_test.dart",
+      "path": null,
+      "line": null,
+      "col": null,
+      "message": "Failed to load \"test/acceptance_test.dart\":\n  lib/src/routing.dart:171:58: Error: A value of type 'num' can't be returned from a function with return type 'int'.\n      math.max(0, neighborCount) * math.max(0, aliasBytes) +\n                                                           ^"
+    },
+    {
+      "name": "loading test/atrium_test.dart",
+      "path": null,
+      "line": null,
+      "col": null,
+      "message": "Failed to load \"test/atrium_test.dart\":\n  lib/src/routing.dart:171:58: Error: A value of type 'num' can't be returned from a function with return type 'int'.\n      math.max(0, neighborCount) * math.max(0, aliasBytes) +\n                                                           ^"
+    },
+    {
+      "name": "loading test/channel_test.dart",
+      "path": null,
+      "line": null,
+      "col": null,
+      "message": "Failed to load \"test/channel_test.dart\":\n  lib/src/routing.dart:171:58: Error: A value of type 'num' can't be returned from a function with return type 'int'.\n      math.max(0, neighborCount) * math.max(0, aliasBytes) +\n                                                           ^"
+    },
+    {
+      "name": "loading test/community_relay_test.dart",
+      "path": null,
+      "line": null,
+      "col": null,
+      "message": "Failed to load \"test/community_relay_test.dart\":\n  lib/src/routing.dart:171:58: Error: A value of type 'num' can't be returned from a function with return type 'int'.\n      math.max(0, neighborCount) * math.max(0, aliasBytes) +\n                                                           ^"
+    },
+    {
+      "name": "loading test/dtn_test.dart",
+      "path": null,
+      "line": null,
+      "col": null,
+      "message": "Failed to load \"test/dtn_test.dart\":\n  lib/src/routing.dart:171:58: Error: A value of type 'num' can't be returned from a function with return type 'int'.\n      math.max(0, neighborCount) * math.max(0, aliasBytes) +\n                                                           ^"
+    },
+    {
+      "name": "loading test/engine_test.dart",
+      "path": null,
+      "line": null,
+      "col": null,
+      "message": "Failed to load \"test/engine_test.dart\":\n  test/engine_test.dart:2715:20: Error: Method not found: 'run'.\n        final flat = run(festivalCrowd(42),\n                     ^^^\n  test/engine_test.dart:2717:21: Error: Method not found: 'run'.\n        final sized = run(festivalCrowd(42),\n                      ^^^\n  lib/src/routing.dart:171:58: Error: A value of type 'num' can't be returned from a function with return type 'int'.\n      math.max(0, neighborCount) * math.max(0, aliasBytes) +\n                                                           ^"
+    },
+    {
+      "name": "loading test/golden_test.dart",
+      "path": null,
+      "line": null,
+      "col": null,
+      "message": "Failed to load \"test/golden_test.dart\":\n  lib/src/routing.dart:171:58: Error: A value of type 'num' can't be returned from a function with return type 'int'.\n      math.max(0, neighborCount) * math.max(0, aliasBytes) +\n                                                           ^"
+    },
+    {
+      "name": "loading test/history_test.dart",
+      "path": null,
+      "line": null,
+      "col": null,
+      "message": "Failed to load \"test/history_test.dart\":\n  lib/src/routing.dart:171:58: Error: A value of type 'num' can't be returned from a function with return type 'int'.\n      math.max(0, neighborCount) * math.max(0, aliasBytes) +\n                                                           ^"
+    },
+    {
+      "name": "loading test/media_test.dart",
+      "path": null,
+      "line": null,
+      "col": null,
+      "message": "Failed to load \"test/media_test.dart\":\n  lib/src/routing.dart:171:58: Error: A value of type 'num' can't be returned from a function with return type 'int'.\n      math.max(0, neighborCount) * math.max(0, aliasBytes) +\n                                                           ^"
+    },
+    {
+      "name": "loading test/transport_test.dart",
+      "path": null,
+      "line": null,
+      "col": null,
+      "message": "Failed to load \"test/transport_test.dart\":\n  lib/src/routing.dart:171:58: Error: A value of type 'num' can't be returned from a function with return type 'int'.\n      math.max(0, neighborCount) * math.max(0, aliasBytes) +\n                                                           ^"
+    }
+  ],
+  "test": {
+    "passed": 0,
+    "failed": 10,
+    "skipped": 0
+  },
+  "analyze": {
+    "error": 0,
+    "warning": 0,
+    "info": 0
+  }
+}

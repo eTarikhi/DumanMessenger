@@ -1,0 +1,11 @@
+{
+  "scenario": "festival_crowd",
+  "seed": 1102,
+  "motionSeed": 5897,
+  "windowMs": 225000,
+  "sent": 150,
+  "optimisticReachable": 150,
+  "upperBound": 1,
+  "assumptions": "all carriers; unlimited copies and hops; zero latency, loss, scheduling or energy costs; observe every piecewise-constant physics graph; carry through partitions",
+  "NOT_A_FIVE_HOP_DELIVERY_MEASUREMENT": true
+}

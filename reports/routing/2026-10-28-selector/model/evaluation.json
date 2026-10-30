@@ -1,0 +1,836 @@
+{
+  "label": "OFFLINE_LABEL_REPLAY_NOT_LIVE_DELIVERY",
+  "modelSHA256": "ef63fbf524cb9ad056a0bd91fb1360330ad87c2518b64af74a748b47b4319c95",
+  "estimates": {
+    "train": {
+      "baseline": {
+        "101/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "101/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "101/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 40,
+          "baseline": 40
+        },
+        "101/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 40,
+          "baseline": 40
+        },
+        "101/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 134,
+          "baseline": 134
+        },
+        "101/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 137,
+          "baseline": 137
+        },
+        "101/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 65,
+          "baseline": 65
+        },
+        "101/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 65,
+          "baseline": 65
+        },
+        "202/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "202/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "202/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 45,
+          "baseline": 45
+        },
+        "202/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 45,
+          "baseline": 45
+        },
+        "202/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 142,
+          "baseline": 142
+        },
+        "202/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 144,
+          "baseline": 144
+        },
+        "202/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 65,
+          "baseline": 65
+        },
+        "202/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 65,
+          "baseline": 65
+        },
+        "303/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "303/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 149,
+          "baseline": 149
+        },
+        "303/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 47,
+          "baseline": 47
+        },
+        "303/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 47,
+          "baseline": 47
+        },
+        "303/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 120,
+          "baseline": 120
+        },
+        "303/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 119,
+          "baseline": 119
+        },
+        "303/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 66,
+          "baseline": 66
+        },
+        "303/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 66,
+          "baseline": 66
+        }
+      },
+      "ack-6000": {
+        "101/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "101/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 149,
+          "baseline": 150
+        },
+        "101/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 40,
+          "baseline": 40
+        },
+        "101/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 40,
+          "baseline": 40
+        },
+        "101/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 127,
+          "baseline": 134
+        },
+        "101/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 126,
+          "baseline": 137
+        },
+        "101/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 65,
+          "baseline": 65
+        },
+        "101/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 65,
+          "baseline": 65
+        },
+        "202/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 149,
+          "baseline": 150
+        },
+        "202/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "202/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 45,
+          "baseline": 45
+        },
+        "202/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 45,
+          "baseline": 45
+        },
+        "202/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 137,
+          "baseline": 142
+        },
+        "202/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 140,
+          "baseline": 144
+        },
+        "202/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 65,
+          "baseline": 65
+        },
+        "202/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 65,
+          "baseline": 65
+        },
+        "303/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 148,
+          "baseline": 150
+        },
+        "303/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 149,
+          "baseline": 149
+        },
+        "303/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 47,
+          "baseline": 47
+        },
+        "303/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 47,
+          "baseline": 47
+        },
+        "303/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 125,
+          "baseline": 120
+        },
+        "303/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 128,
+          "baseline": 119
+        },
+        "303/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 66,
+          "baseline": 66
+        },
+        "303/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 66,
+          "baseline": 66
+        }
+      },
+      "rules": {
+        "101/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "101/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "101/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 40,
+          "baseline": 40
+        },
+        "101/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 40,
+          "baseline": 40
+        },
+        "101/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 127,
+          "baseline": 134
+        },
+        "101/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 137,
+          "baseline": 137
+        },
+        "101/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 65,
+          "baseline": 65
+        },
+        "101/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 65,
+          "baseline": 65
+        },
+        "202/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "202/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "202/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 45,
+          "baseline": 45
+        },
+        "202/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 45,
+          "baseline": 45
+        },
+        "202/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 137,
+          "baseline": 142
+        },
+        "202/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 144,
+          "baseline": 144
+        },
+        "202/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 65,
+          "baseline": 65
+        },
+        "202/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 65,
+          "baseline": 65
+        },
+        "303/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "303/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 149,
+          "baseline": 149
+        },
+        "303/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 47,
+          "baseline": 47
+        },
+        "303/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 47,
+          "baseline": 47
+        },
+        "303/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 125,
+          "baseline": 120
+        },
+        "303/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 119,
+          "baseline": 119
+        },
+        "303/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 66,
+          "baseline": 66
+        },
+        "303/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 66,
+          "baseline": 66
+        }
+      },
+      "learned": {
+        "101/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "101/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "101/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 40,
+          "baseline": 40
+        },
+        "101/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 40,
+          "baseline": 40
+        },
+        "101/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 134,
+          "baseline": 134
+        },
+        "101/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 137,
+          "baseline": 137
+        },
+        "101/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 65,
+          "baseline": 65
+        },
+        "101/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 65,
+          "baseline": 65
+        },
+        "202/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "202/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "202/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 45,
+          "baseline": 45
+        },
+        "202/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 45,
+          "baseline": 45
+        },
+        "202/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 142,
+          "baseline": 142
+        },
+        "202/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 144,
+          "baseline": 144
+        },
+        "202/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 65,
+          "baseline": 65
+        },
+        "202/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 65,
+          "baseline": 65
+        },
+        "303/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "303/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 149,
+          "baseline": 149
+        },
+        "303/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 47,
+          "baseline": 47
+        },
+        "303/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 47,
+          "baseline": 47
+        },
+        "303/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 120,
+          "baseline": 120
+        },
+        "303/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 119,
+          "baseline": 119
+        },
+        "303/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 66,
+          "baseline": 66
+        },
+        "303/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 66,
+          "baseline": 66
+        }
+      }
+    },
+    "tune": {
+      "baseline": {
+        "404/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "404/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 149,
+          "baseline": 149
+        },
+        "404/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 37,
+          "baseline": 37
+        },
+        "404/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 37,
+          "baseline": 37
+        },
+        "404/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 127,
+          "baseline": 127
+        },
+        "404/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 125,
+          "baseline": 125
+        },
+        "404/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 69,
+          "baseline": 69
+        },
+        "404/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 69,
+          "baseline": 69
+        }
+      },
+      "ack-6000": {
+        "404/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 147,
+          "baseline": 150
+        },
+        "404/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 149
+        },
+        "404/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 37,
+          "baseline": 37
+        },
+        "404/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 37,
+          "baseline": 37
+        },
+        "404/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 118,
+          "baseline": 127
+        },
+        "404/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 107,
+          "baseline": 125
+        },
+        "404/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 69,
+          "baseline": 69
+        },
+        "404/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 69,
+          "baseline": 69
+        }
+      },
+      "rules": {
+        "404/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "404/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 149,
+          "baseline": 149
+        },
+        "404/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 37,
+          "baseline": 37
+        },
+        "404/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 37,
+          "baseline": 37
+        },
+        "404/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 118,
+          "baseline": 127
+        },
+        "404/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 125,
+          "baseline": 125
+        },
+        "404/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 69,
+          "baseline": 69
+        },
+        "404/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 69,
+          "baseline": 69
+        }
+      },
+      "learned": {
+        "404/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 150,
+          "baseline": 150
+        },
+        "404/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 149,
+          "baseline": 149
+        },
+        "404/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 37,
+          "baseline": 37
+        },
+        "404/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 37,
+          "baseline": 37
+        },
+        "404/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 127,
+          "baseline": 127
+        },
+        "404/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 125,
+          "baseline": 125
+        },
+        "404/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 69,
+          "baseline": 69
+        },
+        "404/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 69,
+          "baseline": 69
+        }
+      }
+    },
+    "validation": {
+      "baseline": {
+        "505/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 147,
+          "baseline": 147
+        },
+        "505/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 149,
+          "baseline": 149
+        },
+        "505/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 40,
+          "baseline": 40
+        },
+        "505/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 40,
+          "baseline": 40
+        },
+        "505/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 112,
+          "baseline": 112
+        },
+        "505/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 113,
+          "baseline": 113
+        },
+        "505/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 63,
+          "baseline": 63
+        },
+        "505/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 63,
+          "baseline": 63
+        }
+      },
+      "ack-6000": {
+        "505/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 149,
+          "baseline": 147
+        },
+        "505/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 149,
+          "baseline": 149
+        },
+        "505/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 40,
+          "baseline": 40
+        },
+        "505/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 40,
+          "baseline": 40
+        },
+        "505/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 133,
+          "baseline": 112
+        },
+        "505/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 135,
+          "baseline": 113
+        },
+        "505/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 63,
+          "baseline": 63
+        },
+        "505/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 63,
+          "baseline": 63
+        }
+      },
+      "rules": {
+        "505/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 146,
+          "baseline": 147
+        },
+        "505/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 149,
+          "baseline": 149
+        },
+        "505/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 40,
+          "baseline": 40
+        },
+        "505/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 40,
+          "baseline": 40
+        },
+        "505/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 133,
+          "baseline": 112
+        },
+        "505/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 113,
+          "baseline": 113
+        },
+        "505/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 63,
+          "baseline": 63
+        },
+        "505/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 63,
+          "baseline": 63
+        }
+      },
+      "learned": {
+        "505/campus_quad/duty=False": {
+          "sent": 150,
+          "five": 147,
+          "baseline": 147
+        },
+        "505/campus_quad/duty=True": {
+          "sent": 150,
+          "five": 149,
+          "baseline": 149
+        },
+        "505/sparse_village/duty=False": {
+          "sent": 150,
+          "five": 40,
+          "baseline": 40
+        },
+        "505/sparse_village/duty=True": {
+          "sent": 150,
+          "five": 40,
+          "baseline": 40
+        },
+        "505/festival_crowd/duty=False": {
+          "sent": 150,
+          "five": 112,
+          "baseline": 112
+        },
+        "505/festival_crowd/duty=True": {
+          "sent": 150,
+          "five": 113,
+          "baseline": 113
+        },
+        "505/partitioned_pair/duty=False": {
+          "sent": 150,
+          "five": 63,
+          "baseline": 63
+        },
+        "505/partitioned_pair/duty=True": {
+          "sent": 150,
+          "five": 63,
+          "baseline": 63
+        }
+      }
+    }
+  }
+}

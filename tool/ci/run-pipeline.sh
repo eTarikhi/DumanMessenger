@@ -37,7 +37,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(repo_root)"
 DART_DIR="$ROOT/sim/mesh_sim"
 
-JOBS_ALL="web dart cli-matrix probes"
+JOBS_ALL="checks web dart cli-matrix probes"
 JOBS_FAST_WEB="typecheck test golden"
 JOBS_FAST_DART="analyze test"
 
@@ -51,11 +51,16 @@ LIST_ONLY=0
 LABEL="run"
 
 usage() {
-  sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  # Walk the leading `#` block instead of a hard-coded line range. Four of these scripts had
+  # drifted past their own range and were printing their source code as help text — measured, not
+  # suspected: `run-pipeline.sh --help` emitted eleven lines of `set -uo pipefail`, `HERE=…`,
+  # `. "$HERE/lib.sh"`. Re-tuning six magic numbers would leave the same trap for the next edit;
+  # this is the pattern `daily.sh` already uses.
+  awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"
   cat <<USAGE
 
 Options:
-  --job LIST             comma-separated: web, dart, cli-matrix, probes (default: all)
+  --job LIST             comma-separated: checks, web, dart, cli-matrix, probes (default: all)
   --fast                 the quick subset: typecheck, unit tests, analyze, dart test.
                          Skips the production build, the CLI acceptance matrix and the
                          probes. Good before a commit; not good before a push.
@@ -99,6 +104,13 @@ done
 
 describe_jobs() {
   cat <<'PLAN'
+checks     Toolchain-free static checks              [no Node, no Dart — python3 only]
+             python3 tool/ci/check-docs.py
+             python3 tool/ci/check-dart-balance.py
+             python3 tool/ci/check-parity.py
+             python3 tool/ci/check-dart-sites.py
+             python3 tool/ci/check-ps1.py make.ps1
+             the four checkers' --self-test modes
 web        TypeScript engine + React simulator
              npm ci
              npx tsc --noEmit -p tsconfig.json
@@ -106,7 +118,7 @@ web        TypeScript engine + React simulator
              npm run golden && git diff --quiet -- test-fixtures/golden-vectors.json
              npm run build
 dart       Dart mesh_sim (authoritative engine)      [runs all three, then gates]
-             dart pub get
+             dart pub get (--enforce-lockfile; pubspec.lock is committed, so that is the branch taken)
              dart analyze
              dart test --reporter expanded
              dart run bin/mesh_sim.dart --scenario campus_quad --seed 42
@@ -152,7 +164,7 @@ if [ "$QUIET" = 0 ]; then
   echo
   log_dim "toolchain   node $(tool_version node | sed 's/^v//')   npm $(tool_version npm)   python3 $(tool_version python3 | awk '{print $2}')"
   if [ "$HAVE_DART" = 1 ]; then
-    log_dim "            dart $(tool_version dart | awk '{print $NF}')"
+    log_dim "            dart $(dart_sdk_version)"
   else
     log_dim "            dart ${C_YELLOW}MISSING${C_RESET} — see docs/10-local-development-and-ci.md §2"
   fi
@@ -219,6 +231,54 @@ selected() { case " $SELECTED " in *" $1 "*) return 0 ;; *) return 1 ;; esac }
 
 # --- job: web -----------------------------------------------------------------
 
+job_checks() {
+  job_header "checks — toolchain-free static checks (docs, parity, Dart sites)"
+  local out
+  if ! have python3; then
+    skip_step out "static checks (whole job)" "python3 is not installed"
+    record_job checks missing "python3 absent"
+    return
+  fi
+  # Mirrors the workflow's `checks` job step for step. No Node and no Dart, which is the point:
+  # this job answers even when the toolchain jobs cannot, and it is the only one that catches a
+  # protocol constant changed in one engine and not the other, a config knob or statistics field
+  # present in one engine only, or a document naming a command that does not exist.
+  local failed=""
+  run_step out "Documentation drift (check-docs.py)" "checks-drift.txt" \
+           "$ROOT" python3 tool/ci/check-docs.py
+  [ "$out" = success ] || failed="$failed drift"
+
+  run_step out "Dart delimiter balance (check-dart-balance.py)" "checks-dart-balance.txt" \
+           "$ROOT" python3 tool/ci/check-dart-balance.py
+  [ "$out" = success ] || failed="$failed dart-balance"
+
+  run_step out "Cross-language parity (check-parity.py)" "checks-parity.txt" \
+           "$ROOT" python3 tool/ci/check-parity.py
+  [ "$out" = success ] || failed="$failed parity"
+
+  run_step out "Dart declaration sites (check-dart-sites.py)" "checks-dart-sites.txt" \
+           "$ROOT" python3 tool/ci/check-dart-sites.py
+  [ "$out" = success ] || failed="$failed dart-sites"
+
+  # make.ps1 cannot be executed here and could not be executed on the runner either, so both
+  # sides check it statically and both say so. The workflow gained the same step; before that
+  # the checker existed and no pipeline called it.
+  run_step out "PowerShell static check (check-ps1.py)" "checks-ps1.txt" \
+           "$ROOT" python3 tool/ci/check-ps1.py make.ps1
+  [ "$out" = success ] || failed="$failed ps1"
+
+  # A check that always passes is indistinguishable from a broken one, and all four have found
+  # bugs in themselves, so the self-tests are a CI step rather than an optional extra.
+  run_step out "Checker self-tests" "checks-self-test.txt" "$ROOT" bash -c \
+    'python3 tool/ci/check-docs.py --self-test &&
+     python3 tool/ci/check-dart-balance.py --self-test &&
+     python3 tool/ci/check-parity.py --self-test &&
+     python3 tool/ci/check-dart-sites.py --self-test'
+  [ "$out" = success ] || failed="$failed self-test"
+
+  if [ -n "$failed" ]; then record_job checks failure "$failed"; else record_job checks success ""; fi
+}
+
 job_web() {
   job_header "web — TypeScript engine + React simulator"
   local out
@@ -261,6 +321,12 @@ job_web() {
   if [ "$FAST" = 0 ]; then
     run_step out "Production build (tsc -b && vite build)" "web-build.txt" "$ROOT" npm run build
     [ "$out" = success ] || failed="$failed build"
+    run_step out "Deployment regressions" "web-deployment.txt" "$ROOT" npm run test:deployment
+    [ "$out" = success ] || failed="$failed deployment"
+    run_step out "Dependency audit" "web-audit.txt" "$ROOT" npm audit --audit-level=low
+    [ "$out" = success ] || failed="$failed audit"
+    run_step out "Simulator staging package" "web-package.txt" "$ROOT" npm run package:simulator -- "$artifact_dir/package"
+    [ "$out" = success ] || failed="$failed package"
   fi
 
   if [ -n "$failed" ]; then record_job web failure "$failed"; else record_job web success; fi
@@ -276,14 +342,19 @@ job_dart() {
     return
   fi
 
+  # Mirrors the workflow: enforce the lockfile when one is committed, and say so plainly when
+  # there is none, because `test: ^1.25.0` resolved afresh is not a reproducible build.
   local pubout
-  run_step pubout "dart pub get" "dart-pub-get.txt" "$DART_DIR" dart pub get
+  run_step pubout "dart pub get" "dart-pub-get.txt" "$DART_DIR" bash -c \
+    'if [ -f pubspec.lock ]; then dart pub get --enforce-lockfile; else
+       echo "note: pubspec.lock is not committed, so this resolves dependencies fresh" >&2
+       dart pub get; fi'
   if [ "$pubout" != success ]; then record_job dart failure "pub get"; return; fi
 
   # These three run unconditionally and are gated afterwards, exactly as the workflow does
   # it, so a single red build reports the analyzer, the test failures and the CLI metrics
   # together instead of stopping at the first.
-  local analyze=test=cli=success
+  local analyze=success test=success cli=success package=success smoke=success
   run_step analyze "Analyze (dart analyze)" "dart-analyze.txt" "$DART_DIR" dart analyze
   run_step test    "Tests (dart test --reporter expanded)" "dart-test.txt" "$DART_DIR" \
                    dart test --reporter expanded
@@ -294,6 +365,12 @@ job_dart() {
   else
     run_step cli "CLI acceptance (campus_quad, seed 42)" "dart-cli.txt" "$DART_DIR" \
                  dart run bin/mesh_sim.dart --scenario campus_quad --seed 42
+    mkdir -p "$DART_DIR/build"
+    run_step package "Compile authoritative CLI" "dart-compile.txt" "$DART_DIR" \
+                 dart compile exe bin/mesh_sim.dart -o build/duman-mesh-sim
+    if [ "$package" = success ]; then
+      run_step smoke "Compiled CLI help and campus acceptance" "dart-compiled-smoke.txt" "$DART_DIR" bash -c 'build/duman-mesh-sim --help && build/duman-mesh-sim --scenario campus_quad --seed 42 --json'
+    else smoke=failure; fi
   fi
 
   # Diagnostics: the same parser the workflow calls, on the same captured files.
@@ -311,9 +388,9 @@ job_dart() {
   fi
 
   # Gate — the workflow's own condition, on the same three outcomes.
-  if [ "$analyze" != success ] || [ "$test" != success ] || [ "$cli" != success ]; then
+  if [ "$analyze" != success ] || [ "$test" != success ] || [ "$cli" != success ] || [ "$package" != success ] || [ "$smoke" != success ]; then
     err "Dart engine failed (analyze: $analyze, test: $test, CLI: $cli). Captured output is in ${artifact_dir#$ROOT/}"
-    record_job dart failure "analyze=$analyze test=$test cli=$cli"
+    record_job dart failure "analyze=$analyze test=$test cli=$cli compile=$package smoke=$smoke"
   else
     record_job dart success
   fi
@@ -416,6 +493,7 @@ job_probes() {
 START_ALL=$(date +%s)
 for job in $SELECTED; do
   case "$job" in
+    checks)     job_checks ;;
     web)        job_web ;;
     dart)       job_dart ;;
     cli-matrix) job_cli_matrix ;;
@@ -478,7 +556,7 @@ if [ -n "$JSON_OUT" ]; then
     printf '  "verification": "%s",\n' "$VERIFIED"
     printf '  "toolchain": {"node": "%s", "npm": "%s", "dart": "%s", "python3": "%s"},\n' \
       "$(tool_version node | sed 's/^v//')" "$(tool_version npm)" \
-      "$([ "$HAVE_DART" = 1 ] && tool_version dart | awk '{print $NF}' || echo missing)" \
+      "$([ "$HAVE_DART" = 1 ] && dart_sdk_version || echo missing)" \
       "$(tool_version python3 | awk '{print $2}')"
     printf '  "jobs": {\n'
     first=1

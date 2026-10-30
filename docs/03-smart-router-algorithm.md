@@ -65,6 +65,16 @@ No election; just gossip:
 
 1. Each node’s OGM (2s beacon) carries: `{nodeId, seq, score, isSuper, peerCount, batteryBucket}`
 
+> **The 2 s is measured now, not only specified (Oct 2026 — `npm run media beacon`, eight seeds; evidence in `docs/06-simulator-findings.md` §24.7, §24.11–§24.12).** It stays, and it is
+> worth saying why, because the measurement did not flatter it. Sweeping 2/5/12/25 s: at 20 nodes the interval barely matters — stretching it 12.5× cuts demanded radio time tenfold and
+> delivery never leaves 100% — while at 60 nodes **5 s beats the specified 2 s** (94.8% delivery against 92.0%) and everything longer degrades it (87.5% at 12 s, 79.2% at 25 s). So no
+> single interval serves both densities, and `ogmIntervalMode: "density"` was built to derive one per node from its peer count. It is measured and ships off: where the two modes land in
+> comparable topologies it buys no delivery and costs airtime, and where it saves 42% of the airtime the two worlds differ in connectivity so the comparison cannot be read at all
+> (§24.10 is why that matters). The reason 2 s stands is the encoding note below — with the 2-byte aliases this section already prescribes, the control plane fits inside the radio budget at
+> 60 nodes *at the specified interval*, so the pressure to change the interval was an artefact of what a beacon costs rather than of how often it is sent. One caution for anyone re-reading
+> the sweep: an earlier three-seed version of it reported a non-monotone result with 25 s "recovering", and that was the sample, not the mesh — `festival_crowd` is bimodal, and §24.8 has
+> the per-seed table that shows it.
+
 > **Implementation note (Oct 2026 — `sim/mesh_sim`, evidence in `docs/06-simulator-findings.md`):** the beacon also needs the originator's own 1-hop neighbour list —
 > `neighborIds`, capped at 30 (the `k ≤ 30` budget in §4). This is OLSR's HELLO
 > payload, and MPR **coverage** is undefined without it: a node cannot tell
@@ -72,6 +82,21 @@ No election; just gossip:
 > at 12 entries a 60-node crowd (15-18 peers each) truncated every advertisement,
 > suppression collapsed 1772 → 110 and overhead went *up*. A real deployment
 > advertises 2-byte aliases (~60 B for 30 neighbours).
+>
+> **That prescription is now measured, and it is the single largest lever on the control plane
+> (`docs/06-simulator-findings.md` §24.7).** This engine advertises the full 32-byte public
+> key, which sizes a typical beacon at 630 B and a fully loaded one at 1 270 B — over the
+> 1 024 B BLE ceiling. On 2-byte aliases the same beacons are 90 B and 130 B, and at the
+> *specified* 2 s interval in a 60-node crowd the demanded radio time falls from **5.69×** the
+> airtime that exists to **0.79×** — inside budget — with delivery and broadcast reach
+> unchanged and the same number of OGMs sent, because an alias shortens a beacon without
+> thinning them. The originator's own id stays 32 B either way: an alias cannot identify a
+> sender nobody has heard from yet, which is the whole purpose of a beacon. The alias figure
+> measures ~90 B rather than the ~60 B estimated here, because §4 step 1's payload also
+> carries up to eight route advertisements at one alias plus a hop count each. Simulating
+> aliases as such would be a routing change, not a constant — a node has to learn the
+> alias↔key binding before it can use one — so `ogmAliasBytes` defaults to 32 and the 2 B arm
+> is a measurement of this design rather than an adoption of it.
 2. Each node maintains table `neighborScores[nodeId] = score` (expires after 30s no OGM → remove).
 3. To rank itself, node looks at `self + 1-hop neighbors` scores it has heard. If in top 20% → promotes. This is **2-hop-local**, not global — scales.
 

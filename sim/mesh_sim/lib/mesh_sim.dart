@@ -20,3 +20,5 @@ export 'src/scenarios.dart';
 export 'src/simulation.dart';
 export 'src/transport.dart';
 export 'src/types.dart';
+
+export 'src/routing_selector.dart';

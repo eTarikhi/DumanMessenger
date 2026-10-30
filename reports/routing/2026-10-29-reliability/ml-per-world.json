@@ -1,0 +1,506 @@
+[
+  {
+    "world": "campus_quad/6302/False",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.0,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "tn": 150,
+    "precision": null,
+    "recall": null,
+    "accuracy": 1.0,
+    "brier": 0.0009363306368458916,
+    "logLoss": 0.03105132990301021,
+    "auc": null,
+    "calibration": [
+      {
+        "bin": [
+          0.0,
+          0.2
+        ],
+        "n": 150,
+        "predicted": 0.030573363424236298,
+        "observed": 0
+      }
+    ],
+    "ece": 0.030573363424236295
+  },
+  {
+    "world": "campus_quad/6302/True",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.0,
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "tn": 150,
+    "precision": null,
+    "recall": null,
+    "accuracy": 1.0,
+    "brier": 0.0010297529583835785,
+    "logLoss": 0.032588611001387637,
+    "auc": null,
+    "calibration": [
+      {
+        "bin": [
+          0.0,
+          0.2
+        ],
+        "n": 150,
+        "predicted": 0.03206241754060876,
+        "observed": 0
+      }
+    ],
+    "ece": 0.03206241754060876
+  },
+  {
+    "world": "festival_crowd/5301/False",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.15333333333333332,
+    "tp": 0,
+    "fp": 0,
+    "fn": 23,
+    "tn": 127,
+    "precision": null,
+    "recall": 0.0,
+    "accuracy": 0.8466666666666667,
+    "brier": 0.14232977485907347,
+    "logLoss": 0.4643903826342262,
+    "auc": 0.3563847997261212,
+    "calibration": [
+      {
+        "bin": [
+          0.2,
+          0.4
+        ],
+        "n": 150,
+        "predicted": 0.2600320079205559,
+        "observed": 0.15333333333333332
+      }
+    ],
+    "ece": 0.10669867458722261
+  },
+  {
+    "world": "festival_crowd/5301/True",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.16666666666666666,
+    "tp": 0,
+    "fp": 0,
+    "fn": 25,
+    "tn": 125,
+    "precision": null,
+    "recall": 0.0,
+    "accuracy": 0.8333333333333334,
+    "brier": 0.15029192898216578,
+    "logLoss": 0.4822901274191451,
+    "auc": 0.408,
+    "calibration": [
+      {
+        "bin": [
+          0.2,
+          0.4
+        ],
+        "n": 150,
+        "predicted": 0.26958595016872583,
+        "observed": 0.16666666666666666
+      }
+    ],
+    "ece": 0.10291928350205917
+  },
+  {
+    "world": "festival_crowd/5302/False",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.08666666666666667,
+    "tp": 0,
+    "fp": 0,
+    "fn": 13,
+    "tn": 137,
+    "precision": null,
+    "recall": 0.0,
+    "accuracy": 0.9133333333333333,
+    "brier": 0.10926954929293918,
+    "logLoss": 0.3918675923115316,
+    "auc": 0.5014037057832679,
+    "calibration": [
+      {
+        "bin": [
+          0.2,
+          0.4
+        ],
+        "n": 150,
+        "predicted": 0.2600320079205559,
+        "observed": 0.08666666666666667
+      }
+    ],
+    "ece": 0.17336534125388925
+  },
+  {
+    "world": "festival_crowd/5302/True",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.10666666666666667,
+    "tp": 0,
+    "fp": 0,
+    "fn": 16,
+    "tn": 134,
+    "precision": null,
+    "recall": 0.0,
+    "accuracy": 0.8933333333333333,
+    "brier": 0.12177287418724592,
+    "logLoss": 0.42025648582113395,
+    "auc": 0.5223880597014925,
+    "calibration": [
+      {
+        "bin": [
+          0.2,
+          0.4
+        ],
+        "n": 150,
+        "predicted": 0.26958595016872583,
+        "observed": 0.10666666666666667
+      }
+    ],
+    "ece": 0.16291928350205914
+  },
+  {
+    "world": "festival_crowd/5303/False",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.18,
+    "tp": 0,
+    "fp": 0,
+    "fn": 27,
+    "tn": 123,
+    "precision": null,
+    "recall": 0.0,
+    "accuracy": 0.82,
+    "brier": 0.1547159130375474,
+    "logLoss": 0.49118596003359344,
+    "auc": 0.4242697982535381,
+    "calibration": [
+      {
+        "bin": [
+          0.2,
+          0.4
+        ],
+        "n": 150,
+        "predicted": 0.2600320079205559,
+        "observed": 0.18
+      }
+    ],
+    "ece": 0.08003200792055593
+  },
+  {
+    "world": "festival_crowd/5303/True",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.17333333333333334,
+    "tp": 0,
+    "fp": 0,
+    "fn": 26,
+    "tn": 124,
+    "precision": null,
+    "recall": 0.0,
+    "accuracy": 0.8266666666666667,
+    "brier": 0.15307304842910519,
+    "logLoss": 0.48817865827717427,
+    "auc": 0.4466501240694789,
+    "calibration": [
+      {
+        "bin": [
+          0.2,
+          0.4
+        ],
+        "n": 150,
+        "predicted": 0.26958595016872583,
+        "observed": 0.17333333333333334
+      }
+    ],
+    "ece": 0.09625261683539249
+  },
+  {
+    "world": "festival_crowd/5304/False",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.24,
+    "tp": 0,
+    "fp": 0,
+    "fn": 36,
+    "tn": 114,
+    "precision": null,
+    "recall": 0.0,
+    "accuracy": 0.76,
+    "brier": 0.18163373159035207,
+    "logLoss": 0.5491395691037488,
+    "auc": 0.6174463937621832,
+    "calibration": [
+      {
+        "bin": [
+          0.2,
+          0.4
+        ],
+        "n": 150,
+        "predicted": 0.2600320079205559,
+        "observed": 0.24
+      }
+    ],
+    "ece": 0.020032007920555928
+  },
+  {
+    "world": "festival_crowd/5304/True",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.24,
+    "tp": 0,
+    "fp": 0,
+    "fn": 36,
+    "tn": 114,
+    "precision": null,
+    "recall": 0.0,
+    "accuracy": 0.76,
+    "brier": 0.18253179832903682,
+    "logLoss": 0.5514739564288313,
+    "auc": 0.5760233918128655,
+    "calibration": [
+      {
+        "bin": [
+          0.2,
+          0.4
+        ],
+        "n": 150,
+        "predicted": 0.26958595016872583,
+        "observed": 0.24
+      }
+    ],
+    "ece": 0.029585950168725842
+  },
+  {
+    "world": "festival_crowd/5305/False",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.22,
+    "tp": 0,
+    "fp": 0,
+    "fn": 33,
+    "tn": 117,
+    "precision": null,
+    "recall": 0.0,
+    "accuracy": 0.78,
+    "brier": 0.17235251118141623,
+    "logLoss": 0.5290133108633573,
+    "auc": 0.5933695933695934,
+    "calibration": [
+      {
+        "bin": [
+          0.2,
+          0.4
+        ],
+        "n": 150,
+        "predicted": 0.2600320079205559,
+        "observed": 0.22
+      }
+    ],
+    "ece": 0.04003200792055592
+  },
+  {
+    "world": "festival_crowd/5305/True",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.17333333333333334,
+    "tp": 0,
+    "fp": 0,
+    "fn": 26,
+    "tn": 124,
+    "precision": null,
+    "recall": 0.0,
+    "accuracy": 0.8266666666666667,
+    "brier": 0.1530646644237854,
+    "logLoss": 0.4881918028064481,
+    "auc": 0.446029776674938,
+    "calibration": [
+      {
+        "bin": [
+          0.2,
+          0.4
+        ],
+        "n": 150,
+        "predicted": 0.26958595016872583,
+        "observed": 0.17333333333333334
+      }
+    ],
+    "ece": 0.09625261683539249
+  },
+  {
+    "world": "festival_crowd/5306/False",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.14666666666666667,
+    "tp": 0,
+    "fp": 0,
+    "fn": 22,
+    "tn": 128,
+    "precision": null,
+    "recall": 0.0,
+    "accuracy": 0.8533333333333334,
+    "brier": 0.1369090787740748,
+    "logLoss": 0.4516417186861105,
+    "auc": 0.6629971590909091,
+    "calibration": [
+      {
+        "bin": [
+          0.2,
+          0.4
+        ],
+        "n": 150,
+        "predicted": 0.2600320079205559,
+        "observed": 0.14666666666666667
+      }
+    ],
+    "ece": 0.11336534125388925
+  },
+  {
+    "world": "festival_crowd/5306/True",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.17333333333333334,
+    "tp": 0,
+    "fp": 0,
+    "fn": 26,
+    "tn": 124,
+    "precision": null,
+    "recall": 0.0,
+    "accuracy": 0.8266666666666667,
+    "brier": 0.15183915033009276,
+    "logLoss": 0.48506997710391675,
+    "auc": 0.5933622828784119,
+    "calibration": [
+      {
+        "bin": [
+          0.2,
+          0.4
+        ],
+        "n": 150,
+        "predicted": 0.26958595016872583,
+        "observed": 0.17333333333333334
+      }
+    ],
+    "ece": 0.09625261683539249
+  },
+  {
+    "world": "partitioned_pair/6302/False",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.66,
+    "tp": 99,
+    "fp": 51,
+    "fn": 0,
+    "tn": 0,
+    "precision": 0.66,
+    "recall": 1.0,
+    "accuracy": 0.66,
+    "brier": 0.23927334074042592,
+    "logLoss": 0.67165250367858,
+    "auc": 0.45098039215686275,
+    "calibration": [
+      {
+        "bin": [
+          0.4,
+          0.6
+        ],
+        "n": 150,
+        "predicted": 0.5418643078209121,
+        "observed": 0.66
+      }
+    ],
+    "ece": 0.11813569217908793
+  },
+  {
+    "world": "partitioned_pair/6302/True",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.66,
+    "tp": 99,
+    "fp": 51,
+    "fn": 0,
+    "tn": 0,
+    "precision": 0.66,
+    "recall": 1.0,
+    "accuracy": 0.66,
+    "brier": 0.23654371214555503,
+    "logLoss": 0.6661512032124264,
+    "auc": 0.45098039215686275,
+    "calibration": [
+      {
+        "bin": [
+          0.4,
+          0.6
+        ],
+        "n": 150,
+        "predicted": 0.5540191808318013,
+        "observed": 0.66
+      }
+    ],
+    "ece": 0.10598081916819868
+  },
+  {
+    "world": "sparse_village/6302/False",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.7333333333333333,
+    "tp": 110,
+    "fp": 40,
+    "fn": 0,
+    "tn": 0,
+    "precision": 0.7333333333333333,
+    "recall": 1.0,
+    "accuracy": 0.7333333333333333,
+    "brier": 0.19799797091638982,
+    "logLoss": 0.585732740482233,
+    "auc": 0.46295454545454545,
+    "calibration": [
+      {
+        "bin": [
+          0.6,
+          0.8
+        ],
+        "n": 150,
+        "predicted": 0.6897402958467407,
+        "observed": 0.7333333333333333
+      }
+    ],
+    "ece": 0.0435930374865926
+  },
+  {
+    "world": "sparse_village/6302/True",
+    "n": 150,
+    "worlds": 1,
+    "failurePrevalence": 0.7333333333333333,
+    "tp": 110,
+    "fp": 40,
+    "fn": 0,
+    "tn": 0,
+    "precision": 0.7333333333333333,
+    "recall": 1.0,
+    "accuracy": 0.7333333333333333,
+    "brier": 0.19718736985484506,
+    "logLoss": 0.5838487179536163,
+    "auc": 0.46295454545454545,
+    "calibration": [
+      {
+        "bin": [
+          0.6,
+          0.8
+        ],
+        "n": 150,
+        "predicted": 0.7001436063331167,
+        "observed": 0.7333333333333333
+      }
+    ],
+    "ece": 0.03318972700021661
+  }
+]
