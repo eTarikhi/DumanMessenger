@@ -1,0 +1,17 @@
+
+> duman-mesh-simulator@0.1.0 test:deployment
+> node --test tool/deploy/deployment.checks.mjs
+
+✔ package verifies exactly its files, refuses overwrite and detects tampering (86.0178ms)
+✔ rejects secret/source-map/extra files and symlinks instead of packaging them (8.5921ms)
+✔ rejects unlisted files and malicious manifest paths (46.7271ms)
+✔ HTTP smoke: security headers, HEAD, missing assets, methods, traversal and immutable bytes (110.3408ms)
+✔ repeatable manifest and rollback to a known-good immutable package (126.1041ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 556.2492

@@ -1,0 +1,63 @@
+self-test: the copied tree passes all 12 checks; now breaking it on purpose
+  ok    dart-cli-flags     caught `--turbo` in sim/mesh_sim/bin/mesh_sim.dart
+  ok    media-sections     caught `backpressure` in docs/08-media-transport-ptt.md
+  ok    e2ee-sections      caught `churnn` in docs/12-cli-cheat-sheet.md
+  ok    make-targets       caught `checks-listt` in docs/12-cli-cheat-sheet.md
+  ok    ps1-targets        caught `bogus` in make.ps1
+  ok    ci-jobs            caught `bogus` in tool/ci/run-pipeline.sh
+  ok    ci-jobs            caught `checks` in tool/ci/run-pipeline.sh
+  ok    ci-checkers        caught `check-ps1.py` in tool/ci/run-pipeline.sh
+  ok    ci-checkers        caught `check-parity.py` in tool/ci/collect-checks.sh
+  ok    ci-script-flags    caught `--jobs` in docs/10-local-development-and-ci.md
+  ok    help-covers-targets caught `check-ps1` in Makefile
+  ok    npm-scripts        caught `e2ee2` in docs/12-cli-cheat-sheet.md
+  ok    section-counts     caught `17 sections` in README.md
+  ok    doc-section-refs   caught `§96` in docs/07-e2ee-noise-xx.md
+
+self-test passed: all 14 faults caught and named, tree restored.
+  ok   balanced function
+  ok   balanced list literal
+  ok   brace inside a string is not a brace
+  ok   parens inside a double-quoted string
+  ok   delimiters inside a line comment
+  ok   delimiters inside a block comment
+  ok   nested interpolation in a triple-quoted string
+  ok   interpolation holding a nested string that holds a brace
+  ok   escaped quote inside a string
+  ok   raw string keeps its backslashes
+  ok   raw string does not interpolate
+  ok   a double backslash in an ordinary string is one escape
+  ok   unclosed function brace -> unclosed code '{' opened at 1:14
+  ok   unmatched closing brace -> unmatched closing '}'
+  ok   mismatched delimiter -> '}' does not match '(' opened at 2:10
+  ok   single-quoted string crossing a newline -> unterminated string opened at 1:11
+  ok   triple-quoted string never closed -> unclosed string ''' opened at 2:9
+  ok   a quote inside a broken interpolation is the innermost unclosed frame -> unterminated string opened at 2:19
+  ok   interpolation never closed -> unclosed interp '{' opened at 2:14
+check-dart-balance --self-test: 19/19 cases behaved as expected
+  ok   clean fixture: 7 shared constants agree, 2 SimConfig knobs and 1 SimulationStats field identical
+  ok   an integer changed on one side only -> src/routing.ts:1 says 256 but sim/mesh_sim/lib/src/routing.dart:1 says
+  ok   a float changed on one side only -> src/routing.ts:6 says `0.20 / 8` but sim/mesh_sim/lib/src/routing.dart
+  ok   an expression changed on one side only -> src/routing.ts:4 says `27 + 12 + 16 + 32 + 8` but sim/mesh_sim/lib/src
+  ok   a string changed on one side only -> src/routing.ts:5 says `"GROUPS"` but sim/mesh_sim/lib/src/routing.dart
+  ok   a constant deleted from one side -> shared drops to 6 and the name is reported, not failed
+  ok   a class-static constant changed on one side only -> src/routing.ts:7 says 12 but sim/mesh_sim/lib/src/routing.dart:10 says
+  ok   a coverage weight changed on one side only -> src/election.ts says 0.3 but sim/mesh_sim/lib/src/election.dart says 0
+  ok   a coverage weight renamed on one side only -> in src/election.ts but not in Dart
+  ok   a config knob present only in the Dart engine -> a field in the Dart SimConfig with no knob in src/simulation.ts, so th
+  ok   a config knob present only in the TypeScript engine -> a knob in src/simulation.ts with no field in the Dart SimConfig, so th
+  ok   a statistic reported by only one engine -> a statistic the TypeScript engine reports and the Dart one does not, s
+check-parity --self-test: 12/12 cases behaved as expected
+  ok    the real tree is clean
+  ok    a SimConfig field with no constructor parameter
+  ok    a copyWith parameter the body never uses
+  ok    a copyWith body assignment with no parameter
+  ok    a stats field missing from toJson
+  ok    a stats field missing at the construction site
+  ok    a stats field declared without `required this.`
+  ok    an EventKind value with no case in _handleEvent
+  ok    a _handleEvent case for an enum value that does not exist
+  ok    a reference to an enum type that does not exist
+  ok    an import removed, so a type is named but not reachable
+  ok    a reference to an enum member that does not exist
+check-dart-sites --self-test: 12/12 cases behaved as expected

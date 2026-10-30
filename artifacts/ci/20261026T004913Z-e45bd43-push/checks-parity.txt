@@ -1,0 +1,15 @@
+cross-language parity — do the two engines agree on their constants?
+  ok    config-inventory   88 SimConfig knobs, identical in both engines (88 TS, 88 Dart)
+  ok    stats-inventory    83 SimulationStats fields, identical in both engines (83 TS, 83 Dart)
+  ok    engine-constants   57 shared constants agree (45 numeric, 12 by expression)
+        57 exported in src/, 63 in sim/mesh_sim/lib/src/; 0 TypeScript-only and 5 Dart-only
+        names are not compared by this check, because the two inventories are not
+        supposed to match.
+        one-sided names, listed because a synonym pair hiding here is a
+        constant this check is silently not comparing:
+          sim/ only       broadcastAddress, defaultConfig, dumanMeshServiceUuid, ln10, mask
+  ok    coverage-weights   battery 0.2, pdr 0.1, peers 0.3, rssi 0.25, stability 0.15  (sum 1)
+        docs/03 §3's vector, read out of both engines and required to sum to 1 — if it does not,
+        the 0.60 promote and 0.50 demote thresholds do not mean what §3 says they mean.
+
+all parity checks passed.

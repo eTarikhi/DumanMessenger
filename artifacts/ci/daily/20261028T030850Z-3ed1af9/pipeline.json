@@ -1,0 +1,18 @@
+{
+  "runId": "pipeline",
+  "branch": "arena/ff85cb12-dumanmessenger",
+  "sha": "3ed1af9",
+  "timestamp": "2026-10-28T03:21:40Z",
+  "fast": false,
+  "verification": "full",
+  "toolchain": {"node": "/mnt/c/Users/Administrator/Desktop/Git-Clones/DumanMessenger/tool/ci/lib.sh: line 58: /home/administrator/bin/node: Permission denied", "npm": "11.19.0", "dart": "3.13.7", "python3": "3.12.3"},
+  "jobs": {
+    "checks": {"result": "success", "detail": ""},
+    "web": {"result": "success", "detail": ""},
+    "dart": {"result": "success", "detail": ""},
+    "cli-matrix": {"result": "success", "detail": ""},
+    "probes": {"result": "success", "detail": ""}
+  },
+  "seconds": 723,
+  "artifacts": "artifacts/ci/daily/20261028T030850Z-3ed1af9/pipeline"
+}

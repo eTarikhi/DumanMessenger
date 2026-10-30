@@ -1,0 +1,3 @@
+lib/src/routing.dart:171:58: Error: A value of type 'num' can't be returned from a function with return type 'int'.
+    math.max(0, neighborCount) * math.max(0, aliasBytes) +
+                                                         ^

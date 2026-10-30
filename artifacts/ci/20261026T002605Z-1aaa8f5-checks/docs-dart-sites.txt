@@ -1,0 +1,4 @@
+  note  88 SimConfig fields, 68 overridable through copyWith, 20 deliberately not (tickIntervalMs, physicsIntervalMs, ogmIntervalMs, ogmJitterMs…)
+  note  83 stats fields checked at all four sites
+  note  14 EventKind values, 14 cases
+check-dart-sites: all declaration sites consistent (88 SimConfig fields, 68 overridable through copyWith, 20 deliberately not (tickIntervalMs, physicsIntervalMs, ogmIntervalMs, ogmJitterMs…); 83 stats fields checked at all four sites; 14 EventKind values, 14 cases)

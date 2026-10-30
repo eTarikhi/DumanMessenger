@@ -1,0 +1,22 @@
+dart analyze — 0 error(s), 0 warning(s), 0 info(s)
+  (no analyzer issues with a location; raw output below if non-empty)
+
+dart test — 228 passed, 0 failed, 0 skipped
+  (no failing tests parsed)
+
+CLI acceptance (campus_quad, seed 42) — last 15 lines
+  |   batteryPct8hSuper        55.65
+  |   scansPerSec              33.2
+  |   relaysPerSec             16.2311
+  |   awakeRatio               1.0
+  |   scansSkippedAsleep       0
+  |   electionEvents           6
+  |   latencyByHop             hops      n     avg     p95
+  |                               1     62   247 ms   314 ms
+  |                               2     38   646 ms   829 ms
+  |                               3     27   902 ms  1127 ms
+  |                               4     12  1066 ms  1550 ms
+  |                               5      1  1257 ms  1257 ms
+  |                               6      2  1746 ms  2026 ms
+  | 
+  | PASS — acceptance criteria met.

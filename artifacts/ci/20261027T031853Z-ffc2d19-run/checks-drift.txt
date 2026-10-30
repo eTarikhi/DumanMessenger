@@ -1,0 +1,15 @@
+documentation drift — does every documented command exist?
+  ok    ci-jobs            5 workflow jobs, 5 mirrored
+  ok    ci-checkers        5 checkers run by all three entry points
+  ok    section-counts     1 section-count claim(s) checked against the probes
+  ok    dart-cli-flags     34 CLI flags vs 34 documented
+  ok    media-sections     18 sections in the probe, 9 named in the docs
+  ok    e2ee-sections      4 sections in the probe, 4 named in the docs
+  ok    make-targets       53 targets, 51 named in the docs
+  ok    ps1-targets        21 make.ps1 targets, all backed by the Makefile
+  ok    ci-script-flags    7 scripts, 29 flag uses checked
+  ok    help-covers-targets 53 documented targets, all visible in help
+  ok    doc-section-refs   408 section citations, all resolve
+  ok    npm-scripts        15 scripts, 12 referenced in the docs
+
+all 12 checks passed.
