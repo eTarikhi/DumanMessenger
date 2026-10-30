@@ -357,3 +357,13 @@ It is **not** a secure messaging service. For remote private staging use explici
 TLS/access control at your own proxy, and the [deployment guide](docs/18-deployment-baseline.md).
 `.env.example` documents non-secret settings; it is not loaded automatically.
 CI uploads simulator and Linux-x64 Dart CLI build artifacts, not releases or deployments.
+
+
+### CI stabilization evidence (2026-10-30)
+
+[Measured performance and remaining strict-timeout blocker](reports/deployment/2026-10-30/PERFORMANCE.md)
+includes individual before/after timings and full-state differential checks. Runner discovery
+is explicitly separated; the five-second timeout and all original assertions remain.
+This increment is **NOT READY — BLOCKED**, not a green release claim.
+[Prioritized native integration roadmap](docs/19-native-integration-roadmap.md) is separate
+from simulator staging; no handset/native-radio/production-security integration is implied.

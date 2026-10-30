@@ -369,7 +369,7 @@ job_dart() {
     run_step package "Compile authoritative CLI" "dart-compile.txt" "$DART_DIR" \
                  dart compile exe bin/mesh_sim.dart -o build/duman-mesh-sim
     if [ "$package" = success ]; then
-      run_step smoke "Compiled CLI help smoke" "dart-compiled-smoke.txt" "$DART_DIR" build/duman-mesh-sim --help
+      run_step smoke "Compiled CLI help and campus acceptance" "dart-compiled-smoke.txt" "$DART_DIR" bash -c 'build/duman-mesh-sim --help && build/duman-mesh-sim --scenario campus_quad --seed 42 --json'
     else smoke=failure; fi
   fi
 

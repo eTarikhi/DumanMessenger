@@ -215,6 +215,7 @@ jobs:
           mkdir -p build
           dart compile exe bin/mesh_sim.dart -o build/duman-mesh-sim
           build/duman-mesh-sim --help
+          build/duman-mesh-sim --scenario campus_quad --seed 42 --json > build/compiled-campus-42.json
           cp ../../LICENSE build/LICENSE
           dart --version > build/BUILD-INFO.txt 2>&1
           echo "::notice title=Dart SDK::$(cat build/BUILD-INFO.txt)"
