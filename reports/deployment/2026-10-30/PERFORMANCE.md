@@ -126,10 +126,15 @@ Node socket/security/packaging/corruption/rollback tests5pass.
 
 Independent local checks: typecheck, build, discovery, four static checkers, goldens+clean
 diff, differential, baseline replay,8evidence tests,98focused regressions and5HTTP checks
-exit0. Dart SDK/browser binaries are absent locally; no unchanged blocked download retry.
-Final CI will run pinned authoritative Dart3.13.7, executable compile/help plus a NEW
-compiled campus acceptance run (default checks, no --no-check), six CLI jobs and all TS
-cases. Full suite failure must remain visible; web artifact upload remains gated.
+exit0. Dart SDK remains absent locally. At ef81a8e4891a538d05e803bdbd3f83d6ac14be51,
+CI40986303566 and PR CI40986309523 both completed 8/9: authoritative Dart3.13.7,
+executable compile/help and new compiled campus acceptance (default checks), static
+checks and all six CLI jobs pass. TS: 517 passed, 10 timed out at unchanged5000ms,
+28 files (24 passed/4 failed), confirmed through check-run annotations. Full zipped
+logs could not be retrieved because the actions log-host request returned EOF; no CI
+individual durations invented. Browser availability was subsequently resolved via
+pinned optional npm tooling; see BROWSER.md for actual real-browser interactions.
+Full suite failure remains visible; web artifact upload remains gated.
 
 ## Reproducible staging and remaining blockers
 
@@ -148,8 +153,9 @@ node tool/.build/staging-NEW/serve.mjs tool/.build/staging-NEW
 
 Default loopback4173 only. Do NOT expose beyond trusted local environment until operator
 TLS/access controls are configured and verified. No host/provider chosen, auth added or
-public staging enabled here. No installed interactive browser; HTTP/SSR cannot stand in
-for browser/device tests. Existing security headers, traversal/allowlist/integrity and
+public staging enabled here. Real headless Chromium153 automated browser interactions
+subsequently passed against the loopback ef81 clean package (BROWSER.md); this is not
+manual browser, physical-device, real-media, real-radio or production-crypto verification. Existing security headers, traversal/allowlist/integrity and
 rollback safeguards remain enforced. Owner .gitignore edit was preserved during initial work. The owner concurrently committed
 those exact bytes in95492c1; integrated that commit without rebasing/force-pushing, using
 a path-specific temporary stash and byte-equality check. No engine/test sources changed
