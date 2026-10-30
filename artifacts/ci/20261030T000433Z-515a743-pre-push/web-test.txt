@@ -1,0 +1,704 @@
+
+> duman-mesh-simulator@0.1.0 test
+> vitest run
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.12 [39m[90mC:/Users/Administrator/Desktop/Git-Clones/DumanMessenger[39m
+
+ [32m✓[39m src/__tests__/wake-locks.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 16619[2mms[22m[39m
+     [33m[2m✓[22m[39m counts under the shipped radio baseline, which maintains no busy-radio maps [33m 2411[2mms[22m[39m
+     [33m[2m✓[22m[39m reports per node what it reports in total [33m 1783[2mms[22m[39m
+     [33m[2m✓[22m[39m holds at least one lock per transmission, and a second for whoever hears it [33m 1862[2mms[22m[39m
+     [33m[2m✓[22m[39m splits the network's radio demand between the two roles, and the shares sum to 100 [33m 1704[2mms[22m[39m
+     [33m[2m✓[22m[39m reports the model's over-subscription plainly instead of hiding it in a percentage [33m 1568[2mms[22m[39m
+     [33m[2m✓[22m[39m does not let the packet share be read as the energy gap between roles [33m 2833[2mms[22m[39m
+     [33m[2m✓[22m[39m prices concentration on the neighbours who have to hear it [33m 3639[2mms[22m[39m
+     [33m[2m✓[22m[39m measures the window, not the whole run [33m 812[2mms[22m[39m
+ [32m✓[39m src/__tests__/cover-traffic.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 15877[2mms[22m[39m
+     [33m[2m✓[22m[39m emits nothing when off, which is what keeps every published number intact [33m 1678[2mms[22m[39m
+     [33m[2m✓[22m[39m emits at the rate it is told to, and faster when told to be faster [33m 4896[2mms[22m[39m
+     [33m[2m✓[22m[39m costs airtime in proportion to its rate — a dummy that is free is not on air [33m 4267[2mms[22m[39m
+     [33m[2m✓[22m[39m does not starve the network, which is the floor §23 asserts instead of an equality [33m 3291[2mms[22m[39m
+     [33m[2m✓[22m[39m counts cover separately from the routing protocol's own beacons [33m 1733[2mms[22m[39m
+ [31m❯[39m src/__tests__/radio-occupancy.test.ts [2m([22m[2m15 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 39648[2mms[22m[39m
+     [32m✓[39m is the sum of the fields docs/03 §4 says a beacon carries[32m 3[2mms[22m[39m
+     [32m✓[39m bounds a beacon by the advertise limits the engine actually enforces[32m 1[2mms[22m[39m
+     [32m✓[39m ties the literal widths to the named ones, which is what makes the literals safe[32m 0[2mms[22m[39m
+     [32m✓[39m puts a fully loaded beacon over the BLE ceiling, which is a finding not a defect[32m 0[2mms[22m[39m
+     [32m✓[39m never goes negative on an empty or clamped field[32m 0[2mms[22m[39m
+     [32m✓[39m sizes the alias encoding docs/03 §4 prescribes, keeping the originator's id full width[32m 1[2mms[22m[39m
+     [32m✓[39m defaults to the encoding the engine transmits, so nothing published moves[32m 2[2mms[22m[39m
+     [33m[2m✓[22m[39m cuts demanded radio time by the beacon width and not by the beacon count [33m 4191[2mms[22m[39m
+     [32m✓[39m ships on the model every published number was measured under[32m 1[2mms[22m[39m
+     [32m✓[39m charges airtime from the rate constants the engine already had[32m 54[2mms[22m[39m
+     [33m[2m✓[22m[39m changes telemetry and nothing else under the shipped radio baseline [33m 3421[2mms[22m[39m
+     [33m[2m✓[22m[39m halves the demanded radio time without making it physically possible [33m 3142[2mms[22m[39m
+[31m     [31m×[31m costs a dense crowd fewer deferrals and buys it delivery, once contention is modelled[39m[33m 22847[2mms[22m[39m
+     [33m[2m✓[22m[39m counts route churn, and a beacon interval near the soft-state TTL churns more [33m 2667[2mms[22m[39m
+     [33m[2m✓[22m[39m leaves a sparse mesh's delivery alone under contention, which bounds the finding [33m 3313[2mms[22m[39m
+ [32m✓[39m src/__tests__/components.test.tsx [2m([22m[2m32 tests[22m[2m)[22m[33m 45772[2mms[22m[39m
+     [33m[2m✓[22m[39m offers the group as a destination and reports member reach [33m 1588[2mms[22m[39m
+     [33m[2m✓[22m[39m collapses per-member unicasts into the one send the user made [33m 1194[2mms[22m[39m
+     [33m[2m✓[22m[39m shows membership, the admin badge and the rules that bind the buttons [33m 1230[2mms[22m[39m
+     [33m[2m✓[22m[39m disables leaving a three-member group and rotating without admin [33m 1052[2mms[22m[39m
+     [33m[2m✓[22m[39m counts group traffic on the dashboard, and only when there is any [33m 2322[2mms[22m[39m
+     [33m[2m✓[22m[39m shows one alert card for four floods, with the fix and the reach [33m 1226[2mms[22m[39m
+     [33m[2m✓[22m[39m counts live alerts and the newest fix on the dashboard [33m 1066[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps the SOS row off the dashboard until there is an SOS [33m 1177[2mms[22m[39m
+     [33m[2m✓[22m[39m reports the repair traffic, and only once a group has beaconed [33m 2358[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps digest beacons out of the chat log [33m 1314[2mms[22m[39m
+     [33m[2m✓[22m[39m offers the file and push-to-talk controls, and explains why they are greyed out [33m 1505[2mms[22m[39m
+     [33m[2m✓[22m[39m shows one progress row per transfer, with the radio it is riding [33m 1498[2mms[22m[39m
+     [33m[2m✓[22m[39m counts media on the dashboard, and only once there is any [33m 3132[2mms[22m[39m
+     [33m[2m✓[22m[39m renders the battery, radio and hop-budget figures [33m 1077[2mms[22m[39m
+     [33m[2m✓[22m[39m shows the awake ratio only when the duty cycle is running [33m 957[2mms[22m[39m
+     [33m[2m✓[22m[39m names the relays a delivered message went via [33m 1093[2mms[22m[39m
+     [33m[2m✓[22m[39m says so plainly when nothing relayed the message [33m 1119[2mms[22m[39m
+     [33m[2m✓[22m[39m offers a picker before anything is traced [33m 1004[2mms[22m[39m
+     [33m[2m✓[22m[39m explains itself while capture is off [33m 1033[2mms[22m[39m
+     [33m[2m✓[22m[39m renders captured events with their kinds and reasons [33m 1149[2mms[22m[39m
+     [33m[2m✓[22m[39m filters to the message being traced [33m 1140[2mms[22m[39m
+     [33m[2m✓[22m[39m shows waiting and drops under half-duplex, and nothing at all under the shipped model [33m 2488[2mms[22m[39m
+     [33m[2m✓[22m[39m splits the shedding by who did it, and only once there is shedding [33m 2883[2mms[22m[39m
+     [33m[2m✓[22m[39m offers the queue, discipline and backpressure knobs — and hides them under the shipped radio [33m 1482[2mms[22m[39m
+     [33m[2m✓[22m[39m offers both abuse controls from docs/04 §6, with the measurement in the tooltip [33m 1171[2mms[22m[39m
+     [33m[2m✓[22m[39m offers both channel models in the config panel, and says which one ships [33m 1086[2mms[22m[39m
+     [33m[2m✓[22m[39m adds the capture effect as a third receiver model, with its margin beside it [33m 2698[2mms[22m[39m
+     [33m[2m✓[22m[39m counts the receivers a stronger packet took over, and only when there were any [33m 1253[2mms[22m[39m
+     [33m[2m✓[22m[39m offers the control on every peer in range, and says what a block does not do [33m 1059[2mms[22m[39m
+     [33m[2m✓[22m[39m shows a blocked peer as blocked, and lists it even when it is out of range [33m 1201[2mms[22m[39m
+     [33m[2m✓[22m[39m is the same state the engine's block gate reads [33m 1186[2mms[22m[39m
+ [32m✓[39m src/__tests__/rate-limits.test.ts [2m([22m[2m18 tests[22m[2m)[22m[33m 14744[2mms[22m[39m
+     [33m[2m✓[22m[39m suppresses a broadcast flood at the SUPERs when it is on, and not when it is off [33m 2593[2mms[22m[39m
+     [33m[2m✓[22m[39m leaves an honest sender alone, which is the property that makes the cap shippable [33m 1878[2mms[22m[39m
+     [33m[2m✓[22m[39m does not rate-limit an SOS, which docs/04 §6 gives its own mechanism instead [33m 842[2mms[22m[39m
+     [33m[2m✓[22m[39m suppresses more when every node enforces than when only SUPERs do [33m 2081[2mms[22m[39m
+     [33m[2m✓[22m[39m cuts the airtime a flood costs, which is what the cap is for [33m 3051[2mms[22m[39m
+     [33m[2m✓[22m[39m still costs an honest network nothing under either scope [33m 4239[2mms[22m[39m
+ [32m✓[39m src/__tests__/routing-backup.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 3941[2mms[22m[39m
+   [33m[2m✓[22m[39m diagnostic ON/OFF preserves the new arm exactly, including RNG [33m 3927[2mms[22m[39m
+ [32m✓[39m src/__tests__/blocklist.test.ts [2m([22m[2m12 tests[22m[2m)[22m[33m 11416[2mms[22m[39m
+     [33m[2m✓[22m[39m is off by default and inert while empty [33m 1511[2mms[22m[39m
+     [33m[2m✓[22m[39m blocks, unblocks, refuses a self-block, and reports the list sorted [33m 676[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps a blocked peer's messages out of the blocker's inbox [33m 1034[2mms[22m[39m
+     [33m[2m✓[22m[39m still lets everybody else hear the blocked peer — blocking is local [33m 1089[2mms[22m[39m
+     [33m[2m✓[22m[39m does not stop the blocker talking to the peer it blocked [33m 1216[2mms[22m[39m
+     [33m[2m✓[22m[39m lets a blocked peer's SOS through, which is the asymmetry §6 relies on [33m 1003[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps the blocked peer in the routing table, because OGMs are not blockable [33m 936[2mms[22m[39m
+     [33m[2m✓[22m[39m costs less airtime when the blocker also refuses to relay [33m 2188[2mms[22m[39m
+     [33m[2m✓[22m[39m counts fewer suppressions under relay, because the copy dies earlier [33m 1748[2mms[22m[39m
+ [32m✓[39m src/__tests__/routing-selector.test.ts [2m([22m[2m20 tests[22m[2m)[22m[33m 2947[2mms[22m[39m
+     [33m[2m✓[22m[39m baseline integration leaves exact baseline routing intact [33m 909[2mms[22m[39m
+     [33m[2m✓[22m[39m shadow integration leaves exact baseline routing intact [33m 698[2mms[22m[39m
+     [33m[2m✓[22m[39m canary integration leaves exact baseline routing intact [33m 619[2mms[22m[39m
+     [33m[2m✓[22m[39m isolates motion reproducibly when explicitly requested [33m 686[2mms[22m[39m
+ [32m✓[39m src/crypto/__tests__/session.test.ts [2m([22m[2m31 tests[22m[2m)[22m[33m 495[2mms[22m[39m
+ [32m✓[39m src/__tests__/engine.test.ts [2m([22m[2m68 tests[22m[2m)[22m[33m 1567[2mms[22m[39m
+     [33m[2m✓[22m[39m stays inside [0, 1) over a long stream [33m 1381[2mms[22m[39m
+ [32m✓[39m src/crypto/__tests__/handshake.test.ts [2m([22m[2m22 tests[22m[2m)[22m[32m 198[2mms[22m[39m
+ [32m✓[39m src/crypto/__tests__/packet.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 177[2mms[22m[39m
+ [32m✓[39m src/__tests__/failure-diagnostics.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 3875[2mms[22m[39m
+   [33m[2m✓[22m[39m opt-in diagnosis preserves complete statistics, deliveries, nodes, logs and RNG state [33m 3864[2mms[22m[39m
+ [32m✓[39m src/crypto/__tests__/recovery.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 168[2mms[22m[39m
+ [32m✓[39m src/crypto/__tests__/ratchet.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 87[2mms[22m[39m
+ [32m✓[39m src/__tests__/import-graph.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 74[2mms[22m[39m
+ [32m✓[39m src/__tests__/routing-learning-artifact.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 65[2mms[22m[39m
+ [32m✓[39m src/__tests__/routing-strategies.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 45[2mms[22m[39m
+ [32m✓[39m src/__tests__/wire-bytes.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 32[2mms[22m[39m
+ [31m❯[39m src/__tests__/connectivity.test.ts [2m([22m[2m14 tests[22m[2m | [22m[31m4 failed[39m[2m)[22m[33m 56892[2mms[22m[39m
+     [33m[2m✓[22m[39m reports the radio graph's components, largest first, summing to the network [33m 2249[2mms[22m[39m
+     [33m[2m✓[22m[39m samples the window at the configured interval, and not the settle period [33m 1784[2mms[22m[39m
+     [33m[2m✓[22m[39m can be disabled, and a disabled run reports the trivially connected defaults [33m 1600[2mms[22m[39m
+     [33m[2m✓[22m[39m says a settled 20-node campus stays in one piece [33m 1675[2mms[22m[39m
+[31m     [31m×[31m catches the crowd splitting, which an end-of-window graph cannot[39m[33m 8962[2mms[22m[39m
+     [33m[2m✓[22m[39m does not change the world it measures [33m 2978[2mms[22m[39m
+     [32m✓[39m ships on the fixed interval docs/03 §4 specifies[32m 1[2mms[22m[39m
+[31m     [31m×[31m beacons a reference-density node at exactly the specified interval[39m[33m 5146[2mms[22m[39m
+     [33m[2m✓[22m[39m spends more airtime in a sparse world, where the floor bites [33m 400[2mms[22m[39m
+[31m     [31m×[31m holds the topology still, and there the derived interval is cheaper without losing reach[39m[33m 18181[2mms[22m[39m
+     [32m✓[39m splits what is out of range, largest piece first[32m 2[2mms[22m[39m
+     [32m✓[39m partitions every node exactly once[32m 1[2mms[22m[39m
+     [32m✓[39m makes an offline node its own component rather than absorbing it into a neighbour's[32m 1[2mms[22m[39m
+[31m     [31m×[31m is what componentSizes reports the sizes of, so the metric and the picture agree[39m[33m 13901[2mms[22m[39m
+ [32m✓[39m src/__tests__/transport.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+ [32m✓[39m src/__tests__/routing-contact-bound.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/__tests__/routing-epoch.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [31m❯[39m src/__tests__/scan-interval.test.ts [2m([22m[2m6 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 61303[2mms[22m[39m
+     [32m✓[39m ships fixed, so nothing published moves[32m 6[2mms[22m[39m
+     [33m[2m✓[22m[39m scans less in a sparse world, which is the row's claimed saving [33m 473[2mms[22m[39m
+[31m     [31m×[31m scans more in a dense world, which is what the row says and what it costs[39m[33m 27887[2mms[22m[39m
+     [33m[2m✓[22m[39m is anchored, so a reference-density node scans at exactly the configured interval [33m 3132[2mms[22m[39m
+[31m     [31m×[31m clamps, so one peer does not stop a node scanning and a crowd does not pin it awake[39m[33m 27739[2mms[22m[39m
+     [33m[2m✓[22m[39m does not consume random numbers the fixed mode does not, so the default is untouched [33m 2061[2mms[22m[39m
+[90mstdout[2m | src/__tests__/simulation.test.ts[2m > [22m[2mcommunity relays (roadmap Phase 5: a plugged tablet in a café)[2m > [22m[2melects the plugged tablets and moves relay work off other people's batteries
+[22m[39m{
+ "baseMpr": {
+  "sent": 100,
+  "delivered": 91,
+  "ratio": 0.91,
+  "relayTx": 23518,
+  "superRatio": 0.18333333333333332,
+  "relaysAreSuper": 0,
+  "burdenOnOthers": 23518,
+  "burdenOnRelays": 0,
+  "normalPctPerHour": 2.914336878318547,
+  "blocked": [],
+  "superCount": 11
+ },
+ "baseFloodRelays": 223538,
+ "baseFloodRatio": 1,
+ "relayMpr": {
+  "sent": 100,
+  "delivered": 91,
+  "ratio": 0.91,
+  "relayTx": 26540,
+  "superRatio": 0.21666666666666667,
+  "relaysAreSuper": 3,
+  "burdenOnOthers": 23414,
+  "burdenOnRelays": 3126,
+  "normalPctPerHour": 2.8216262927405293,
+  "blocked": [],
+  "superCount": 13
+ },
+ "relayFloodRelays": 206528,
+ "relayFloodRatio": 1,
+ "sixMpr": {
+  "sent": 100,
+  "delivered": 98,
+  "ratio": 0.98,
+  "relayTx": 24444,
+  "superRatio": 0.21666666666666667,
+  "relaysAreSuper": 4,
+  "burdenOnOthers": 19148,
+  "burdenOnRelays": 5296,
+  "normalPctPerHour": 2.877188545930059,
+  "blocked": [
+   {
+    "id": "node-1",
+    "reason": "NORMAL: score 0.78, rank 7/24",
+    "betterTablets": 6,
+    "betterPhones": 0
+   },
+   {
+    "id": "node-19",
+    "reason": "NORMAL: score 0.79, rank 6/25",
+    "betterTablets": 5,
+    "betterPhones": 0
+   }
+  ],
+  "superCount": 13
+ }
+}
+
+ [31m❯[39m src/__tests__/simulation.test.ts [2m([22m[2m140 tests[22m[2m | [22m[31m14 failed[39m[2m)[22m[33m 306284[2mms[22m[39m
+     [32m✓[39m does not blow the stack when two adjacent nodes exchange one message[32m 24[2mms[22m[39m
+     [33m[2m✓[22m[39m brings up a connected world by default [33m 442[2mms[22m[39m
+     [32m✓[39m never spawns a node inside a building[32m 76[2mms[22m[39m
+     [33m[2m✓[22m[39m learns routes beyond one hop by gossiping OGMs [33m 547[2mms[22m[39m
+     [33m[2m✓[22m[39m delivers a multi-hop unicast along a routed path [33m 450[2mms[22m[39m
+     [33m[2m✓[22m[39m measures latency on a virtual clock that grows with hop count [33m 755[2mms[22m[39m
+     [33m[2m✓[22m[39m counts broadcast deliveries instead of silently dropping them [33m 325[2mms[22m[39m
+[31m     [31m×[31m expires soft state on simulated time, not wall-clock time[39m[33m 6462[2mms[22m[39m
+     [33m[2m✓[22m[39m reproduces a run exactly for the same seed [33m 813[2mms[22m[39m
+     [32m✓[39m diverges for a different seed[32m 111[2mms[22m[39m
+     [32m✓[39m resets back to the seeded world[32m 212[2mms[22m[39m
+     [32m✓[39m carries a message across a partition until the groups meet[32m 63[2mms[22m[39m
+     [32m✓[39m keeps undeliverable traffic in a sparse village instead of dropping it[32m 73[2mms[22m[39m
+     [32m✓[39m takes a node offline when its battery is exhausted[32m 249[2mms[22m[39m
+[31m     [31m×[31m honours manual offline/online and charging toggles[39m[33m 6028[2mms[22m[39m
+     [32m✓[39m refuses to send from an offline node[32m 58[2mms[22m[39m
+     [33m[2m✓[22m[39m retransmits from the source when no ACK returns, and stops at the budget [33m 959[2mms[22m[39m
+     [33m[2m✓[22m[39m suppresses redundant NORMAL relays under MPR but not under flood-all [33m 2040[2mms[22m[39m
+     [33m[2m✓[22m[39m elects super-nodes only from eligible candidates [33m 1566[2mms[22m[39m
+     [33m[2m✓[22m[39m disables election when configured to [33m 933[2mms[22m[39m
+       [33m[2m✓[22m[39m records when each hop arrived, over what link, and what it decided [33m 1233[2mms[22m[39m
+       [33m[2m✓[22m[39m recovers the route chain from the fan-out tree [33m 1191[2mms[22m[39m
+       [33m[2m✓[22m[39m marks the relays MPR suppressed, with the reason [33m 1210[2mms[22m[39m
+       [33m[2m✓[22m[39m traces hops always, and captures the log only when asked [33m 2452[2mms[22m[39m
+       [33m[2m✓[22m[39m logs beacons too when captureOgm is set [33m 1129[2mms[22m[39m
+       [33m[2m✓[22m[39m keeps the capture bounded and in time order [33m 1391[2mms[22m[39m
+       [33m[2m✓[22m[39m does not perturb the run it is measuring [33m 3233[2mms[22m[39m
+       [33m[2m✓[22m[39m drops the log when metrics are re-baselined [33m 1578[2mms[22m[39m
+       [33m[2m✓[22m[39m logs the DTN last resort as a queue event [33m 312[2mms[22m[39m
+       [33m[2m✓[22m[39m never promotes a node the user opted out of, and steps it down at once [33m 1783[2mms[22m[39m
+       [33m[2m✓[22m[39m keeps the mesh routing when a third of the nodes decline the role [33m 1340[2mms[22m[39m
+       [33m[2m✓[22m[39m never auto-promotes with battery saver on [33m 1634[2mms[22m[39m
+       [33m[2m✓[22m[39m leaves duty cycling off by default [33m 594[2mms[22m[39m
+       [33m[2m✓[22m[39m scans 3 s out of every 10 s when duty cycling, and never sleeps a SUPER [33m 846[2mms[22m[39m
+       [33m[2m✓[22m[39m spreads duty phases so a crowd does not sleep in lockstep [33m 519[2mms[22m[39m
+       [33m[2m✓[22m[39m trades discovery for battery when duty cycling [33m 636[2mms[22m[39m
+       [33m[2m✓[22m[39m reports battery %/h per role, scans/sec and relays/sec [33m 370[2mms[22m[39m
+       [33m[2m✓[22m[39m spends exactly the skills/07 budget always-on, and buys headroom by sleeping [33m 3759[2mms[22m[39m
+       [33m[2m✓[22m[39m excludes charging nodes from the measured drain rate [33m 583[2mms[22m[39m
+       [33m[2m✓[22m[39m buckets latency by hop for first-attempt routed traffic [33m 576[2mms[22m[39m
+       [32m✓[39m runs at the bottom of the range with nobody cut off[32m 73[2mms[22m[39m
+[31m       [31m×[31m runs at the top of the range, and the fallback does not go quadratic[39m[33m 32608[2mms[22m[39m
+[31m       [31m×[31m keeps the dense branch out of the worlds that do not need it[39m[33m 5651[2mms[22m[39m
+       [33m[2m✓[22m[39m enforces the 3-10 member bound, and nothing else can create a group [33m 596[2mms[22m[39m
+       [33m[2m✓[22m[39m reaches every member and nobody else [33m 735[2mms[22m[39m
+       [33m[2m✓[22m[39m relays through non-members, so a spread group still works [33m 688[2mms[22m[39m
+       [33m[2m✓[22m[39m keeps group traffic out of the unicast metrics [33m 753[2mms[22m[39m
+       [33m[2m✓[22m[39m never arms a retry timer for a scoped flood [33m 691[2mms[22m[39m
+       [33m[2m✓[22m[39m rotates the key when a member leaves, and the departed node can relay but not read [33m 780[2mms[22m[39m
+       [33m[2m✓[22m[39m refuses to shrink a group below three [33m 767[2mms[22m[39m
+       [33m[2m✓[22m[39m rotates on join, so a joiner cannot read the history it missed [33m 727[2mms[22m[39m
+       [33m[2m✓[22m[39m counts a member that cannot decrypt as a rejected epoch, not a delivery [33m 630[2mms[22m[39m
+       [33m[2m✓[22m[39m lets only the admin rotate the key [33m 579[2mms[22m[39m
+       [33m[2m✓[22m[39m offers per-member unicast as the alternative, with ACKs and the same reach [33m 723[2mms[22m[39m
+       [33m[2m✓[22m[39m logs membership changes and stale epochs when capture is on [33m 649[2mms[22m[39m
+       [33m[2m✓[22m[39m lists a node's groups, and forgets them when the world is rebuilt [33m 622[2mms[22m[39m
+       [32m✓[39m defaults to the mode whose cost does not depend on the route table[32m 0[2mms[22m[39m
+       [32m✓[39m takes its TTL from the documented value, not from a longer data TTL[32m 33[2mms[22m[39m
+       [33m[2m✓[22m[39m carries a GPS fix and goes out on the transport that moves it fastest [33m 1020[2mms[22m[39m
+       [33m[2m✓[22m[39m re-floods on the interval, every flood with a fresh id [33m 905[2mms[22m[39m
+       [33m[2m✓[22m[39m gives a single-flood arm to measure against [33m 1004[2mms[22m[39m
+       [33m[2m✓[22m[39m reaches every radio-connected node — the roadmap exit criterion [33m 831[2mms[22m[39m
+[31m       [31m×[31m reaches all of a 60-node crowd, which TTL=5 cannot span[39m[33m 6673[2mms[22m[39m
+       [33m[2m✓[22m[39m re-floods with a fresh fix, so a moving sender stays trackable [33m 867[2mms[22m[39m
+       [33m[2m✓[22m[39m collapses repeats into one alert per receiver, holding the newest fix [33m 956[2mms[22m[39m
+       [32m✓[39m keeps a late copy from overwriting a newer fix[32m 1[2mms[22m[39m
+       [33m[2m✓[22m[39m floods to every peer whatever the relay policy says [33m 846[2mms[22m[39m
+       [33m[2m✓[22m[39m stops flooding when the sender goes dark [33m 896[2mms[22m[39m
+       [33m[2m✓[22m[39m logs every flood when capture is on [33m 895[2mms[22m[39m
+       [33m[2m✓[22m[39m buys reach with radio time, and the cost is visible [33m 1881[2mms[22m[39m
+       [33m[2m✓[22m[39m leaves the unicast metrics baseline alone [33m 905[2mms[22m[39m
+     [32m✓[39m charges air time only for the part of a payload above one packet[32m 2[2mms[22m[39m
+     [32m✓[39m sends a file as 64 KB chunks and completes the transfer[32m 4[2mms[22m[39m
+     [32m✓[39m keeps media out of the 1:1 delivery metrics[32m 2[2mms[22m[39m
+     [32m✓[39m slides a window instead of putting the whole file on air at once[32m 8[2mms[22m[39m
+     [32m✓[39m slices to the BLE ceiling when there is no Wi-Fi Direct capacity[32m 6[2mms[22m[39m
+     [32m✓[39m keeps a 500 ms Opus frame inside one BLE packet at 12 kbps, and not at 24[32m 2[2mms[22m[39m
+     [32m✓[39m streams a note while it is being recorded, so audio starts before release[32m 3[2mms[22m[39m
+     [32m✓[39m meets the roadmap's push-to-talk budget at 1 and 3 hops[32m 5[2mms[22m[39m
+     [32m✓[39m carries a 10 MB image three hops on Wi-Fi Direct inside a minute[32m 56[2mms[22m[39m
+     [32m✓[39m cannot carry a 10 MB image over BLE in any reasonable time[32m 103[2mms[22m[39m
+     [32m✓[39m re-sends the chunks a stalled window is missing, and resumes when the peer returns[32m 4[2mms[22m[39m
+     [32m✓[39m retries a chunk on the media timer, not the text plane's[32m 4[2mms[22m[39m
+     [32m✓[39m refuses media from a node that is offline or to nobody[32m 1[2mms[22m[39m
+     [32m✓[39m sends voice chunks as VOICE_CHUNK: type voice, priority high, ttl 3[32m 2[2mms[22m[39m
+     [32m✓[39m rides Wi-Fi Direct for a voice note when the group owner is already connected[32m 1[2mms[22m[39m
+     [32m✓[39m refuses a transfer over the 10 MB ceiling[32m 1[2mms[22m[39m
+     [32m✓[39m resumes a 10 MB Wi-Fi Direct image after a mid-transfer disconnect[32m 61[2mms[22m[39m
+     [32m✓[39m slices to the 512 B BLE MTU when there is no Wi-Fi Direct capacity[32m 103[2mms[22m[39m
+     [32m✓[39m repairs a flood a member missed while it was offline[32m 7[2mms[22m[39m
+     [32m✓[39m digests a set, not a sequence: the union properties the merge relies on[32m 2[2mms[22m[39m
+     [32m✓[39m keeps a beacon inside one BLE packet whatever the history holds[32m 3[2mms[22m[39m
+     [32m✓[39m repairs a long absence in bounded rounds rather than one huge reply[32m 9[2mms[22m[39m
+     [32m✓[39m cannot repair history a key rotation made unreadable[32m 4[2mms[22m[39m
+     [32m✓[39m costs control traffic only: no ACKs, no deliveries, no unicast count[32m 11[2mms[22m[39m
+     [32m✓[39m stops beaconing when a node leaves its last group, and can be switched off[32m 11[2mms[22m[39m
+     [32m✓[39m weighs openness against health, and says where the crossover is[32m 3[2mms[22m[39m
+     [33m[2m✓[22m[39m elects a healthy open node in campus_quad within two cycles [33m 512[2mms[22m[39m
+     [32m✓[39m elects a healthy open node in sparse_village within two cycles[32m 32[2mms[22m[39m
+     [33m[2m✓[22m[39m elects a healthy open node in festival_crowd within two cycles [33m 3508[2mms[22m[39m
+     [32m✓[39m elects a healthy open node in partitioned_pair within two cycles[32m 54[2mms[22m[39m
+[31m     [31m×[31m elects the plugged tablets and moves relay work off other people's batteries[39m[33m 66592[2mms[22m[39m
+     [32m✓[39m carries a bundle for a destination that was offline, and delivers it on contact[32m 46[2mms[22m[39m
+     [32m✓[39m never puts more than three copies of one bundle on air[32m 32[2mms[22m[39m
+     [33m[2m✓[22m[39m hands a bundle to a SUPER when the carrier has no route of its own [33m 771[2mms[22m[39m
+     [32m✓[39m prunes a bundle when its ACK is overheard, and evicts by priority then age[32m 37[2mms[22m[39m
+[31m     [31m×[31m costs radio work and nothing else: text delivery is identical, seed for seed[39m[33m 12366[2mms[22m[39m
+     [33m[2m✓[22m[39m has no mechanism by which media could harm text, and says so [33m 1659[2mms[22m[39m
+     [33m[2m✓[22m[39m occupies no radio by default: nothing is ever deferred, and nothing is ever dropped [33m 2126[2mms[22m[39m
+     [32m✓[39m makes a packet wait its turn, and still delivers it[32m 8[2mms[22m[39m
+     [32m✓[39m wakes a radio that went busy with an empty queue[32m 16[2mms[22m[39m
+     [32m✓[39m sheds load when the queue is full instead of promising air time it does not have[32m 2[2mms[22m[39m
+     [33m[2m✓[22m[39m takes the parallelism out of the sliding window, which is the whole finding [33m 305[2mms[22m[39m
+     [32m✓[39m keeps up with the capture clock at one hop and falls behind at three[32m 41[2mms[22m[39m
+     [32m✓[39m lets a voice note overtake the bulk transfer, and charges the transfer for it[32m 38[2mms[22m[39m
+     [32m✓[39m promoting acknowledgements moves them, and the bulk transfer pays for it[32m 28[2mms[22m[39m
+     [32m✓[39m is never consulted on the shipped radio, because nothing ever waits there[32m 4[2mms[22m[39m
+[31m     [31m×[31m the cap a tablet loses is being spent on other tablets, not on phones[39m[33m 16876[2mms[22m[39m
+[31m     [31m×[31m exempting tablets from the cap elects all six and pushes the ratio to the top of the band[39m[33m 23425[2mms[22m[39m
+[31m     [31m×[31m reserving half the cap does not reserve it for tablets — it hands a slot to a phone[39m[33m 9323[2mms[22m[39m
+[31m     [31m×[31m raises every open node's score and leaves the ranking exactly where it was[39m[33m 9695[2mms[22m[39m
+[31m     [31m×[31m what it does move is the promote gate and the size of the elected set[39m[33m 8607[2mms[22m[39m
+[31m     [31m×[31m holds skills/02's band on the campus world, and puts one seed on its floor[39m[33m 11711[2mms[22m[39m
+     [32m✓[39m wins an equal-coverage MPR tie, which is the only thing it can change[32m 2[2mms[22m[39m
+     [32m✓[39m hands a routeless bundle to a plugged carrier when asked, and parks it when not[32m 14[2mms[22m[39m
+[31m     [31m×[31m and that is where the benefit stops: the bundle waits on a node that never moves[39m[33m 22005[2mms[22m[39m
+     [32m✓[39m takes the receiver over for a stronger newcomer, and never for a weaker one[32m 25[2mms[22m[39m
+     [32m✓[39m is first-packet-wins under a margin the geometry cannot reach, and inert when shipped[32m 42[2mms[22m[39m
+     [32m✓[39m does not condemn a retry of the message it took over[32m 9[2mms[22m[39m
+     [32m✓[39m loses the second of two packets that arrive together, and only when asked to[32m 5[2mms[22m[39m
+     [32m✓[39m loses a packet that arrives while its receiver is transmitting[32m 5[2mms[22m[39m
+     [33m[2m✓[22m[39m counts nothing at all in the shipped model, whatever the transmitter does [33m 2256[2mms[22m[39m
+     [32m✓[39m turns a collision into a wait, and the retry goes away with it[32m 5[2mms[22m[39m
+     [32m✓[39m cannot help a hidden terminal, which is the limitation the geometry reproduces[32m 5[2mms[22m[39m
+     [32m✓[39m fires where carrier sense defers, and costs waiting to do it[32m 16[2mms[22m[39m
+     [32m✓[39m doubles the window after a collision, which is the exponential half of the backoff[32m 52[2mms[22m[39m
+     [32m✓[39m is carrier sense's lever: a radio with no shared medium does not move[32m 12[2mms[22m[39m
+     [32m✓[39m measures silence after a transmission, not after a hand-over[32m 4[2mms[22m[39m
+     [32m✓[39m stops a transfer overrunning its own queue, and the transfer is faster for it[32m 7[2mms[22m[39m
+     [32m✓[39m is inert on the shipped radio, where nothing ever queues[32m 6[2mms[22m[39m
+ [31m❯[39m src/__tests__/acceptance.test.ts [2m([22m[2m49 tests[22m[2m | [22m[31m3 failed[39m[2m)[22m[33m 336340[2mms[22m[39m
+     [32m✓[39m seed 42 elects a stable 15-25% super-node set[32m 4[2mms[22m[39m
+     [32m✓[39m seed 7 elects a stable 15-25% super-node set[32m 1[2mms[22m[39m
+     [32m✓[39m seed 1234 elects a stable 15-25% super-node set[32m 1[2mms[22m[39m
+     [32m✓[39m seed 99 elects a stable 15-25% super-node set[32m 0[2mms[22m[39m
+     [32m✓[39m seed 2026 elects a stable 15-25% super-node set[32m 1[2mms[22m[39m
+     [32m✓[39m seed 555 elects a stable 15-25% super-node set[32m 0[2mms[22m[39m
+     [32m✓[39m seed 42 delivers >=90% of messages[32m 1[2mms[22m[39m
+     [32m✓[39m seed 7 delivers >=90% of messages[32m 0[2mms[22m[39m
+     [32m✓[39m seed 1234 delivers >=90% of messages[32m 0[2mms[22m[39m
+     [32m✓[39m seed 99 delivers >=90% of messages[32m 1[2mms[22m[39m
+     [32m✓[39m seed 2026 delivers >=90% of messages[32m 0[2mms[22m[39m
+     [32m✓[39m seed 555 delivers >=90% of messages[32m 0[2mms[22m[39m
+     [32m✓[39m seed 42 delivers >=90% within five hops[32m 8[2mms[22m[39m
+     [32m✓[39m seed 7 delivers >=90% within five hops[32m 0[2mms[22m[39m
+     [32m✓[39m seed 1234 delivers >=90% within five hops[32m 0[2mms[22m[39m
+     [32m✓[39m seed 99 delivers >=90% within five hops[32m 0[2mms[22m[39m
+     [32m✓[39m seed 2026 delivers >=90% within five hops[32m 0[2mms[22m[39m
+     [32m✓[39m seed 555 delivers >=90% within five hops[32m 0[2mms[22m[39m
+     [32m✓[39m seed 42 reports the three-hop reading without gating on it[32m 1[2mms[22m[39m
+     [32m✓[39m seed 7 reports the three-hop reading without gating on it[32m 0[2mms[22m[39m
+     [32m✓[39m seed 1234 reports the three-hop reading without gating on it[32m 0[2mms[22m[39m
+     [32m✓[39m seed 99 reports the three-hop reading without gating on it[32m 0[2mms[22m[39m
+     [32m✓[39m seed 2026 reports the three-hop reading without gating on it[32m 0[2mms[22m[39m
+     [32m✓[39m seed 555 reports the three-hop reading without gating on it[32m 0[2mms[22m[39m
+     [32m✓[39m seed 42 uses <=70% of the naive flood-all relay budget[32m 1[2mms[22m[39m
+     [32m✓[39m seed 7 uses <=70% of the naive flood-all relay budget[32m 0[2mms[22m[39m
+     [32m✓[39m seed 1234 uses <=70% of the naive flood-all relay budget[32m 0[2mms[22m[39m
+     [32m✓[39m seed 99 uses <=70% of the naive flood-all relay budget[32m 0[2mms[22m[39m
+     [32m✓[39m seed 2026 uses <=70% of the naive flood-all relay budget[32m 0[2mms[22m[39m
+     [32m✓[39m seed 555 uses <=70% of the naive flood-all relay budget[32m 0[2mms[22m[39m
+     [32m✓[39m MPR buys a further cut over routing without suppression, on the mean[32m 0[2mms[22m[39m
+     [32m✓[39m seed 42 keeps a fully connected world with no isolated node[32m 2[2mms[22m[39m
+     [32m✓[39m seed 7 keeps a fully connected world with no isolated node[32m 0[2mms[22m[39m
+     [32m✓[39m seed 1234 keeps a fully connected world with no isolated node[32m 0[2mms[22m[39m
+     [32m✓[39m seed 99 keeps a fully connected world with no isolated node[32m 0[2mms[22m[39m
+     [32m✓[39m seed 2026 keeps a fully connected world with no isolated node[32m 1[2mms[22m[39m
+     [32m✓[39m seed 555 keeps a fully connected world with no isolated node[32m 0[2mms[22m[39m
+     [32m✓[39m respects the docs/04 latency budget[32m 1[2mms[22m[39m
+     [32m✓[39m suppression actually fires, and only under MPR[32m 0[2mms[22m[39m
+[31m     [31m×[31m stays stable and cheap at 60 nodes[39m[33m 42869[2mms[22m[39m
+[31m     [31m×[31m holds its delivery bar on seeds the gate above does not use[39m[33m 179709[2mms[22m[39m
+[31m     [31m×[31m costs MPR nothing against the same engine without suppression[39m[33m 112578[2mms[22m[39m
+     [32m✓[39m carries traffic in a sparse village instead of dropping it[32m 132[2mms[22m[39m
+     [32m✓[39m exposes every named scenario through the same factory[32m 291[2mms[22m[39m
+     [33m[2m✓[22m[39m honours the skills/08 configuration envelope [33m 551[2mms[22m[39m
+     [32m✓[39m reproduces the mulberry32 stream bit-for-bit[32m 1[2mms[22m[39m
+     [32m✓[39m reproduces the seeded spawn geometry[32m 6[2mms[22m[39m
+     [32m✓[39m serialises an anti-entropy reply exactly as the fixture says[32m 1[2mms[22m[39m
+     [32m✓[39m reproduces the reference run[32m 168[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 24 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/acceptance.test.ts[2m > [22mdense crowd (docs/02 §6: 50+ nodes)[2m > [22mstays stable and cheap at 60 nodes
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/acceptance.test.ts:[2m257:3[22m[39m
+    [90m255|[39m
+    [90m256|[39m [34mdescribe[39m([32m"dense crowd (docs/02 §6: 50+ nodes)"[39m[33m,[39m () [33m=>[39m {
+    [90m257|[39m   [34mit[39m([32m"stays stable and cheap at 60 nodes"[39m[33m,[39m () [33m=>[39m {
+    [90m   |[39m   [31m^[39m
+    [90m258|[39m     [35mconst[39m r [33m=[39m [34mmeasure[39m([34mfestivalCrowd[39m([34m42[39m))[33m;[39m
+    [90m259|[39m     [34mexpect[39m(r[33m.[39msuperRatio)[33m.[39m[34mtoBeGreaterThanOrEqual[39m([34m0.1[39m)[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/acceptance.test.ts[2m > [22mdense crowd (docs/02 §6: 50+ nodes)[2m > [22mholds its delivery bar on seeds the gate above does not use
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/acceptance.test.ts:[2m266:3[22m[39m
+    [90m264|[39m   })[33m;[39m
+    [90m265|[39m
+    [90m266|[39m   it("holds its delivery bar on seeds the gate above does not use", ()…
+    [90m   |[39m   [31m^[39m
+    [90m267|[39m     // The two crowd gates above run seeds 42, 7 and 1234. `docs/06` §…
+    [90m268|[39m     // scenario is bimodal — broadcast reach lands near 98% or between…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/acceptance.test.ts[2m > [22mdense crowd (docs/02 §6: 50+ nodes)[2m > [22mcosts MPR nothing against the same engine without suppression
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/acceptance.test.ts:[2m300:3[22m[39m
+    [90m298|[39m   })[33m;[39m
+    [90m299|[39m
+    [90m300|[39m   it("costs MPR nothing against the same engine without suppression", …
+    [90m   |[39m   [31m^[39m
+    [90m301|[39m     // docs/05 §"Duman's hybrid selection": MPR suppression must cut r…
+    [90m302|[39m     // transmissions without costing delivery. Suppression gated on *c…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/connectivity.test.ts[2m > [22mconnectivity sampling (docs/06 §24.10)[2m > [22mcatches the crowd splitting, which an end-of-window graph cannot
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/connectivity.test.ts:[2m62:3[22m[39m
+    [90m 60|[39m   })[33m;[39m
+    [90m 61|[39m
+    [90m 62|[39m   it("catches the crowd splitting, which an end-of-window graph cannot…
+    [90m   |[39m   [31m^[39m
+    [90m 63|[39m     // docs/06 §24.10 measured seed 2024 at a 12 s beacon interval as …
+    [90m 64|[39m     // in-window samples with a mean largest component of 72%, while t…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/connectivity.test.ts[2m > [22mthe density-derived beacon interval (docs/06 §24.11)[2m > [22mbeacons a reference-density node at exactly the specified interval
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/connectivity.test.ts:[2m118:3[22m[39m
+    [90m116|[39m   })[33m;[39m
+    [90m117|[39m
+    [90m118|[39m   it("beacons a reference-density node at exactly the specified interv…
+    [90m   |[39m   [31m^[39m
+    [90m119|[39m     // The rule is anchored, not a replacement: a node with ten peers …
+    [90m120|[39m     // both modes, so the derived mode cannot be blamed for a change i…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/connectivity.test.ts[2m > [22mthe density-derived beacon interval (docs/06 §24.11)[2m > [22mholds the topology still, and there the derived interval is cheaper without losing reach
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/connectivity.test.ts:[2m155:3[22m[39m
+    [90m153|[39m   })[33m;[39m
+    [90m154|[39m
+    [90m155|[39m   it("holds the topology still, and there the derived interval is chea…
+    [90m   |[39m   [31m^[39m
+    [90m156|[39m     // docs/06 §24.12. With mobility off, both arms share a graph *by …
+    [90m157|[39m     // positions are drawn from the same seed and never move — so a di…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/connectivity.test.ts[2m > [22mradioComponents — the one walk behind both the metric and the picture[2m > [22mis what componentSizes reports the sizes of, so the metric and the picture agree
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/connectivity.test.ts:[2m239:3[22m[39m
+    [90m237|[39m   })[33m;[39m
+    [90m238|[39m
+    [90m239|[39m   it("is what componentSizes reports the sizes of, so the metric and t…
+    [90m   |[39m   [31m^[39m
+    [90m240|[39m     const sim = measured({ connectivitySampleMs: 5_000 }, festivalCrow…
+    [90m241|[39m     expect(sim.components().map((c) => c.length)).toEqual(sim.componen…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/radio-occupancy.test.ts[2m > [22mradioOccupancy[2m > [22mcosts a dense crowd fewer deferrals and buys it delivery, once contention is modelled
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/radio-occupancy.test.ts:[2m195:3[22m[39m
+    [90m193|[39m   })[33m;[39m
+    [90m194|[39m
+    [90m195|[39m   it("costs a dense crowd fewer deferrals and buys it delivery, once c…
+    [90m   |[39m   [31m^[39m
+    [90m196|[39m     // This is where the two models stop being equivalent: under `csma…
+    [90m197|[39m     // for 120 ms defers traffic that a radio busy for 26 ms would hav…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/scan-interval.test.ts[2m > [22madaptive scan intervals (docs/05 §1.2, layer 3)[2m > [22mscans more in a dense world, which is what the row says and what it costs
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/scan-interval.test.ts:[2m50:3[22m[39m
+    [90m 48|[39m   })[33m;[39m
+    [90m 49|[39m
+    [90m 50|[39m   it("scans more in a dense world, which is what the row says and what…
+    [90m   |[39m   [31m^[39m
+    [90m 51|[39m     // "Dense = shorter interval (peers stable)". This is the half tha…
+    [90m 52|[39m     // worth asserting rather than assuming the row is a saving everyw…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/scan-interval.test.ts[2m > [22madaptive scan intervals (docs/05 §1.2, layer 3)[2m > [22mclamps, so one peer does not stop a node scanning and a crowd does not pin it awake
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/scan-interval.test.ts:[2m71:3[22m[39m
+    [90m 69|[39m   })[33m;[39m
+    [90m 70|[39m
+    [90m 71|[39m   it("clamps, so one peer does not stop a node scanning and a crowd do…
+    [90m   |[39m   [31m^[39m
+    [90m 72|[39m     // The clamp is [base / 4, base × 4]. Without the upper bound a no…
+    [90m 73|[39m     // scan every 250 ms forever; without the lower one a node with a …
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/simulation.test.ts[2m > [22mregressions against the original prototype[2m > [22mexpires soft state on simulated time, not wall-clock time
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/simulation.test.ts:[2m249:3[22m[39m
+    [90m247|[39m   });
+    [90m248|[39m
+    [90m249|[39m   it("expires soft state on simulated time, not wall-clock time", () =…
+    [90m   |[39m   [31m^[39m
+    [90m250|[39m     const sim = new MeshSimulation({ ...campusQuad(42), enableMobility…
+    [90m251|[39m     sim.runFor(20000);
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/simulation.test.ts[2m > [22mnode lifecycle and manual controls[2m > [22mhonours manual offline/online and charging toggles
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/simulation.test.ts:[2m350:3[22m[39m
+    [90m348|[39m   });
+    [90m349|[39m
+    [90m350|[39m   it("honours manual offline/online and charging toggles", () => {
+    [90m   |[39m   [31m^[39m
+    [90m351|[39m     const sim = new MeshSimulation(campusQuad(42));
+    [90m352|[39m     sim.toggleNodeOnline("node-1");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/simulation.test.ts[2m > [22mprotocol behaviour[2m > [22mscale: the documented 10-200 node range (skills/08)[2m > [22mruns at the top of the range, and the fallback does not go quadratic
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/simulation.test.ts:[2m771:5[22m[39m
+    [90m769|[39m     });
+    [90m770|[39m
+    [90m771|[39m     it("runs at the top of the range, and the fallback does not go qua…
+    [90m   |[39m     [31m^[39m
+    [90m772|[39m       // 200 nodes in a 100×100 m area is one radio cell: every node h…
+    [90m773|[39m       // the other 199, so a beacon cannot describe the neighbourhood …
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/simulation.test.ts[2m > [22mprotocol behaviour[2m > [22mscale: the documented 10-200 node range (skills/08)[2m > [22mkeeps the dense branch out of the worlds that do not need it
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/simulation.test.ts:[2m786:5[22m[39m
+    [90m784|[39m     });
+    [90m785|[39m
+    [90m786|[39m     it("keeps the dense branch out of the worlds that do not need it",…
+    [90m   |[39m     [31m^[39m
+    [90m787|[39m       // campus_quad peaks at 12 peers and festival_crowd at 24, both …
+    [90m788|[39m       // 30-neighbour beacon cap, so the cap on fallback fan-out canno…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/simulation.test.ts[2m > [22mprotocol behaviour[2m > [22mSOS mode: repeated flood of GPS + text (docs/05 §SOS, roadmap Phase 3)[2m > [22mreaches all of a 60-node crowd, which TTL=5 cannot span
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/simulation.test.ts:[2m1157:5[22m[39m
+    [90m1155|[39m     });
+    [90m1156|[39m
+    [90m1157|[39m     it("reaches all of a 60-node crowd, which TTL=5 cannot span", () =…
+    [90m   |[39m     [31m^[39m
+    [90m1158|[39m       // Measured: from an edge sender this world is 6+ hops across, s…
+    [90m1159|[39m       // TTL=5 flood stops short of ~7% of it. The scenario widens the…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/simulation.test.ts[2m > [22mcommunity relays (roadmap Phase 5: a plugged tablet in a café)[2m > [22melects the plugged tablets and moves relay work off other people's batteries
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/simulation.test.ts:[2m2104:3[22m[39m
+    [90m2102|[39m   }
+    [90m2103|[39m
+    [90m2104|[39m   it("elects the plugged tablets and moves relay work off other people…
+    [90m   |[39m   [31m^[39m
+    [90m2105|[39m     const seed = 42;
+    [90m2106|[39m     const baseMpr = runArm(seed, 0, "mpr");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/simulation.test.ts[2m > [22mmedia under load, measured without confounding the A/B (docs/08 §9)[2m > [22mcosts radio work and nothing else: text delivery is identical, seed for seed
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/simulation.test.ts:[2m2385:3[22m[39m
+    [90m2383|[39m   }
+    [90m2384|[39m
+    [90m2385|[39m   it("costs radio work and nothing else: text delivery is identical, s…
+    [90m   |[39m   [31m^[39m
+    [90m2386|[39m     for (const seed of [42, 7]) {
+    [90m2387|[39m       const quiet = arm(seed, false);
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/simulation.test.ts[2m > [22mcap-aware community-relay promotion, measured and rejected (docs/06 §19.4)[2m > [22mthe cap a tablet loses is being spent on other tablets, not on phones
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/simulation.test.ts:[2m2751:3[22m[39m
+    [90m2749|[39m   }
+    [90m2750|[39m
+    [90m2751|[39m   it("the cap a tablet loses is being spent on other tablets, not on p…
+    [90m   |[39m   [31m^[39m
+    [90m2752|[39m     // docs/06 §19.2 proposed making promotion cap-aware so a plugged …
+    [90m2753|[39m     // battery-powered SUPER. This is why that cannot work: with six t…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/simulation.test.ts[2m > [22mcap-aware community-relay promotion, measured and rejected (docs/06 §19.4)[2m > [22mexempting tablets from the cap elects all six and pushes the ratio to the top of the band
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/simulation.test.ts:[2m2771:3[22m[39m
+    [90m2769|[39m   });
+    [90m2770|[39m
+    [90m2771|[39m   it("exempting tablets from the cap elects all six and pushes the rat…
+    [90m   |[39m   [31m^[39m
+    [90m2772|[39m     const capped = crowdArm(42, 6, 0);
+    [90m2773|[39m     const exempt = crowdArm(42, 6, 1);
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/simulation.test.ts[2m > [22mcap-aware community-relay promotion, measured and rejected (docs/06 §19.4)[2m > [22mreserving half the cap does not reserve it for tablets — it hands a slot to a phone
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/simulation.test.ts:[2m2786:3[22m[39m
+    [90m2784|[39m   });
+    [90m2785|[39m
+    [90m2786|[39m   it("reserving half the cap does not reserve it for tablets — it hand…
+    [90m   |[39m   [31m^[39m
+    [90m2787|[39m     // A tablet already outscores every phone in range, so the reserve…
+    [90m2788|[39m     // before the reservation existed. Taking those slots out of the o…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/simulation.test.ts[2m > [22mobserved-maximum peer normalisation, measured and rejected (docs/06 §18.4)[2m > [22mraises every open node's score and leaves the ranking exactly where it was
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/simulation.test.ts:[2m2854:3[22m[39m
+    [90m2852|[39m   }
+    [90m2853|[39m
+    [90m2854|[39m   it("raises every open node's score and leaves the ranking exactly wh…
+    [90m   |[39m   [31m^[39m
+    [90m2855|[39m     // docs/06 §18.2 predicted that normalising against the observed m…
+    [90m2856|[39m     // openness decisive in sparse worlds. It does not, and the reason…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/simulation.test.ts[2m > [22mobserved-maximum peer normalisation, measured and rejected (docs/06 §18.4)[2m > [22mwhat it does move is the promote gate and the size of the elected set
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/simulation.test.ts:[2m2870:3[22m[39m
+    [90m2868|[39m   });
+    [90m2869|[39m
+    [90m2870|[39m   it("what it does move is the promote gate and the size of the electe…
+    [90m   |[39m   [31m^[39m
+    [90m2871|[39m     // sparse_village: the atrium phone's score crosses docs/03 §3's 0…
+    [90m2872|[39m     // only under the observed denominator (0.529 -> 0.723), and one m…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/simulation.test.ts[2m > [22mobserved-maximum peer normalisation, measured and rejected (docs/06 §18.4)[2m > [22mholds skills/02's band on the campus world, and puts one seed on its floor
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/simulation.test.ts:[2m2888:3[22m[39m
+    [90m2886|[39m   });
+    [90m2887|[39m
+    [90m2888|[39m   it("holds skills/02's band on the campus world, and puts one seed on…
+    [90m   |[39m   [31m^[39m
+    [90m2889|[39m     const ratios: number[] = [];
+    [90m2890|[39m     for (const seed of [42, 7, 1234, 99, 2026, 555]) {
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/24]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/simulation.test.ts[2m > [22mpreferring a community relay, measured and rejected (docs/06 §19.5)[2m > [22mand that is where the benefit stops: the bundle waits on a node that never moves
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m src/__tests__/simulation.test.ts:[2m2995:3[22m[39m
+    [90m2993|[39m   });
+    [90m2994|[39m
+    [90m2995|[39m   it("and that is where the benefit stops: the bundle waits on a node …
+    [90m   |[39m   [31m^[39m
+    [90m2996|[39m     // The same tablet that is a good place to *leave* a bundle is a b…
+    [90m2997|[39m     // one, because carrying is movement. Measured over three seeds in…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/24]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m5 failed[39m[22m[2m | [22m[1m[32m21 passed[39m[22m[90m (26)[39m
+[2m      Tests [22m [1m[31m24 failed[39m[22m[2m | [22m[1m[32m498 passed[39m[22m[90m (522)[39m
+[2m   Start at [22m 03:34:40
+[2m   Duration [22m 391.34s[2m (transform 3.76s, setup 0ms, import 60.69s, tests 918.60s, environment 7ms)[22m
+
