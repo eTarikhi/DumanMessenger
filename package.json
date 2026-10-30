@@ -39,5 +39,8 @@
     "typescript": "^5.6.3",
     "vite": "6.4.5",
     "vitest": "4.1.12"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
   }
 }
