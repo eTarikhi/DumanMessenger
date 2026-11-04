@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-28",
+  "branch": "arena/ff85cb12-dumanmessenger",
+  "verifiedCodeSha": "19024abcba6d7ba83ee86c981781715536d7fde3",
+  "tools": {
+    "node": "v22.22.3",
+    "python": "3.11.2",
+    "localDart": "unavailable"
+  },
+  "commands": [
+    {
+      "command": "npm test",
+      "revision": "adac00d",
+      "exit": 0,
+      "files": 20,
+      "passed": 504,
+      "durationSec": 361.08
+    },
+    {
+      "command": "npx vitest run src/__tests__/routing-selector.test.ts",
+      "revision": "19024ab",
+      "exit": 0,
+      "passed": 20
+    },
+    {
+      "command": "python3 -m unittest discover -s tool/routing -p 'test_*.py'",
+      "exit": 0,
+      "passed": 7
+    },
+    {
+      "command": "npm run build",
+      "exit": 0
+    },
+    {
+      "command": "npx tsc -p tool/tsconfig.golden.json",
+      "exit": 0
+    },
+    {
+      "command": "python3 tool/ci/check-docs.py",
+      "exit": 0
+    },
+    {
+      "command": "python3 tool/ci/check-parity.py",
+      "exit": 0
+    },
+    {
+      "command": "python3 tool/ci/check-dart-sites.py",
+      "exit": 0
+    },
+    {
+      "command": "python3 tool/ci/check-dart-balance.py",
+      "exit": 0
+    },
+    {
+      "command": "git diff --check",
+      "exit": 0
+    }
+  ],
+  "ci": {
+    "runId": 40642776402,
+    "sourceSha": "19024ab",
+    "conclusion": "success",
+    "jobsPassed": 9,
+    "typescript": {
+      "files": 20,
+      "passed": 504
+    },
+    "dart": {
+      "passed": 344,
+      "failed": 0,
+      "skipped": 0
+    },
+    "annotationJobs": [
+      122664524446,
+      122664524751
+    ]
+  },
+  "previousCIFailure": {
+    "runId": 40642147624,
+    "sourceSha": "762e048",
+    "reason": "Dart import before library directive",
+    "fixedIn": "adac00d"
+  },
+  "experiments": {
+    "targetedHomogeneousRuns": 104,
+    "independentMotionRuns": 4,
+    "frozenHoldoutRuns": 16,
+    "shadowWorldRuns": 16,
+    "totalNewWorldRuns": 140,
+    "plannedTextMessages": 21000,
+    "baselineReproduction": "exact five-hop/relay/retry equality on campus42 and duty crowd31415",
+    "shadow": "eight paired scenario/power contexts; exact full stat and delivery equality"
+  },
+  "gates": {
+    "productionActivation": "blocked",
+    "candidatePromotion": "rejected",
+    "onlineLearning": "not-enabled",
+    "reason": "fitted policy is baseline-only; no generalized gain, one final seed, missing approved tolerances"
+  },
+  "notRunOrBlocked": [
+    {
+      "check": "local Dart",
+      "status": "not-run",
+      "reason": "SDK unavailable; authoritative CI executed"
+    },
+    {
+      "check": "124 new candidate runs in Dart",
+      "status": "not-run",
+      "reason": "Dart SDK unavailable locally; only existing fixture + new controller suite verified in CI"
+    },
+    {
+      "check": "real-device canary",
+      "status": "blocked",
+      "reason": "no app, host crypto loader, devices or approved cohort"
+    },
+    {
+      "check": "phone heap, inference, energy",
+      "status": "not-run",
+      "reason": "no physical runtime"
+    },
+    {
+      "check": "learned mixed-policy actuation",
+      "status": "not-run",
+      "reason": "unapproved; model is baseline-only; label replay is not network evaluation"
+    },
+    {
+      "check": "bandit/deep RL training",
+      "status": "not-run",
+      "reason": "not justified by data/feedback or simpler results"
+    }
+  ]
+}

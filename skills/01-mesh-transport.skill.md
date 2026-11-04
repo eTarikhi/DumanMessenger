@@ -36,6 +36,14 @@ enum TransportType { bleGatt, wifiDirect, wifiAware, multipeer }
 > built on an oracle passes every test in this repo and then fails on a phone in a pocket. That is also why `connect` throws rather than returning null: `notHeard`,
 > `offline`, `disconnected`, `tooLarge` and `closed` need different messages, and a nullable return cannot carry which.
 >
+> **And pinned twice, because the first pinning cannot run.** Every decision above is tested in Dart, on a machine that cannot compile Dart: the SDK is not installable where this
+> repository is developed (`storage.googleapis.com` is unreachable — `docs/10` §11, section A of `make blockers`), so `test/transport_test.dart` has never executed anywhere. The twelve
+> bytes of the beacon therefore exist a second time in `src/transport.ts`, asserted by `src/__tests__/transport.test.ts` in the engine that does run: the same digest the Dart test uses
+> (`0x1122334455667788` → `0x11223344` then `0x55667788`, big-endian), the same FNV-1a/32 id hash, and the signed/unsigned edge at 2^63 where Dart's `int` is negative and TypeScript's
+> `bigint` is not, and both must write `8000000000000000`. `BEACON_BYTES` and `DUMAN_MESH_SERVICE_UUID` are paired with Dart's `beaconBytes` and `dumanMeshServiceUuid` by
+> `tool/ci/check-parity.py`, which learned to read a `static const` class member to do it — until then the size of a wire format was invisible to the one check whose job is to keep the
+> two engines' numbers equal.
+>
 > **Not built:** the four concrete impls below, and the MethodChannel/EventChannel bridge. `SimulatedMeshTransport` is a reference and a test double, not a radio.
 
 ### Concrete impls

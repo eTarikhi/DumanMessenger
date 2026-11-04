@@ -1,0 +1,7 @@
+Analyzing mesh_sim...
+
+  error - lib/src/routing.dart:170:5 - A value of type 'num' can't be returned from the function 'ogmWireBytes' because it has a return type of 'int'. - return_of_invalid_type
+  error - test/engine_test.dart:2715:20 - The function 'run' isn't defined. Try importing the library that defines 'run', correcting the name to the name of an existing function, or defining a function named 'run'. - undefined_function
+  error - test/engine_test.dart:2717:21 - The function 'run' isn't defined. Try importing the library that defines 'run', correcting the name to the name of an existing function, or defining a function named 'run'. - undefined_function
+
+3 issues found.

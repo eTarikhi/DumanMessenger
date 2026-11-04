@@ -1,0 +1,48 @@
+dart analyze — 0 error(s), 0 warning(s), 0 info(s)
+  (no analyzer issues with a location; raw output below if non-empty)
+  | Analyzing mesh_sim...
+  | 
+  |   error - test/acceptance_test.dart:4:8 - Target of URI doesn't exist: 'package:test/test.dart'. Try creating the file referenced by the URI, or try using a URI for a file that does exist. - uri_does_not_exist
+  |   error - test/acceptance_test.dart:129:3 - The function 'group' isn't defined. Try importing the library that defines 'group', correcting the name to the name of an existing function, or defining a function named 'group'. - undefined_function
+  |   error - test/acceptance_test.dart:131:7 - The function 'test' isn't defined. Try importing the library that defines 'test', correcting the name to the name of an existing function, or defining a function named 'test'. - undefined_function
+  |   error - test/acceptance_test.dart:133:9 - The function 'expect' isn't defined. Try importing the library that defines 'expect', correcting the name to the name of an existing function, or defining a function named 'expect'. - undefined_function
+  |   error - test/acceptance_test.dart:133:36 - The function 'greaterThanOrEqualTo' isn't defined. Try importing the library that defines 'greaterThanOrEqualTo', correcting the name to the name of an existing function, or defining a function named 'greaterThanOrEqualTo'. - undefined_function
+  |   error - test/acceptance_test.dart:134:9 - The function 'expect' isn't defined. Try importing the library that defines 'expect', correcting the name to the name of an existing function, or defining a function named 'expect'. - undefined_function
+  |   error - test/acceptance_test.dart:134:36 - The function 'lessThanOrEqualTo' isn't defined. Try importing the library that defines 'lessThanOrEqualTo', correcting the name to the name of an existing function, or defining a function named 'lessThanOrEqualTo'. - undefined_function
+  |   error - test/acceptance_test.dart:135:9 - The function 'expect' isn't defined. Try importing the library that defines 'expect', correcting the name to the name of an existing function, or defining a function named 'expect'. - undefined_function
+  |   error - test/acceptance_test.dart:135:41 - The function 'lessThanOrEqualTo' isn't defined. Try importing the library that defines 'lessThanOrEqualTo', correcting the name to the name of an existing function, or defining a function named 'lessThanOrEqualTo'. - undefined_function
+  |   error - test/acceptance_test.dart:138:7 - The function 'test' isn't defined. Try importing the library that defines 'test', correcting the name to the name of an existing function, or defining a function named 'test'. - undefined_function
+  |   error - test/acceptance_test.dart:139:9 - The function 'expect' isn't defined. Try importing the library that defines 'expect', correcting the name to the name of an existing function, or defining a function named 'expect'. - undefined_function
+  |   error - test/acceptance_test.dart:139:43 - The function 'greaterThanOrEqualTo' isn't defined. Try importing the library that defines 'greaterThanOrEqualTo', correcting the name to the name of an existing function, or defining a function named 'greaterThanOrEqualTo'. - undefined_function
+  |   error - test/acceptance_test.dart:142:7 - The function 'test' isn't defined. Try importing the library that defines 'test', correcting the name to the name of an existing function, or defining a function named 'test'. - undefined_function
+  |   error - test/acceptance_test.dart:144:9 - The function 'expect' isn't defined. Try importing the library that defines 'expect', correcting the name to the name of an existing function, or defining a function named 'expect'. - undefined_function
+  |   error - test/acceptance_test.dart:144:35 - The function 'greaterThanOrEqualTo' isn't defined. Try importing the library that defines 'greaterThanOrEqualTo', correcting the name to the name of an existing function, or defining a function named 'greaterThanOrEqualTo'. - undefined_function
+  |   error - test/acceptance_test.dart:145:9 - The function 'expect' isn't defined. Try importing the library that defines 'expect', correcting the name to the name of an existing function, or defining a function named 'expect'. - undefined_function
+  |   error - test/acceptance_test.dart:145:33 - The function 'lessThanOrEqualTo' isn't defined. Try importing the library that defines 'lessThanOrEqualTo', correcting the name to the name of an existing function, or defining a function named 'lessThanOrEqualTo'. - undefined_function
+  |   error - test/acceptance_test.dart:148:7 - The function 'test' isn't defined. Try importing the library that defines 'test', correcting the name to the name of an existing function, or defining a function named 'test'. - undefined_function
+
+dart test — 277 passed, 1 failed, 0 skipped
+  FAIL test/engine_test.dart: density-derived beacon interval (docs/06 §24.11) costs a dense crowd fewer deferrals under csma, and buys it delivery
+       at test/engine_test.dart:2723:7
+       Expected: a value less than <0>
+           Actual: <0>
+            Which: is not a value less than <0>
+         
+         package:matcher               expect
+
+CLI acceptance (campus_quad, seed 42) — last 15 lines
+  |   batteryPct8hSuper        55.65
+  |   scansPerSec              33.2
+  |   relaysPerSec             16.2311
+  |   awakeRatio               1.0
+  |   scansSkippedAsleep       0
+  |   electionEvents           6
+  |   latencyByHop             hops      n     avg     p95
+  |                               1     62   247 ms   314 ms
+  |                               2     38   646 ms   829 ms
+  |                               3     27   902 ms  1127 ms
+  |                               4     12  1066 ms  1550 ms
+  |                               5      1  1257 ms  1257 ms
+  |                               6      2  1746 ms  2026 ms
+  | 
+  | PASS — acceptance criteria met.

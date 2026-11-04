@@ -11,6 +11,11 @@ library;
 enum EventKind {
   physics,
   ogm,
+
+  /// A dummy beacon: cover traffic that carries nothing (docs/04 §5, "dummy beacons at
+  /// low rate"). Scheduled only while `coverTraffic` is on, so it consumes no RNG draws
+  /// and no golden vector moves when it is off.
+  cover,
   election,
   scan,
   msg,

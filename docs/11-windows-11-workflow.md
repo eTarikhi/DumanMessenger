@@ -32,7 +32,7 @@ front doors.
 | **Git for Windows** | 2.30+ | `winget install --id Git.Git -e` | everything; also supplies Git Bash |
 | **Node.js** | **22.x LTS** | `winget install --id OpenJS.NodeJS.LTS -e` | the `web` job |
 | **Dart SDK** | **stable ≥ 3.4.0** | `choco install dart-sdk -y`, or the zip in §2 | the `dart`, `cli-matrix` and `probes` jobs |
-| **Python 3** | 3.9+ | `winget install --id Python.Python.3.12 -e` | `tool/ci/diagnostics.py` |
+| **Python 3** | 3.9+ | `winget install --id Python.Python.3.12 -e` | the five checkers in `tool/ci/` and `diagnostics.py` — stdlib only, no pip packages |
 | **GitHub CLI** | 2.x | `winget install --id GitHub.cli -e` | `make watch`, `make diagnose`, `make pr` |
 | **GNU Make** | 4.x | in WSL: `sudo apt install make`; Git Bash does **not** ship it | the `make` targets |
 | **WSL2 + Ubuntu** | current | `wsl --install -d Ubuntu` | the recommended runtime |
@@ -59,7 +59,7 @@ The Node requirement is declared in `package.json` as well as documented here, s
 manager enforces it and not just the reader:
 
 ```json
-"engines": { "node": ">=22 <23" }
+"engines": { "node": ">=22" }
 ```
 
 On a mismatched Node, `npm ci` prints `npm warn EBADENGINE` naming both the required and the
@@ -83,7 +83,14 @@ Dart's equivalent constraint already exists as `environment: sdk: ^3.4.0` in
 
 This is the step that gets skipped, because the TypeScript half works perfectly without it and CI
 would normally catch the gap. **CI on this repository is currently refused for billing reasons**, so
-nothing will catch it. Without Dart, `make ci` exits 1 with three of four jobs `MISSING`.
+nothing will catch it. Without Dart, `make ci` exits 1 with three of five jobs `MISSING` — the
+`checks` and `web` jobs still run, and `checks` needs no toolchain beyond python3 at all.
+
+Before installing it — or if you cannot — `make dart-balance` and `make checks` still tell you
+something about `sim/mesh_sim`. `tool/ci/check-dart-balance.py` checks delimiter balance across all
+22 Dart sources with no SDK at all, so a brace or string mistake costs one line here instead of a
+hundred unrelated analyzer errors after you install it. It is not a compiler and does not catch
+type errors, exhaustiveness or a wrong argument order; for those, install the SDK.
 
 **Option A — Chocolatey**
 
@@ -115,6 +122,33 @@ dart pub get
 The only dependency is `package:test`. If `pub.dev` is unreachable from your network, this fails and
 the Dart jobs cannot run; `doctor` probes it and tells you before you find out the slow way.
 
+**Then commit `sim\mesh_sim\pubspec.lock` — done, `991d11c`, 2026-10-28.** It used to be
+git-ignored, so every CI run resolved `test: ^1.25.0` against whatever pub.dev served that morning —
+a caret range in an application package (`pubspec.yaml` says `publish_to: none`), which is the case
+the Dart guidance says to pin. It is un-ignored now, and both the workflow and `run-pipeline.sh`
+resolve with `dart pub get --enforce-lockfile` when the lock exists.
+
+The gate this section wrote in advance — "every Dart job publishes a warning annotation saying that
+the run resolved dependencies fresh; that warning is the acceptance gate, and it disappears on the
+commit that adds the file" — was measured on both sides rather than assumed. At `e894ff0`, the last
+commit without a lock, the warning fired on **seven of nine jobs**: `Dart mesh_sim (authoritative
+engine)`, `CLI probes (SOS, groups, media)` and all five `CLI acceptance across scenarios` legs
+(run 40463387905). At `991d11c` it fires on **none**, with all nine jobs green and
+`dart test: 279 passed, 0 failed, 0 skipped` (run 40610830053). The two jobs that never warned are
+the two that never resolve Dart dependencies.
+
+What the committed lock says, for whoever reads it before installing an SDK: **49 packages**, and
+`sdks: dart: ">=3.13.0 <4.0.0"` — the range it was resolved under, which is narrower than
+`pubspec.yaml`'s `environment: sdk: ^3.4.0`. Whether an SDK older than 3.13 re-resolves or refuses
+is **not verified anywhere in this repository**: the environment that wrote these lines has no Dart
+SDK at all, so treat the range as a description of the lock, not as a promise about your machine.
+CI asks `dart-lang/setup-dart` for `stable`, which satisfies it.
+
+The SDK that produced it was fetched inside WSL2, not on the Windows side — a resumed 228 MB
+download of `dartsdk-linux-x64-release.zip` from `storage.googleapis.com`, which is what the note
+below about installing inside the distro asks for. Do not hand-write the lock: it carries content
+hashes, and a wrong one fails `--enforce-lockfile` for everybody.
+
 **Under WSL** the SDK must be installed *inside* the distro, not shared from Windows: a Windows
 `dart.exe` invoked from WSL works, but resolves paths differently and confuses `dart pub get`. Use
 the Linux instructions in `docs/10` §2.
@@ -128,6 +162,8 @@ the Linux instructions in `docs/10` §2.
 .\make.ps1 doctor                     # is this machine able to verify this repository?
 .\make.ps1 ci                         # every CI job, locally
 .\make.ps1 ci --job web --fast        # one job's quick subset
+.\make.ps1 checks                     # every check at once, one report — see docs/10 §5
+.\make.ps1 checks-list                # what that would run, and what has never been run
 .\make.ps1 push                       # validate, then push — refuses on red or partial
 .\make.ps1 pr-dry                     # the whole PR flow, no side effects
 .\make.ps1 install-hooks              # the pre-push gate
@@ -151,6 +187,64 @@ the exact command it hands to the shell, which is the first thing to look at whe
 run · `2` partial · `64` bad usage. Anything else means the *runtime* failed — a bad path, a missing
 distro — and `make.ps1` says so explicitly instead of letting a shell error masquerade as a build
 verdict.
+
+**Run `.\make.ps1 checks` once the Dart SDK from §2 is installed.** It is the single command that
+exercises everything in the repository — TypeScript, Dart, the CLI acceptance matrix and the
+probes — in one pass without stopping at the first failure, and writes one report plus a compact
+block you can paste back. It is also the only tool here that will tell you which checks have
+*never* been run. Until a Dart SDK exists on this machine it reports the whole Dart half as
+`not-run` and exits `1`, which is the correct answer rather than a broken one: those checks did
+not pass, and saying so is the point.
+
+### The daily run
+
+`checks` is every check. `daily` is every check **and** the CI mirror, composed into one dated
+artifact directory with one summary and one verdict:
+
+```powershell
+.\make.ps1 daily            # everything, including the probes behind the published numbers
+.\make.ps1 daily-fast       # the quick daily run — measured at 11.5 min without a Dart SDK
+.\make.ps1 daily-checks     # the full CI mirror and every check, no re-measuring
+```
+
+Use `daily` rather than running `ci` and `checks` separately. The two halves were separately
+interpretable and their exit codes meant different things — `run-pipeline.sh` exits `2` for
+*partial*, while `collect-checks.sh` exits `1` for both *failed* and *could not run* — so
+`daily.sh` reads the collector's JSON to tell those apart and reports one of three verdicts:
+
+| verdict | exit | what it means, and what to do |
+| --- | ---: | --- |
+| **GREEN** | `0` | Everything that could run, ran and passed, and nothing was skipped. Push. |
+| **FAILED** | `1` | Something failed. Read `pipeline.txt` and `checks.txt` in the artifact directory before pushing anything. |
+| **INCOMPLETE** | `2` | Nothing failed, but part of the run could not execute. **This is not a pass.** On a machine without the Dart SDK it is the expected verdict, and it is the reason §2 exists: `sim/mesh_sim` is the authoritative engine, and the four static checkers that stand in for a compiler here (delimiter balance, cross-language constant parity, config/stats inventory parity, declaration-site consistency) are not one. |
+
+Everything lands under `artifacts/ci/daily/<UTC stamp>-<sha>/`, with `DAILY.md` as the one page to
+read: the verdict, the elapsed time, which toolchain was missing, both halves' results side by
+side, the file list — and **how this run differs from the previous one**, which is the part that
+makes a daily cadence worth having. The comparison is narrow on purpose: verdict, passed, failed,
+could-not-run, elapsed and sha, each as a delta. At this cadence the useful signal is "a check
+appeared or disappeared" or "the verdict changed", not "this number moved by 0.4", and a page that
+tried to diff every measurement would be unreadable by the time anybody wanted it.
+
+`artifacts/` is gitignored, so a daily run never dirties the tree — which matters if the run is
+scheduled. A scheduled run does accumulate directories, though, so `--prune N` deletes all but the
+N most recent, counted from the newest so the run being compared against is the last to go. Nothing
+is ever deleted without the flag: silently reclaiming artifacts is how somebody loses the run they
+wanted to compare against. From PowerShell, `./tool/ci/daily.sh --prune 14` inside the distro, or
+add it to the scheduled command below.
+
+To actually schedule it, Windows Task Scheduler wants a program and arguments, not a shell:
+
+```
+Program:   wsl.exe
+Arguments: bash -lc "cd ~/DumanMessenger && ./tool/ci/daily.sh --no-evidence"
+```
+
+Point it at the repository inside the distro rather than `/mnt/c/...` if you can — §3's
+performance warning applies to a scheduled run more than to an interactive one, because nobody is
+there to notice it taking forty minutes. A scheduled run should also redirect somewhere durable;
+`daily.sh` already writes everything under its artifact directory, so the task's own history is
+what needs a location, not the report.
 
 ### If PowerShell refuses to run it
 
@@ -346,14 +440,114 @@ its limits.
 **Verified by execution:** everything in `tool/ci/`, the `Makefile` targets, the pre-push hook, the
 pipeline exit codes, the PR flow including its refusal to merge when CI is billing-blocked, and
 `watch.sh --classify-run`. Those were run against this repository and against stubs that simulate a
-failing build and a billing refusal.
+failing build and a billing refusal. `collect-checks.sh` is in that group — run on Linux, against a
+deliberately failing Dart stub as well as against a missing SDK, so both of its exit paths are
+exercised. `check-dart-balance.py` is in it too: 22/22 files balanced and 19/19 self-test cases
+behaving, including the 12 clean snippets that must not alarm. So are the two checkers added since:
+`check-dart-sites.py`, which verifies the Dart engine's repeated declarations (88 `SimConfig`
+fields across up to five sites each, 83 `SimulationStats` fields across four, 14 `EventKind`
+values with 14 cases) and carries a 9-case self-test, and `check-parity.py`'s inventory rule, which
+requires the two engines' `SimConfig` and `SimulationStats` field lists to be *identical* — 88 and
+83, none one-sided. `daily.sh` is in this group as well, run on Linux against a missing SDK, so its
+INCOMPLETE path and its exit `2` are exercised; its GREEN path is not exercisable here, because
+GREEN requires the Dart half to run. What is *not* verified is reaching any of it through
+`make.ps1`, which is the paragraph below.
 
-**Not verified by execution:** `make.ps1`. The sandbox this was written in has no PowerShell and
-cannot install one — the release asset host is not reachable from it. So `make.ps1` was **statically
-checked only**, by `tool/ci/check-ps1.py`, which confirms balanced delimiters and the absence of
-PowerShell 7-only syntax (`??`, `?.`, the ternary, `&&`/`||` as pipeline chain operators) so that it
-runs on the Windows PowerShell 5.1 that Windows 11 actually ships. It is written defensively — every
-failure path prints an explicit reason and a fix rather than throwing — but it has not been run.
+**Not verified at all: the Dart engine.** `sim/mesh_sim` has never been compiled on the current
+tree — no SDK here, and `storage.googleapis.com` is not reachable from this sandbox, so none could
+be installed. `make checks` reports the whole `dart` group as `not-run`, which is the honest label
+and not a pass.
+
+What is therefore unverified has grown well past the two items this paragraph once listed. In
+roughly the order they were added, and all of them mechanical translations of TypeScript that *is*
+compiled and tested: the radio-model mirror for `docs/08` §12.9–§12.15; the `utf8ByteLength` /
+`wireSizeOfBody` byte-counting mirror; `docs/04` §6's abuse limits and the local blocklist
+(`blockPeer`/`isBlocked`, the `blocked` hop action, `BlockScope`); §5's dummy beacons (a `cover`
+event kind, which needed a case in `_handleEvent` or the switch is non-exhaustive); `skills/07`'s
+wake-lock accounting; `radioOccupancy` with `airtimeMs`/`occupancyMs` and the derived
+`ogmWireBytes`; `ogmAliasBytes`; `routeExpiries`; in-window connectivity sampling with
+`componentSizes()` and `radioComponents()`; and `scanIntervalMode`. That is roughly ninety Dart
+tests as well, none of which has ever run.
+
+Four static checkers stand in for part of a compiler and are worth knowing about when reading a
+red `dart analyze`: delimiter balance, cross-language constant parity, the config/stats inventory
+rule, and declaration-site consistency. Between them they would catch an unclosed brace, a protocol
+constant changed on one side only, a knob added to one engine and not the other, a stats field
+missing from `toJson()`, and an `EventKind` with no case. They would **not** catch a wrong
+identifier, a type mismatch, a bad enum member name or a missing import — and three defects of
+exactly that kind were found by hand this month and fixed before commit, so the residual risk is
+real rather than theoretical. If `dart analyze` fails, the collector's paste-back block carries
+`--- dart diagnostics ---` with `file:line:col` locations from `diagnostics.py` — enough to fix it
+blind, which is why it is there.
+
+**Executed twice, and it failed twice:** `make.ps1`. The sandbox this was written in has no PowerShell and
+cannot install one — the release asset host is not reachable from it — so for its whole life the
+script was **statically checked only**, by `tool/ci/check-ps1.py`: balanced delimiters, no PowerShell
+7-only syntax (`??`, `?.`, the ternary, `&&`/`||` as pipeline chain operators) so that it runs on the
+Windows PowerShell 5.1 that Windows 11 actually ships. Then, on 2026-10-27, it was run on a real
+Windows 11 machine, and the invocation this document recommends in §6 failed before the dispatcher
+did any work:
+
+```
+PS> .\make.ps1 doctor
+Cannot validate argument on parameter 'Runtime'. The argument "doctor" does not belong to the set
+"auto,wsl,bash" specified by the ValidateSet attribute.
+```
+
+The parameter block declared `[Parameter(ValueFromRemainingArguments = $true)] [string[]]$Task` with
+no `Position`. PowerShell excludes a `ValueFromRemainingArguments` parameter from positional binding,
+so the first positional argument bound to the *next* parameter — `$Runtime` — and its
+`ValidateSet('auto','wsl','bash')` rejected it. Every documented form of the command was affected:
+`.\make.ps1 doctor`, `.\make.ps1 ci`, `.\make.ps1 help`. Only the named form
+`.\make.ps1 -Task doctor` worked, and no document mentioned it.
+
+Fixed by giving `$Task` `Position = 0` and turning off positional binding for the rest with
+`[CmdletBinding(PositionalBinding = $false)]`, so `-Runtime` stays a named switch and a second
+positional argument (`--job web --fast`) is forwarded to bash rather than offered to it.
+`check-ps1.py` now has a third failure class for exactly this, verified both ways: it reports the
+defect when run against the pre-fix file and is clean on the fixed one.
+
+The second execution, minutes later on the same machine, got past binding with both forms
+(`.\make.ps1 -Task doctor` and `.\make.ps1 doctor`), detected WSL2, translated the path, built the
+command and ran it — and failed one directory too high:
+
+```
+bash: line 1: /mnt/c/Users/Administrator/Desktop/Git-Clones/tool/ci/doctor.sh: No such file or directory
+error: the wsl runtime exited with 127, which is not a pipeline verdict.
+```
+
+The path in that message is the *parent* of the clone. `make.ps1` is committed at the top of the
+repository, a sibling of `Makefile`, `tool/` and `sim/`, so `$PSScriptRoot` is the repo root — but the
+script computed `$RepoRoot = Split-Path -Parent $PSScriptRoot`, under a comment that asserted the
+opposite ("the repo root is its parent"), which is why it read like a fact and survived every review.
+Fixed to `$PSScriptRoot`, with a startup guard that fails in PowerShell rather than in bash when the
+directory does not look like a clone, and a 127/126 explanation that names the likeliest cause inside
+WSL (`make` is not installed by default; the targets in the help list do not need it).
+`check-ps1.py` gained a fourth failure class for the repo-root assumption, verified both ways: run
+against `ffc2d19`'s `make.ps1` in a directory where `tool/` is a sibling it reports the climb and
+exits 1; against the fixed file it is clean; against the same file with no `tool/` sibling it says
+nothing, because there the parent might genuinely be the root.
+
+What the two executions together have now **verified on real Windows 11**: parameter binding in both
+forms, WSL2 detection with a real distro, `wslpath -u` translation, the `/mnt/c` performance warning,
+single-quote-only quoting surviving the PowerShell &rarr; `wsl.exe` &rarr; `bash -lc` layers, exit-code
+propagation, and the defensive branch that refuses to report 127 as a pipeline verdict. What is still
+unverified anywhere is a target actually completing: no doctor output, no `make` target, no script
+target has ever run through this dispatcher to a verdict of 0, 1 or 2.
+Its `daily`, `daily-fast` and `daily-checks` entries are in the same position: they are three more
+rows in `$ScriptTargets` pointing at `tool/ci/daily.sh`, which *is* verified by execution on Linux,
+and `check-ps1.py` confirms every `make.ps1` target is backed by a real Makefile target (it prints
+the count; this sentence used to carry a number that went stale) — but the forwarding itself has not
+been exercised. That static check now runs in CI's `checks` job and in both local pipelines, so the
+front door is looked at on every run instead of only when somebody types `make check-ps1`.
+
+The Task Scheduler snippet in §3 is in the same category and worth calling out separately, because
+it is the one command in this document that is neither run nor statically checked: `wsl.exe` with
+`bash -lc` is the documented way to give Task Scheduler a program and arguments rather than a
+shell, and the quoting is what usually goes wrong. Treat it as a starting point, confirm it once by
+hand from a `cmd` prompt before scheduling it, and check that the working directory resolves —
+`bash -lc` starts in the home directory, which is why the `cd` is inside the quoted command rather
+than left to the task's "Start in" field.
 
 Run `.\make.ps1 doctor` first. If it misbehaves, `$env:DUMAN_CI_VERBOSE = 1` prints the exact
 command it handed to the shell, and `.\make.ps1 -Runtime bash <target>` forces the other runtime.

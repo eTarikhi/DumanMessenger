@@ -1,0 +1,1412 @@
+==> local CI run pipeline on arena/ff85cb12-dumanmessenger @ 3ed1af9
+artifacts: artifacts/ci/daily/20261028T030850Z-3ed1af9/pipeline
+
+toolchain   node /mnt/c/Users/Administrator/Desktop/Git-Clones/DumanMessenger/tool/ci/lib.sh: line 58: /home/administrator/bin/node: Permission denied   npm 11.19.0   python3 3.12.3
+            dart 3.13.7
+            CI pins node 22 (actions/setup-node) and dart stable ≥ 3.4.0 (pubspec)
+
+==> checks — toolchain-free static checks (docs, parity, Dart sites)
+$ (cd /mnt/c/Users/Administrator/Desktop/Git-Clones/DumanMessenger) python3 tool/ci/check-docs.py
+documentation drift — does every documented command exist?
+  ok    ci-jobs            5 workflow jobs, 5 mirrored
+  ok    ci-checkers        5 checkers run by all three entry points
+  ok    section-counts     1 section-count claim(s) checked against the probes
+  ok    dart-cli-flags     34 CLI flags vs 34 documented
+  ok    media-sections     18 sections in the probe, 9 named in the docs
+  ok    e2ee-sections      4 sections in the probe, 4 named in the docs
+  ok    make-targets       53 targets, 51 named in the docs
+  ok    ps1-targets        21 make.ps1 targets, all backed by the Makefile
+  ok    ci-script-flags    7 scripts, 29 flag uses checked
+  ok    help-covers-targets 53 documented targets, all visible in help
+  ok    doc-section-refs   409 section citations, all resolve
+  ok    npm-scripts        15 scripts, 12 referenced in the docs
+
+all 12 checks passed.
+  PASS Documentation drift (check-docs.py)                  1s
+$ (cd /mnt/c/Users/Administrator/Desktop/Git-Clones/DumanMessenger) python3 tool/ci/check-dart-balance.py
+check-dart-balance: 22/22 files balanced
+  PASS Dart delimiter balance (check-dart-balance.py)       6s
+$ (cd /mnt/c/Users/Administrator/Desktop/Git-Clones/DumanMessenger) python3 tool/ci/check-parity.py
+cross-language parity — do the two engines agree on their constants?
+  ok    config-inventory   88 SimConfig knobs, identical in both engines (88 TS, 88 Dart)
+  ok    stats-inventory    83 SimulationStats fields, identical in both engines (83 TS, 83 Dart)
+  ok    engine-constants   59 shared constants agree (46 numeric, 13 by expression)
+        59 exported in src/, 64 in sim/mesh_sim/lib/src/; 0 TypeScript-only and 4 Dart-only
+        names are not compared by this check, because the two inventories are not
+        supposed to match.
+        one-sided names, listed because a synonym pair hiding here is a
+        constant this check is silently not comparing:
+          sim/ only       broadcastAddress, defaultConfig, ln10, mask
+  ok    coverage-weights   battery 0.2, pdr 0.1, peers 0.3, rssi 0.25, stability 0.15  (sum 1)
+        docs/03 §3's vector, read out of both engines and required to sum to 1 — if it does not,
+        the 0.60 promote and 0.50 demote thresholds do not mean what §3 says they mean.
+
+all parity checks passed.
+  PASS Cross-language parity (check-parity.py)              0s
+$ (cd /mnt/c/Users/Administrator/Desktop/Git-Clones/DumanMessenger) python3 tool/ci/check-dart-sites.py
+  note  88 SimConfig fields, 68 overridable through copyWith, 20 deliberately not (tickIntervalMs, physicsIntervalMs, ogmIntervalMs, ogmJitterMs…)
+  note  83 stats fields checked at all four sites
+  note  14 EventKind values, 14 cases
+  note  749 qualified references, 84 declared types
+  note  84 declared types reachable-checked across 22 files
+check-dart-sites: all declaration sites consistent (88 SimConfig fields, 68 overridable through copyWith, 20 deliberately not (tickIntervalMs, physicsIntervalMs, ogmIntervalMs, ogmJitterMs…); 83 stats fields checked at all four sites; 14 EventKind values, 14 cases; 749 qualified references, 84 declared types; 84 declared types reachable-checked across 22 files)
+  PASS Dart declaration sites (check-dart-sites.py)         2s
+$ (cd /mnt/c/Users/Administrator/Desktop/Git-Clones/DumanMessenger) python3 tool/ci/check-ps1.py make.ps1
+ok    make.ps1
+  PASS PowerShell static check (check-ps1.py)               0s
+$ (cd /mnt/c/Users/Administrator/Desktop/Git-Clones/DumanMessenger) bash -c python3 tool/ci/check-docs.py --self-test &&
+     python3 tool/ci/check-dart-balance.py --self-test &&
+     python3 tool/ci/check-parity.py --self-test &&
+     python3 tool/ci/check-dart-sites.py --self-test
+self-test: the copied tree passes all 12 checks; now breaking it on purpose
+  ok    dart-cli-flags     caught `--turbo` in sim/mesh_sim/bin/mesh_sim.dart
+  ok    media-sections     caught `backpressure` in docs/08-media-transport-ptt.md
+  ok    e2ee-sections      caught `churnn` in docs/12-cli-cheat-sheet.md
+  ok    make-targets       caught `checks-listt` in docs/12-cli-cheat-sheet.md
+  ok    ps1-targets        caught `bogus` in make.ps1
+  ok    ci-jobs            caught `bogus` in tool/ci/run-pipeline.sh
+  ok    ci-jobs            caught `checks` in tool/ci/run-pipeline.sh
+  ok    ci-checkers        caught `check-ps1.py` in tool/ci/run-pipeline.sh
+  ok    ci-checkers        caught `check-parity.py` in tool/ci/collect-checks.sh
+  ok    ci-script-flags    caught `--jobs` in docs/10-local-development-and-ci.md
+  ok    help-covers-targets caught `check-ps1` in Makefile
+  ok    npm-scripts        caught `e2ee2` in docs/12-cli-cheat-sheet.md
+  ok    section-counts     caught `17 sections` in README.md
+  ok    doc-section-refs   caught `§96` in docs/07-e2ee-noise-xx.md
+
+self-test passed: all 14 faults caught and named, tree restored.
+  ok   balanced function
+  ok   balanced list literal
+  ok   brace inside a string is not a brace
+  ok   parens inside a double-quoted string
+  ok   delimiters inside a line comment
+  ok   delimiters inside a block comment
+  ok   nested interpolation in a triple-quoted string
+  ok   interpolation holding a nested string that holds a brace
+  ok   escaped quote inside a string
+  ok   raw string keeps its backslashes
+  ok   raw string does not interpolate
+  ok   a double backslash in an ordinary string is one escape
+  ok   unclosed function brace -> unclosed code '{' opened at 1:14
+  ok   unmatched closing brace -> unmatched closing '}'
+  ok   mismatched delimiter -> '}' does not match '(' opened at 2:10
+  ok   single-quoted string crossing a newline -> unterminated string opened at 1:11
+  ok   triple-quoted string never closed -> unclosed string ''' opened at 2:9
+  ok   a quote inside a broken interpolation is the innermost unclosed frame -> unterminated string opened at 2:19
+  ok   interpolation never closed -> unclosed interp '{' opened at 2:14
+check-dart-balance --self-test: 19/19 cases behaved as expected
+  ok   clean fixture: 7 shared constants agree, 2 SimConfig knobs and 1 SimulationStats field identical
+  ok   an integer changed on one side only -> src/routing.ts:1 says 256 but sim/mesh_sim/lib/src/routing.dart:1 says
+  ok   a float changed on one side only -> src/routing.ts:6 says `0.20 / 8` but sim/mesh_sim/lib/src/routing.dart
+  ok   an expression changed on one side only -> src/routing.ts:4 says `27 + 12 + 16 + 32 + 8` but sim/mesh_sim/lib/src
+  ok   a string changed on one side only -> src/routing.ts:5 says `"GROUPS"` but sim/mesh_sim/lib/src/routing.dart
+  ok   a constant deleted from one side -> shared drops to 6 and the name is reported, not failed
+  ok   a class-static constant changed on one side only -> src/routing.ts:7 says 12 but sim/mesh_sim/lib/src/routing.dart:10 says
+  ok   a coverage weight changed on one side only -> src/election.ts says 0.3 but sim/mesh_sim/lib/src/election.dart says 0
+  ok   a coverage weight renamed on one side only -> in src/election.ts but not in Dart
+  ok   a config knob present only in the Dart engine -> a field in the Dart SimConfig with no knob in src/simulation.ts, so th
+  ok   a config knob present only in the TypeScript engine -> a knob in src/simulation.ts with no field in the Dart SimConfig, so th
+  ok   a statistic reported by only one engine -> a statistic the TypeScript engine reports and the Dart one does not, s
+check-parity --self-test: 12/12 cases behaved as expected
+  ok    the real tree is clean
+  ok    a SimConfig field with no constructor parameter
+  ok    a copyWith parameter the body never uses
+  ok    a copyWith body assignment with no parameter
+  ok    a stats field missing from toJson
+  ok    a stats field missing at the construction site
+  ok    a stats field declared without `required this.`
+  ok    an EventKind value with no case in _handleEvent
+  ok    a _handleEvent case for an enum value that does not exist
+  ok    a reference to an enum type that does not exist
+  ok    an import removed, so a type is named but not reachable
+  ok    a reference to an enum member that does not exist
+check-dart-sites --self-test: 12/12 cases behaved as expected
+  PASS Checker self-tests                                   22s
+
+==> web — TypeScript engine + React simulator
+$ (cd /mnt/c/Users/Administrator/Desktop/Git-Clones/DumanMessenger) npm ci --no-audit --no-fund
+
+> duman-mesh-simulator@0.1.0 prepare
+> git config core.hooksPath .githooks || exit 0
+
+
+added 100 packages in 13s
+npm warn install-scripts 1 package has install scripts not yet covered by allowScripts:
+npm warn install-scripts   esbuild@0.21.5 (postinstall: node install.js)
+npm warn install-scripts
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+  PASS npm ci                                               14s
+$ (cd /mnt/c/Users/Administrator/Desktop/Git-Clones/DumanMessenger) npx tsc --noEmit -p tsconfig.json
+  PASS Typecheck (tsc --noEmit)                             12s
+$ (cd /mnt/c/Users/Administrator/Desktop/Git-Clones/DumanMessenger) npm test
+
+> duman-mesh-simulator@0.1.0 test
+> vitest run
+
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90mC:/Users/Administrator/Desktop/Git-Clones/DumanMessenger[39m
+
+ [32m✓[39m src/crypto/__tests__/handshake.test.ts [2m([22m[2m22 tests[22m[2m)[22m[33m 378[2mms[22m[39m
+ [32m✓[39m src/crypto/__tests__/packet.test.ts [2m([22m[2m19 tests[22m[2m)[22m[33m 359[2mms[22m[39m
+ [32m✓[39m src/crypto/__tests__/session.test.ts [2m([22m[2m31 tests[22m[2m)[22m[33m 955[2mms[22m[39m
+ [32m✓[39m src/__tests__/engine.test.ts [2m([22m[2m68 tests[22m[2m)[22m[33m 1757[2mms[22m[39m
+   [33m[2m✓[22m[39m seeded RNG[2m > [22mstays inside [0, 1) over a long stream [33m1476[2mms[22m[39m
+ [32m✓[39m src/crypto/__tests__/ratchet.test.ts [2m([22m[2m15 tests[22m[2m)[22m[90m 89[2mms[22m[39m
+ [32m✓[39m src/__tests__/transport.test.ts [2m([22m[2m12 tests[22m[2m)[22m[90m 21[2mms[22m[39m
+ [32m✓[39m src/__tests__/rate-limits.test.ts [2m([22m[2m18 tests[22m[2m)[22m[33m 17371[2mms[22m[39m
+   [33m[2m✓[22m[39m in the engine[2m > [22msuppresses a broadcast flood at the SUPERs when it is on, and not when it is off [33m3014[2mms[22m[39m
+   [33m[2m✓[22m[39m in the engine[2m > [22mleaves an honest sender alone, which is the property that makes the cap shippable [33m2236[2mms[22m[39m
+   [33m[2m✓[22m[39m in the engine[2m > [22mdoes not rate-limit an SOS, which docs/04 §6 gives its own mechanism instead [33m887[2mms[22m[39m
+   [33m[2m✓[22m[39m the broadcast cap's enforcement scope[2m > [22msuppresses more when every node enforces than when only SUPERs do [33m2143[2mms[22m[39m
+   [33m[2m✓[22m[39m the broadcast cap's enforcement scope[2m > [22mcuts the airtime a flood costs, which is what the cap is for [33m4049[2mms[22m[39m
+   [33m[2m✓[22m[39m the broadcast cap's enforcement scope[2m > [22mstill costs an honest network nothing under either scope [33m5000[2mms[22m[39m
+ [32m✓[39m src/__tests__/wake-locks.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 21102[2mms[22m[39m
+   [33m[2m✓[22m[39m wake-lock accounting (skills/07)[2m > [22mcounts under the shipped radio baseline, which maintains no busy-radio maps [33m2407[2mms[22m[39m
+   [33m[2m✓[22m[39m wake-lock accounting (skills/07)[2m > [22mreports per node what it reports in total [33m2131[2mms[22m[39m
+   [33m[2m✓[22m[39m wake-lock accounting (skills/07)[2m > [22mholds at least one lock per transmission, and a second for whoever hears it [33m2762[2mms[22m[39m
+   [33m[2m✓[22m[39m wake-lock accounting (skills/07)[2m > [22msplits the network's radio demand between the two roles, and the shares sum to 100 [33m2439[2mms[22m[39m
+   [33m[2m✓[22m[39m wake-lock accounting (skills/07)[2m > [22mreports the model's over-subscription plainly instead of hiding it in a percentage [33m2512[2mms[22m[39m
+   [33m[2m✓[22m[39m wake-lock accounting (skills/07)[2m > [22mdoes not let the packet share be read as the energy gap between roles [33m3592[2mms[22m[39m
+   [33m[2m✓[22m[39m wake-lock accounting (skills/07)[2m > [22mprices concentration on the neighbours who have to hear it [33m4258[2mms[22m[39m
+   [33m[2m✓[22m[39m wake-lock accounting (skills/07)[2m > [22mmeasures the window, not the whole run [33m999[2mms[22m[39m
+ [32m✓[39m src/__tests__/wire-bytes.test.ts [2m([22m[2m9 tests[22m[2m)[22m[90m 28[2mms[22m[39m
+ [32m✓[39m src/__tests__/blocklist.test.ts [2m([22m[2m12 tests[22m[2m)[22m[33m 11630[2mms[22m[39m
+   [33m[2m✓[22m[39m the blocklist itself[2m > [22mis off by default and inert while empty [33m1577[2mms[22m[39m
+   [33m[2m✓[22m[39m the blocklist itself[2m > [22mblocks, unblocks, refuses a self-block, and reports the list sorted [33m663[2mms[22m[39m
+   [33m[2m✓[22m[39m the blocklist itself[2m > [22mkeeps a blocked peer's messages out of the blocker's inbox [33m1219[2mms[22m[39m
+   [33m[2m✓[22m[39m the blocklist itself[2m > [22mstill lets everybody else hear the blocked peer — blocking is local [33m1064[2mms[22m[39m
+   [33m[2m✓[22m[39m the blocklist itself[2m > [22mdoes not stop the blocker talking to the peer it blocked [33m958[2mms[22m[39m
+   [33m[2m✓[22m[39m the blocklist itself[2m > [22mlets a blocked peer's SOS through, which is the asymmetry §6 relies on [33m1059[2mms[22m[39m
+   [33m[2m✓[22m[39m the blocklist itself[2m > [22mkeeps the blocked peer in the routing table, because OGMs are not blockable [33m1030[2mms[22m[39m
+   [33m[2m✓[22m[39m blockScope[2m > [22mcosts less airtime when the blocker also refuses to relay [33m2164[2mms[22m[39m
+   [33m[2m✓[22m[39m blockScope[2m > [22mcounts fewer suppressions under relay, because the copy dies earlier [33m1885[2mms[22m[39m
+ [32m✓[39m src/__tests__/import-graph.test.ts [2m([22m[2m4 tests[22m[2m)[22m[90m 80[2mms[22m[39m
+ [32m✓[39m src/__tests__/radio-occupancy.test.ts [2m([22m[2m15 tests[22m[2m)[22m[33m 45472[2mms[22m[39m
+   [33m[2m✓[22m[39m OGM wire size, derived rather than guessed[2m > [22mcuts demanded radio time by the beacon width and not by the beacon count [33m4870[2mms[22m[39m
+   [33m[2m✓[22m[39m radioOccupancy[2m > [22mchanges telemetry and nothing else under the shipped radio baseline [33m4292[2mms[22m[39m
+   [33m[2m✓[22m[39m radioOccupancy[2m > [22mhalves the demanded radio time without making it physically possible [33m4658[2mms[22m[39m
+   [33m[2m✓[22m[39m radioOccupancy[2m > [22mcosts a dense crowd fewer deferrals and buys it delivery, once contention is modelled [33m25344[2mms[22m[39m
+   [33m[2m✓[22m[39m radioOccupancy[2m > [22mcounts route churn, and a beacon interval near the soft-state TTL churns more [33m2653[2mms[22m[39m
+   [33m[2m✓[22m[39m radioOccupancy[2m > [22mleaves a sparse mesh's delivery alone under contention, which bounds the finding [33m3567[2mms[22m[39m
+ [32m✓[39m src/__tests__/cover-traffic.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 17136[2mms[22m[39m
+   [33m[2m✓[22m[39m cover traffic (docs/04 §5, dummy beacons)[2m > [22memits nothing when off, which is what keeps every published number intact [33m2200[2mms[22m[39m
+   [33m[2m✓[22m[39m cover traffic (docs/04 §5, dummy beacons)[2m > [22memits at the rate it is told to, and faster when told to be faster [33m5119[2mms[22m[39m
+   [33m[2m✓[22m[39m cover traffic (docs/04 §5, dummy beacons)[2m > [22mcosts airtime in proportion to its rate — a dummy that is free is not on air [33m4845[2mms[22m[39m
+   [33m[2m✓[22m[39m cover traffic (docs/04 §5, dummy beacons)[2m > [22mdoes not starve the network, which is the floor §23 asserts instead of an equality [33m3440[2mms[22m[39m
+   [33m[2m✓[22m[39m cover traffic (docs/04 §5, dummy beacons)[2m > [22mcounts cover separately from the routing protocol's own beacons [33m1524[2mms[22m[39m
+ [32m✓[39m src/__tests__/components.test.tsx [2m([22m[2m32 tests[22m[2m)[22m[33m 50853[2mms[22m[39m
+   [33m[2m✓[22m[39m groups in the UI[2m > [22moffers the group as a destination and reports member reach [33m1735[2mms[22m[39m
+   [33m[2m✓[22m[39m groups in the UI[2m > [22mcollapses per-member unicasts into the one send the user made [33m1296[2mms[22m[39m
+   [33m[2m✓[22m[39m groups in the UI[2m > [22mshows membership, the admin badge and the rules that bind the buttons [33m1436[2mms[22m[39m
+   [33m[2m✓[22m[39m groups in the UI[2m > [22mdisables leaving a three-member group and rotating without admin [33m1259[2mms[22m[39m
+   [33m[2m✓[22m[39m groups in the UI[2m > [22mcounts group traffic on the dashboard, and only when there is any [33m2764[2mms[22m[39m
+   [33m[2m✓[22m[39m SOS in the UI[2m > [22mshows one alert card for four floods, with the fix and the reach [33m1814[2mms[22m[39m
+   [33m[2m✓[22m[39m SOS in the UI[2m > [22mcounts live alerts and the newest fix on the dashboard [33m1578[2mms[22m[39m
+   [33m[2m✓[22m[39m SOS in the UI[2m > [22mkeeps the SOS row off the dashboard until there is an SOS [33m1661[2mms[22m[39m
+   [33m[2m✓[22m[39m group history anti-entropy in the UI[2m > [22mreports the repair traffic, and only once a group has beaconed [33m3208[2mms[22m[39m
+   [33m[2m✓[22m[39m group history anti-entropy in the UI[2m > [22mkeeps digest beacons out of the chat log [33m1475[2mms[22m[39m
+   [33m[2m✓[22m[39m media transport in the UI[2m > [22moffers the file and push-to-talk controls, and explains why they are greyed out [33m1550[2mms[22m[39m
+   [33m[2m✓[22m[39m media transport in the UI[2m > [22mshows one progress row per transfer, with the radio it is riding [33m1665[2mms[22m[39m
+   [33m[2m✓[22m[39m media transport in the UI[2m > [22mcounts media on the dashboard, and only once there is any [33m2943[2mms[22m[39m
+   [33m[2m✓[22m[39m metrics dashboard[2m > [22mrenders the battery, radio and hop-budget figures [33m1234[2mms[22m[39m
+   [33m[2m✓[22m[39m metrics dashboard[2m > [22mshows the awake ratio only when the duty cycle is running [33m1202[2mms[22m[39m
+   [33m[2m✓[22m[39m hop trace panel[2m > [22mnames the relays a delivered message went via [33m1200[2mms[22m[39m
+   [33m[2m✓[22m[39m hop trace panel[2m > [22msays so plainly when nothing relayed the message [33m1188[2mms[22m[39m
+   [33m[2m✓[22m[39m hop trace panel[2m > [22moffers a picker before anything is traced [33m1323[2mms[22m[39m
+   [33m[2m✓[22m[39m mesh log panel[2m > [22mexplains itself while capture is off [33m1396[2mms[22m[39m
+   [33m[2m✓[22m[39m mesh log panel[2m > [22mrenders captured events with their kinds and reasons [33m1330[2mms[22m[39m
+   [33m[2m✓[22m[39m mesh log panel[2m > [22mfilters to the message being traced [33m1289[2mms[22m[39m
+   [33m[2m✓[22m[39m the radio channel in the UI (docs/08 §12)[2m > [22mshows waiting and drops under half-duplex, and nothing at all under the shipped model [33m2682[2mms[22m[39m
+   [33m[2m✓[22m[39m the radio channel in the UI (docs/08 §12)[2m > [22msplits the shedding by who did it, and only once there is shedding [33m2447[2mms[22m[39m
+   [33m[2m✓[22m[39m the radio channel in the UI (docs/08 §12)[2m > [22moffers the queue, discipline and backpressure knobs — and hides them under the shipped radio [33m1531[2mms[22m[39m
+   [33m[2m✓[22m[39m the radio channel in the UI (docs/08 §12)[2m > [22moffers both abuse controls from docs/04 §6, with the measurement in the tooltip [33m1264[2mms[22m[39m
+   [33m[2m✓[22m[39m the radio channel in the UI (docs/08 §12)[2m > [22moffers both channel models in the config panel, and says which one ships [33m1155[2mms[22m[39m
+   [33m[2m✓[22m[39m the radio channel in the UI (docs/08 §12)[2m > [22madds the capture effect as a third receiver model, with its margin beside it [33m2545[2mms[22m[39m
+   [33m[2m✓[22m[39m the radio channel in the UI (docs/08 §12)[2m > [22mcounts the receivers a stronger packet took over, and only when there were any [33m1294[2mms[22m[39m
+   [33m[2m✓[22m[39m blocking a peer from the inspector (docs/04 §6, bullet 1)[2m > [22moffers the control on every peer in range, and says what a block does not do [33m1167[2mms[22m[39m
+   [33m[2m✓[22m[39m blocking a peer from the inspector (docs/04 §6, bullet 1)[2m > [22mshows a blocked peer as blocked, and lists it even when it is out of range [33m1079[2mms[22m[39m
+   [33m[2m✓[22m[39m blocking a peer from the inspector (docs/04 §6, bullet 1)[2m > [22mis the same state the engine's block gate reads [33m1121[2mms[22m[39m
+ [32m✓[39m src/__tests__/connectivity.test.ts [2m([22m[2m14 tests[22m[2m)[22m[33m 61896[2mms[22m[39m
+   [33m[2m✓[22m[39m connectivity sampling (docs/06 §24.10)[2m > [22mreports the radio graph's components, largest first, summing to the network [33m2849[2mms[22m[39m
+   [33m[2m✓[22m[39m connectivity sampling (docs/06 §24.10)[2m > [22msamples the window at the configured interval, and not the settle period [33m1967[2mms[22m[39m
+   [33m[2m✓[22m[39m connectivity sampling (docs/06 §24.10)[2m > [22mcan be disabled, and a disabled run reports the trivially connected defaults [33m2162[2mms[22m[39m
+   [33m[2m✓[22m[39m connectivity sampling (docs/06 §24.10)[2m > [22msays a settled 20-node campus stays in one piece [33m2402[2mms[22m[39m
+   [33m[2m✓[22m[39m connectivity sampling (docs/06 §24.10)[2m > [22mcatches the crowd splitting, which an end-of-window graph cannot [33m11027[2mms[22m[39m
+   [33m[2m✓[22m[39m connectivity sampling (docs/06 §24.10)[2m > [22mdoes not change the world it measures [33m3376[2mms[22m[39m
+   [33m[2m✓[22m[39m the density-derived beacon interval (docs/06 §24.11)[2m > [22mbeacons a reference-density node at exactly the specified interval [33m5666[2mms[22m[39m
+   [33m[2m✓[22m[39m the density-derived beacon interval (docs/06 §24.11)[2m > [22mspends more airtime in a sparse world, where the floor bites [33m579[2mms[22m[39m
+   [33m[2m✓[22m[39m the density-derived beacon interval (docs/06 §24.11)[2m > [22mholds the topology still, and there the derived interval is cheaper without losing reach [33m19101[2mms[22m[39m
+   [33m[2m✓[22m[39m radioComponents — the one walk behind both the metric and the picture[2m > [22mis what componentSizes reports the sizes of, so the metric and the picture agree [33m12757[2mms[22m[39m
+ [32m✓[39m src/__tests__/scan-interval.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 57957[2mms[22m[39m
+   [33m[2m✓[22m[39m adaptive scan intervals (docs/05 §1.2, layer 3)[2m > [22mscans less in a sparse world, which is the row's claimed saving [33m404[2mms[22m[39m
+   [33m[2m✓[22m[39m adaptive scan intervals (docs/05 §1.2, layer 3)[2m > [22mscans more in a dense world, which is what the row says and what it costs [33m30448[2mms[22m[39m
+   [33m[2m✓[22m[39m adaptive scan intervals (docs/05 §1.2, layer 3)[2m > [22mis anchored, so a reference-density node scans at exactly the configured interval [33m2798[2mms[22m[39m
+   [33m[2m✓[22m[39m adaptive scan intervals (docs/05 §1.2, layer 3)[2m > [22mclamps, so one peer does not stop a node scanning and a crowd does not pin it awake [33m22250[2mms[22m[39m
+   [33m[2m✓[22m[39m adaptive scan intervals (docs/05 §1.2, layer 3)[2m > [22mdoes not consume random numbers the fixed mode does not, so the default is untouched [33m2050[2mms[22m[39m
+[90mstdout[2m | src/__tests__/simulation.test.ts[2m > [22m[2mcommunity relays (roadmap Phase 5: a plugged tablet in a café)[2m > [22m[2melects the plugged tablets and moves relay work off other people's batteries
+[22m[39m{
+ "baseMpr": {
+  "sent": 100,
+  "delivered": 91,
+  "ratio": 0.91,
+  "relayTx": 23518,
+  "superRatio": 0.18333333333333332,
+  "relaysAreSuper": 0,
+  "burdenOnOthers": 23518,
+  "burdenOnRelays": 0,
+  "normalPctPerHour": 2.914336878318547,
+  "blocked": [],
+  "superCount": 11
+ },
+ "baseFloodRelays": 223538,
+ "baseFloodRatio": 1,
+ "relayMpr": {
+  "sent": 100,
+  "delivered": 91,
+  "ratio": 0.91,
+  "relayTx": 26540,
+  "superRatio": 0.21666666666666667,
+  "relaysAreSuper": 3,
+  "burdenOnOthers": 23414,
+  "burdenOnRelays": 3126,
+  "normalPctPerHour": 2.8216262927405293,
+  "blocked": [],
+  "superCount": 13
+ },
+ "relayFloodRelays": 206528,
+ "relayFloodRatio": 1,
+ "sixMpr": {
+  "sent": 100,
+  "delivered": 98,
+  "ratio": 0.98,
+  "relayTx": 24444,
+  "superRatio": 0.21666666666666667,
+  "relaysAreSuper": 4,
+  "burdenOnOthers": 19148,
+  "burdenOnRelays": 5296,
+  "normalPctPerHour": 2.877188545930059,
+  "blocked": [
+   {
+    "id": "node-1",
+    "reason": "NORMAL: score 0.78, rank 7/24",
+    "betterTablets": 6,
+    "betterPhones": 0
+   },
+   {
+    "id": "node-19",
+    "reason": "NORMAL: score 0.79, rank 6/25",
+    "betterTablets": 5,
+    "betterPhones": 0
+   }
+  ],
+  "superCount": 13
+ }
+}
+
+ [32m✓[39m src/__tests__/simulation.test.ts [2m([22m[2m140 tests[22m[2m)[22m[33m 237046[2mms[22m[39m
+   [33m[2m✓[22m[39m regressions against the original prototype[2m > [22mbrings up a connected world by default [33m666[2mms[22m[39m
+   [33m[2m✓[22m[39m regressions against the original prototype[2m > [22mlearns routes beyond one hop by gossiping OGMs [33m549[2mms[22m[39m
+   [33m[2m✓[22m[39m regressions against the original prototype[2m > [22mdelivers a multi-hop unicast along a routed path [33m515[2mms[22m[39m
+   [33m[2m✓[22m[39m regressions against the original prototype[2m > [22mmeasures latency on a virtual clock that grows with hop count [33m898[2mms[22m[39m
+   [33m[2m✓[22m[39m regressions against the original prototype[2m > [22mcounts broadcast deliveries instead of silently dropping them [33m594[2mms[22m[39m
+   [33m[2m✓[22m[39m regressions against the original prototype[2m > [22mexpires soft state on simulated time, not wall-clock time [33m7358[2mms[22m[39m
+   [33m[2m✓[22m[39m determinism[2m > [22mreproduces a run exactly for the same seed [33m1157[2mms[22m[39m
+   [33m[2m✓[22m[39m determinism[2m > [22mresets back to the seeded world [33m341[2mms[22m[39m
+   [33m[2m✓[22m[39m delay-tolerant networking (docs/03 §8)[2m > [22mkeeps undeliverable traffic in a sparse village instead of dropping it [33m325[2mms[22m[39m
+   [33m[2m✓[22m[39m node lifecycle and manual controls[2m > [22mtakes a node offline when its battery is exhausted [33m523[2mms[22m[39m
+   [33m[2m✓[22m[39m node lifecycle and manual controls[2m > [22mhonours manual offline/online and charging toggles [33m8060[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mretransmits from the source when no ACK returns, and stops at the budget [33m978[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22msuppresses redundant NORMAL relays under MPR but not under flood-all [33m2247[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22melects super-nodes only from eligible candidates [33m1299[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mdisables election when configured to [33m1131[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mhop traces and the capture log (roadmap Phase 4)[2m > [22mrecords when each hop arrived, over what link, and what it decided [33m1626[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mhop traces and the capture log (roadmap Phase 4)[2m > [22mrecovers the route chain from the fan-out tree [33m1281[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mhop traces and the capture log (roadmap Phase 4)[2m > [22mmarks the relays MPR suppressed, with the reason [33m1490[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mhop traces and the capture log (roadmap Phase 4)[2m > [22mtraces hops always, and captures the log only when asked [33m3088[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mhop traces and the capture log (roadmap Phase 4)[2m > [22mlogs beacons too when captureOgm is set [33m1471[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mhop traces and the capture log (roadmap Phase 4)[2m > [22mkeeps the capture bounded and in time order [33m1359[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mhop traces and the capture log (roadmap Phase 4)[2m > [22mdoes not perturb the run it is measuring [33m3063[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mhop traces and the capture log (roadmap Phase 4)[2m > [22mdrops the log when metrics are re-baselined [33m1324[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mhop traces and the capture log (roadmap Phase 4)[2m > [22mlogs the DTN last resort as a queue event [33m465[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mpower policy and telemetry (skills/02, skills/07, roadmap Phase 2)[2m > [22mnever promotes a node the user opted out of, and steps it down at once [33m1991[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mpower policy and telemetry (skills/02, skills/07, roadmap Phase 2)[2m > [22mkeeps the mesh routing when a third of the nodes decline the role [33m1445[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mpower policy and telemetry (skills/02, skills/07, roadmap Phase 2)[2m > [22mnever auto-promotes with battery saver on [33m1703[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mpower policy and telemetry (skills/02, skills/07, roadmap Phase 2)[2m > [22mleaves duty cycling off by default [33m634[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mpower policy and telemetry (skills/02, skills/07, roadmap Phase 2)[2m > [22mscans 3 s out of every 10 s when duty cycling, and never sleeps a SUPER [33m841[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mpower policy and telemetry (skills/02, skills/07, roadmap Phase 2)[2m > [22mspreads duty phases so a crowd does not sleep in lockstep [33m538[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mpower policy and telemetry (skills/02, skills/07, roadmap Phase 2)[2m > [22mtrades discovery for battery when duty cycling [33m675[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mpower policy and telemetry (skills/02, skills/07, roadmap Phase 2)[2m > [22mreports battery %/h per role, scans/sec and relays/sec [33m369[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mpower policy and telemetry (skills/02, skills/07, roadmap Phase 2)[2m > [22mspends exactly the skills/07 budget always-on, and buys headroom by sleeping [33m3475[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mpower policy and telemetry (skills/02, skills/07, roadmap Phase 2)[2m > [22mexcludes charging nodes from the measured drain rate [33m578[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mpower policy and telemetry (skills/02, skills/07, roadmap Phase 2)[2m > [22mbuckets latency by hop for first-attempt routed traffic [33m488[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mscale: the documented 10-200 node range (skills/08)[2m > [22mruns at the top of the range, and the fallback does not go quadratic [33m40571[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mscale: the documented 10-200 node range (skills/08)[2m > [22mkeeps the dense branch out of the worlds that do not need it [33m4403[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mgroup channels (docs/04 §4, roadmap Phase 1 'group (3-10 members)')[2m > [22menforces the 3-10 member bound, and nothing else can create a group [33m512[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mgroup channels (docs/04 §4, roadmap Phase 1 'group (3-10 members)')[2m > [22mreaches every member and nobody else [33m638[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mgroup channels (docs/04 §4, roadmap Phase 1 'group (3-10 members)')[2m > [22mrelays through non-members, so a spread group still works [33m579[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mgroup channels (docs/04 §4, roadmap Phase 1 'group (3-10 members)')[2m > [22mkeeps group traffic out of the unicast metrics [33m652[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mgroup channels (docs/04 §4, roadmap Phase 1 'group (3-10 members)')[2m > [22mnever arms a retry timer for a scoped flood [33m640[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mgroup channels (docs/04 §4, roadmap Phase 1 'group (3-10 members)')[2m > [22mrotates the key when a member leaves, and the departed node can relay but not read [33m602[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mgroup channels (docs/04 §4, roadmap Phase 1 'group (3-10 members)')[2m > [22mrefuses to shrink a group below three [33m526[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mgroup channels (docs/04 §4, roadmap Phase 1 'group (3-10 members)')[2m > [22mrotates on join, so a joiner cannot read the history it missed [33m594[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mgroup channels (docs/04 §4, roadmap Phase 1 'group (3-10 members)')[2m > [22mcounts a member that cannot decrypt as a rejected epoch, not a delivery [33m527[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mgroup channels (docs/04 §4, roadmap Phase 1 'group (3-10 members)')[2m > [22mlets only the admin rotate the key [33m495[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mgroup channels (docs/04 §4, roadmap Phase 1 'group (3-10 members)')[2m > [22moffers per-member unicast as the alternative, with ACKs and the same reach [33m615[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mgroup channels (docs/04 §4, roadmap Phase 1 'group (3-10 members)')[2m > [22mlogs membership changes and stale epochs when capture is on [33m564[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mgroup channels (docs/04 §4, roadmap Phase 1 'group (3-10 members)')[2m > [22mlists a node's groups, and forgets them when the world is rebuilt [33m573[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mSOS mode: repeated flood of GPS + text (docs/05 §SOS, roadmap Phase 3)[2m > [22mcarries a GPS fix and goes out on the transport that moves it fastest [33m771[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mSOS mode: repeated flood of GPS + text (docs/05 §SOS, roadmap Phase 3)[2m > [22mre-floods on the interval, every flood with a fresh id [33m789[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mSOS mode: repeated flood of GPS + text (docs/05 §SOS, roadmap Phase 3)[2m > [22mgives a single-flood arm to measure against [33m798[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mSOS mode: repeated flood of GPS + text (docs/05 §SOS, roadmap Phase 3)[2m > [22mreaches every radio-connected node — the roadmap exit criterion [33m830[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mSOS mode: repeated flood of GPS + text (docs/05 §SOS, roadmap Phase 3)[2m > [22mreaches all of a 60-node crowd, which TTL=5 cannot span [33m6047[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mSOS mode: repeated flood of GPS + text (docs/05 §SOS, roadmap Phase 3)[2m > [22mre-floods with a fresh fix, so a moving sender stays trackable [33m846[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mSOS mode: repeated flood of GPS + text (docs/05 §SOS, roadmap Phase 3)[2m > [22mcollapses repeats into one alert per receiver, holding the newest fix [33m823[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mSOS mode: repeated flood of GPS + text (docs/05 §SOS, roadmap Phase 3)[2m > [22mfloods to every peer whatever the relay policy says [33m788[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mSOS mode: repeated flood of GPS + text (docs/05 §SOS, roadmap Phase 3)[2m > [22mstops flooding when the sender goes dark [33m706[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mSOS mode: repeated flood of GPS + text (docs/05 §SOS, roadmap Phase 3)[2m > [22mlogs every flood when capture is on [33m774[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mSOS mode: repeated flood of GPS + text (docs/05 §SOS, roadmap Phase 3)[2m > [22mbuys reach with radio time, and the cost is visible [33m1545[2mms[22m[39m
+   [33m[2m✓[22m[39m protocol behaviour[2m > [22mSOS mode: repeated flood of GPS + text (docs/05 §SOS, roadmap Phase 3)[2m > [22mleaves the unicast metrics baseline alone [33m727[2mms[22m[39m
+   [33m[2m✓[22m[39m the atrium becomes a router (roadmap Phase 2 field test, docs/09 §5)[2m > [22melects a healthy open node in campus_quad within two cycles [33m443[2mms[22m[39m
+   [33m[2m✓[22m[39m the atrium becomes a router (roadmap Phase 2 field test, docs/09 §5)[2m > [22melects a healthy open node in festival_crowd within two cycles [33m3565[2mms[22m[39m
+   [33m[2m✓[22m[39m community relays (roadmap Phase 5: a plugged tablet in a café)[2m > [22melects the plugged tablets and moves relay work off other people's batteries [33m31128[2mms[22m[39m
+   [33m[2m✓[22m[39m media under load, measured without confounding the A/B (docs/08 §9)[2m > [22mcosts radio work and nothing else: text delivery is identical, seed for seed [33m4333[2mms[22m[39m
+   [33m[2m✓[22m[39m media under load, measured without confounding the A/B (docs/08 §9)[2m > [22mhas no mechanism by which media could harm text, and says so [33m587[2mms[22m[39m
+   [33m[2m✓[22m[39m channel access: one radio, half-duplex (docs/08 §12)[2m > [22moccupies no radio by default: nothing is ever deferred, and nothing is ever dropped [33m881[2mms[22m[39m
+   [33m[2m✓[22m[39m cap-aware community-relay promotion, measured and rejected (docs/06 §19.4)[2m > [22mthe cap a tablet loses is being spent on other tablets, not on phones [33m6945[2mms[22m[39m
+   [33m[2m✓[22m[39m cap-aware community-relay promotion, measured and rejected (docs/06 §19.4)[2m > [22mexempting tablets from the cap elects all six and pushes the ratio to the top of the band [33m13806[2mms[22m[39m
+   [33m[2m✓[22m[39m cap-aware community-relay promotion, measured and rejected (docs/06 §19.4)[2m > [22mreserving half the cap does not reserve it for tablets — it hands a slot to a phone [33m6984[2mms[22m[39m
+   [33m[2m✓[22m[39m observed-maximum peer normalisation, measured and rejected (docs/06 §18.4)[2m > [22mraises every open node's score and leaves the ranking exactly where it was [33m8345[2mms[22m[39m
+   [33m[2m✓[22m[39m observed-maximum peer normalisation, measured and rejected (docs/06 §18.4)[2m > [22mwhat it does move is the promote gate and the size of the elected set [33m7529[2mms[22m[39m
+   [33m[2m✓[22m[39m observed-maximum peer normalisation, measured and rejected (docs/06 §18.4)[2m > [22mholds skills/02's band on the campus world, and puts one seed on its floor [33m9989[2mms[22m[39m
+   [33m[2m✓[22m[39m preferring a community relay, measured and rejected (docs/06 §19.5)[2m > [22mand that is where the benefit stops: the bundle waits on a node that never moves [33m16927[2mms[22m[39m
+   [33m[2m✓[22m[39m receiver contention: what a busy receiver does (docs/08 §12.9)[2m > [22mcounts nothing at all in the shipped model, whatever the transmitter does [33m1664[2mms[22m[39m
+ [32m✓[39m src/__tests__/acceptance.test.ts [2m([22m[2m49 tests[22m[2m)[22m[33m 270592[2mms[22m[39m
+   [33m[2m✓[22m[39m dense crowd (docs/02 §6: 50+ nodes)[2m > [22mstays stable and cheap at 60 nodes [33m45698[2mms[22m[39m
+   [33m[2m✓[22m[39m dense crowd (docs/02 §6: 50+ nodes)[2m > [22mholds its delivery bar on seeds the gate above does not use [33m110154[2mms[22m[39m
+   [33m[2m✓[22m[39m dense crowd (docs/02 §6: 50+ nodes)[2m > [22mcosts MPR nothing against the same engine without suppression [33m113387[2mms[22m[39m
+   [33m[2m✓[22m[39m delay-tolerant scenarios[2m > [22mexposes every named scenario through the same factory [33m325[2mms[22m[39m
+   [33m[2m✓[22m[39m delay-tolerant scenarios[2m > [22mhonours the skills/08 configuration envelope [33m662[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m18 passed[39m[22m[90m (18)[39m
+[2m      Tests [22m [1m[32m480 passed[39m[22m[90m (480)[39m
+[2m   Start at [22m 06:40:40
+[2m   Duration [22m 333.82s[2m (transform 4.16s, setup 0ms, collect 70.16s, tests 794.72s, environment 9ms, prepare 12.14s)[22m
+
+  PASS Unit + acceptance tests (vitest)                     340s
+$ (cd /mnt/c/Users/Administrator/Desktop/Git-Clones/DumanMessenger) npm run golden
+
+> duman-mesh-simulator@0.1.0 golden
+> tsc -p tool/tsconfig.golden.json && node -e "require('fs').writeFileSync('tool/.build/package.json','{\"type\":\"commonjs\"}')" && node tool/.build/tool/generate-golden.js
+
+wrote C:\Users\Administrator\Desktop\Git-Clones\DumanMessenger\test-fixtures\golden-vectors.json
+{
+  "onlineNodes": 20,
+  "superNodes": 5,
+  "sentUnicast": 20,
+  "deliveredUnicast": 20,
+  "relayTx": 289,
+  "ogmTx": 16655,
+  "retriesSent": 0,
+  "acksReceived": 20,
+  "roleTransitions": 5,
+  "totalQueued": 0,
+  "sumHopCounts": 33,
+  "deliveredWithinFiveHops": 20,
+  "deliveredWithinThreeHops": 19,
+  "simTimeMs": 38000,
+  "avgScore": 0.627662,
+  "avgHops": 1.65,
+  "avgLatencyMs": 526.623,
+  "p95LatencyMs": 1356.134
+}
+  PASS Golden vectors regenerate                            7s
+  PASS Golden vectors are up to date                        0s
+$ (cd /mnt/c/Users/Administrator/Desktop/Git-Clones/DumanMessenger) npm run build
+
+> duman-mesh-simulator@0.1.0 build
+> tsc -b && vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 47 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[32mindex.html                 [39m[1m[2m  1.05 kB[22m[1m[22m[2m │ gzip:  0.55 kB[22m
+[2mdist/[22m[35massets/index-DlFxEVLi.css  [39m[1m[2m  0.75 kB[22m[1m[22m[2m │ gzip:  0.40 kB[22m
+[2mdist/[22m[36massets/index-DLyFAMYl.js   [39m[1m[2m294.50 kB[22m[1m[22m[2m │ gzip: 90.83 kB[22m
+[32m✓ built in 2.44s[39m
+  PASS Production build (tsc -b && vite build)              12s
+
+==> dart — Dart mesh_sim (authoritative engine)
+$ (cd sim/mesh_sim) bash -c if [ -f pubspec.lock ]; then dart pub get --enforce-lockfile; else
+       echo "note: pubspec.lock is not committed, so this resolves dependencies fresh" >&2
+       dart pub get; fi
+Resolving dependencies...
+Downloading packages...
+Got dependencies!
+  PASS dart pub get                                         45s
+$ (cd sim/mesh_sim) dart analyze
+Analyzing mesh_sim...
+No issues found!
+  PASS Analyze (dart analyze)                               2s
+$ (cd sim/mesh_sim) dart test --reporter expanded
+00:00 +0: loading test/acceptance_test.dart
+00:00 +0: test/atrium_test.dart: the atrium becomes a router (docs/06 §18) elects a healthy open node in campus_quad within two cycles
+00:00 +1: test/atrium_test.dart: the atrium becomes a router (docs/06 §18) elects a healthy open node in sparse_village within two cycles
+00:00 +2: test/atrium_test.dart: the atrium becomes a router (docs/06 §18) elects a healthy open node in festival_crowd within two cycles
+00:03 +3: test/atrium_test.dart: the atrium becomes a router (docs/06 §18) elects a healthy open node in partitioned_pair within two cycles
+00:03 +4: test/atrium_test.dart: the atrium becomes a router (docs/06 §18) weighs openness against health, and says where the crossover is
+00:03 +5: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +6: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +7: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +8: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +9: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +10: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +11: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +12: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +13: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +14: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +15: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +16: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +17: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +18: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +19: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +20: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +21: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +22: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +23: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +24: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:09 +25: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:13 +26: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +27: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:21 +28: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:21 +29: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:21 +30: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:21 +31: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +32: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +33: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +34: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +35: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +36: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +37: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +38: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +39: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +40: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:24 +41: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:24 +42: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:24 +43: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:24 +44: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:24 +45: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:24 +46: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:24 +47: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:24 +48: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:24 +49: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:27 +50: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:29 +51: test/community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:29 +52: test/community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:29 +53: test/community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:29 +54: test/community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:30 +55: test/community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:38 +56: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +57: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +58: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +59: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +60: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +61: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +62: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +63: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +64: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +65: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +66: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +67: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +68: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +69: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +70: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +71: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +72: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +73: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +74: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +75: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +76: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +77: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +78: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +79: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +80: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +81: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +82: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +83: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +84: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +85: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +86: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +87: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +88: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +89: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +90: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +91: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +92: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +93: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +94: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +95: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +96: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +97: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +98: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +99: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +100: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +101: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +102: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +103: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +104: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +105: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +106: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +107: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +108: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +109: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +110: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +111: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:46 +112: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:46 +113: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:46 +114: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:46 +115: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:47 +116: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:47 +117: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:47 +118: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:48 +119: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:48 +120: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:49 +121: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:49 +122: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:50 +123: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:50 +124: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:51 +125: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:51 +126: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +127: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +128: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +129: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:53 +130: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:53 +131: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:53 +132: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:53 +133: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:53 +134: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:53 +135: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:53 +136: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:53 +137: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:54 +138: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) re-floods on the interval, every flood with a fresh id
+00:54 +139: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:54 +140: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:54 +141: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:55 +142: test/golden_test.dart: golden vectors v2 reproduces the reference run
+00:55 +143: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) re-floods with a fresh fix, so a moving sender stays trackable
+00:55 +144: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) re-floods with a fresh fix, so a moving sender stays trackable
+00:55 +145: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) re-floods with a fresh fix, so a moving sender stays trackable
+00:55 +146: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) re-floods with a fresh fix, so a moving sender stays trackable
+00:55 +147: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) re-floods with a fresh fix, so a moving sender stays trackable
+00:55 +148: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) re-floods with a fresh fix, so a moving sender stays trackable
+00:55 +149: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) re-floods with a fresh fix, so a moving sender stays trackable
+00:55 +150: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) re-floods with a fresh fix, so a moving sender stays trackable
+00:55 +151: test/history_test.dart: group history anti-entropy stops beaconing when a node leaves its last group, and can be switched off
+00:55 +152: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches every radio-connected node — the roadmap exit criterion
+00:56 +153: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches every radio-connected node — the roadmap exit criterion
+00:56 +154: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches every radio-connected node — the roadmap exit criterion
+00:56 +155: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches every radio-connected node — the roadmap exit criterion
+00:56 +156: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches every radio-connected node — the roadmap exit criterion
+00:56 +157: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches every radio-connected node — the roadmap exit criterion
+00:56 +158: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches every radio-connected node — the roadmap exit criterion
+00:56 +159: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches every radio-connected node — the roadmap exit criterion
+00:56 +160: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches every radio-connected node — the roadmap exit criterion
+00:56 +161: test/media_test.dart: media transport carries a 10 MB image three hops on Wi-Fi Direct inside a minute
+00:56 +162: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:56 +163: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:56 +164: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:56 +165: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:56 +166: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:56 +167: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:56 +168: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:56 +169: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:56 +170: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:56 +171: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:57 +172: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:57 +173: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:57 +174: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:57 +175: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:57 +176: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:57 +177: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:57 +178: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:57 +179: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:57 +180: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:57 +181: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:57 +182: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:57 +183: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:57 +184: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:57 +185: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+01:00 +186: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) collapses repeats into one alert per receiver, newest fix wins
+01:01 +187: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) keeps a late copy from overwriting a newer fix
+01:01 +188: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) floods to every peer whatever the relay policy says
+01:01 +189: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) stops flooding when the sender goes dark
+01:02 +190: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) logs every flood when capture is on
+01:02 +191: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) buys reach with radio time, and the cost is visible
+01:03 +192: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) leaves the unicast metrics baseline alone
+01:04 +193: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) records when each hop arrived, over what link, and what it decided
+01:04 +194: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) recovers the route chain from the fan-out tree
+01:05 +195: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) marks the relays MPR suppressed, with the reason
+01:05 +196: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) traces hops always, and captures the log only when asked
+01:06 +197: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) logs beacons too when captureOgm is set
+01:07 +198: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) keeps the capture bounded and in time order
+01:07 +199: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) does not perturb the run it is measuring
+01:09 +200: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) drops the log when metrics are re-baselined
+01:09 +201: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) logs the DTN last resort as a queue event
+01:09 +202: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) never promotes a node the user opted out of
+01:10 +203: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) never auto-promotes with battery saver on
+01:10 +204: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) leaves duty cycling off by default
+01:11 +205: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) scans 3 s out of every 10 s when duty cycling, never a SUPER
+01:11 +206: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) spreads duty phases so a crowd does not sleep in lockstep
+01:11 +207: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) measures the per-role battery rate against the skills/07 budget
+01:12 +208: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) buys battery headroom by sleeping
+01:13 +209: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) excludes charging nodes from the measured drain rate
+01:13 +210: test/engine_test.dart: power policy and telemetry (skills/02, skills/07) buckets latency by hop for first-attempt routed traffic
+01:14 +211: test/engine_test.dart: encrypted packet size (skills/03 Packet) is the documented layout: 95 bytes around the body, padded to 256
+01:14 +212: test/engine_test.dart: encrypted packet size (skills/03 Packet) keeps a long text on BLE, where the documented packet still fits
+01:14 +213: test/engine_test.dart: encrypted packet size (skills/03 Packet) sizes a created message from the packet layout
+01:14 +214: test/engine_test.dart: encrypted packet size (skills/03 Packet) counts a body in UTF-8 bytes, not in UTF-16 code units
+01:14 +215: test/engine_test.dart: encrypted packet size (skills/03 Packet) agrees with utf8.encode on every script the app will meet first
+01:14 +216: test/engine_test.dart: encrypted packet size (skills/03 Packet) moves a non-ASCII body to the transport that can actually carry it
+01:14 +217: test/engine_test.dart: encrypted packet size (skills/03 Packet) leaves every ASCII result exactly where wireSizeOf put it
+01:14 +218: test/engine_test.dart: abuse limits (docs/04 §6) the caps are the numbers docs/04 §6 states
+01:14 +219: test/engine_test.dart: abuse limits (docs/04 §6) admits exactly cap messages, then refuses
+01:14 +220: test/engine_test.dart: abuse limits (docs/04 §6) refills continuously, so a rate is enforced rather than a tally
+01:14 +221: test/engine_test.dart: abuse limits (docs/04 §6) never refills above the cap, so silence does not bank a burst
+01:14 +222: test/engine_test.dart: abuse limits (docs/04 §6) keeps sources and enforcers apart
+01:14 +223: test/engine_test.dart: abuse limits (docs/04 §6) treats a non-positive cap as no cap
+01:14 +224: test/engine_test.dart: abuse limits (docs/04 §6) grants no refill when the clock goes backwards
+01:14 +225: test/engine_test.dart: abuse limits (docs/04 §6) reports one token every 2 s at the relay cap
+01:14 +226: test/engine_test.dart: abuse limits (docs/04 §6) exempts control-plane traffic from the relay cap
+01:14 +227: test/engine_test.dart: abuse limits (docs/04 §6) counting beacons would cost a node 90% of its sustained data rate
+01:14 +228: test/engine_test.dart: abuse limits (docs/04 §6) is off by default, so nothing a shipped run does changes
+01:14 +229: test/engine_test.dart: broadcast cap enforcement scope defaults to docs/04 §6 — SUPERs only
+01:14 +230: test/engine_test.dart: broadcast cap enforcement scope suppresses more when every node enforces than when only SUPERs do
+01:14 +231: test/engine_test.dart: broadcast cap enforcement scope cuts the airtime a flood costs, which is what the cap is for
+01:15 +232: test/engine_test.dart: broadcast cap enforcement scope still costs an honest network nothing under either scope
+01:17 +233: test/engine_test.dart: local blocklist (docs/04 §6, bullet 1) isBlockableTraffic covers user traffic and exempts protocol and SOS
+01:17 +234: test/engine_test.dart: local blocklist (docs/04 §6, bullet 1) defaults to delivery scope and is inert while empty
+01:17 +235: test/engine_test.dart: local blocklist (docs/04 §6, bullet 1) blocks, unblocks, refuses a self-block, and reports the list sorted
+01:18 +236: test/engine_test.dart: local blocklist (docs/04 §6, bullet 1) keeps a blocked peer out of the blocker inbox but not out of the mesh
+01:18 +237: test/engine_test.dart: local blocklist (docs/04 §6, bullet 1) lets a blocked peer SOS through, and still lets the blocker send
+01:18 +238: test/engine_test.dart: local blocklist (docs/04 §6, bullet 1) keeps the blocked peer in the routing table, because OGMs are not blockable
+01:19 +239: test/engine_test.dart: local blocklist (docs/04 §6, bullet 1) relay scope costs the blocked source airtime that delivery scope spends
+01:19 +240: test/engine_test.dart: cover traffic (docs/04 §5, dummy beacons) is off by default at a rate the document does not specify
+01:19 +241: test/engine_test.dart: cover traffic (docs/04 §5, dummy beacons) emits nothing when off, which is what keeps every published number intact
+01:20 +242: test/engine_test.dart: cover traffic (docs/04 §5, dummy beacons) emits at the rate it is told to, and faster when told to be faster
+01:22 +243: test/engine_test.dart: cover traffic (docs/04 §5, dummy beacons) costs airtime in proportion to its rate
+01:23 +244: test/engine_test.dart: cover traffic (docs/04 §5, dummy beacons) does not starve the network, which is the floor §23 asserts not an equality
+01:24 +245: test/engine_test.dart: cover traffic (docs/04 §5, dummy beacons) counts cover separately from the routing protocol own beacons
+01:25 +246: test/engine_test.dart: wake-lock accounting (skills/07, fourth telemetry item) counts under the shipped radio baseline, which maintains no busy-radio maps
+01:26 +247: test/engine_test.dart: wake-lock accounting (skills/07, fourth telemetry item) reports per node what it reports in total
+01:26 +248: test/engine_test.dart: wake-lock accounting (skills/07, fourth telemetry item) splits the radio demand between roles, and the shares sum to 100
+01:27 +249: test/engine_test.dart: wake-lock accounting (skills/07, fourth telemetry item) reports the model over-subscription plainly instead of hiding it
+01:27 +250: test/engine_test.dart: wake-lock accounting (skills/07, fourth telemetry item) measures the window, not the whole run
+01:28 +251: test/engine_test.dart: wake-lock accounting (skills/07, fourth telemetry item) prices concentration on the neighbours who have to hear it
+01:29 +252: test/engine_test.dart: radio occupancy and the derived beacon size (docs/06 §24.6) derives a beacon from the fields docs/03 §4 says an OGM carries
+01:29 +253: test/engine_test.dart: radio occupancy and the derived beacon size (docs/06 §24.6) ties the literal widths to the named ones, which is what makes them safe
+01:29 +254: test/engine_test.dart: radio occupancy and the derived beacon size (docs/06 §24.6) puts a fully loaded beacon over the BLE ceiling
+01:29 +255: test/engine_test.dart: radio occupancy and the derived beacon size (docs/06 §24.6) ships on the model every published number was measured under
+01:29 +256: test/engine_test.dart: radio occupancy and the derived beacon size (docs/06 §24.6) charges airtime from the rate constants the engine already had
+01:29 +257: test/engine_test.dart: radio occupancy and the derived beacon size (docs/06 §24.6) changes telemetry and nothing else under the shipped radio baseline
+01:31 +258: test/engine_test.dart: radio occupancy and the derived beacon size (docs/06 §24.6) halves the demanded radio time without making it physical
+01:32 +259: test/engine_test.dart: radio occupancy and the derived beacon size (docs/06 §24.6) sizes the alias encoding docs/03 §4 prescribes
+01:32 +260: test/engine_test.dart: radio occupancy and the derived beacon size (docs/06 §24.6) defaults to the encoding the engine transmits
+01:32 +261: test/engine_test.dart: radio occupancy and the derived beacon size (docs/06 §24.6) cuts demanded radio time by beacon width, not by beacon count
+01:33 +262: test/engine_test.dart: radio occupancy and the derived beacon size (docs/06 §24.6) samples connectivity in-window, which an end-of-window graph cannot
+01:38 +263: test/engine_test.dart: connectivity sampling (docs/06 §24.10) reports the radio graph components, largest first, summing to the network
+01:39 +264: test/engine_test.dart: connectivity sampling (docs/06 §24.10) samples the window at the configured interval, not the settle period
+01:39 +265: test/engine_test.dart: connectivity sampling (docs/06 §24.10) can be disabled, and a disabled run reports trivially connected defaults
+01:40 +266: test/engine_test.dart: connectivity sampling (docs/06 §24.10) splits what is out of range, largest piece first
+01:40 +267: test/engine_test.dart: connectivity sampling (docs/06 §24.10) makes an offline node its own component rather than absorbing it
+01:40 +268: test/engine_test.dart: connectivity sampling (docs/06 §24.10) is what componentSizes reports the sizes of, so metric and picture agree
+01:41 +269: test/engine_test.dart: connectivity sampling (docs/06 §24.10) says a settled 20-node campus stays in one piece
+01:41 +270: test/engine_test.dart: connectivity sampling (docs/06 §24.10) does not change the world it measures
+01:42 +271: test/engine_test.dart: adaptive scan intervals (docs/05 §1.2, layer 3) ships fixed, so nothing published moves
+01:42 +272: test/engine_test.dart: adaptive scan intervals (docs/05 §1.2, layer 3) scans less in a sparse world, which is the row claimed saving
+01:43 +273: test/engine_test.dart: adaptive scan intervals (docs/05 §1.2, layer 3) scans more in a dense world, which is what the row says and what it costs
+01:54 +274: test/engine_test.dart: adaptive scan intervals (docs/05 §1.2, layer 3) is anchored, so a reference-density node scans at the configured interval
+01:55 +275: test/engine_test.dart: adaptive scan intervals (docs/05 §1.2, layer 3) clamps, so one peer does not stop a scan and a crowd does not pin a node awake
+02:06 +276: test/engine_test.dart: density-derived beacon interval (docs/06 §24.11) ships on the fixed interval docs/03 §4 specifies
+02:06 +277: test/engine_test.dart: density-derived beacon interval (docs/06 §24.11) spends more airtime in a sparse world, where the clamp floor bites
+02:06 +278: test/engine_test.dart: density-derived beacon interval (docs/06 §24.11) costs a dense crowd fewer deferrals under csma, and buys it delivery
+02:15 +279: All tests passed!
+  PASS Tests (dart test --reporter expanded)                140s
+$ (cd sim/mesh_sim) dart run bin/mesh_sim.dart --scenario campus_quad --seed 42
+Duman mesh simulator — campus_quad (seed 42, policy mpr)
+──────────────────────────────────────────────────────────────
+  scenario                 campus_quad
+  seed                     42
+  policy                   mpr
+  nodes                    20
+  sent                     150
+  deliveredUnicast         150
+  deliveryRatio            1.0
+  deliveredWithinFiveHops  148
+  withinFiveRatio          0.9867
+  deliveredWithinThreeHops 134
+  withinThreeRatio         0.8933
+  superNodes               4
+  superRatio               0.2
+  timeAvgSuperRatio        0.2429
+  electionsPerMin          0.0773
+  avgHops                  2.0267
+  latencyP50Ms             545.483
+  latencyP95Ms             4190.9395
+  relayTx                  3652
+  floodAllRelayTx          44654
+  overheadVsFloodAll       0.0818
+  routeFloodRelayTx        5574
+  overheadVsRouteFlood     0.6552
+  overheadRatio            24.3467
+  mprSuppressed            286
+  retriesSent              31
+  retriesExhausted         4
+  acksReceived             149
+  controlOverhead          123664
+  lostTransmissions        109
+  lostOgmTransmissions     3438
+  totalQueued              5
+  avgPeers                 7.9
+  isolatedNodes            0
+  avgScore                 0.628
+  simTimeMs                233000.0
+  dutyCycle                false
+  batteryPctPerHourNormal  2.5619
+  batteryPctPerHourSuper   6.9562
+  batteryPct8hNormal       20.4948
+  batteryPct8hSuper        55.65
+  scansPerSec              33.2
+  relaysPerSec             16.2311
+  awakeRatio               1.0
+  scansSkippedAsleep       0
+  electionEvents           6
+  latencyByHop             hops      n     avg     p95
+                              1     62   247 ms   314 ms
+                              2     38   646 ms   829 ms
+                              3     27   902 ms  1127 ms
+                              4     12  1066 ms  1550 ms
+                              5      1  1257 ms  1257 ms
+                              6      2  1746 ms  2026 ms
+
+PASS — acceptance criteria met.
+  PASS CLI acceptance (campus_quad, seed 42)                6s
+
+diagnostics
+dart analyze — 0 error(s), 0 warning(s), 0 info(s)
+  (no analyzer issues with a location; raw output below if non-empty)
+
+dart test — 279 passed, 0 failed, 0 skipped
+  (no failing tests parsed)
+
+CLI acceptance (campus_quad, seed 42) — last 15 lines
+  |   batteryPct8hSuper        55.65
+  |   scansPerSec              33.2
+  |   relaysPerSec             16.2311
+  |   awakeRatio               1.0
+  |   scansSkippedAsleep       0
+  |   electionEvents           6
+  |   latencyByHop             hops      n     avg     p95
+  |                               1     62   247 ms   314 ms
+  |                               2     38   646 ms   829 ms
+  |                               3     27   902 ms  1127 ms
+  |                               4     12  1066 ms  1550 ms
+  |                               5      1  1257 ms  1257 ms
+  |                               6      2  1746 ms  2026 ms
+  | 
+  | PASS — acceptance criteria met.
+
+==> cli-matrix — CLI acceptance across scenarios
+$ (cd sim/mesh_sim) dart run bin/mesh_sim.dart --scenario campus_quad --seed 42
+Duman mesh simulator — campus_quad (seed 42, policy mpr)
+──────────────────────────────────────────────────────────────
+  scenario                 campus_quad
+  seed                     42
+  policy                   mpr
+  nodes                    20
+  sent                     150
+  deliveredUnicast         150
+  deliveryRatio            1.0
+  deliveredWithinFiveHops  148
+  withinFiveRatio          0.9867
+  deliveredWithinThreeHops 134
+  withinThreeRatio         0.8933
+  superNodes               4
+  superRatio               0.2
+  timeAvgSuperRatio        0.2429
+  electionsPerMin          0.0773
+  avgHops                  2.0267
+  latencyP50Ms             545.483
+  latencyP95Ms             4190.9395
+  relayTx                  3652
+  floodAllRelayTx          44654
+  overheadVsFloodAll       0.0818
+  routeFloodRelayTx        5574
+  overheadVsRouteFlood     0.6552
+  overheadRatio            24.3467
+  mprSuppressed            286
+  retriesSent              31
+  retriesExhausted         4
+  acksReceived             149
+  controlOverhead          123664
+  lostTransmissions        109
+  lostOgmTransmissions     3438
+  totalQueued              5
+  avgPeers                 7.9
+  isolatedNodes            0
+  avgScore                 0.628
+  simTimeMs                233000.0
+  dutyCycle                false
+  batteryPctPerHourNormal  2.5619
+  batteryPctPerHourSuper   6.9562
+  batteryPct8hNormal       20.4948
+  batteryPct8hSuper        55.65
+  scansPerSec              33.2
+  relaysPerSec             16.2311
+  awakeRatio               1.0
+  scansSkippedAsleep       0
+  electionEvents           6
+  latencyByHop             hops      n     avg     p95
+                              1     62   247 ms   314 ms
+                              2     38   646 ms   829 ms
+                              3     27   902 ms  1127 ms
+                              4     12  1066 ms  1550 ms
+                              5      1  1257 ms  1257 ms
+                              6      2  1746 ms  2026 ms
+
+PASS — acceptance criteria met.
+  PASS campus_quad (always-on)                              5s
+$ (cd sim/mesh_sim) dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --duty-cycle
+Duman mesh simulator — campus_quad (seed 42, policy mpr, duty-cycle)
+──────────────────────────────────────────────────────────────
+  scenario                 campus_quad
+  seed                     42
+  policy                   mpr
+  nodes                    20
+  sent                     150
+  deliveredUnicast         148
+  deliveryRatio            0.9867
+  deliveredWithinFiveHops  148
+  withinFiveRatio          0.9867
+  deliveredWithinThreeHops 134
+  withinThreeRatio         0.8933
+  superNodes               5
+  superRatio               0.25
+  timeAvgSuperRatio        0.25
+  electionsPerMin          0.1416
+  avgHops                  1.9865
+  latencyP50Ms             508.5982
+  latencyP95Ms             4175.5467
+  relayTx                  3685
+  floodAllRelayTx          44654
+  overheadVsFloodAll       0.0825
+  routeFloodRelayTx        5602
+  overheadVsRouteFlood     0.6578
+  overheadRatio            24.8986
+  mprSuppressed            247
+  retriesSent              23
+  retriesExhausted         3
+  acksReceived             146
+  controlOverhead          118923
+  lostTransmissions        97
+  lostOgmTransmissions     3325
+  totalQueued              4
+  avgPeers                 7.2
+  isolatedNodes            0
+  avgScore                 0.6289
+  simTimeMs                233000.0
+  dutyCycle                true
+  batteryPctPerHourNormal  1.2138
+  batteryPctPerHourSuper   6.274
+  batteryPct8hNormal       9.71
+  batteryPct8hSuper        50.1917
+  scansPerSec              22.6756
+  relaysPerSec             16.3778
+  awakeRatio               0.3333
+  scansSkippedAsleep       2437
+  electionEvents           11
+  latencyByHop             hops      n     avg     p95
+                              1     59   239 ms   310 ms
+                              2     43   624 ms   835 ms
+                              3     25   888 ms  1199 ms
+                              4      7  1050 ms  1367 ms
+                              5      6  1303 ms  1595 ms
+
+PASS — acceptance criteria met.
+  PASS campus_quad (duty-cycle)                             5s
+$ (cd sim/mesh_sim) dart run bin/mesh_sim.dart --scenario sparse_village --seed 42 --no-check
+Duman mesh simulator — sparse_village (seed 42, policy mpr)
+──────────────────────────────────────────────────────────────
+  scenario                 sparse_village
+  seed                     42
+  policy                   mpr
+  nodes                    12
+  sent                     150
+  deliveredUnicast         42
+  deliveryRatio            0.28
+  deliveredWithinFiveHops  42
+  withinFiveRatio          0.28
+  deliveredWithinThreeHops 42
+  withinThreeRatio         0.28
+  superNodes               2
+  superRatio               0.1667
+  timeAvgSuperRatio        0.1667
+  electionsPerMin          0.0429
+  avgHops                  1.0
+  latencyP50Ms             236.5685
+  latencyP95Ms             311.6897
+  relayTx                  1455
+  floodAllRelayTx          4560
+  overheadVsFloodAll       0.3191
+  routeFloodRelayTx        3892
+  overheadVsRouteFlood     0.3738
+  overheadRatio            34.6429
+  mprSuppressed            804
+  retriesSent              209
+  retriesExhausted         103
+  acksReceived             42
+  controlOverhead          12168
+  lostTransmissions        16
+  lostOgmTransmissions     178
+  totalQueued              103
+  avgPeers                 3.0
+  isolatedNodes            0
+  avgScore                 0.5582
+  simTimeMs                233000.0
+  dutyCycle                false
+  batteryPctPerHourNormal  2.4847
+  batteryPctPerHourSuper   0.0
+  batteryPct8hNormal       19.878
+  batteryPct8hSuper        0.0
+  scansPerSec              17.3956
+  relaysPerSec             6.4667
+  awakeRatio               1.0
+  scansSkippedAsleep       0
+  electionEvents           2
+  latencyByHop             hops      n     avg     p95
+                              1     42   245 ms   312 ms
+  PASS sparse_village (always-on)                           3s
+$ (cd sim/mesh_sim) dart run bin/mesh_sim.dart --scenario festival_crowd --seed 42 --no-check
+Duman mesh simulator — festival_crowd (seed 42, policy mpr)
+──────────────────────────────────────────────────────────────
+  scenario                 festival_crowd
+  seed                     42
+  policy                   mpr
+  nodes                    60
+  sent                     150
+  deliveredUnicast         142
+  deliveryRatio            0.9467
+  deliveredWithinFiveHops  128
+  withinFiveRatio          0.8533
+  deliveredWithinThreeHops 85
+  withinThreeRatio         0.5667
+  superNodes               11
+  superRatio               0.1833
+  timeAvgSuperRatio        0.1833
+  electionsPerMin          0.1159
+  avgHops                  3.007
+  latencyP50Ms             1116.5481
+  latencyP95Ms             15560.1268
+  relayTx                  45978
+  floodAllRelayTx          359719
+  overheadVsFloodAll       0.1278
+  routeFloodRelayTx        91896
+  overheadVsRouteFlood     0.5003
+  overheadRatio            323.7887
+  mprSuppressed            2958
+  retriesSent              131
+  retriesExhausted         46
+  acksReceived             140
+  controlOverhead          796685
+  lostTransmissions        1603
+  lostOgmTransmissions     28349
+  totalQueued              62
+  avgPeers                 17.65
+  isolatedNodes            0
+  avgScore                 0.6359
+  simTimeMs                233000.0
+  dutyCycle                false
+  batteryPctPerHourNormal  2.887
+  batteryPctPerHourSuper   6.6121
+  batteryPct8hNormal       23.0964
+  batteryPct8hSuper        52.8971
+  scansPerSec              89.6578
+  relaysPerSec             204.3467
+  awakeRatio               1.0
+  scansSkippedAsleep       0
+  electionEvents           27
+  latencyByHop             hops      n     avg     p95
+                              1     40   254 ms   313 ms
+                              2     11   659 ms   826 ms
+                              3     23   968 ms  1217 ms
+                              4     18  1336 ms  1807 ms
+                              5      8  1888 ms  2091 ms
+                              6     10  1696 ms  2254 ms
+  PASS festival_crowd (always-on)                           28s
+$ (cd sim/mesh_sim) dart run bin/mesh_sim.dart --scenario partitioned_pair --seed 42 --no-check
+Duman mesh simulator — partitioned_pair (seed 42, policy mpr)
+──────────────────────────────────────────────────────────────
+  scenario                 partitioned_pair
+  seed                     42
+  policy                   mpr
+  nodes                    10
+  sent                     150
+  deliveredUnicast         66
+  deliveryRatio            0.44
+  deliveredWithinFiveHops  66
+  withinFiveRatio          0.44
+  deliveredWithinThreeHops 66
+  withinThreeRatio         0.44
+  superNodes               2
+  superRatio               0.2
+  timeAvgSuperRatio        0.2
+  electionsPerMin          0.0515
+  avgHops                  1.0
+  latencyP50Ms             241.8162
+  latencyP95Ms             310.7336
+  relayTx                  1773
+  floodAllRelayTx          7112
+  overheadVsFloodAll       0.2493
+  routeFloodRelayTx        5134
+  overheadVsRouteFlood     0.3453
+  overheadRatio            26.8636
+  mprSuppressed            836
+  retriesSent              169
+  retriesExhausted         80
+  acksReceived             66
+  controlOverhead          18016
+  lostTransmissions        16
+  lostOgmTransmissions     267
+  totalQueued              80
+  avgPeers                 4.0
+  isolatedNodes            0
+  avgScore                 0.6164
+  simTimeMs                233000.0
+  dutyCycle                false
+  batteryPctPerHourNormal  1.979
+  batteryPctPerHourSuper   0.0
+  batteryPct8hNormal       15.8319
+  batteryPct8hSuper        0.0
+  scansPerSec              15.4
+  relaysPerSec             7.88
+  awakeRatio               1.0
+  scansSkippedAsleep       0
+  electionEvents           2
+  latencyByHop             hops      n     avg     p95
+                              1     65   240 ms   310 ms
+  PASS partitioned_pair (always-on)                         4s
+
+==> probes — CLI probes (SOS, groups, media)
+$ (cd sim/mesh_sim) dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --sos --no-check
+Duman mesh simulator — campus_quad (seed 42, policy mpr)
+──────────────────────────────────────────────────────────────
+  scenario                 campus_quad
+  seed                     42
+  policy                   mpr
+  nodes                    20
+  sent                     150
+  deliveredUnicast         150
+  deliveryRatio            1.0
+  deliveredWithinFiveHops  148
+  withinFiveRatio          0.9867
+  deliveredWithinThreeHops 134
+  withinThreeRatio         0.8933
+  superNodes               4
+  superRatio               0.2
+  timeAvgSuperRatio        0.2429
+  electionsPerMin          0.0773
+  avgHops                  2.0267
+  latencyP50Ms             545.483
+  latencyP95Ms             4190.9395
+  relayTx                  3652
+  floodAllRelayTx          44654
+  overheadVsFloodAll       0.0818
+  routeFloodRelayTx        5574
+  overheadVsRouteFlood     0.6552
+  overheadRatio            24.3467
+  mprSuppressed            286
+  retriesSent              31
+  retriesExhausted         4
+  acksReceived             149
+  controlOverhead          123664
+  lostTransmissions        109
+  lostOgmTransmissions     3438
+  totalQueued              5
+  avgPeers                 7.9
+  isolatedNodes            0
+  avgScore                 0.628
+  simTimeMs                233000.0
+  dutyCycle                false
+  batteryPctPerHourNormal  2.5619
+  batteryPctPerHourSuper   6.9562
+  batteryPct8hNormal       20.4948
+  batteryPct8hSuper        55.65
+  scansPerSec              33.2
+  relaysPerSec             16.2311
+  awakeRatio               1.0
+  scansSkippedAsleep       0
+  electionEvents           6
+  sos                      {sender: node-16, senderPos: {x: 80.19154494530662, y: 30.431672304441417}, floods: 4, onlinePeers: 19, componentPeers: 19, reachedComponent: 19, reachedAll: 19, componentReachPct: 100.0, allReachPct: 100.0, tLastMs: 522.9077, dataTx: 636, radioReceipts: 76, missed: []}
+
+SOS probe (edge sender node-16, ttl 5, 3 repeats, 5 s apart)
+  floods on air              4
+  radio-connected peers      19/19
+  reached (component)        19/19  100.0%
+  reached (all online)       19/19  100.0%
+  last node heard at         522.9077 ms
+  data transmissions         636
+  radio receipts             76 → 19 alerts (repeats collapse)
+  missed in component        none
+  latencyByHop             hops      n     avg     p95
+                              1     62   247 ms   314 ms
+                              2     38   646 ms   829 ms
+                              3     27   902 ms  1127 ms
+                              4     12  1066 ms  1550 ms
+                              5      1  1257 ms  1257 ms
+                              6      2  1746 ms  2026 ms
+  PASS SOS flood reach (roadmap Phase 3)                    7s
+$ (cd sim/mesh_sim) dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --group 5 --no-check
+Duman mesh simulator — campus_quad (seed 42, policy mpr)
+──────────────────────────────────────────────────────────────
+  scenario                 campus_quad
+  seed                     42
+  policy                   mpr
+  nodes                    20
+  sent                     150
+  deliveredUnicast         150
+  deliveryRatio            1.0
+  deliveredWithinFiveHops  148
+  withinFiveRatio          0.9867
+  deliveredWithinThreeHops 134
+  withinThreeRatio         0.8933
+  superNodes               4
+  superRatio               0.2
+  timeAvgSuperRatio        0.2429
+  electionsPerMin          0.0773
+  avgHops                  2.0267
+  latencyP50Ms             545.483
+  latencyP95Ms             4190.9395
+  relayTx                  3652
+  floodAllRelayTx          44654
+  overheadVsFloodAll       0.0818
+  routeFloodRelayTx        5574
+  overheadVsRouteFlood     0.6552
+  overheadRatio            24.3467
+  mprSuppressed            286
+  retriesSent              31
+  retriesExhausted         4
+  acksReceived             149
+  controlOverhead          123664
+  lostTransmissions        109
+  lostOgmTransmissions     3438
+  totalQueued              5
+  avgPeers                 7.9
+  isolatedNodes            0
+  avgScore                 0.628
+  simTimeMs                233000.0
+  dutyCycle                false
+  batteryPctPerHourNormal  2.5619
+  batteryPctPerHourSuper   6.9562
+  batteryPct8hNormal       20.4948
+  batteryPct8hSuper        55.65
+  scansPerSec              33.2
+  relaysPerSec             16.2311
+  awakeRatio               1.0
+  scansSkippedAsleep       0
+  electionEvents           6
+  group                    {members: 5, sends: 5, scopedFlood: {deliveryPct: 100.0, receipts: 20, expected: 20, radioMessages: 5, txPerMsg: 61.2, p95Ms: 1381.4268, retries: 0, acks: 0, epochRejected: 0}, perMemberUnicast: {deliveryPct: 100.0, receipts: 20, expected: 20, radioMessages: 20, txPerMsg: 128.4, p95Ms: 1351.6817, retries: 0, acks: 20, epochRejected: 0}, verdict: scoped flood is 2.1x cheaper here (members are far enough that each routed copy fans out anyway)}
+
+Group probe (5 members spread across the world, 5 messages each)
+  scopedFlood          delivery 100.0%  tx/msg 61.2  receipts 20/20  p95 1381.4268 ms  retries 0  acks 0
+  perMemberUnicast     delivery 100.0%  tx/msg 128.4  receipts 20/20  p95 1351.6817 ms  retries 0  acks 20
+  scoped flood is 2.1x cheaper here (members are far enough that each routed copy fans out anyway)
+  latencyByHop             hops      n     avg     p95
+                              1     62   247 ms   314 ms
+                              2     38   646 ms   829 ms
+                              3     27   902 ms  1127 ms
+                              4     12  1066 ms  1550 ms
+                              5      1  1257 ms  1257 ms
+                              6      2  1746 ms  2026 ms
+  PASS Group delivery modes (docs/06 §14)                  7s
+$ (cd sim/mesh_sim) dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --history --no-check
+Duman mesh simulator — campus_quad (seed 42, policy mpr)
+──────────────────────────────────────────────────────────────
+  scenario                 campus_quad
+  seed                     42
+  policy                   mpr
+  nodes                    20
+  sent                     150
+  deliveredUnicast         150
+  deliveryRatio            1.0
+  deliveredWithinFiveHops  148
+  withinFiveRatio          0.9867
+  deliveredWithinThreeHops 134
+  withinThreeRatio         0.8933
+  superNodes               4
+  superRatio               0.2
+  timeAvgSuperRatio        0.2429
+  electionsPerMin          0.0773
+  avgHops                  2.0267
+  latencyP50Ms             545.483
+  latencyP95Ms             4190.9395
+  relayTx                  3652
+  floodAllRelayTx          44654
+  overheadVsFloodAll       0.0818
+  routeFloodRelayTx        5574
+  overheadVsRouteFlood     0.6552
+  overheadRatio            24.3467
+  mprSuppressed            286
+  retriesSent              31
+  retriesExhausted         4
+  acksReceived             149
+  controlOverhead          123664
+  lostTransmissions        109
+  lostOgmTransmissions     3438
+  totalQueued              5
+  avgPeers                 7.9
+  isolatedNodes            0
+  avgScore                 0.628
+  simTimeMs                233000.0
+  dutyCycle                false
+  batteryPctPerHourNormal  2.5619
+  batteryPctPerHourSuper   6.9562
+  batteryPct8hNormal       20.4948
+  batteryPct8hSuper        55.65
+  scansPerSec              33.2
+  relaysPerSec             16.2311
+  awakeRatio               1.0
+  scansSkippedAsleep       0
+  electionEvents           6
+  history                  {members: 5, messages: 20, heldBefore: 20, missed: 20, offRecovered: 0, offConverged: false, recovered: 20, converged: false, convergedSeconds: null, rounds: 2, beacons: 166, requests: 3, replies: 2, syncPackets: 171, bytes: 29750, beaconChars: 156, beaconWire: 256, beaconTransport: ble, verdict: anti-entropy did NOT converge inside 5 minutes (20/20 recovered), close: {heldBefore: 20, missed: 20, offRecovered: 0, offConverged: false, recovered: 20, converged: true, convergedSeconds: 8.75, rounds: 4, beacons: 52, requests: 4, replies: 4, syncPackets: 60, bytes: 15656, verdict: a membership that can hear itself converges in 8.8 s over 4 bounded rounds, at 60 packets against 171 for the spread one — the peer graph is the boundary, not the list}}
+
+History probe (5 members, 20 messages, one member out of range for all of them)
+  member held           20 entries (missed 20)
+  without repair        0 recovered, converged=false — a missed flood is missed for good
+  with repair           20/20 recovered, converged=false in >300 s (2 beacon rounds)
+  radio cost            166 beacons, 3 requests, 2 replies = 171 packets, 29750 payload bytes
+  one beacon is         156 characters -> 256 B on the wire (ble), constant in the size of the history
+  anti-entropy did NOT converge inside 5 minutes (20/20 recovered)
+
+History probe, the same world with a membership that can hear itself (5 nearest nodes)
+  without repair        0 recovered, converged=false
+  with repair           20/20 recovered, converged=true in 8.8 s (4 beacon rounds)
+  radio cost            52 beacons, 4 requests, 4 replies = 60 packets, 15656 payload bytes
+  a membership that can hear itself converges in 8.8 s over 4 bounded rounds, at 60 packets against 171 for the spread one — the peer graph is the boundary, not the list
+  latencyByHop             hops      n     avg     p95
+                              1     62   247 ms   314 ms
+                              2     38   646 ms   829 ms
+                              3     27   902 ms  1127 ms
+                              4     12  1066 ms  1550 ms
+                              5      1  1257 ms  1257 ms
+                              6      2  1746 ms  2026 ms
+  PASS Group history anti-entropy (docs/06 §17)            11s
+$ (cd sim/mesh_sim) dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media --no-check
+Duman mesh simulator — campus_quad (seed 42, policy mpr)
+──────────────────────────────────────────────────────────────
+  scenario                 campus_quad
+  seed                     42
+  policy                   mpr
+  nodes                    20
+  sent                     150
+  deliveredUnicast         150
+  deliveryRatio            1.0
+  deliveredWithinFiveHops  148
+  withinFiveRatio          0.9867
+  deliveredWithinThreeHops 134
+  withinThreeRatio         0.8933
+  superNodes               4
+  superRatio               0.2
+  timeAvgSuperRatio        0.2429
+  electionsPerMin          0.0773
+  avgHops                  2.0267
+  latencyP50Ms             545.483
+  latencyP95Ms             4190.9395
+  relayTx                  3652
+  floodAllRelayTx          44654
+  overheadVsFloodAll       0.0818
+  routeFloodRelayTx        5574
+  overheadVsRouteFlood     0.6552
+  overheadRatio            24.3467
+  mprSuppressed            286
+  retriesSent              31
+  retriesExhausted         4
+  acksReceived             149
+  controlOverhead          123664
+  lostTransmissions        109
+  lostOgmTransmissions     3438
+  totalQueued              5
+  avgPeers                 7.9
+  isolatedNodes            0
+  avgScore                 0.628
+  simTimeMs                233000.0
+  dutyCycle                false
+  batteryPctPerHourNormal  2.5619
+  batteryPctPerHourSuper   6.9562
+  batteryPct8hNormal       20.4948
+  batteryPct8hSuper        55.65
+  scansPerSec              33.2
+  relaysPerSec             16.2311
+  awakeRatio               1.0
+  scansSkippedAsleep       0
+  electionEvents           6
+  media                    {files: [{hops: 1, chunks: 160, transport: wifiDirect, complete: true, ms: 7598.7411, kbps: 11039.4707, retransmitted: 0, stalls: 0}, {hops: 2, chunks: 160, transport: wifiDirect, complete: true, ms: 17989.8357, kbps: 4662.9709, retransmitted: 15, stalls: 0}, {hops: 3, chunks: 160, transport: wifiDirect, complete: true, ms: 33002.8405, kbps: 2541.7836, retransmitted: 0, stalls: 0}], bleOnly: {chunks: 20480, transport: ble, complete: false, ms: null, receivedIn15Min: 14667, mtuBytes: 512}, bleLadder: [{bytes: 262144, complete: true, ms: 32135.8723, received: 512, chunks: 512}, {bytes: 1048576, complete: true, ms: 126222.466, received: 2048, chunks: 2048}, {bytes: 2097152, complete: true, ms: 251213.2896, received: 4096, chunks: 4096}, {bytes: 5242880, complete: false, ms: null, received: 4896, chunks: 10240}], voice: [{hops: 1, mode: streamed, transport: ble, frames: 6, firstAudioMs: 989.4972, playDelayMs: 407.2272, maxGapMs: 517.7174, underruns: 0, retransmitted: 0, budgetMs: 3000.0, meetsBudget: true}, {hops: 1, mode: blob, transport: wifiDirect, frames: 1, firstAudioMs: 3427.2465, playDelayMs: 427.2465, maxGapMs: 0.0, underruns: 0, retransmitted: 0, budgetMs: 3000.0, meetsBudget: true}, {hops: 2, mode: streamed, transport: ble, frames: 6, firstAudioMs: 1270.4112, playDelayMs: 585.4262, maxGapMs: 1110.5012, underruns: 1, retransmitted: 1, budgetMs: 3000.0, meetsBudget: true}, {hops: 2, mode: blob, transport: wifiDirect, frames: 1, firstAudioMs: 3578.0499, playDelayMs: 578.0499, maxGapMs: 0.0, underruns: 0, retransmitted: 0, budgetMs: 3000.0, meetsBudget: true}, {hops: 3, mode: streamed, transport: ble, frames: 6, firstAudioMs: 1742.1003, playDelayMs: 1104.3214, maxGapMs: 575.5366, underruns: 0, retransmitted: 0, budgetMs: 8000.0, meetsBudget: true}, {hops: 3, mode: blob, transport: wifiDirect, frames: 1, firstAudioMs: 3990.5622, playDelayMs: 990.5622, maxGapMs: 0.0, underruns: 0, retransmitted: 0, budgetMs: 8000.0, meetsBudget: true}], acceptance: {wifiPttRoundTripMs: 291.7667, wifiPttBufferExcludedMs: 91.7667, wifiPttUnder1s: true, bleNoteIntact: true, bleNoteFrames: 6, bleNoteFrameCount: 6, resumeAfterDisconnect: true, resume: {atDisconnect: 50, chunks: 160, stallsWhileAway: 6, stalls: 6, retransmitted: 1, complete: true, ms: 44594.0966}, overCeilingRefused: true}, channel: {files: [{channel: free, window: 1, complete: true, ms: 103365.3111, retransmitted: 1, drops: 0}, {channel: free, window: 4, complete: true, ms: 33002.8405, retransmitted: 0, drops: 0}, {channel: halfDuplex, window: 1, complete: true, ms: 302365.8158, retransmitted: 19, drops: 3876}, {channel: halfDuplex, window: 4, complete: true, ms: 266191.559, retransmitted: 34, drops: 6698}], text: [{channel: free, arm: quiet, sent: 39, delivered: 39, ratio: 1.0, retries: 6, parked: 1, deferrals: 0, deferMs: 0.0, drops: 0, fileComplete: false}, {channel: free, arm: file w4, sent: 39, delivered: 39, ratio: 1.0, retries: 13, parked: 0, deferrals: 0, deferMs: 0.0, drops: 0, fileComplete: true}, {channel: halfDuplex, arm: quiet, sent: 39, delivered: 39, ratio: 1.0, retries: 9, parked: 0, deferrals: 687, deferMs: 656020.6677, drops: 107, fileComplete: false}, {channel: halfDuplex, arm: file w4, sent: 39, delivered: 37, ratio: 0.9487, retries: 321, parked: 6, deferrals: 1442, deferMs: 1754004.9872, drops: 451, fileComplete: false}, {channel: halfDuplex, arm: file w1, sent: 39, delivered: 38, ratio: 0.9744, retries: 253, parked: 2, deferrals: 1250, deferMs: 1204338.5276, drops: 220, fileComplete: false}], priority: [{arm: voice behind a 2 MB file, priority: fifo, metric: 10/10 frames before the file, ms: 13645.7287, what: note finished in}, {arm: voice behind a 2 MB file, priority: class, metric: 10/10 frames before the file, ms: 6127.2972, what: note finished in}, {arm: an ACK behind a 2 MB file, priority: fifo, metric: 8/32 chunks before the ACK, ms: 13366.2793, what: file finished in}, {arm: an ACK behind a 2 MB file, priority: ackFirst, metric: 5/32 chunks before the ACK, ms: 21231.3295, what: file finished in}]}, pttMeetsBudget: true, imageMeetsBudget: true, verdict: a 10 MB image crosses 1-3 hops on Wi-Fi Direct; 3 hops in 33 s; BLE-only: unfinished in 15 min; push-to-talk plays inside the budget at every hop count; streaming starts audio at 989 ms against 3427 ms for one blob}
+
+Media probe (10 MB image, 64 KB chunks behind a 4-deep window; 3 s Opus note in 500 ms frames at 12 kbit/s)
+  hops transport   chunks  time       kbit/s   retrans  stalls
+  1    wifiDirect  160     7598.7411 ms11039.47070        0
+  2    wifiDirect  160     17989.8357 ms4662.970915       0
+  3    wifiDirect  160     33002.8405 ms2541.78360        0
+  BLE-only at the 512 B MTU skills/05 specifies (no Wi-Fi Direct peer): not finished in 15 min for 10 MB over 20480 chunks
+    256 KB over BLE → 32135.8723 ms
+    1024 KB over BLE → 126222.466 ms
+    2048 KB over BLE → 251213.2896 ms
+    5120 KB over BLE → >5 min (4896/10240 chunks)
+  note  mode      hops  radio       first audio  play delay  max gap   underruns  budget
+  3 s   streamed  1     ble         989.4972 ms  407.2272 ms 517.7174 ms0          PASS (<3 s)
+  3 s   blob      1     wifiDirect  3427.2465 ms 427.2465 ms 0.0 ms    0          PASS (<3 s)
+  3 s   streamed  2     ble         1270.4112 ms 585.4262 ms 1110.5012 ms1          PASS (<3 s)
+  3 s   blob      2     wifiDirect  3578.0499 ms 578.0499 ms 0.0 ms    0          PASS (<3 s)
+  3 s   streamed  3     ble         1742.1003 ms 1104.3214 ms575.5366 ms0          PASS (<8 s)
+  3 s   blob      3     wifiDirect  3990.5622 ms 990.5622 ms 0.0 ms    0          PASS (<8 s)
+  skills/05 acceptance:
+    [1] 1-hop Wi-Fi PTT round trip 291.7667 ms (buffer excluded 91.7667 ms) → PASS <1 s
+    [2] 3-hop BLE voice note 6/6 frames → intact PASS
+    [3] 10 MB Wi-Fi Direct, receiver offline at 50/160 chunks for 20 s → resumed, 44594.0966 ms PASS (6 window stalls, 6 while away)
+    [ ] 11 MB send → refused (skills/05 "Max 10 MB")
+  channel access (docs/08 §12) — `free` is the shipped model:
+    model      window 10 MB @3 hops  retrans  dropped
+    free       1      103365.3111 ms 1       0
+    free       4      33002.8405 ms  0       0
+    halfDuplex 1      302365.8158 ms 19      3876
+    halfDuplex 4      266191.559 ms  34      6698
+    model      arm        delivery  retries parked deferred  dropped  file done
+    free       quiet      1.0       6       1      0.0 ms    0        —
+    free       file w4    1.0       13      0      0.0 ms    0        yes
+    halfDuplex quiet      1.0       9       0      656020.6677 ms107      —
+    halfDuplex file w4    0.9487    321     6      1754004.9872 ms451      no
+    halfDuplex file w1    0.9744    253     2      1204338.5276 ms220      no
+    queue discipline on one radio (docs/08 §12.8):
+      voice behind a 2 MB file    fifo      note finished in 13645.7287 ms10/10 frames before the file
+      voice behind a 2 MB file    class     note finished in 6127.2972 ms10/10 frames before the file
+      an ACK behind a 2 MB file   fifo      file finished in 13366.2793 ms8/32 chunks before the ACK
+      an ACK behind a 2 MB file   ackFirst  file finished in 21231.3295 ms5/32 chunks before the ACK
+  a 10 MB image crosses 1-3 hops on Wi-Fi Direct; 3 hops in 33 s; BLE-only: unfinished in 15 min; push-to-talk plays inside the budget at every hop count; streaming starts audio at 989 ms against 3427 ms for one blob
+  latencyByHop             hops      n     avg     p95
+                              1     62   247 ms   314 ms
+                              2     38   646 ms   829 ms
+                              3     27   902 ms  1127 ms
+                              4     12  1066 ms  1550 ms
+                              5      1  1257 ms  1257 ms
+                              6      2  1746 ms  2026 ms
+  PASS Media transport and push-to-talk (docs/08)           44s
+
+==> result
+  PASS checks       
+  PASS web          
+  PASS dart         
+  PASS cli-matrix   
+  PASS probes       
+
+  total 723s · artifacts artifacts/ci/daily/20261028T030850Z-3ed1af9/pipeline
+result record: /mnt/c/Users/Administrator/Desktop/Git-Clones/DumanMessenger/artifacts/ci/daily/20261028T030850Z-3ed1af9/pipeline.json
+==> pipeline PASSED — verified: full

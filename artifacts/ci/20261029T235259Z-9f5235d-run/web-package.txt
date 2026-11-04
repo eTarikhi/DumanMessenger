@@ -1,0 +1,5 @@
+
+> duman-mesh-simulator@0.1.0 package:simulator
+> node tool/deploy/package.mjs /mnt/c/Users/Administrator/Desktop/Git-Clones/DumanMessenger/artifacts/ci/20261029T235259Z-9f5235d-run/package
+
+C:\mnt\c\Users\Administrator\Desktop\Git-Clones\DumanMessenger\artifacts\ci\20261029T235259Z-9f5235d-run\package

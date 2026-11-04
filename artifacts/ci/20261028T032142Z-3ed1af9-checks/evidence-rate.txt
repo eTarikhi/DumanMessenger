@@ -1,0 +1,151 @@
+
+> duman-mesh-simulator@0.1.0 rate
+> tsc -p tool/tsconfig.golden.json && node -e "require('fs').writeFileSync('tool/.build/package.json','{\"type\":\"commonjs\"}')" && node tool/.build/tool/rate-probe.js
+
+Duman Messenger — what docs/04 §6's abuse limits cost and buy
+Two caps, both off by default, both token buckets rather than per-minute tallies,
+both enforced exactly where the document says and no further.
+
+=== a compliant network loses nothing (docs/04 §6) ===
+docs/04 §6 caps broadcasts at 5/min per node and relays at
+30/min per source. The engine's own traffic generator sends
+30 unicasts over 120 s — 15/min
+network-wide, and each node beacons one OGM every 2 s. Neither is near either cap,
+so the limits must be invisible. If they are not, they are not shippable.
+
+  seed  scope    delivery   bcast reach   overhead   SUPER   bcast drops   relay drops
+  42    super      100.0%         95.0%     952.9%    20.0%             0             0
+  42    all        100.0%         95.0%     952.9%    20.0%             0             0
+  7     super      100.0%         95.0%     566.3%    25.0%             0             0
+  7     all        100.0%         95.0%     566.3%    25.0%             0             0
+  11    super      100.0%         95.0%     647.7%    20.0%             0             0
+  11    all        100.0%         95.0%     647.7%    20.0%             0             0
+
+  OGMs are exempt from the relay cap, and this is where that decision shows: at 2 s a
+  beacon a node emits 30/min, which is exactly the documented cap of
+  30. Counting beacons would leave every node's own routing protocol holding
+  the entire budget — measured in the test suite as 29 messages admitted in ten minutes
+  instead of 300 — so the caps would fire on a completely honest network and the row
+  above would not be zero.
+
+=== verdict ===
+  Zero drops on all 3 seeds under both enforcement scopes, and delivery is
+  identical with the caps on and off. The limits cost a compliant network nothing.
+
+=== what a 12× flooder costs, with and without the caps (docs/04 §6) ===
+One node sends 60 broadcasts in 60 s — 60/min,
+12× the documented cap — while 30 honest unicasts are in flight.
+Four arms per seed: flood/no-flood × caps off/on. The delivery and overhead columns
+are reported rather than asserted, because the answer is a measurement.
+
+  seed  arm                     delivery   bcast reach   overhead   tx      bcast drops  relay drops
+  42    no flood / caps off       100.0%         95.0%     952.9%     1315             0            0
+  42    no flood / caps on        100.0%         95.0%     952.9%     1315             0            0
+  42    flood / caps off          100.0%         94.9%     464.2%     6011             0            0
+  42    flood / caps SUPERs       100.0%         76.2%     368.1%     3736           201           23
+  42    flood / caps all          100.0%         23.2%     622.6%     2098           424            0
+  7     no flood / caps off       100.0%         95.0%     566.3%     1495             0            0
+  7     no flood / caps on        100.0%         95.0%     566.3%     1495             0            0
+  7     flood / caps off          100.0%         95.0%     429.5%     5798             0            0
+  7     flood / caps SUPERs       100.0%         78.6%     450.8%     4783           201            7
+  7     flood / caps all          100.0%         20.3%     719.4%     2079           433            0
+  11    no flood / caps off       100.0%         95.0%     647.7%     1127             0            0
+  11    no flood / caps on        100.0%         95.0%     647.7%     1127             0            0
+  11    flood / caps off          100.0%         94.9%     511.8%     6444             0            0
+  11    flood / caps SUPERs       100.0%         75.9%     628.0%     6267           231            4
+  11    flood / caps all          100.0%         20.2%     942.8%     2734           330            0
+
+  mean over 3 seeds
+    honest delivery   no flood 100.0% → 100.0% (caps on)   flood 100.0% → 100.0% → 100.0%
+    broadcast reach   no flood 95.0% → 95.0%   flood 94.9% → 76.9% → 21.2%
+    overhead          no flood 722.3% → 722.3%   flood 468.5% → 482.3% → 761.6%
+    transmissions     flood 6084 → 4929 → 2304   (the last two columns are caps on, SUPERs only then every node)
+    suppressions      SUPERs 211   all 396   of 60 messages sent, summed over every enforcing node
+
+  The caps move honest delivery under flood by +0.0 points and
+  overhead by +293.1 points. Neither number is asserted, for the reason docs/06
+  gives for its seventeen rejected levers: a probe that only passes when the answer is the
+  one its author hoped for is how a rejected lever gets published as a win.
+
+  Read the suppressions column as a sum over enforcing nodes, not as messages: one flood
+  broadcast heard by four SUPERs over its cap is four suppressions, which is why the mean
+  (211) is larger than the 60 messages the source sent. And read the overhead
+  column with its denominator in mind — it is transmissions per delivered message, and a
+  suppressed flood copy is a transmission that never becomes a delivery, so capping a flood
+  can raise the ratio while removing work. The transmissions column is the one that says
+  what the radio actually did.
+
+  §21.5's question, answered with a measurement rather than an opinion: docs/04 §6 says
+  "SUPERs drop excess", so only SUPERs enforce, which bounds how *far* a flood travels
+  and not whether the flooder's own neighbours see it — a NORMAL node neither relays far
+  nor filters. Making every node enforce instead is the fifth arm above, and it is not a
+  rule this document contains, so it ships as a knob (`broadcastCapScope`,
+  `--broadcast-cap-scope super|all`) with the two measured against each other.
+
+    reach    94.9% uncapped → 76.9% SUPERs only → 21.2% every node
+    airtime  6084 → 4929 → 2304 transmissions
+
+  The 8.3% that 5 admitted of 60 sent would imply is not reachable by either scope,
+  because the honest broadcasts in the same window are counted in that reach too.
+
+=== verdict ===
+  The caps fired on all 3 seeds under a 12× flood and stayed silent without one,
+  and the honest-network section shows they cost a compliant network nothing.
+
+=== a local block, and who pays for it (docs/04 §6, bullet 1) ===
+docs/04 §6 says "Block/mute peer locally (ignore msgs from pubKey)" and, in the same
+section, "ignore floods". Those are two different reach: the first is about what a
+user sees, the second about what a relay pays for. `blockScope` is the seam between
+them — `delivery` (the default) filters the inbox only, `relay` refuses to forward
+as well — and one node spamming 24 broadcasts is blocked at half the network
+so the other half can show whether a block stays local.
+
+  seed  arm       spam@blockers  spam@others  others@bystanders  SOS@blockers  unicast  delivery   tx      blocked
+  42    none                240           216                 51            10        1    381.5%     3559         0
+  42    delivery              0           216                 64            10        0    400.0%     3444       243
+  42    relay                 0           216                 69            10        0    412.5%     3037       271
+  7     none                240           216                 56            10        1    381.5%     3562         0
+  7     delivery              0           216                 87            10        0    440.9%     3421       253
+  7     relay                 0           165                 39            10        0    355.2%     2848       230
+  11    none                240           216                 57            10        1    392.3%     4064         0
+  11    delivery              0           216                 46            10        0    355.2%     3993       267
+  11    relay                 0           216                 92            10        0    436.4%     3918       261
+
+  mean over 3 seeds
+    spam at the nodes that blocked it   none 240.0 → delivery 0.0 → relay 0.0
+    spam at the nodes that did not      none 216.0 → delivery 216.0 → relay 199.0
+    SOS at the nodes that blocked it    none 10.0 → delivery 10.0 → relay 10.0
+    everything else at the bystanders    none 54.7 → delivery 65.7 → relay 66.7
+    ACKs / bundles gossip-pruned         none 27.0 / 0.0 → delivery 24.0 / 0.0 → relay 23.0 / 0.0
+    network delivery ratio              none 385.1% → delivery 398.7% → relay 401.3%
+    transmissions                       none 3728 → delivery 3619 → relay 3268
+
+  Read the second line as the price of "relay": 17.0 of the blocked
+  sender's copies per seed never reached nodes that did not block it, because a blocker
+  that refuses to forward is a hole in that source's routes. The first and third lines
+  are the feature and its exemption. The second line is the locality claim — a block
+  removes nothing from a device that did not block — though at 24 messages × 9
+  bystanders it is a saturated one, so it rules out removal rather than proving the two
+  worlds identical.
+
+  The fourth line moves and the sixth moves with it, and neither is a cost of blocking.
+  The sixth is a whole-network ratio whose numerator counts the blocked sender's own
+  messages to the nodes that blocked it, so a working block reduces it by construction;
+  reading it as "a block costs the network delivery" is the mistake this section exists
+  to prevent. The fourth is unrelated traffic at unrelated nodes, and it moves because
+  the fifth line's ACKs are transmissions: an ignored message is not acknowledged, a
+  transmission not made is an RNG draw not spent, and jitter, the MPR wait and backoff
+  are drawn per transmission — so the two worlds diverge at the first ignored message.
+  The pruning half of that story is printed and is zero: docs/06 §20.5 measured
+  gossip-pruning as essentially never firing, and it does not fire here either.
+
+  Scope relay saves 352 transmissions per seed (9.7% of the network's
+  airtime) that scope delivery spends forwarding someone the forwarder has blocked.
+  Whether that trade is worth a hole in the blocked source's routes is a policy
+  question, so both ship and the default is the one that cannot censor anybody.
+
+PASS — the block filters what the blocker sees and nothing else: a bystander loses no
+  copy of the blocked sender's traffic, an SOS still gets through under both scopes,
+  and the network spends less airtime only when it is asked to.
+
+PASS — the caps and the blocklist are inert on traffic that does not abuse them, fire on traffic that does, and neither reaches past the node that decided.

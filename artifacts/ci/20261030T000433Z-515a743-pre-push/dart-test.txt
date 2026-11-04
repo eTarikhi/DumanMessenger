@@ -1,0 +1,346 @@
+00:00 +0: loading test\acceptance_test.dart
+00:00 +0: test\atrium_test.dart: the atrium becomes a router (docs/06 §18) elects a healthy open node in campus_quad within two cycles
+00:01 +1: test\channel_test.dart: occupies no radio by default: nothing is deferred and nothing is dropped
+00:01 +2: test\channel_test.dart: occupies no radio by default: nothing is deferred and nothing is dropped
+00:01 +3: test\community_relay_test.dart: the cap a tablet loses is being spent on other tablets, not on phones
+00:01 +4: test\community_relay_test.dart: the cap a tablet loses is being spent on other tablets, not on phones
+00:01 +5: test\community_relay_test.dart: the cap a tablet loses is being spent on other tablets, not on phones
+00:01 +6: test\community_relay_test.dart: the cap a tablet loses is being spent on other tablets, not on phones
+00:02 +7: test\community_relay_test.dart: the cap a tablet loses is being spent on other tablets, not on phones
+00:02 +8: test\community_relay_test.dart: the cap a tablet loses is being spent on other tablets, not on phones
+00:02 +9: test\community_relay_test.dart: the cap a tablet loses is being spent on other tablets, not on phones
+00:02 +10: test\community_relay_test.dart: the cap a tablet loses is being spent on other tablets, not on phones
+00:02 +11: test\community_relay_test.dart: the cap a tablet loses is being spent on other tablets, not on phones
+00:02 +12: test\community_relay_test.dart: the cap a tablet loses is being spent on other tablets, not on phones
+00:02 +13: test\community_relay_test.dart: the cap a tablet loses is being spent on other tablets, not on phones
+00:02 +14: test\community_relay_test.dart: the cap a tablet loses is being spent on other tablets, not on phones
+00:02 +15: test\community_relay_test.dart: the cap a tablet loses is being spent on other tablets, not on phones
+00:04 +16: test\atrium_test.dart: the atrium becomes a router (docs/06 §18) elects a healthy open node in festival_crowd within two cycles
+00:04 +17: test\channel_test.dart: counts nothing at all in the shipped model, whatever the transmitter does
+00:04 +18: test\channel_test.dart: counts nothing at all in the shipped model, whatever the transmitter does
+00:04 +19: test\channel_test.dart: counts nothing at all in the shipped model, whatever the transmitter does
+00:05 +20: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:05 +21: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:05 +22: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:05 +23: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:05 +24: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:05 +25: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:05 +26: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:05 +27: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:05 +28: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:05 +29: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:06 +30: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:06 +31: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:06 +32: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:06 +33: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +34: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +35: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +36: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +37: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +38: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +39: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +40: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +41: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +42: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +43: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +44: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +45: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +46: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +47: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +48: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +49: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +50: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +51: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +52: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +53: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +54: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +55: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +56: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +57: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +58: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +59: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +60: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +61: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +62: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +63: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +64: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +65: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +66: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +67: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +68: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +69: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +70: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +71: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +72: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +73: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +74: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +75: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +76: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +77: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +78: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +79: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +80: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +81: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +82: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:07 +83: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:08 +84: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:10 +85: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:10 +86: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:11 +87: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:11 +88: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:12 +89: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +90: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +91: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +92: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +93: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +94: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +95: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +96: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +97: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +98: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +99: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +100: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +101: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +102: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +103: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +104: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +105: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +106: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +107: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +108: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +109: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +110: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:13 +111: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:14 +112: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:15 +113: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:15 +114: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:16 +115: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:17 +116: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:17 +117: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:18 +118: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:19 +119: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:19 +120: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:19 +121: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:19 +122: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:19 +123: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:19 +124: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:19 +125: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:19 +126: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:20 +127: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:20 +128: test\community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:21 +129: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:21 +130: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +131: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:23 +132: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:28 +133: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:28 +134: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:28 +135: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:29 +136: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:29 +137: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:29 +138: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:29 +139: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:30 +140: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:30 +141: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:30 +142: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:30 +143: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:30 +144: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:30 +145: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:30 +146: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:30 +147: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:31 +148: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:31 +149: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:31 +150: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:31 +151: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:31 +152: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:31 +153: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:31 +154: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:31 +155: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:31 +156: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:31 +157: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:31 +158: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:31 +159: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:31 +160: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +161: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +162: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +163: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +164: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +165: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +166: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +167: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +168: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +169: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +170: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +171: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +172: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +173: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +174: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +175: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +176: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +177: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:32 +178: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:33 +179: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:33 +180: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:33 +181: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:33 +182: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:33 +183: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:34 +184: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:34 +185: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:34 +186: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:35 +187: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:35 +188: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:35 +189: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:36 +190: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:36 +191: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:36 +192: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:36 +193: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:36 +194: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:36 +195: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:36 +196: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:36 +197: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:36 +198: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:36 +199: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:36 +200: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:36 +201: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:36 +202: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:36 +203: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:36 +204: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:36 +205: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:36 +206: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:37 +207: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:38 +208: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:38 +209: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:39 +210: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:39 +211: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:40 +212: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:41 +213: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:41 +214: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:42 +215: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:43 +216: test\acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:43 +217: test\engine_test.dart: hop traces and the capture log (roadmap Phase 4) does not perturb the run it is measuring
+00:44 +218: test\engine_test.dart: hop traces and the capture log (roadmap Phase 4) does not perturb the run it is measuring
+00:44 +219: test\engine_test.dart: hop traces and the capture log (roadmap Phase 4) does not perturb the run it is measuring
+00:44 +220: test\engine_test.dart: hop traces and the capture log (roadmap Phase 4) does not perturb the run it is measuring
+00:44 +221: test\routing_benchmark_test.dart: campus_quad duty=true baseline-v1 parity
+00:44 +222: test\routing_benchmark_test.dart: campus_quad duty=true baseline-v1 parity
+00:44 +223: test\engine_test.dart: hop traces and the capture log (roadmap Phase 4) drops the log when metrics are re-baselined
+00:45 +224: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +225: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:46 +226: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:46 +227: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:47 +228: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:48 +229: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:48 +230: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:48 +231: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:49 +232: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:49 +233: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:49 +234: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:50 +235: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:51 +236: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:51 +237: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:51 +238: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +239: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +240: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +241: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +242: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +243: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +244: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +245: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +246: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +247: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +248: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +249: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +250: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +251: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +252: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +253: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +254: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +255: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +256: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +257: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +258: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +259: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +260: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +261: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:52 +262: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:53 +263: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:53 +264: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:53 +265: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:54 +266: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:54 +267: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:54 +268: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:54 +269: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:54 +270: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:54 +271: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:55 +272: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:58 +273: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:58 +274: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:59 +275: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:59 +276: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:59 +277: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+01:00 +278: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+01:01 +279: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+01:02 +280: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+01:02 +281: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+01:03 +282: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+01:06 +283: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+01:09 +284: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+01:15 +285: test\acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+01:18 +286: test\routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:21 +287: test\routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:24 +288: test\routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:27 +289: test\routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:29 +290: test\routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:31 +291: test\routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:33 +292: test\routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:34 +293: test\routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:40 +294: test\routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:40 +295: test\routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:40 +296: test\routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:40 +297: test\routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:40 +298: test\routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:40 +299: test\engine_test.dart: radio occupancy and the derived beacon size (docs/06 §24.6) charges airtime from the rate constants the engine already had
+01:40 +300: test\routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:45 +301: test\routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:50 +302: test\routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:50 +303: test\routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:50 +304: test\routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:57 +305: test\routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+02:23 +306: test\engine_test.dart: radio occupancy and the derived beacon size (docs/06 §24.6) samples connectivity in-window, which an end-of-window graph cannot
+02:24 +307: test\routing_benchmark_test.dart: festival_crowd duty=false super-carrier-v1 parity
+02:25 +308: test\routing_benchmark_test.dart: festival_crowd duty=false super-carrier-v1 parity
+02:26 +309: test\routing_benchmark_test.dart: festival_crowd duty=false super-carrier-v1 parity
+02:27 +310: test\routing_benchmark_test.dart: festival_crowd duty=false super-carrier-v1 parity
+02:27 +311: test\routing_benchmark_test.dart: festival_crowd duty=false super-carrier-v1 parity
+02:27 +312: test\routing_benchmark_test.dart: festival_crowd duty=false super-carrier-v1 parity
+02:28 +313: test\routing_benchmark_test.dart: festival_crowd duty=false super-carrier-v1 parity
+02:29 +314: test\routing_benchmark_test.dart: festival_crowd duty=false super-carrier-v1 parity
+02:31 +315: test\routing_benchmark_test.dart: festival_crowd duty=false super-carrier-v1 parity
+02:31 +316: test\routing_benchmark_test.dart: festival_crowd duty=false super-carrier-v1 parity
+02:31 +317: test\routing_benchmark_test.dart: festival_crowd duty=false super-carrier-v1 parity
+02:37 +318: test\engine_test.dart: adaptive scan intervals (docs/05 §1.2, layer 3) scans more in a dense world, which is what the row says and what it costs
+02:48 +319: test\routing_benchmark_test.dart: festival_crowd duty=false community-carrier-v1 parity
+02:48 +320: test\engine_test.dart: adaptive scan intervals (docs/05 §1.2, layer 3) is anchored, so a reference-density node scans at the configured interval
+02:49 +321: test\routing_benchmark_test.dart: festival_crowd duty=false route-flood-v1 parity
+02:58 +322: test\engine_test.dart: adaptive scan intervals (docs/05 §1.2, layer 3) clamps, so one peer does not stop a scan and a crowd does not pin a node awake
+03:05 +323: test\routing_benchmark_test.dart: festival_crowd duty=true baseline-v1 parity
+03:05 +324: test\routing_benchmark_test.dart: festival_crowd duty=true baseline-v1 parity
+03:05 +325: test\routing_benchmark_test.dart: festival_crowd duty=true baseline-v1 parity
+03:07 +326: test\engine_test.dart: density-derived beacon interval (docs/06 §24.11) costs a dense crowd fewer deferrals under csma, and buys it delivery
+03:15 +327: test\engine_test.dart: density-derived beacon interval (docs/06 §24.11) costs a dense crowd fewer deferrals under csma, and buys it delivery
+03:17 +328: test\routing_benchmark_test.dart: festival_crowd duty=true ack-6000-v1 parity
+03:23 +329: test\routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+03:29 +330: test\routing_benchmark_test.dart: festival_crowd duty=true community-carrier-v1 parity
+03:36 +331: test\routing_benchmark_test.dart: festival_crowd duty=true route-flood-v1 parity
+03:43 +332: test\routing_benchmark_test.dart: partitioned_pair duty=false baseline-v1 parity
+03:43 +333: test\routing_benchmark_test.dart: partitioned_pair duty=false ack-2000-v1 parity
+03:43 +334: test\routing_benchmark_test.dart: partitioned_pair duty=false ack-6000-v1 parity
+03:43 +335: test\routing_benchmark_test.dart: partitioned_pair duty=false super-carrier-v1 parity
+03:43 +336: test\routing_benchmark_test.dart: partitioned_pair duty=false community-carrier-v1 parity
+03:44 +337: test\routing_benchmark_test.dart: partitioned_pair duty=false route-flood-v1 parity
+03:44 +338: test\routing_benchmark_test.dart: partitioned_pair duty=true baseline-v1 parity
+03:44 +339: test\routing_benchmark_test.dart: partitioned_pair duty=true ack-2000-v1 parity
+03:44 +340: test\routing_benchmark_test.dart: partitioned_pair duty=true ack-6000-v1 parity
+03:44 +341: test\routing_benchmark_test.dart: partitioned_pair duty=true super-carrier-v1 parity
+03:44 +342: test\routing_benchmark_test.dart: partitioned_pair duty=true community-carrier-v1 parity
+03:44 +343: test\routing_benchmark_test.dart: partitioned_pair duty=true route-flood-v1 parity
+03:45 +344: All tests passed!

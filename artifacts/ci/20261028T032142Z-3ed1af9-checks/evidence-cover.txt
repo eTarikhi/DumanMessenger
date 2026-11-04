@@ -1,0 +1,82 @@
+
+> duman-mesh-simulator@0.1.0 cover
+> tsc -p tool/tsconfig.golden.json && node -e "require('fs').writeFileSync('tool/.build/package.json','{\"type\":\"commonjs\"}')" && node tool/.build/tool/cover-probe.js
+
+Duman Messenger — what docs/04 §5's dummy beacons buy, and what they cost
+Count and timing cover only: this engine gives beacons no length, so length-based
+traffic analysis is out of reach and nothing here claims otherwise.
+
+=== cover traffic off is the shipped engine (docs/04 §5) ===
+A mitigation that is on by default is a change to every number this repository has
+published, so `coverTraffic` defaults to false and this section checks that the
+default is inert: no dummy beacons, no transmissions, and nothing in the world that
+differs from a build without the feature.
+
+  seed   coverTx   transmissions   delivery   target rank   conspicuousness
+  42           0            1014    100.0%             6             0.922
+  7            0            1105    100.0%             7             0.944
+  11           0            1101    100.0%             8             0.667
+
+  Zero dummy beacons on all 3 seeds, so the feature is inert as shipped and the
+  golden vectors are unchanged by its existence.
+
+=== what a dummy beacon buys, and what it costs (docs/04 §5) ===
+One node sends a burst of 12 broadcasts while every other node sends one unicast,
+and the observer sees nothing but transmission counts per node over 120 s. It names
+the node that transmitted most. `conspicuousness` is the target's count as a z-score
+against the other nodes: how far it stands out from the median, in standard
+deviations. Zero means the burst is invisible in that statistic.
+
+  seed  cover    coverTx   transmissions   delivery   guess hit   target rank   conspicuousness
+  42    off            0            1014    100.0%          no             6             0.922
+  42    60s           60            1087    100.0%          no             5             1.001
+  42    30s          100             972    100.0%          no             5             1.124
+  42    10s          320            1225    100.0%          no             4             0.939
+  42    5s           639            1771    100.0%          no             6             0.848
+  7     off            0            1105    100.0%          no             7             0.944
+  7     60s           60            1081    100.0%          no             7             1.254
+  7     30s          100            1153    100.0%          no             7             0.976
+  7     10s          320            1444    100.0%          no             9             0.880
+  7     5s           640            1642    100.0%          no             8             1.170
+  11    off            0            1101    100.0%          no             8             0.667
+  11    60s           60            1214    100.0%          no             8             0.623
+  11    30s          100            1484    100.0%          no             8             0.149
+  11    10s          320            1506    100.0%          no             8             0.554
+  11    5s           640            1939    100.0%          no             8             0.579
+
+  mean over 3 seeds
+    cover       coverTx   transmissions   vs off    delivery   observer named the target   rank   conspicuousness
+    off               0            1073      0.0%    100.0%                       0/3    7.0             0.844
+    60s              60            1127      5.0%    100.0%                       0/3    6.7             0.959
+    30s             100            1203     12.1%    100.0%                       0/3    6.7             0.750
+    10s             320            1392     29.7%    100.0%                       0/3    7.0             0.791
+    5s              640            1784     66.2%    100.0%                       0/3    7.3             0.866
+
+  The result is null, and the reason is in the "observer named the target" column: it
+  reads 0/3 with cover off. Relaying already dominates every node's transmission
+  count, so a 12-message burst does not make its sender the top transmitter — the target
+  ranks 7.0 of 20, and the z-score that measures how far it stands out is
+  0.844 before any dummy beacon exists. Cover traffic cannot hide a sender who is already
+  hidden, and tightening the interval to 5s moves that z-score to 0.866 — no
+  direction, no trend — while costing 66% more airtime. On this observable the mitigation
+  buys nothing measurable and is not free, so the knob ships off and §23 records it as a
+  rejected lever rather than a feature that works.
+
+  That is a statement about this observable, not about cover traffic in general. The
+  premise it rests on — that relay traffic swamps a burst — is a property of a dense
+  20-node campus mesh, and a sparse or partitioned topology relays less, so the column
+  that reads 0/3 here is the one to re-read before concluding anything elsewhere.
+
+  Two limits on what any of these numbers mean. First, the observable is transmission
+  *count*: this engine gives beacons no length, so an adversary doing length-based
+  analysis is not modelled here at all, and a real one would need padded cover rather
+  than counted cover. Second, the battery model is a role-based hourly rate
+  (NORMAL_DRAIN_PER_HOUR in src/rf.ts) with no per-packet term, so the cost of cover
+  traffic shows up in airtime and in nothing else — this probe cannot price it in
+  battery, and skills/07's "Battery %/h per role" cannot either.
+
+PASS — cover traffic is inert when off, costs airtime in proportion to its rate, and
+  leaves delivery alone. It does not measurably conceal the sender on this observable,
+  which is reported above and recorded in docs/06 §23 rather than asserted away.
+
+PASS — off means off, on costs airtime in proportion to its rate, and delivery survives.

@@ -1,0 +1,59 @@
+Duman mesh simulator — campus_quad (seed 42, policy mpr)
+──────────────────────────────────────────────────────────────
+  scenario                 campus_quad
+  seed                     42
+  policy                   mpr
+  nodes                    20
+  sent                     150
+  deliveredUnicast         150
+  deliveryRatio            1.0
+  deliveredWithinFiveHops  148
+  withinFiveRatio          0.9867
+  superNodes               4
+  superRatio               0.2
+  timeAvgSuperRatio        0.2429
+  electionsPerMin          0.0773
+  avgHops                  2.0267
+  latencyP50Ms             545.483
+  latencyP95Ms             4190.9395
+  relayTx                  3652
+  floodAllRelayTx          44654
+  overheadVsFloodAll       0.0818
+  routeFloodRelayTx        5574
+  overheadVsRouteFlood     0.6552
+  overheadRatio            24.3467
+  mprSuppressed            286
+  retriesSent              31
+  retriesExhausted         4
+  acksReceived             149
+  controlOverhead          123664
+  lostTransmissions        109
+  lostOgmTransmissions     3438
+  totalQueued              5
+  avgPeers                 7.9
+  isolatedNodes            0
+  avgScore                 0.628
+  simTimeMs                233000.0
+  dutyCycle                false
+  batteryPctPerHourNormal  2.5619
+  batteryPctPerHourSuper   6.9562
+  batteryPct8hNormal       20.4948
+  batteryPct8hSuper        55.65
+  scansPerSec              33.2
+  relaysPerSec             16.2311
+  awakeRatio               1.0
+  scansSkippedAsleep       0
+  electionEvents           6
+  group                    {members: 5, sends: 5, scopedFlood: {deliveryPct: 100.0, receipts: 20, expected: 20, radioMessages: 5, txPerMsg: 61.2, p95Ms: 1381.4268, retries: 0, acks: 0, epochRejected: 0}, perMemberUnicast: {deliveryPct: 100.0, receipts: 20, expected: 20, radioMessages: 20, txPerMsg: 128.4, p95Ms: 1351.6817, retries: 0, acks: 20, epochRejected: 0}, verdict: scoped flood is 2.1x cheaper here (members are far enough that each routed copy fans out anyway)}
+
+Group probe (5 members spread across the world, 5 messages each)
+  scopedFlood          delivery 100.0%  tx/msg 61.2  receipts 20/20  p95 1381.4268 ms  retries 0  acks 0
+  perMemberUnicast     delivery 100.0%  tx/msg 128.4  receipts 20/20  p95 1351.6817 ms  retries 0  acks 20
+  scoped flood is 2.1x cheaper here (members are far enough that each routed copy fans out anyway)
+  latencyByHop             hops      n     avg     p95
+                              1     62   247 ms   314 ms
+                              2     38   646 ms   829 ms
+                              3     27   902 ms  1127 ms
+                              4     12  1066 ms  1550 ms
+                              5      1  1257 ms  1257 ms
+                              6      2  1746 ms  2026 ms

@@ -499,6 +499,33 @@ describe("OGM handling (docs/03 §4, §7)", () => {
     expect(me.tqWindows.has(tqPairKey(`o${TQ_PAIR_MAX + 49}`, `p${TQ_PAIR_MAX + 49}`))).toBe(true);
   });
 
+  it("reports how many route entries it dropped, which is the route table's churn", () => {
+    // docs/06 §24.7 needs this count to test why a 12 s beacon interval delivered worse
+    // than both 5 s and 25 s in a 60-node crowd: the flap hypothesis says the middle
+    // interval is the one that churns, and before the counter existed there was no way to
+    // ask. It counts *route* entries only, not the two-hop views or receipt windows the same
+    // call also drops, because churn in the routing table is what a reader can reason about.
+    const me = makeNode("me", 0, 0);
+    const fresh = makeNode("fresh", 0, 0, { seq: 1 });
+    const stale = makeNode("stale", 0, 0, { seq: 1 });
+    me.peerIds = ["fresh", "stale"];
+    receiveOGM(me, buildOGM(fresh), "fresh", 1000);
+    receiveOGM(me, buildOGM(stale), "stale", 1000);
+    expect(Object.keys(me.nextHopTable).length).toBe(2);
+
+    // Nothing is older than the TTL yet, so nothing is dropped and nothing is reported.
+    expect(pruneStaleEntries(me, 2000, 30_000)).toBe(0);
+
+    me.nextHopTable["stale"].lastSeen = 1000;
+    me.nextHopTable["fresh"].lastSeen = 40_000;
+    expect(pruneStaleEntries(me, 50_000, 30_000)).toBe(1);
+    expect(me.nextHopTable["stale"]).toBeUndefined();
+    expect(me.nextHopTable["fresh"]).toBeDefined();
+
+    // Idempotent: the expired entry is gone, the live one is still inside the TTL.
+    expect(pruneStaleEntries(me, 50_000, 30_000)).toBe(0);
+  });
+
   it("builds a 2-hop view only from beacons heard directly", () => {
     const me = makeNode("me", 0, 0);
     const origin = makeNode("x", 0, 0, { seq: 1 });

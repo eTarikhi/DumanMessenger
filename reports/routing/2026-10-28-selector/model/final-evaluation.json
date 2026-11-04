@@ -1,0 +1,178 @@
+{
+  "status": "not-approved",
+  "modelSHA256": "ef63fbf524cb9ad056a0bd91fb1360330ad87c2518b64af74a748b47b4319c95",
+  "label": "OFFLINE_LABEL_REPLAY_NOT_LIVE_MIXED_POLICY",
+  "holdoutSeed": 909,
+  "seedLevelCI": null,
+  "reason": "one independent seed; missing owner-approved tolerances",
+  "estimates": {
+    "baseline": {
+      "909/campus_quad/duty=False": {
+        "sent": 150,
+        "five": 150,
+        "baseline": 150
+      },
+      "909/campus_quad/duty=True": {
+        "sent": 150,
+        "five": 150,
+        "baseline": 150
+      },
+      "909/sparse_village/duty=False": {
+        "sent": 150,
+        "five": 36,
+        "baseline": 36
+      },
+      "909/sparse_village/duty=True": {
+        "sent": 150,
+        "five": 36,
+        "baseline": 36
+      },
+      "909/festival_crowd/duty=False": {
+        "sent": 150,
+        "five": 116,
+        "baseline": 116
+      },
+      "909/festival_crowd/duty=True": {
+        "sent": 150,
+        "five": 122,
+        "baseline": 122
+      },
+      "909/partitioned_pair/duty=False": {
+        "sent": 150,
+        "five": 61,
+        "baseline": 61
+      },
+      "909/partitioned_pair/duty=True": {
+        "sent": 150,
+        "five": 61,
+        "baseline": 61
+      }
+    },
+    "ack-6000": {
+      "909/campus_quad/duty=False": {
+        "sent": 150,
+        "five": 150,
+        "baseline": 150
+      },
+      "909/campus_quad/duty=True": {
+        "sent": 150,
+        "five": 150,
+        "baseline": 150
+      },
+      "909/sparse_village/duty=False": {
+        "sent": 150,
+        "five": 36,
+        "baseline": 36
+      },
+      "909/sparse_village/duty=True": {
+        "sent": 150,
+        "five": 36,
+        "baseline": 36
+      },
+      "909/festival_crowd/duty=False": {
+        "sent": 150,
+        "five": 125,
+        "baseline": 116
+      },
+      "909/festival_crowd/duty=True": {
+        "sent": 150,
+        "five": 118,
+        "baseline": 122
+      },
+      "909/partitioned_pair/duty=False": {
+        "sent": 150,
+        "five": 61,
+        "baseline": 61
+      },
+      "909/partitioned_pair/duty=True": {
+        "sent": 150,
+        "five": 61,
+        "baseline": 61
+      }
+    },
+    "rules": {
+      "909/campus_quad/duty=False": {
+        "sent": 150,
+        "five": 150,
+        "baseline": 150
+      },
+      "909/campus_quad/duty=True": {
+        "sent": 150,
+        "five": 150,
+        "baseline": 150
+      },
+      "909/sparse_village/duty=False": {
+        "sent": 150,
+        "five": 36,
+        "baseline": 36
+      },
+      "909/sparse_village/duty=True": {
+        "sent": 150,
+        "five": 36,
+        "baseline": 36
+      },
+      "909/festival_crowd/duty=False": {
+        "sent": 150,
+        "five": 125,
+        "baseline": 116
+      },
+      "909/festival_crowd/duty=True": {
+        "sent": 150,
+        "five": 122,
+        "baseline": 122
+      },
+      "909/partitioned_pair/duty=False": {
+        "sent": 150,
+        "five": 61,
+        "baseline": 61
+      },
+      "909/partitioned_pair/duty=True": {
+        "sent": 150,
+        "five": 61,
+        "baseline": 61
+      }
+    },
+    "learned": {
+      "909/campus_quad/duty=False": {
+        "sent": 150,
+        "five": 150,
+        "baseline": 150
+      },
+      "909/campus_quad/duty=True": {
+        "sent": 150,
+        "five": 150,
+        "baseline": 150
+      },
+      "909/sparse_village/duty=False": {
+        "sent": 150,
+        "five": 36,
+        "baseline": 36
+      },
+      "909/sparse_village/duty=True": {
+        "sent": 150,
+        "five": 36,
+        "baseline": 36
+      },
+      "909/festival_crowd/duty=False": {
+        "sent": 150,
+        "five": 116,
+        "baseline": 116
+      },
+      "909/festival_crowd/duty=True": {
+        "sent": 150,
+        "five": 122,
+        "baseline": 122
+      },
+      "909/partitioned_pair/duty=False": {
+        "sent": 150,
+        "five": 61,
+        "baseline": 61
+      },
+      "909/partitioned_pair/duty=True": {
+        "sent": 150,
+        "five": 61,
+        "baseline": 61
+      }
+    }
+  }
+}

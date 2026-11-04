@@ -82,7 +82,9 @@ const int denseFallbackFanout = 6;
 const double neighborScoreTtlMs = 30000;
 
 /// Entries advertised in an OGM so peers can learn routes to non-neighbours.
-const int _bestHopAdvertiseLimit = 8;
+/// Exported because `ogmWireBytes` needs it to bound a beacon's size, and a
+/// size bound that disagreed with the real one would be worse than no bound.
+const int bestHopAdvertiseLimit = 8;
 
 /// Normalise a peer count. [observedMax] is 0 for the shipped fixed denominator of 50; a
 /// positive value switches to the largest peer count this node has heard, which is what
@@ -134,7 +136,7 @@ Ogm buildOgm(MeshNode node, [int hopCount = 0]) {
       final byHop = a.value.hopCount.compareTo(b.value.hopCount);
       return byHop != 0 ? byHop : a.key.compareTo(b.key);
     });
-  for (final e in entries.take(_bestHopAdvertiseLimit)) {
+  for (final e in entries.take(bestHopAdvertiseLimit)) {
     bestHopTo[e.key] = e.value.hopCount;
   }
   return Ogm(
@@ -547,10 +549,20 @@ ElectionOutcome electRole(MeshNode node, List<MeshNode> allNodes, RfParams rf,
 }
 
 /// Drop routes and scores that have not been refreshed (soft state, docs/05 §1.4).
-void pruneStaleEntries(MeshNode node, double nowMs, double maxAgeMs) {
+/// Returns how many **route entries** were dropped, which is the route table's churn: a
+/// neighbour that expires and is re-learned a moment later costs two table updates, and in
+/// between, anything that needed it is forwarded by a node that no longer knows where it
+/// goes. docs/06 §24.7 needs that number to test why a 12 s beacon interval delivered worse
+/// than both 5 s and 25 s in a 60-node crowd. Callers that do not care can ignore it, as
+/// every existing one did when this returned void.
+int pruneStaleEntries(MeshNode node, double nowMs, double maxAgeMs) {
   // Drop 2-hop views for nodes that are no longer direct neighbours.
   final peers = node.peerIds.toSet();
   node.twoHopView.removeWhere((id, _) => !peers.contains(id));
+  // Counted before removal because `removeWhere` does not report how much it took.
+  final expired = node.nextHopTable.values
+      .where((e) => nowMs - e.lastSeen > maxAgeMs)
+      .length;
   node.nextHopTable.removeWhere((_, e) => nowMs - e.lastSeen > maxAgeMs);
   // Receipt windows are keyed by the neighbour that delivered them: a neighbour
   // we can no longer hear is not a candidate next hop, and an originator whose
@@ -571,6 +583,7 @@ void pruneStaleEntries(MeshNode node, double nowMs, double maxAgeMs) {
     node.ogmTable.remove(id);
     node.neighborScores.remove(id);
   }
+  return expired;
 }
 
 NodeId? getNextHop(MeshNode node, NodeId dest) {

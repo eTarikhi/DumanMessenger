@@ -175,6 +175,75 @@ const int groupMaxMembers = 10;
 /// geometry-independent flood is the default.
 enum GroupMode { scopedFlood, perMemberUnicast }
 
+/// Who enforces `docs/04` §6's broadcast cap.
+///
+/// [superOnly] is what the document says — "SUPERs drop excess" — and is the default.
+/// It bounds how *far* a flood travels, not whether the flooder's own neighbours see
+/// it. [all] is the reading that closes that, kept as a knob rather than a
+/// replacement because §6 does not contain the rule; the two are measured against
+/// each other in `docs/06` §21.5. Spelled `superOnly` because `super` is a Dart
+/// keyword, the same reason `Role.superNode` is not `Role.super`.
+enum BroadcastCapScope { superOnly, all }
+
+/// How far a local block reaches (`docs/04` §6: "Block/mute peer locally").
+///
+/// [delivery] is the literal reading and the default: the blocking node ignores the
+/// message and the mesh still carries it for everyone else, so blocking never costs a
+/// third party a delivery. [relay] also refuses to forward, which is what §6's
+/// battery-drain bullet means by "ignore floods", at the cost of a hole in that source's
+/// routes wherever the blocker was a relay. Measured against each other in `docs/06` §22.
+/// How long a packet holds a radio, which is not the same question as how long it takes to
+/// arrive (docs/06 §24.5-§24.6). [RadioOccupancy.hopLatency] ships: occupancy is the
+/// calibrated hop latency plus the serialization of whatever exceeds a full BLE packet,
+/// which is what docs/08 §12's contention arms were measured under. [RadioOccupancy.airtime]
+/// charges only `bytes x 8 / kbps`, the rate the engine already had, applied to the whole
+/// packet. Delivery latency is unaffected either way.
+/// Whether a node beacons on the fixed interval docs/03 §4 specifies, or on one derived from
+/// how many peers will hear it. [OgmIntervalMode.density] is measured and rejected — docs/06
+/// §24.11 — and ships off: where the two modes land in comparable topologies the derived
+/// interval buys no delivery and costs airtime, and the one place it saves airtime is the one
+/// place the comparison cannot be read, because the two worlds differ in connectivity.
+/// Whether a node scans on its role's fixed interval or on one scaled by how many peers it had
+/// at the last scan. [ScanIntervalMode.density] is docs/05 §1.2's third mitigation row —
+/// "Scan interval scales with peer density: dense = shorter interval, sparse = longer" — which
+/// was documented and never built. Its direction is the *inverse* of [OgmIntervalMode.density]
+/// and that is not a contradiction: a scan is this device waking to look, a beacon is every
+/// neighbour waking to listen, so the two costs scale with density in opposite directions.
+enum ScanIntervalMode { fixed, density }
+
+enum OgmIntervalMode { fixed, density }
+
+enum RadioOccupancy { hopLatency, airtime }
+
+enum BlockScope { delivery, relay }
+
+extension BlockScopeName on BlockScope {
+  /// CLI and JSON spelling, matching the TypeScript engine's `"delivery" | "relay"`.
+  String get wire => this == BlockScope.delivery ? 'delivery' : 'relay';
+}
+
+extension ScanIntervalModeName on ScanIntervalMode {
+  /// CLI and JSON spelling, matching the TypeScript engine's `"fixed" | "density"`.
+  String get wire => this == ScanIntervalMode.fixed ? 'fixed' : 'density';
+}
+
+extension OgmIntervalModeName on OgmIntervalMode {
+  /// CLI and JSON spelling, matching the TypeScript engine's `"fixed" | "density"`.
+  String get wire => this == OgmIntervalMode.fixed ? 'fixed' : 'density';
+}
+
+extension RadioOccupancyName on RadioOccupancy {
+  /// CLI and JSON spelling, matching the TypeScript engine's
+  /// `"hop-latency" | "airtime"`.
+  String get wire =>
+      this == RadioOccupancy.hopLatency ? 'hop-latency' : 'airtime';
+}
+
+extension BroadcastCapScopeName on BroadcastCapScope {
+  /// CLI and JSON spelling, matching the TypeScript engine's `"super" | "all"`.
+  String get wire => this == BroadcastCapScope.superOnly ? 'super' : 'all';
+}
+
 /// A group channel (docs/04 §4, roadmap Phase 1 and Phase 4 "Group UX").
 class Group {
   Group({
@@ -405,7 +474,7 @@ class Ogm {
 }
 
 /// What a node did with a copy it accepted.
-enum HopAction { received, delivered, relayed, suppressed, queued, expired }
+enum HopAction { received, delivered, relayed, suppressed, blocked, queued, expired }
 
 /// One hop of a message's journey, recorded as a *fresh* copy arrives.
 ///
@@ -624,14 +693,32 @@ class HistoryEntry {
   /// True once this copy arrived by anti-entropy rather than by the original flood.
   final bool synced;
 
+  /// The wire form of one entry, as it goes into an anti-entropy reply (`RS|group|epoch|[…]`).
+  ///
+  /// Two details here are load-bearing for cross-engine parity, because the TypeScript reference
+  /// engine's `JSON.stringify` decides both and the two engines have to put the same bytes on air
+  /// for the same repair:
+  ///
+  ///  * `synced` is omitted when false. It is a *local* flag — "this copy arrived by repair rather
+  ///    than by the original flood" — and the receiver sets it itself with [withSynced], so sending
+  ///    `"synced":false` costs 15 bytes an entry to say nothing. TypeScript declares it
+  ///    `synced?: boolean`, which is `undefined` until set, and `JSON.stringify` drops undefined
+  ///    keys; emitting it unconditionally made every Dart reply heavier than the reference's.
+  ///  * an integral `at` is written without a decimal point. `at` is a `double` here and a `number`
+  ///    there, and Dart writes `1200.0` where TypeScript writes `1200` — two more bytes an entry.
+  ///
+  /// Those two were 680 bytes across the history probe's two replies: 30 430 measured here against
+  /// 29 750 from the reference, for identical 166 beacons / 3 requests / 2 replies / 171 packets.
+  /// `test-fixtures/golden-vectors.json`'s `history` section pins the encoding in both languages, so
+  /// the next divergence is a failing test rather than a difference in probe output.
   Map<String, dynamic> toJson() => <String, dynamic>{
         'msgId': msgId,
         'groupId': groupId,
         'from': from,
-        'at': at,
+        'at': at == at.roundToDouble() ? at.toInt() : at,
         'body': body,
         'epoch': epoch,
-        'synced': synced,
+        if (synced) 'synced': true,
       };
 
   HistoryEntry withSynced() => HistoryEntry(

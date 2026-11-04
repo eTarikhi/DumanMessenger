@@ -6,6 +6,8 @@
 /// a CI run reproduce a field test exactly.
 library;
 
+import 'routing_selector.dart';
+
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -43,6 +45,15 @@ class SimConfig {
     this.tickIntervalMs = 1000,
     this.physicsIntervalMs = 250,
     this.ogmIntervalMs = 2000,
+    this.coverTraffic = false,
+    this.coverIntervalMs = 30000,
+    this.radioOccupancy = RadioOccupancy.hopLatency,
+    this.ogmAliasBytes = 32,
+    this.connectivitySampleMs = 5000,
+    this.ogmIntervalMode = OgmIntervalMode.fixed,
+    this.ogmDensityReferencePeers = 10,
+    this.scanIntervalMode = ScanIntervalMode.fixed,
+    this.scanDensityReferencePeers = 10,
     this.ogmJitterMs = 200,
     this.ogmTtl = 5,
     this.electionIntervalMs = 30000,
@@ -96,6 +107,11 @@ class SimConfig {
     this.channelCwMax = 64,
     this.channelSlotMs = 1.0,
     this.mediaBackpressure = false,
+    this.rateLimits = false,
+    this.broadcastPerMinuteCap = broadcastPerMinuteCapDefault,
+    this.relayPerSourcePerMinuteCap = relayPerSourcePerMinuteCapDefault,
+    this.broadcastCapScope = BroadcastCapScope.superOnly,
+    this.blockScope = BlockScope.delivery,
     this.communityRelayPreference = false,
     this.dtnPreferCommunity = false,
     this.maxRetries = 2,
@@ -127,6 +143,77 @@ class SimConfig {
   final double tickIntervalMs;
   final double physicsIntervalMs;
   final double ogmIntervalMs;
+
+  /// docs/04 §5: "Mitigate traffic analysis: random jitter 50-200 ms before forwarding,
+  /// dummy beacons at low rate." The jitter half ships unconditionally; this is the
+  /// dummy-beacon half, off by default. A cover packet is one radio burst carrying
+  /// nothing: it increments the node's `txCount`, which is what a passive observer counts,
+  /// creates no routing state, delivers nothing and is never acknowledged. It models
+  /// timing and count cover only — this engine gives beacons no length, so a length-based
+  /// observer is out of reach here (docs/06 §23).
+  final bool coverTraffic;
+
+  /// Mean interval between a node's dummy beacons. "Low rate" is the document's word and
+  /// not a number, so docs/06 §23 sweeps it instead of picking one.
+  final double coverIntervalMs;
+
+  /// How long a packet holds a radio, which is not the same question as how long it takes to
+  /// arrive (docs/06 §24.5-§24.6). [RadioOccupancy.hopLatency] ships and is what every
+  /// published number was measured under; [RadioOccupancy.airtime] charges only
+  /// `bytes x 8 / kbps` for the whole packet. Delivery latency is unaffected either way —
+  /// `airTime` keeps its hop-latency base, because that is what docs/02 §6's budget
+  /// measures — and under the shipped `free`/`none` baseline nothing reads occupancy except
+  /// the wake-lock accounting, so the knob moves telemetry and nothing else.
+  final RadioOccupancy radioOccupancy;
+
+  /// How many bytes one *advertised* neighbour costs on air, read only under
+  /// [RadioOccupancy.airtime]. 32 ships, because that is what this engine puts in an OGM: the
+  /// neighbour's X25519 public key. docs/03 §4 says a real deployment advertises 2-byte
+  /// aliases instead, and §24.6 derives the difference — a fully loaded beacon is 1270 B on
+  /// public keys, over the 1024 B BLE ceiling, and 130 B on aliases. Since beacon *reception*
+  /// dominates demanded radio time, the encoding is a bigger lever than the beacon interval.
+  /// The originator's own id stays 32 B either way.
+  final int ogmAliasBytes;
+
+  /// How often to sample the connectivity of the radio graph, in ms. 0 disables it.
+  ///
+  /// docs/06 §24.10 measured why this belongs in the engine rather than in a probe: a 60-node
+  /// crowd splits and re-joins repeatedly inside a measurement window, so `broadcastReach` and
+  /// `deliveryRatio` averaged over that window are unreadable without knowing how much of it the
+  /// network was in one piece. The graph measured *after* the window cannot tell you — a
+  /// partition that healed looks like a network that was never partitioned, which is exactly the
+  /// mistake §24.9 made. Sampling consumes no random numbers and schedules no events, so it
+  /// cannot move a golden vector or a published number.
+  final double connectivitySampleMs;
+
+  /// Whether a node beacons on the fixed interval docs/03 §4 specifies or on one derived from
+  /// its peer count. Ships off, and docs/06 §24.11-§24.12 is why — which is not that it lost.
+  /// Where the topology can be held equal it is cheaper and does not cost reach: with mobility
+  /// off in festival_crowd it takes 44% off the demanded radio time and 44% off the beacons, and
+  /// is equal or better on reach in seven of eight seeds. Delivery is not a win — better on four
+  /// seeds, worse on three, level on one, and the +2.5 mean is mostly one seed. Where the
+  /// topology cannot be held equal it loses or cannot be read —
+  /// sparse_village pays 3.11x the airtime for 1.6 points, campus_quad 1.20x for -0.7, and the
+  /// mobile crowd's two arms land in different topologies, so that pair means nothing because
+  /// §24.10 shows reach tracks the topology rather than the interval. It ships off because the
+  /// shipped condition is the mobile one.
+  final OgmIntervalMode ogmIntervalMode;
+
+  /// The peer count at which [OgmIntervalMode.density] reproduces [ogmIntervalMs] exactly. 10
+  /// is the median peer count campus_quad produces, so the reference world is the one §4's 2 s
+  /// was written against and the crowd stretches from there.
+  final int ogmDensityReferencePeers;
+
+  /// Whether a node scans on its role's fixed interval or on one scaled by its peer count at the
+  /// last scan — docs/05 §1.2's adaptive-scan-interval row, documented and never built until now.
+  /// Anchored so a node with [scanDensityReferencePeers] peers scans at exactly its role's
+  /// configured interval, and clamped to `[base / 4, base * 4]` so a node with one peer does not
+  /// stop scanning and a node in a crowd does not scan continuously. Consumes no random number, so
+  /// the fixed mode's draw sequence is untouched and the golden vectors do not move.
+  final ScanIntervalMode scanIntervalMode;
+
+  /// The peer count at which [ScanIntervalMode.density] reproduces the configured interval.
+  final int scanDensityReferencePeers;
   final double ogmJitterMs;
   final int ogmTtl;
   final double electionIntervalMs;
@@ -326,6 +413,23 @@ class SimConfig {
   /// [ChannelAccess.free] where nothing queues.
   final bool mediaBackpressure;
 
+  /// Whether docs/04 §6's two abuse limits are enforced. Off by default, so a
+  /// shipped run allocates no buckets and no golden vector moves.
+  final bool rateLimits;
+
+  /// docs/04 §6: "Max 5 broadcasts / minute per node; SUPERs drop excess."
+  final int broadcastPerMinuteCap;
+
+  /// docs/04 §6: "Cap relay to 30 msgs/min per source; ignore floods." Control-plane
+  /// traffic is exempt — see [countsAgainstRelayCap].
+  final int relayPerSourcePerMinuteCap;
+
+  /// Who enforces the broadcast cap: SUPERs only, as docs/04 §6 says, or every node.
+  final BroadcastCapScope broadcastCapScope;
+
+  /// How far a local block reaches: delivery only, as docs/04 §6 says, or relay too.
+  final BlockScope blockScope;
+
   /// When two relays cover the same neighbours, pick the plugged one. Off by default and
   /// measured as a null result: it moves 0.6 of 100 MPR slots in a crowd and nothing
   /// downstream, because who transmits is decided per packet from what was actually heard
@@ -402,6 +506,20 @@ class SimConfig {
     int? channelCwMax,
     double? channelSlotMs,
     bool? mediaBackpressure,
+    bool? rateLimits,
+    int? broadcastPerMinuteCap,
+    int? relayPerSourcePerMinuteCap,
+    BroadcastCapScope? broadcastCapScope,
+    BlockScope? blockScope,
+    bool? coverTraffic,
+    double? coverIntervalMs,
+    RadioOccupancy? radioOccupancy,
+    int? ogmAliasBytes,
+    double? connectivitySampleMs,
+    OgmIntervalMode? ogmIntervalMode,
+    int? ogmDensityReferencePeers,
+    ScanIntervalMode? scanIntervalMode,
+    int? scanDensityReferencePeers,
     bool? communityRelayPreference,
     bool? dtnPreferCommunity,
     double? voiceKbps,
@@ -458,6 +576,24 @@ class SimConfig {
         channelCwMax: channelCwMax ?? this.channelCwMax,
         channelSlotMs: channelSlotMs ?? this.channelSlotMs,
         mediaBackpressure: mediaBackpressure ?? this.mediaBackpressure,
+        rateLimits: rateLimits ?? this.rateLimits,
+        broadcastPerMinuteCap:
+            broadcastPerMinuteCap ?? this.broadcastPerMinuteCap,
+        relayPerSourcePerMinuteCap:
+            relayPerSourcePerMinuteCap ?? this.relayPerSourcePerMinuteCap,
+        broadcastCapScope: broadcastCapScope ?? this.broadcastCapScope,
+        blockScope: blockScope ?? this.blockScope,
+        coverTraffic: coverTraffic ?? this.coverTraffic,
+        coverIntervalMs: coverIntervalMs ?? this.coverIntervalMs,
+        radioOccupancy: radioOccupancy ?? this.radioOccupancy,
+        ogmAliasBytes: ogmAliasBytes ?? this.ogmAliasBytes,
+        connectivitySampleMs: connectivitySampleMs ?? this.connectivitySampleMs,
+        ogmIntervalMode: ogmIntervalMode ?? this.ogmIntervalMode,
+        ogmDensityReferencePeers:
+            ogmDensityReferencePeers ?? this.ogmDensityReferencePeers,
+        scanIntervalMode: scanIntervalMode ?? this.scanIntervalMode,
+        scanDensityReferencePeers:
+            scanDensityReferencePeers ?? this.scanDensityReferencePeers,
         communityRelayPreference:
             communityRelayPreference ?? this.communityRelayPreference,
         dtnPreferCommunity: dtnPreferCommunity ?? this.dtnPreferCommunity,
@@ -599,7 +735,12 @@ class SimulationStats {
     required this.transferStalls,
     required this.sentChunks,
     required this.bytesDelivered,
+    required this.routeExpiries,
+    required this.connectivitySamples,
+    required this.connectedSampleShare,
+    required this.meanLargestComponent,
     required this.sentSync,
+    required this.coverTx,
     required this.historyBeacons,
     required this.historyRequests,
     required this.historyReplies,
@@ -620,10 +761,18 @@ class SimulationStats {
     required this.channelDropsMedia,
     required this.channelDropsWithAlternative,
     required this.transferBlocks,
+    required this.rateBroadcastDrops,
+    required this.rateRelayDrops,
+    required this.blockedDrops,
     required this.batteryPercentPerHourNormal,
     required this.batteryPercentPerHourSuper,
     required this.scansPerSec,
     required this.relaysPerSec,
+    required this.wakeLocks,
+    required this.wakeLockMs,
+    required this.wakeLockShareNormal,
+    required this.wakeLockShareSuper,
+    required this.radioDemandRatio,
     required this.scansSkippedAsleep,
     required this.awakeRatio,
     required this.electionEvents,
@@ -706,7 +855,33 @@ class SimulationStats {
   /// the payload bytes the whole exchange occupied. Counted apart from
   /// [sentUnicast]/[deliveryRatio]: a digest is control traffic, not a message anybody
   /// sent to anybody.
+  /// Route entries dropped because no beacon refreshed them inside [neighborScoreTtlMs] —
+  /// the route table's churn. docs/06 §24.7 uses it to test why a 12 s beacon interval
+  /// delivered worse than both 5 s and 25 s in a 60-node crowd.
+  final int routeExpiries;
+
+  /// How many times the radio graph was sampled inside the window, at
+  /// [SimConfig.connectivitySampleMs]. Zero disables the metric, not the network.
+  final int connectivitySamples;
+
+  /// Fraction of those samples at which every node could reach every other. Read this beside
+  /// `broadcastReach` and `deliveryRatio` in any mobile scenario: docs/06 §24.10 shows
+  /// festival_crowd reaches 98% when it stays connected and 54-79% when it does not, and the
+  /// two look like one bimodal metric unless this is beside them.
+  final double connectedSampleShare;
+
+  /// Mean share of the network inside the largest component across those samples. A broadcast
+  /// cannot do better than this, so a reach near it is a topology result and a reach well below
+  /// it is a routing one.
+  final double meanLargestComponent;
+
   final int sentSync;
+
+  /// Dummy beacons put on air by [SimConfig.coverTraffic] (docs/04 §5). Zero unless it is
+  /// on, which is what makes the feature inert. Not included in [controlOverhead], which
+  /// counts the OGMs the routing protocol needs; cover traffic is optional and its whole
+  /// cost belongs in this column.
+  final int coverTx;
   final int historyBeacons;
   final int historyRequests;
   final int historyReplies;
@@ -761,6 +936,16 @@ class SimulationStats {
   /// is backpressure working, not a failure (docs/08 §12.12).
   final int transferBlocks;
 
+  /// Broadcasts a SUPER dropped because the source exceeded docs/04 §6's 5/min.
+  final int rateBroadcastDrops;
+
+  /// Relays refused because the source exceeded docs/04 §6's 30/min.
+  final int rateRelayDrops;
+
+  /// Messages a node ignored because it had blocked the sender locally (docs/04 §6).
+  /// Counted per receiving node, so one broadcast heard by four blockers is four.
+  final int blockedDrops;
+
   /// skills/07 telemetry: "Battery %/h per role, scans/sec, relays/sec".
   /// Measured from the battery snapshot taken when metrics were cleared, over
   /// nodes that are online, in that role and not charging.
@@ -768,6 +953,22 @@ class SimulationStats {
   final double batteryPercentPerHourSuper;
   final double scansPerSec;
   final double relaysPerSec;
+
+  /// skills/07 telemetry, fourth item: "wake-locks". One acquisition per transmission and
+  /// per reception, held for as long as that packet occupies the radio. Mirror of the
+  /// TypeScript fields of the same name, including the reason these are *shares* and not
+  /// percentages of wall clock — see [radioDemandRatio].
+  final int wakeLocks;
+  final double wakeLockMs;
+  final double wakeLockShareNormal;
+  final double wakeLockShareSuper;
+
+  /// Total demanded radio time divided by the radio time that exists (`nodes × window`).
+  /// Above 1 the model asks for more airtime than there is; docs/06 §24 measures roughly
+  /// 3.9 on campus_quad at 20 nodes under every channel model, because a beacon is charged
+  /// one `hopLatencyBleMs` at each of the peers that hear it and reception dominates the
+  /// total. Transmission *counts* are exact; durations are the model's, not a device's.
+  final double radioDemandRatio;
 
   /// Scans a duty-cycling node skipped because its scanner was asleep.
   final int scansSkippedAsleep;
@@ -818,9 +1019,67 @@ class SimulationStats {
         'batteryPercentPerHourSuper': batteryPercentPerHourSuper,
         'scansPerSec': scansPerSec,
         'relaysPerSec': relaysPerSec,
+        'wakeLocks': wakeLocks,
+        'wakeLockMs': wakeLockMs,
+        'wakeLockShareNormal': wakeLockShareNormal,
+        'wakeLockShareSuper': wakeLockShareSuper,
+        'radioDemandRatio': radioDemandRatio,
         'scansSkippedAsleep': scansSkippedAsleep,
         'awakeRatio': awakeRatio,
         'electionEvents': electionEvents,
+        // Everything above is the basic mesh readout. What follows is the rest of the
+        // instrumentation this repository measures with: group traffic, transfers, history
+        // anti-entropy, the DTN carry path, and the radio model of docs/08 §12. All of it was
+        // declared as a field and none of it was emitted, so this serializer reported 38 of the
+        // class's 70 fields.
+        //
+        // The CLI's `--json` is NOT what this fixes: bin/mesh_sim.dart builds its own report map,
+        // rounded to 4 dp and carrying the scenario and probe sections, and it does not call
+        // toJson(). This matters to a consumer that embeds the library instead — which is what
+        // the Flutter app in the roadmap does, and telemetry is the first thing it will want to
+        // persist. Raw values here, rounded ones there; the two are for different readers.
+        //
+        // All scalars, so they encode as they stand. Ordered to match the class above.
+        'sosFloods': sosFloods,
+        'sentGroup': sentGroup,
+        'groupReceipts': groupReceipts,
+        'groupExpected': groupExpected,
+        'groupDeliveryRatio': groupDeliveryRatio,
+        'groupEpochRejected': groupEpochRejected,
+        'transfersStarted': transfersStarted,
+        'transfersCompleted': transfersCompleted,
+        'transferStalls': transferStalls,
+        'sentChunks': sentChunks,
+        'bytesDelivered': bytesDelivered,
+        'routeExpiries': routeExpiries,
+        'connectivitySamples': connectivitySamples,
+        'connectedSampleShare': connectedSampleShare,
+        'meanLargestComponent': meanLargestComponent,
+        'sentSync': sentSync,
+        'coverTx': coverTx,
+        'historyBeacons': historyBeacons,
+        'historyRequests': historyRequests,
+        'historyReplies': historyReplies,
+        'historyEntriesSynced': historyEntriesSynced,
+        'historyEpochDropped': historyEpochDropped,
+        'historyBytes': historyBytes,
+        'bundlesPruned': bundlesPruned,
+        'dtnSuperCarries': dtnSuperCarries,
+        'dtnCommunityCarries': dtnCommunityCarries,
+        'channelDeferrals': channelDeferrals,
+        'channelDeferMs': channelDeferMs,
+        'channelDrops': channelDrops,
+        'channelCaptured': channelCaptured,
+        'channelDeafRx': channelDeafRx,
+        'channelCaptureEffects': channelCaptureEffects,
+        'channelBackoffs': channelBackoffs,
+        'channelDropsRelayed': channelDropsRelayed,
+        'channelDropsMedia': channelDropsMedia,
+        'channelDropsWithAlternative': channelDropsWithAlternative,
+        'transferBlocks': transferBlocks,
+        'rateBroadcastDrops': rateBroadcastDrops,
+        'rateRelayDrops': rateRelayDrops,
+        'blockedDrops': blockedDrops,
         'latencyByHop': latencyByHop.map((b) => b.toJson()).toList(),
       };
 }
@@ -1317,19 +1576,30 @@ class _PendingAck {
 }
 
 class MeshSimulation {
-  MeshSimulation([SimConfig config = defaultConfig])
-      : config = config,
+  MeshSimulation([SimConfig config = defaultConfig, RoutingSelectorOptions? selectorOptions, int? motionSeed])
+      : _motionRng = motionSeed == null ? null : createRng(motionSeed),
+        _selectorOptions = selectorOptions, config = config,
         rng = createRng(config.seed),
         rf = config.rf {
     // `nodes` is built from the *same* stream as every later draw, so the spawn
     // order is part of the cross-language determinism contract.
     nodes = createNodes(rng, this.config);
+    if(selectorOptions!=null) {
+      for(final n in nodes) { _routingSelectors[n.id]=RoutingSelector(selectorOptions); }
+    }
     _schedule();
     runFor(this.config.warmupMs);
     clearRecords();
     stats = _computeStats();
   }
 
+  final Rng? _motionRng;
+  final RoutingSelectorOptions? _selectorOptions;
+  final Map<String, RoutingSelector> _routingSelectors = {};
+  final Map<String, double> _peerObservedAt = {};
+  final List<SelectorDecision> selectorDiagnostics = [];
+  final Map<String,int> selectorDecisionCounts = {};
+  void rollbackRoutingSelector() { for(final c in _routingSelectors.values) {c.rollback();} }
   late List<MeshNode> nodes;
   SimConfig config;
   RfParams rf;
@@ -1373,6 +1643,28 @@ class MeshSimulation {
   int _channelDropsMedia = 0;
   int _channelDropsWithAlternative = 0;
   int _transferBlocks = 0;
+  int _rateBroadcastDrops = 0;
+  int _rateRelayDrops = 0;
+  int _blockedDrops = 0;
+
+  /// Token buckets for docs/04 §6's two caps, keyed `"enforcer|source"`. Held here
+  /// rather than on `MeshNode` so the feature adds no field to the cross-language
+  /// node contract: a node's identity, RNG draw order and golden-vector surface are
+  /// untouched, and the state is per enforcing pair anyway.
+  final Map<String, RateBucket> _rateBroadcasts = {};
+  final Map<String, RateBucket> _rateRelays = {};
+
+  /// docs/04 §6's local blocklist, keyed blocker → blocked peers. On the simulation for
+  /// the same reason the rate buckets are: it adds no field to the cross-language node
+  /// contract, and it is inert while empty, so a shipped run behaves identically whether
+  /// or not the feature exists. Mirror of `blocked` in `src/simulation.ts`.
+  final Map<NodeId, Set<NodeId>> _blocked = {};
+
+  /// skills/07's fourth telemetry item, per node: acquisitions and milliseconds held. On
+  /// the simulation rather than on `MeshNode`, so no field is added to the cross-language
+  /// node contract and no golden vector moves.
+  final Map<NodeId, int> _wakeLocksByNode = {};
+  final Map<NodeId, double> _wakeLockMsByNode = {};
 
   /// Whether the transmission that just went on air collided at its receiver. Written by
   /// [_onAir], read by the contention window to decide whether to widen.
@@ -1391,6 +1683,15 @@ class MeshSimulation {
   /// [ChannelAccess.free] a radio is never busy, so the map stays empty.
   final Map<NodeId, _ChannelState> _channel = <NodeId, _ChannelState>{};
   int _ogmTx = 0;
+  int _coverTx = 0;
+  int _routeExpiries = 0;
+
+  /// In-window connectivity sampling (docs/06 §24.10). Counters, not state: nothing here feeds
+  /// back into routing, so a sample cannot change the world it is measuring.
+  int _connectivitySamples = 0;
+  int _connectedSamples = 0;
+  double _largestComponentSum = 0;
+  double _lastConnectivitySampleMs = -1;
   int _lostDataTx = 0;
   int _lostOgmTx = 0;
   int _duplicateRx = 0;
@@ -1443,6 +1744,9 @@ class MeshSimulation {
     for (final node in nodes) {
       final stagger = randRange(rng, 0, config.ogmIntervalMs);
       _queue.push(stagger, EventKind.ogm, node.id);
+      // Reuses the stagger already drawn for the beacon rather than drawing its own, so
+      // enabling cover traffic does not shift the RNG sequence at t=0.
+      if (config.coverTraffic) _queue.push(stagger, EventKind.cover, node.id);
       _queue.push(stagger / 2, EventKind.scan, node.id);
     }
     if (config.trafficIntervalMs > 0) {
@@ -1476,6 +1780,13 @@ class MeshSimulation {
     _channelDropsMedia = 0;
     _channelDropsWithAlternative = 0;
     _transferBlocks = 0;
+    _rateBroadcastDrops = 0;
+    _rateRelayDrops = 0;
+    _blockedDrops = 0;
+    _wakeLocksByNode.clear();
+    _wakeLockMsByNode.clear();
+    _rateBroadcasts.clear();
+    _rateRelays.clear();
     _lastTxCollided = false;
     _channel.clear();
     _txUntil.clear();
@@ -1483,6 +1794,14 @@ class MeshSimulation {
     _rxRssi.clear();
     _rxSeq.clear();
     _ogmTx = 0;
+    _coverTx = 0;
+    _routeExpiries = 0;
+    _connectivitySamples = 0;
+    _connectedSamples = 0;
+    _largestComponentSum = 0;
+    // Sample from the start of the window rather than inheriting the settle period's clock, so
+    // a caller that clears and then runs for 60 s gets 60 s of samples.
+    _lastConnectivitySampleMs = now;
     _lostDataTx = 0;
     _lostOgmTx = 0;
     _duplicateRx = 0;
@@ -1589,6 +1908,9 @@ class MeshSimulation {
       case EventKind.ogm:
         _onOgm(nodeId);
         break;
+      case EventKind.cover:
+        _onCover(nodeId);
+        break;
       case EventKind.election:
         _onElection();
         break;
@@ -1643,7 +1965,7 @@ class MeshSimulation {
     final dtSec = config.physicsIntervalMs / 1000;
     for (final node in nodes) {
       if (!node.isOnline) continue;
-      integrateMotion(node, rng, dtSec, config.areaWidth, config.areaHeight,
+      integrateMotion(node, _motionRng ?? rng, dtSec, config.areaWidth, config.areaHeight,
           config.enableMobility);
       // A duty-cycling node with its scanner off burns less: skills/07's whole
       // argument is that the sleep slot is what keeps NORMAL under 15%/8h.
@@ -1660,6 +1982,7 @@ class MeshSimulation {
         node.role = Role.normal;
         node.reasonTrace = 'Battery depleted';
         _queue.cancel(EventKind.ogm, node.id);
+        _queue.cancel(EventKind.cover, node.id);
         _queue.cancel(EventKind.scan, node.id);
         // A dead radio is an idle radio: whatever it had committed to is gone, and a node
         // that comes back must not inherit a busy transmitter.
@@ -1671,6 +1994,11 @@ class MeshSimulation {
         _rxSeq.remove(node.id);
       }
     }
+    // Sampled here rather than from its own event: a queue entry would carry a sequence number,
+    // and two events at the same instant are ordered by it, so adding one could reorder
+    // unrelated events. This consumes no random number and schedules nothing, so a published
+    // number and a golden vector are both untouched by it.
+    _sampleConnectivity();
     _queue.push(now + config.physicsIntervalMs, EventKind.physics, '*');
   }
 
@@ -1682,13 +2010,76 @@ class MeshSimulation {
     node.seq++;
     _beacon(node, buildOgm(node));
     final jitter = randRange(rng, -config.ogmJitterMs, config.ogmJitterMs);
-    _queue.push(now + math.max(200.0, config.ogmIntervalMs + jitter),
+    _queue.push(now + math.max(200.0, _ogmIntervalFor(node) + jitter),
         EventKind.ogm, nodeId);
+  }
+
+  /// Put one dummy beacon on air (docs/04 §5, "dummy beacons at low rate").
+  ///
+  /// The point of cover traffic is that an observer cannot tell it from the real thing, so
+  /// it is counted exactly where a real transmission is counted — [MeshNode.txCount] — and
+  /// nowhere else. It does not enter the message path: no routing state, no delivery, no
+  /// ACK. Returning early when the knob is off keeps the reschedule from happening, so a
+  /// disabled run pushes no event and spends no draw.
+  void _onCover(String nodeId) {
+    if (!config.coverTraffic) return;
+    final node = _byId(nodeId);
+    if (node == null || !node.isOnline) return;
+    node.txCount++;
+    _coverTx++;
+    _pushLog(MeshLogKind.ogm, node.id, 'dummy beacon (cover traffic) → peers in range');
+    final jitter = randRange(rng, -config.ogmJitterMs, config.ogmJitterMs);
+    _queue.push(now + math.max(200.0, config.coverIntervalMs + jitter),
+        EventKind.cover, nodeId);
+  }
+
+  /// The interval before this node's next scan, under [SimConfig.scanIntervalMode] — docs/05
+  /// §1.2's adaptive-scan-interval row. Scaled from the peer count the *previous* scan found,
+  /// because a node cannot know how dense its neighbourhood is before it looks, which is why the
+  /// clamp matters: a node that has just moved into a crowd scans at its old, longer interval for
+  /// one cycle, and a node just left alone scans at its old, shorter one.
+  double _scanIntervalFor(MeshNode node) {
+    final base = node.role == Role.superNode
+        ? config.scanIntervalSuperMs
+        : config.scanIntervalNormalMs;
+    if (config.scanIntervalMode == ScanIntervalMode.fixed) return base;
+    final peers = math.max(1, node.peerIds.length);
+    final reference = math.max(1, config.scanDensityReferencePeers);
+    // Inverse of the beacon rule: dense scans sooner, sparse scans later.
+    final raw = (base * reference) / peers;
+    return math.min(base * 4, math.max(base / 4, raw));
+  }
+
+  /// The interval before this node's next beacon, under [SimConfig.ogmIntervalMode].
+  ///
+  /// [OgmIntervalMode.density] holds the receptions a node imposes constant: at interval `I`
+  /// with `p` peers it causes `p / I` receptions per millisecond, so setting `I` proportional
+  /// to `p` keeps that product at whatever the reference density produces. Called after
+  /// `_refreshPeerList`, so `peerIds` is this instant's neighbourhood. Consumes no random
+  /// number — the jitter draw belongs to the caller and happens either way — so the fixed
+  /// mode's sequence of draws is untouched and the golden vectors do not move.
+  double _ogmIntervalFor(MeshNode node) {
+    if (config.ogmIntervalMode == OgmIntervalMode.fixed) return config.ogmIntervalMs;
+    final peers = math.max(1, node.peerIds.length);
+    final reference = math.max(1, config.ogmDensityReferencePeers);
+    final raw = (config.ogmIntervalMs * peers) / reference;
+    final floor = config.ogmIntervalMs / 4;
+    // Two chances per soft-state TTL: a neighbour expires at neighborScoreTtlMs, and an
+    // interval at half that survives one lost beacon, which BLE links produce routinely.
+    final ceiling = neighborScoreTtlMs / 2;
+    return math.min(ceiling, math.max(floor, raw));
   }
 
   /// Transmit an OGM to every peer, then let each peer gossip it onward.
   void _beacon(MeshNode node, Ogm ogm) {
-    for (final peer in peersInRange(node, nodes, rf)) {
+    final peers = peersInRange(node, nodes, rf);
+    // One beacon is one broadcast, however many peers are in range to hear it: the per-peer
+    // loop below exists to give each link its own loss draw, not because the radio
+    // transmits once per neighbour. Charging the sender per peer inflated an idle node's
+    // wake-lock share past 100 % of the clock, which is how that was caught. The receiver
+    // side *is* per peer, because each of them really does wake and listen.
+    if (peers.isNotEmpty) _holdWakeLock(node.id, _beaconWakeMs(ogm));
+    for (final peer in peers) {
       _ogmTx++;
       _pushLog(
           MeshLogKind.ogm,
@@ -1699,6 +2090,7 @@ class MeshSimulation {
         _lostOgmTx++;
         continue;
       }
+      _holdWakeLock(peer.id, _beaconWakeMs(ogm));
       _acceptOgm(peer, ogm, node.id);
     }
   }
@@ -1709,14 +2101,18 @@ class MeshSimulation {
     if (!shouldGossip) return;
     final next = ogmToGossip(ogm, config.ogmTtl);
     if (next == null) return;
-    for (final peer in peersInRange(receiver, nodes, rf)) {
-      if (peer.id == via) continue;
+    // One gossip retransmission, not one per neighbour — the same reasoning as [_beacon].
+    final gossipTo =
+        peersInRange(receiver, nodes, rf).where((p) => p.id != via).toList();
+    if (gossipTo.isNotEmpty) _holdWakeLock(receiver.id, _beaconWakeMs(next));
+    for (final peer in gossipTo) {
       _ogmTx++;
       if (chance(rng,
           effectiveLossProbability(receiver, peer, rf, config.linkRetries))) {
         _lostOgmTx++;
         continue;
       }
+      _holdWakeLock(peer.id, _beaconWakeMs(next));
       _acceptOgm(peer, next, receiver.id);
     }
   }
@@ -1798,9 +2194,7 @@ class MeshSimulation {
   void _onScan(String nodeId) {
     final node = _byId(nodeId);
     if (node == null || !node.isOnline) return;
-    final interval = node.role == Role.superNode
-        ? config.scanIntervalSuperMs
-        : config.scanIntervalNormalMs;
+    final interval = _scanIntervalFor(node);
 
     if (!isAwake(node)) {
       // Scanner off: no discovery, no OppQueue hand-off, no MPR recompute this
@@ -1821,7 +2215,7 @@ class MeshSimulation {
       node.avgRssi = sum / peers.length;
     }
     pruneSeenCache(node, now);
-    pruneStaleEntries(node, now, neighborScoreTtlMs);
+    _routeExpiries += pruneStaleEntries(node, now, neighborScoreTtlMs);
     pruneOppQueue(node, now);
     node.mprSet =
         selectMprSet(node, nodes, config.communityRelayPreference);
@@ -1859,6 +2253,7 @@ class MeshSimulation {
   /// MPR set are deterministic across runs and across both language engines.
   List<MeshNode> _refreshPeerList(MeshNode node) {
     final peers = peersInRange(node, nodes, rf);
+    if(_selectorOptions!=null) _peerObservedAt[node.id]=now;
     node.peerCount = peers.length;
     node.peerIds = peers.map((p) => p.id).toList()..sort();
     return peers;
@@ -2162,7 +2557,18 @@ class MeshSimulation {
   /// and optionally on a timer measured from the path rather than a constant.
   double _ackTimeoutFor(MeshMessage msg) {
     final id = msg.transferId;
-    if (id == null) return config.ackTimeoutMs;
+    if (id == null) {
+      final node=_byId(msg.from), controller=_routingSelectors[msg.from];
+      if(_selectorOptions!=null && node!=null && controller!=null) {
+        final decision=controller.decide(LocalRoutingContext(node.peerCount.toDouble(),
+          node.oppQueue.length.toDouble(),config.dutyCycleEnabled?1:0,node.battery,node.batterySaver,
+          _peerObservedAt[node.id]??double.negativeInfinity),now);
+        selectorDecisionCounts[decision.reason]=(selectorDecisionCounts[decision.reason]??0)+1;
+        selectorDiagnostics.add(decision);
+        if(selectorDiagnostics.length>256) selectorDiagnostics.removeAt(0);
+      }
+      return config.ackTimeoutMs;
+    }
     final t = transfers[id];
     return t == null ? config.mediaAckTimeoutMs : _transferTimeoutMs(t);
   }
@@ -2204,6 +2610,123 @@ class MeshSimulation {
     }
     t.rttVarMs = 0.75 * t.rttVarMs + 0.25 * (srtt - rtt).abs();
     t.srttMs = 0.875 * srtt + 0.125 * rtt;
+  }
+
+  /// How long [bytes] take to push over [transport] at the modelled bit rate — the whole
+  /// packet, unlike [serializationMs], which charges only the excess over a full BLE packet
+  /// because the calibrated hop latency already includes one.
+  double airtimeMs(int bytes, TransportType transport) {
+    final kbps = transport == TransportType.wifiDirect
+        ? config.wifiDirectKbps
+        : config.bleKbps;
+    return (math.max(0, bytes) * 8) / kbps; // bits over kbit/s is milliseconds
+  }
+
+  /// How long a packet holds a radio, under [SimConfig.radioOccupancy]. The
+  /// [RadioOccupancy.hopLatency] branch is the expression `_onAir` used before this method
+  /// existed, so the default model is unchanged and the golden vectors do not move.
+  double occupancyMs(int bytes, TransportType transport) {
+    if (config.radioOccupancy == RadioOccupancy.airtime) {
+      return airtimeMs(bytes, transport);
+    }
+    return (transport == TransportType.wifiDirect
+            ? config.hopLatencyWifiMs
+            : config.hopLatencyBleMs) +
+        serializationMs(bytes, transport);
+  }
+
+  /// What one beacon costs in wake-lock time. Beacons ride [_beacon] rather than [_onAir],
+  /// so under the shipped occupancy model they are accounted as one BLE hop with no payload
+  /// term. It cannot be ignored, because on an idle network beaconing is the only radio
+  /// activity there is — one acquisition every 2 s per node.
+  ///
+  /// Under [RadioOccupancy.airtime] the duration comes from [ogmWireBytes], derived from the
+  /// fields an OGM actually carries, so a beacon advertising 30 neighbours and 8 routes
+  /// costs what that payload costs and one advertising 3 neighbours costs far less.
+  double _beaconWakeMs(Ogm ogm) {
+    if (config.radioOccupancy == RadioOccupancy.airtime) {
+      return airtimeMs(
+          ogmWireBytes(ogm.neighborIds.length, ogm.bestHopTo.length,
+              config.ogmAliasBytes),
+          TransportType.ble);
+    }
+    return config.hopLatencyBleMs;
+  }
+
+  /// One wake-lock acquisition of [ms] milliseconds by [nodeId] (skills/07 telemetry).
+  void _holdWakeLock(NodeId nodeId, double ms) {
+    _wakeLocksByNode[nodeId] = (_wakeLocksByNode[nodeId] ?? 0) + 1;
+    _wakeLockMsByNode[nodeId] = (_wakeLockMsByNode[nodeId] ?? 0) + ms;
+  }
+
+  /// Wake locks acquired by one node since the metrics were cleared.
+  int wakeLocksFor(NodeId nodeId) => _wakeLocksByNode[nodeId] ?? 0;
+
+  /// Milliseconds one node has spent holding a wake lock since the metrics were cleared.
+  double wakeLockMsFor(NodeId nodeId) => _wakeLockMsByNode[nodeId] ?? 0;
+
+  /// Component sizes of the radio graph right now — who can hear whom — largest first.
+  ///
+  /// A node is in a component with the peers inside RF range of it, which is the graph a
+  /// broadcast has to cross. docs/06 §24.10 uses this to explain festival_crowd's two modes,
+  /// and any measurement of reach in a mobile network should report it beside the reach,
+  /// because a graph sampled once after the window cannot see a partition that healed.
+  List<int> componentSizes() =>
+      radioComponents(nodes, rf).map((c) => c.length).toList();
+
+  /// The radio graph's components as node-id lists, largest first — the same walk
+  /// [componentSizes] reports the sizes of, for a caller that needs to know *which* node is in
+  /// which piece. The TypeScript visualiser draws it; a probe could use it to attribute a
+  /// delivery failure to the component the sender was in.
+  List<List<NodeId>> components() => radioComponents(nodes, rf);
+
+  /// Take one connectivity sample if the interval has elapsed. Called from the physics tick, so
+  /// it adds no event to the queue and consumes no random number.
+  void _sampleConnectivity() {
+    final every = config.connectivitySampleMs;
+    if (every <= 0) return;
+    if (_lastConnectivitySampleMs < 0) _lastConnectivitySampleMs = now;
+    if (now - _lastConnectivitySampleMs < every) return;
+    _lastConnectivitySampleMs = now;
+    final sizes = componentSizes();
+    if (sizes.isEmpty) return;
+    _connectivitySamples++;
+    if (sizes.length == 1) _connectedSamples++;
+    _largestComponentSum += sizes.first / nodes.length;
+  }
+
+  /// Block a peer locally, as docs/04 §6 specifies: no moderation server exists, so the
+  /// list never leaves the device and never affects anyone else's view of the network.
+  /// Returns whether the list changed.
+  ///
+  /// Keyed on the sender's node id, which is the mesh's identity: docs/07 §4 derives
+  /// `destHint8 = SHA-256(pubKey)[0:8]`, and a node id carries that hint, so blocking a
+  /// pubKey and blocking a node id are the same act on air.
+  bool blockPeer(NodeId blockerId, NodeId peerId) {
+    if (blockerId == peerId) return false; // a node cannot block itself
+    final list = _blocked[blockerId];
+    if (list != null) return list.add(peerId);
+    _blocked[blockerId] = {peerId};
+    return true;
+  }
+
+  /// Undo a block. Returns whether the list changed.
+  bool unblockPeer(NodeId blockerId, NodeId peerId) {
+    final list = _blocked[blockerId];
+    if (list == null || !list.remove(peerId)) return false;
+    if (list.isEmpty) _blocked.remove(blockerId);
+    return true;
+  }
+
+  /// Whether [blockerId] has blocked [peerId].
+  bool isBlocked(NodeId blockerId, NodeId peerId) =>
+      _blocked[blockerId]?.contains(peerId) ?? false;
+
+  /// The peers a node has blocked, sorted — the same contract as [MeshNode.peerIds].
+  List<NodeId> blockedPeers(NodeId blockerId) {
+    final list = _blocked[blockerId]?.toList() ?? <NodeId>[];
+    list.sort();
+    return list;
   }
 
   MeshMessage? sendMessage(
@@ -2769,10 +3292,7 @@ class MeshSimulation {
     // below needs it before the packet's fate is known, and both branches that never land
     // return it. No random number is consumed here, so `ChannelCapture.none` stays
     // bit-identical to the model every other result was measured under.
-    final occupied = (msg.transport == TransportType.wifiDirect
-            ? config.hopLatencyWifiMs
-            : config.hopLatencyBleMs) +
-        serializationMs(msg.sizeBytes, msg.transport);
+    final occupied = occupancyMs(msg.sizeBytes, msg.transport);
     if (config.channelAccess != ChannelAccess.free) {
       // A retry timer measures the silence after a transmission, so under a queued radio it
       // has to start when the packet leaves rather than when it was handed over.
@@ -2785,6 +3305,10 @@ class MeshSimulation {
     // survives the link — and carrier sense needs the same fact from the other side, because
     // what a sender listens for is exactly its peers' transmit windows.
     if (capture || sense) _txUntil[node.id] = now + occupied;
+    // skills/07 "wake-locks": a transmission holds the radio — and therefore the CPU — for
+    // as long as the packet occupies it. Accumulated here rather than read off `_txUntil`,
+    // which the shipped `free`/`none` baseline never maintains.
+    _holdWakeLock(node.id, occupied);
     if (chance(rng, loss)) {
       _lostDataTx++;
       _recordTxOutcome(node, 0);
@@ -2883,7 +3407,18 @@ class MeshSimulation {
     final airTime = base +
         serializationMs(msg.sizeBytes, msg.transport) +
         randRange(rng, config.jitterMinMs, config.jitterMaxMs);
-    if (capture) _rxUntil[target.id] = now + airTime;
+    // Occupancy is not latency. `airTime` says when this packet lands, which keeps its
+    // hop-latency base under both models because that is what docs/02 §6's budget measures;
+    // `rxOccupied` says how long the radio was busy hearing it, which is the only one of the
+    // two [SimConfig.radioOccupancy] may change. Identical under the shipped model.
+    final rxOccupied = config.radioOccupancy == RadioOccupancy.airtime
+        ? airtimeMs(msg.sizeBytes, msg.transport)
+        : airTime;
+    if (capture) _rxUntil[target.id] = now + rxOccupied;
+    // The receiving side of the same lock, counted whether or not the packet survives the
+    // link: a radio that woke and listened spent the power either way, which is what makes
+    // a flood a battery-drain attack rather than a bandwidth one.
+    _holdWakeLock(target.id, rxOccupied);
     int? seq;
     if (config.channelCapture == ChannelCapture.strongest) {
       // Only assigned here, so the two shipped modes consume nothing and behave exactly as
@@ -3011,6 +3546,70 @@ class MeshSimulation {
       trace.hops.add(hopRecord);
     }
 
+    // Placed after the hop record exists so a suppressed broadcast still shows in
+    // the hop trace, which is the artifact an auditor reads (docs/07 §6).
+    //
+    // docs/04 §6: "Max 5 broadcasts / minute per node; SUPERs drop excess."
+    // Enforced by SUPERs only, exactly as written — a limitation worth stating
+    // rather than hiding, since a NORMAL node neither relays far nor filters, so a
+    // flooder still reaches its own one-hop neighbourhood. The gate is on the
+    // `broadcast` type and not on `to == broadcastAddress`, because SOS travels to
+    // BROADCAST too and docs/04 §6 gives SOS its own mechanism (opt-in listening,
+    // plus the collapsing in §11); rate-limiting an emergency channel at 5/min would
+    // be a worse failure than the abuse it prevents.
+    if (config.rateLimits &&
+        msg.type == MsgType.broadcast &&
+        (config.broadcastCapScope == BroadcastCapScope.all ||
+            node.role == Role.superNode)) {
+      final gate = admitByRate(_rateBroadcasts, '${node.id}|${msg.from}',
+          config.broadcastPerMinuteCap, now);
+      if (!gate.ok) {
+        _rateBroadcastDrops++;
+        if (hopRecord != null) {
+          hopRecord.action = HopAction.suppressed;
+          hopRecord.reason = gate.reason;
+        }
+        _pushLog(
+            MeshLogKind.decision,
+            node.id,
+            '${msg.id} broadcast from ${msg.from} suppressed by ${node.name} '
+                '(${node.role == Role.superNode ? 'SUPER' : 'NORMAL, cap scope all'}): '
+                '${gate.reason}',
+            peerId: via,
+            msgId: msg.id,
+            msgType: msg.type,
+            hop: msg.hopCount);
+        return;
+      }
+    }
+
+    // docs/04 §6: "Block/mute peer locally (ignore msgs from pubKey)." Placed after the
+    // hop record, like the rate gates, so the audit trail shows a node ignored a message
+    // rather than silently never seeing it — which is the difference between a user
+    // choice and packet loss. [isBlockableTraffic] keeps control plane and SOS out; see
+    // its doc comment for why blocking an ACK makes the airtime worse.
+    final blockedHere =
+        isBlockableTraffic(msg) && isBlocked(node.id, msg.from);
+    if (blockedHere) {
+      _blockedDrops++;
+      if (hopRecord != null) {
+        hopRecord.action = HopAction.blocked;
+        hopRecord.reason = '${node.name} has blocked ${msg.from}';
+      }
+      _pushLog(
+          MeshLogKind.decision,
+          node.id,
+          '${msg.id} from ${msg.from} ignored by ${node.name}: sender is blocked'
+              '${config.blockScope == BlockScope.relay ? ' (and not relayed)' : ''}',
+          peerId: via,
+          msgId: msg.id,
+          msgType: msg.type,
+          hop: msg.hopCount);
+      // "relay" is §6's "ignore floods": the blocker stops paying for someone it blocked.
+      // "delivery" stops here and lets the mesh carry the copy for everyone else.
+      if (config.blockScope == BlockScope.relay) return;
+    }
+
     // skills/04: "On ackReceived from dest: remove + gossip ACK (so relays can prune)".
     // The ACK comes back along the reverse path, and the nodes on that path are the ones
     // that were carrying copies, so hearing one is enough to drop the bundle — no extra
@@ -3020,7 +3619,7 @@ class MeshSimulation {
       _bundlesPruned += pruneAcked(node, msg.body.substring(4));
     }
 
-    if (msg.to == node.id) {
+    if (msg.to == node.id && !blockedHere) {
       if (msg.type == MsgType.ack) {
         final ackedId = msg.body.length > 4 ? msg.body.substring(4) : '';
         final pending = _pendingAcks.remove(ackedId);
@@ -3064,7 +3663,10 @@ class MeshSimulation {
     if (msg.to == groupAddress && msg.groupId != null) {
       final group = groups[msg.groupId];
       final isMember = group != null && group.members.contains(node.id);
-      if (group != null && isMember && group.keyEpoch == msg.groupEpoch) {
+      if (group != null &&
+          isMember &&
+          group.keyEpoch == msg.groupEpoch &&
+          !blockedHere) {
         final fresh = deliverToInbox(node, msg);
         if (fresh) {
           _recordDelivery(node, msg, trace);
@@ -3079,7 +3681,7 @@ class MeshSimulation {
               msgType: msg.type,
               hop: msg.hopCount + 1);
         }
-      } else if (group != null && isMember) {
+      } else if (group != null && isMember && !blockedHere) {
         // A member holding an older epoch cannot decrypt this copy: the key rotated
         // when somebody left or joined (docs/04 §4, "groupKey rotated on member
         // leave"). It still relays — the bytes are not secret to the network, only
@@ -3097,7 +3699,7 @@ class MeshSimulation {
       // normal case in a scoped flood, and logging it would drown the capture.
     }
 
-    if (msg.to == broadcastAddress) {
+    if (msg.to == broadcastAddress && !blockedHere) {
       final fresh = deliverToInbox(node, msg);
       if (fresh) {
         _broadcastReceipts++;
@@ -3130,6 +3732,33 @@ class MeshSimulation {
           msgType: msg.type,
           hop: msg.hopCount);
       return;
+    }
+
+    // docs/04 §6: "Cap relay to 30 msgs/min per source; ignore floods." Every node
+    // enforces this one, because relaying is what every node does and a flood costs
+    // the relays' queues rather than a SUPER's attention — docs/08 §12.13 measured
+    // queue drops running eight to one against receiver collisions, so the buffer is
+    // where a flood actually lands.
+    if (config.rateLimits && countsAgainstRelayCap(msg)) {
+      final gate = admitByRate(_rateRelays, '${node.id}|${msg.from}',
+          config.relayPerSourcePerMinuteCap, now);
+      if (!gate.ok) {
+        _rateRelayDrops++;
+        if (hopRecord != null) {
+          hopRecord.action = HopAction.suppressed;
+          hopRecord.reason = gate.reason;
+        }
+        _pushLog(
+            MeshLogKind.decision,
+            node.id,
+            '${msg.id} from ${msg.from} not relayed by ${node.name}: '
+                '${gate.reason}',
+            peerId: via,
+            msgId: msg.id,
+            msgType: msg.type,
+            hop: msg.hopCount);
+        return;
+      }
     }
 
     final forwarded = msg.copyWith(ttl: msg.ttl - 1, hopCount: msg.hopCount + 1);
@@ -3538,6 +4167,7 @@ class MeshSimulation {
       node.reasonTrace = 'Offline';
       node.offlineAt = now;
       _queue.cancel(EventKind.ogm, node.id);
+      _queue.cancel(EventKind.cover, node.id);
       _queue.cancel(EventKind.scan, node.id);
       _channel.remove(node.id);
       _queue.cancel(EventKind.channel, node.id);
@@ -3549,6 +4179,7 @@ class MeshSimulation {
       node.offlineAt = -1;
       node.reasonTrace = 'Reconnected';
       _queue.push(now + 100, EventKind.ogm, node.id);
+      if (config.coverTraffic) _queue.push(now + 100, EventKind.cover, node.id);
       _queue.push(now + 100, EventKind.scan, node.id);
     }
     stats = _computeStats();
@@ -3657,6 +4288,18 @@ class MeshSimulation {
         ? 1.0
         : dutyNodes.where(isAwake).length / dutyNodes.length;
 
+    // Not filtered on charging, unlike the battery rates: a plugged-in device still holds
+    // its CPU awake for every packet it hears. The denominator is the network total, so the
+    // two shares sum to 100 and neither can exceed it — the property that makes them
+    // readable when the absolute milliseconds are not (see radioDemandRatio).
+    double heldBy(Role role) => online
+        .where((n) => n.role == role)
+        .fold<double>(0, (sum, n) => sum + (_wakeLockMsByNode[n.id] ?? 0));
+    final heldTotal = online.fold<double>(
+        0, (sum, n) => sum + (_wakeLockMsByNode[n.id] ?? 0));
+    double wakeShare(Role role) =>
+        heldTotal == 0 ? 0 : (heldBy(role) / heldTotal) * 100;
+
     // roadmap Phase 2 metrics dashboard: "latency by hop". Scoped like the
     // docs/04 §5 budget — first-attempt routed unicast only — so a retry (which
     // adds a whole ACK timeout) and a DTN bundle (which measures a meeting time,
@@ -3704,6 +4347,7 @@ class MeshSimulation {
       roleChangesPerNodeMin: roleChangesPerNodeMin,
       electionsPerMin: roleChangesPerNodeMin,
       controlOverhead: _ogmTx,
+      coverTx: _coverTx,
       retriesSent: _retriesSent,
       retriesExhausted: _retriesExhausted,
       acksReceived: _acksReceived,
@@ -3721,6 +4365,14 @@ class MeshSimulation {
       transferStalls: _transferStalls,
       sentChunks: _sentChunks,
       bytesDelivered: _bytesDelivered,
+      routeExpiries: _routeExpiries,
+      connectivitySamples: _connectivitySamples,
+      connectedSampleShare: _connectivitySamples == 0
+          ? 1.0
+          : _connectedSamples / _connectivitySamples,
+      meanLargestComponent: _connectivitySamples == 0
+          ? 1.0
+          : _largestComponentSum / _connectivitySamples,
       sentSync: _sentSync,
       historyBeacons: _historyBeacons,
       historyRequests: _historyRequests,
@@ -3742,10 +4394,19 @@ class MeshSimulation {
       channelDropsMedia: _channelDropsMedia,
       channelDropsWithAlternative: _channelDropsWithAlternative,
       transferBlocks: _transferBlocks,
+      rateBroadcastDrops: _rateBroadcastDrops,
+      rateRelayDrops: _rateRelayDrops,
+      blockedDrops: _blockedDrops,
       batteryPercentPerHourNormal: drainPerHour(Role.normal),
       batteryPercentPerHourSuper: drainPerHour(Role.superNode),
       scansPerSec: _scanCount / elapsedSec,
       relaysPerSec: _relayTx / elapsedSec,
+      wakeLocks: _wakeLocksByNode.values.fold<int>(0, (a, b) => a + b),
+      wakeLockMs: heldTotal,
+      wakeLockShareNormal: wakeShare(Role.normal),
+      wakeLockShareSuper: wakeShare(Role.superNode),
+      radioDemandRatio:
+          heldTotal / (math.max(1, online.length) * elapsedMs),
       scansSkippedAsleep: _scansSkippedAsleep,
       awakeRatio: awakeRatio,
       electionEvents: roleEvents.length,

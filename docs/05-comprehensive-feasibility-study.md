@@ -58,6 +58,31 @@ Continuous BLE scanning and Wi-Fi Direct group ownership are the two dominant po
 | Role-based duty cycling | NORMAL: scan 3 s / sleep 7 s (30% duty); SUPER: continuous scan (user-opt-in) | NORMAL drains ~15%/8h target; SUPER warned in UI |
 | Transport selection | BLE for discovery + text (µW range); Wi-Fi Direct activated only for media/voice, then torn down | Avoids continuous Wi-Fi GO power cost |
 | Adaptive scan intervals | Scan interval scales with peer density: dense = shorter interval (peers stable), sparse = longer (fewer discoveries expected) | Reduces redundant wake-ups |
+
+> **Implementation note (Oct 2026 — `src/simulation.ts` + `sim/mesh_sim`; evidence in `docs/06-simulator-findings.md` §10.3, §24):** of the three layers above, **one is implemented and
+> measured, one is half implemented, and one is not implemented at all**. They are worth separating because this section is the corpus's only account of where the battery budget comes from.
+>
+> 1. **Role-based duty cycling — implemented, measured, and it is what makes the budget.** `dutyCycleEnabled` with `normalScanWindowMs` 3 s / `normalScanCycleMs` 10 s and
+>    `sleepDrainFactor` 0.25, exactly the row above. Measured `awakeRatio` is **0.333** on `campus_quad` and **0.306** on `festival_crowd`, so a NORMAL node's effective rate halves and its
+>    8-hour drain falls from 19-25% to **8.7-12.4%** — under the 15% target, which is why CI gates that figure in `--duty-cycle` mode only. Switching it on *widens* the measured
+>    SUPER:NORMAL battery ratio from 2.98× to **4.23×**, and the scan-duty ratio alone (`1 / awakeRatio`) is **3.00-3.27×** — the same order as the documented 4×, from a mechanism rather
+>    than from calibration (§24.1).
+> 2. **Transport selection — half implemented.** The BLE/Wi-Fi Direct split ships and is the seam every latency in this repository is measured against: `selectTransport` puts a packet on
+>    Wi-Fi Direct above 1 024 B, so a 929-character body rides BLE and a 930-character one does not (`docs/07` §4). *"Then torn down"* is **not** modelled, and neither is the GO's power
+>    cost: the engine charges a Wi-Fi Direct group nothing for existing, which §24.1 names as the one missing term in the role gap. It cannot simply be added, because this section gives
+>    the GO cost as *"significantly more"* with no number, and `SUPER_DRAIN_PER_HOUR = (0.15 / 8) * 4` may already bundle it with continuous scanning — so adding a GO factor on top risks
+>    charging the same drain twice. Settling that needs a device measurement (Battery Historian on a phone holding a group against one that does not), not a simulator constant.
+> 3. **Adaptive scan intervals — now implemented, and its claimed benefit is not measurable here.** `scanIntervalMode: "density"` (`--scan-interval-mode`) scales each node's scan interval
+>    by its peer count, dense sooner and sparse later, anchored so ten peers reproduces the configured interval and clamped to a quarter..four times it. It does what this row specifies:
+>    scans per second fall ~70% in `sparse_village` and rise ~75% in `festival_crowd`. But the *"reduces redundant wake-ups"* impact column **cannot be evaluated by this engine**: cutting
+>    scans by 70% moves NORMAL drain from 1.331 to 1.331 %/h, identical to three decimals, because `batteryDrain` charges the duty-cycle *window* and not the scan events inside it. What the
+>    row does buy is delivery, and it buys it by *spending* wake-ups rather than saving them: **+6.8 points** in a 60-node crowd with the duty cycle on (82.5 → 89.4%). So for the dense case
+>    this row is a delivery lever with a battery cost the simulator cannot charge, not a saving — and pricing it needs a device, which is what layer 2's note says about the group-owner role
+>    too. `docs/06-simulator-findings.md` §24.15 has the grid.
+>
+>    The direction this row specifies is **dense = shorter**, the opposite of the beacon-interval rule `docs/06` §24.11 built and rejected, and §24.15 explains why the two are not in
+>    conflict: a scan is a local cost bought for a local benefit, so spending it where the neighbourhood is dense pays, while a beacon is a local cost imposed on *every* neighbour, so
+>    spending it where the neighbourhood is dense is exactly backwards. Same word "density", opposite sign, and the sign comes from who pays.
 | Charging bonus | Plugged devices get +0.1 coverage score → more likely to become SUPER | Encourages café/tablet community relays |
 | Battery floor | Battery <25% → forced demotion from SUPER; <15% → minimal beacon only | Prevents dead-phone scenarios |
 | OS-level integration | Android ForegroundService (connectedDevice type) + battery-optimization exemption request; iOS bluetooth-central background mode with state restoration | Prevents silent OS kills; documents tradeoff to user |
@@ -164,7 +189,7 @@ Duman needs a routing protocol that works on phones: low memory, low CPU, tolera
 Rationale:
 - BATMAN-lite gives the lowest memory footprint (O(n), capped at 200 nodes) and proven resilience to churn without requiring global topology.
 - MPR flood suppression (SUPER nodes relay; NORMAL nodes wait 300 ms and only relay if no SUPER retransmission heard) reduces redundant transmissions by ~30% vs naive flood.
-  - **Measured: 91-93% reduction on the 20-node case** (7-9% of the naive-flood relay budget), so the ~30% target is met with wide margin. But the rule *as phrased* is unsafe — "no SUPER retransmission heard" does not imply this node's neighbours are covered. On a 60-node crowd it cost 16-29 points of delivery. Gating suppression on **coverage** (the neighbours heard from, plus their advertised neighbour lists, must cover all of this node's 1-hop neighbours) reaches delivery **parity with the same engine without suppression** — and within 0-3 points of naive epidemic flooding on the 20-node case, 5-9 points in the 60-node crowd, where naive flooding buys that margin with 7-9× the relays. See `docs/03` §6.
+  - **Measured: 90-92% reduction on the 20-node case** (8-10% of the naive-flood relay budget, mean 9.3%), so the ~30% target is met with wide margin. But the rule *as phrased* is unsafe — "no SUPER retransmission heard" does not imply this node's neighbours are covered. On a 60-node crowd it cost 16-29 points of delivery. Gating suppression on **coverage** (the neighbours heard from, plus their advertised neighbour lists, must cover all of this node's 1-hop neighbours) reaches delivery **parity with the same engine without suppression** — and within 0-3 points of naive epidemic flooding on the 20-node case, 5-9 points in the 60-node crowd, where naive flooding buys that margin with 7.8-9.5× the relays. See `docs/03` §6.
   - *Composition of that saving, because the headline number flatters MPR:* most of it is the routing layer, not suppression. Holding routing fixed and switching suppression off (`route-flood`) costs 22-41% more relays in the 20-node quad and 50-58% more in the 60-node crowd. Both arms are reported in `docs/06-simulator-findings.md` §2 and §7. Neither was measurable until the per-link tq fix (`docs/06` §6) — with tq collapsing to 0 on every duplicate beacon, routes were rejected and both arms flooded blindly.
 - Spray-and-Wait DTN handles the partition case that pure MANET protocols don't address — messages survive across disconnections.
 

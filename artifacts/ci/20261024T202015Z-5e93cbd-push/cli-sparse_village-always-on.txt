@@ -1,0 +1,48 @@
+Duman mesh simulator — sparse_village (seed 42, policy mpr)
+──────────────────────────────────────────────────────────────
+  scenario                 sparse_village
+  seed                     42
+  policy                   mpr
+  nodes                    12
+  sent                     150
+  deliveredUnicast         42
+  deliveryRatio            0.28
+  deliveredWithinFiveHops  42
+  withinFiveRatio          0.28
+  superNodes               2
+  superRatio               0.1667
+  timeAvgSuperRatio        0.1667
+  electionsPerMin          0.0429
+  avgHops                  1.0
+  latencyP50Ms             236.5685
+  latencyP95Ms             311.6897
+  relayTx                  1455
+  floodAllRelayTx          4560
+  overheadVsFloodAll       0.3191
+  routeFloodRelayTx        3892
+  overheadVsRouteFlood     0.3738
+  overheadRatio            34.6429
+  mprSuppressed            804
+  retriesSent              209
+  retriesExhausted         103
+  acksReceived             42
+  controlOverhead          12168
+  lostTransmissions        16
+  lostOgmTransmissions     178
+  totalQueued              103
+  avgPeers                 3.0
+  isolatedNodes            0
+  avgScore                 0.5582
+  simTimeMs                233000.0
+  dutyCycle                false
+  batteryPctPerHourNormal  2.4847
+  batteryPctPerHourSuper   0.0
+  batteryPct8hNormal       19.878
+  batteryPct8hSuper        0.0
+  scansPerSec              17.3956
+  relaysPerSec             6.4667
+  awakeRatio               1.0
+  scansSkippedAsleep       0
+  electionEvents           2
+  latencyByHop             hops      n     avg     p95
+                              1     42   245 ms   312 ms

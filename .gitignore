@@ -20,12 +20,27 @@ tool/.build/
 
 # dart
 sim/mesh_sim/.dart_tool/
-sim/mesh_sim/pubspec.lock
+# pubspec.lock is deliberately NOT ignored: this package is an application (`publish_to: none`),
+# not a library, so the Dart guidance is to commit the lock and resolve against it. It is committed
+# as of 991d11c — 49 packages, resolved for Dart >=3.13.0 <4.0.0 on a machine that could reach
+# pub.dev. Where pub.dev is unreachable it still cannot be regenerated, only enforced, so a failed
+# re-resolution is not licence to delete it; see docs/11 §2 and `make doctor`.
 sim/mesh_sim/build/
 
 # local CI run artifacts (tool/ci/): captures, not deliverables
 artifacts/
 
+
+
 # Python bytecode (created by py_compile / imports; never a deliverable)
 __pycache__/
 *.py[cod]
+
+# wget's own log files, and the archives it fetches. `wget` writes ./wget-log when it runs
+# without a terminal, so an unattended SDK download leaves one behind in whatever directory it
+# was started from — a 4 184-line progress log for a 228 MB zip was committed here on
+# 2026-10-28 (991d11c) exactly that way. Neither the download nor its progress output is a
+# deliverable; the fact it happened belongs in docs/11 §2, which is where it now is.
+wget-log
+wget-log.*
+*.zip

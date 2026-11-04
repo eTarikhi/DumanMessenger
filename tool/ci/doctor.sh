@@ -60,8 +60,8 @@ have npm && ok "npm $(npm --version)" "npm ci needs package-lock.json (present)"
 have git && ok "git $(git --version | awk '{print $3}')" "" \
          || bad "git" "MISSING."
 
-have python3 && ok "python3 $(python3 --version | awk '{print $2}')" "tool/ci/diagnostics.py" \
-             || bad "python3" "MISSING — the CI diagnostics step needs it."
+have python3 && ok "python3 $(python3 --version | awk '{print $2}')" "the five checkers in tool/ci/ and diagnostics.py" \
+             || bad "python3" "MISSING — the whole checks job needs it: five static checkers and diagnostics.py."
 
 if have dart; then
   DART_V="$(dart --version 2>&1 | awk '{print $NF}')"
@@ -115,9 +115,17 @@ else
 fi
 
 if [ -f "$DART_DIR/pubspec.lock" ]; then
-  ok "sim/mesh_sim/pubspec.lock" "dart pub get has run"
+  # The lock is a committed artifact (991d11c), so report what it pins rather than only that it
+  # exists: the package count and the SDK range it was resolved under are the two facts that decide
+  # whether `dart pub get --enforce-lockfile` will work on this machine. Both are read out of the
+  # file, never hard-coded — a re-resolved lock changes them and this line should follow.
+  lock_pkgs=$(grep -cE '^  [A-Za-z0-9_]+:$' "$DART_DIR/pubspec.lock" 2>/dev/null) || lock_pkgs='?'
+  lock_sdk=$(awk '/^sdks:/{f=1;next} f&&/^[[:space:]]+dart:/{sub(/^[[:space:]]*dart:[[:space:]]*/,"");gsub(/"/,"");print;exit}' \
+             "$DART_DIR/pubspec.lock" 2>/dev/null) || lock_sdk=''
+  ok "sim/mesh_sim/pubspec.lock" \
+     "committed: ${lock_pkgs} packages, resolved for Dart ${lock_sdk:-an unrecorded SDK range}"
 else
-  meh "sim/mesh_sim/pubspec.lock" "absent — run: cd sim/mesh_sim && dart pub get"
+  meh "sim/mesh_sim/pubspec.lock" "absent — run: cd sim/mesh_sim && dart pub get, then commit it (docs/11 §2)"
 fi
 
 if [ -f "$ROOT/test-fixtures/golden-vectors.json" ]; then
@@ -215,5 +223,5 @@ if [ "$WARN" -gt 0 ]; then
   warn "$WARN warning(s), nothing missing. 'make ci' should run every job."
   exit 0
 fi
-log "everything required is present. 'make ci' will verify all four jobs."
+log "everything required is present. 'make ci' will verify all five jobs."
 exit 0

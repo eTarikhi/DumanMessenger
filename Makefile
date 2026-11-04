@@ -7,6 +7,7 @@
 #
 #   make doctor    is this machine able to verify this repository?
 #   make ci        run the whole CI pipeline locally
+#   make checks    every check at once, one report, and which have never been run
 #   make push      run the pipeline, and push only if it passed
 #   make watch     what did the remote CI do?
 #
@@ -17,19 +18,22 @@ CI    := ./tool/ci
 
 .DEFAULT_GOAL := help
 .PHONY: help doctor install ci ci-fast web dart cli-matrix probes \
-        test typecheck build golden dev media history \
+        test typecheck build golden dev media history e2ee \
         dart-get dart-analyze dart-test dart-cli \
-        push push-dry push-force commit-push watch watch-all follow diagnose \
-        pr pr-dry pr-open pr-local pr-branch pr-squash check-ps1 \
-        act install-hooks clean clean-artifacts
+        push push-dry push-force commit-push watch watch-all follow diagnose blockers \
+        checks checks-list checks-evidence \
+        pr pr-dry pr-open pr-local pr-branch pr-squash check-ps1 check-docs \
+        dart-balance parity rate act install-hooks clean clean-artifacts
 
 ## --- setup -------------------------------------------------------------------
 
 help: ## Show this help
 	@printf '\n%s\n\n' "Duman Messenger — local development and CI"
-	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
+	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) \
 	  | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 	@printf '\n%s\n' "Pipeline exit codes: 0 verified · 1 failed or incomplete · 2 partial"
+	@printf '%s\n'   "  Through make, 1 and 2 both arrive as 2 — that is make's own code for any"
+	@printf '%s\n'   "  recipe failure. Call tool/ci/*.sh directly to tell them apart."
 	@printf '%s\n'   "Docs: docs/10-local-development-and-ci.md  (pipeline, exit codes, monitoring)"
 	@printf '%s\n'   "      docs/11-windows-11-workflow.md       (WSL2, Git Bash, make.ps1)"
 	@printf '%s\n\n' "      docs/12-cli-cheat-sheet.md           (every command, by task)"
@@ -70,6 +74,37 @@ cli-matrix: ## CLI acceptance across all four scenarios and both power models
 
 probes: ## CLI probes: SOS, groups, history anti-entropy, media
 	@$(CI)/run-pipeline.sh --job probes
+
+## --- every check at once -----------------------------------------------------
+#
+# `make ci` mirrors .github/workflows/ci.yml one command for one command, and that mapping is
+# its whole value. `make checks` is deliberately a superset: everything CI runs, plus the
+# checks that only make sense locally, plus a column CI cannot give you — which of these have
+# never actually been run against this tree. It never stops at the first failure.
+
+checks: ## Every check at once, one report; nothing stops at the first failure
+	@$(CI)/collect-checks.sh
+
+checks-list: ## What `make checks` would run, and which checks have never been run
+	@$(CI)/collect-checks.sh --list
+
+checks-evidence: ## `make checks` plus the slow probes that reproduce the docs' numbers
+	@$(CI)/collect-checks.sh --with-evidence
+
+# One command for the daily run. The CI mirror and the check collection were separately
+# runnable and separately interpretable — run-pipeline.sh exits 2 for "partial" while
+# collect-checks.sh exits 1 for both "failed" and "could not run" — so daily.sh composes them,
+# reads the collector's JSON to tell those two apart, and reports one verdict: GREEN, FAILED or
+# INCOMPLETE. INCOMPLETE is not a pass, and on a machine without the Dart SDK it is the expected
+# result, because sim/mesh_sim is the authoritative engine and nothing here can compile it.
+daily: ## Everything: the CI mirror, every check, and the evidence probes. ~27 min
+	@$(CI)/daily.sh
+
+daily-fast: ## The daily quick run: CI mirror (fast) plus every check, no evidence. ~12 min
+	@$(CI)/daily.sh --fast
+
+daily-checks: ## The full CI mirror and every check, but no re-measuring of published numbers
+	@$(CI)/daily.sh --no-evidence
 
 ## --- push, gated -------------------------------------------------------------
 
@@ -126,6 +161,13 @@ follow: ## Wait for the newest run to finish, then explain the result
 diagnose: ## Jobs + annotations for a run (RUN=12345, default newest), and why it failed
 	@$(CI)/watch.sh --diagnose $(RUN)
 
+# Not a check and not in `make checks`: it always exits 0, because "this machine has no Dart
+# SDK" is a fact rather than a defect, and a row that can only pass would sit in a pass/fail
+# table as a permanent pass. It answers a different question from doctor — not "can I verify
+# this repository?" but "why is the project not finished?" — and it measures the answer.
+blockers: ## Why the project is not finished here: toolchain, egress, CI, hardware, roadmap
+	@$(CI)/blockers.sh
+
 act: ## Run the real workflow YAML in Docker via act (JOB=dart to pick one)
 	@command -v act >/dev/null 2>&1 || { printf '\033[31merror:\033[0m act is not installed (needs Docker). brew install act\n'; exit 64; }
 ifdef JOB
@@ -159,6 +201,15 @@ media: ## The media/radio probe. SECT=captureEffect to run one section
 history: ## Group-history anti-entropy probe (docs/06 §17)
 	@npm run history
 
+e2ee: ## What E2EE costs on this mesh (docs/07 §2-§4, §7). SECT=latency|churn|packet|crypto
+	@npm run e2ee $(if $(SECT),-- $(SECT),)
+
+rate: ## What docs/04 §6's abuse limits cost and buy (docs/06 §21). SECT=honest|flood
+	@npm run rate $(if $(SECT),-- $(SECT),)
+
+cover: ## What docs/04 §5's dummy beacons cost and buy (docs/06 §23). SECT=inert|sweep
+	@npm run cover $(if $(SECT),-- $(SECT),)
+
 dart-get: ## dart pub get
 	@cd sim/mesh_sim && dart pub get
 
@@ -179,6 +230,28 @@ clean: clean-artifacts ## Remove build output and CI artifacts
 
 check-ps1: ## Static check of make.ps1, for machines that cannot run PowerShell
 	@python3 $(CI)/check-ps1.py make.ps1
+
+check-docs: ## Does every command the docs tell you to run actually exist?
+	@python3 $(CI)/check-docs.py
+
+# Not a substitute for `dart analyze`, which needs the SDK this target exists to
+# work without. It answers one question about sim/mesh_sim — does every delimiter
+# opened outside a comment or a string get closed — so that a brace mistake shows
+# up here in one line instead of as a hundred analyzer errors on somebody else's
+# machine. `--self-test` runs its own 19 cases, 12 of which must NOT alarm.
+dart-balance: ## Do the Dart sources balance? Needs no Dart SDK
+	@python3 $(CI)/check-dart-balance.py
+
+# The two engines are a contract: same protocol constants, same golden vectors.
+# `make golden` polices the TypeScript side and `dart test` the Dart one, and
+# neither runs where there is no Dart SDK — which is everywhere in this pipeline
+# right now. This compares the constants directly, in both directions of value, and
+# needs nothing but python3.
+parity: ## Do the two engines agree on their constants? Needs no toolchain
+	@python3 $(CI)/check-parity.py
+
+dart-sites: ## Are the Dart engine's repeated declarations all present? Needs no Dart SDK
+	@python3 $(CI)/check-dart-sites.py
 
 clean-artifacts: ## Remove captured CI run artifacts
 	@rm -rf artifacts/ci

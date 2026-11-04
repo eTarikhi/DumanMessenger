@@ -1,0 +1,201 @@
+{
+  "runId": "20261028T032142Z-3ed1af9-checks",
+  "sha": "3ed1af9",
+  "branch": "arena/ff85cb12-dumanmessenger",
+  "groups": [
+    "docs",
+    "ts",
+    "dart",
+    "cli",
+    "probes",
+    "evidence"
+  ],
+  "timestamp": "2026-10-28T04:11:28Z",
+  "seconds": 2984,
+  "passed": 30,
+  "failed": 0,
+  "notRun": 0,
+  "report": "/mnt/c/Users/Administrator/Desktop/Git-Clones/DumanMessenger/artifacts/ci/daily/20261028T030850Z-3ed1af9/REPORT.md",
+  "checks": [
+    {
+      "group": "docs",
+      "name": "drift",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "docs",
+      "name": "dart-balance",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "docs",
+      "name": "parity",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "docs",
+      "name": "dart-sites",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "docs",
+      "name": "ps1",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "docs",
+      "name": "checker-self-test",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "ts",
+      "name": "npm-ci",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "ts",
+      "name": "typecheck",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "ts",
+      "name": "test",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "ts",
+      "name": "golden-regen",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "ts",
+      "name": "golden-diff",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "ts",
+      "name": "build",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "dart",
+      "name": "pub-get",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "dart",
+      "name": "analyze",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "dart",
+      "name": "test",
+      "result": "success",
+      "detail": "+279: All tests passed"
+    },
+    {
+      "group": "dart",
+      "name": "cli",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "cli",
+      "name": "campus_quad-always-on",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "cli",
+      "name": "campus_quad-duty-cycle",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "cli",
+      "name": "sparse_village",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "cli",
+      "name": "festival_crowd",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "cli",
+      "name": "partitioned_pair",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "probes",
+      "name": "sos",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "probes",
+      "name": "group",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "probes",
+      "name": "history",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "probes",
+      "name": "media",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "evidence",
+      "name": "media-probe",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "evidence",
+      "name": "history-probe",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "evidence",
+      "name": "e2ee-probe",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "evidence",
+      "name": "rate-probe",
+      "result": "success",
+      "detail": ""
+    },
+    {
+      "group": "evidence",
+      "name": "cover-probe",
+      "result": "success",
+      "detail": ""
+    }
+  ]
+}

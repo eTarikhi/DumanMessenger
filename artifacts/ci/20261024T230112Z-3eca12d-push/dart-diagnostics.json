@@ -1,0 +1,14 @@
+{
+  "analyze_issues": [],
+  "test_failures": [],
+  "test": {
+    "passed": 228,
+    "failed": 0,
+    "skipped": 0
+  },
+  "analyze": {
+    "error": 0,
+    "warning": 0,
+    "info": 0
+  }
+}

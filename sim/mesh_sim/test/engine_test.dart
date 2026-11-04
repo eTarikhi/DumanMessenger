@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:duman_mesh_sim/mesh_sim.dart';
@@ -327,11 +328,17 @@ void main() {
     test('expires soft state that has not been refreshed', () {
       final me = makeNode('me', 0, 0);
       receiveOgm(me, buildOgm(makeNode('x', 0, 0, seq: 1)), 'x', 1000);
-      pruneStaleEntries(me, 1000, neighborScoreTtlMs);
+      // Nothing is stale yet, so nothing is dropped and nothing is reported.
+      expect(pruneStaleEntries(me, 1000, neighborScoreTtlMs), equals(0));
       expect(me.nextHopTable.containsKey('x'), isTrue);
-      pruneStaleEntries(me, 40000, neighborScoreTtlMs);
+      // One route entry ages out, and the returned count is what the caller accumulates
+      // into `routeExpiries` — the churn measure docs/06 §24.7 needed to test why a 12 s
+      // beacon interval looked worse than both 5 s and 25 s in a 60-node crowd.
+      expect(pruneStaleEntries(me, 40000, neighborScoreTtlMs), equals(1));
       expect(me.nextHopTable.containsKey('x'), isFalse);
       expect(me.ogmTable.containsKey('x'), isFalse);
+      // Idempotent: the entry is already gone, so the second call reports nothing.
+      expect(pruneStaleEntries(me, 40000, neighborScoreTtlMs), equals(0));
     });
 
     test('keeps link quality per neighbour, so a duplicate cannot zero it', () {
@@ -1664,6 +1671,1075 @@ void main() {
       final longMsg = createMessage('m2', 0.0, 'a', 'b', 'x' * 930);
       expect(longMsg.sizeBytes, equals(1280));
       expect(longMsg.transport, equals(TransportType.wifiDirect));
+    });
+
+    test('counts a body in UTF-8 bytes, not in UTF-16 code units', () {
+      expect(utf8ByteLength(''), equals(0));
+      expect(utf8ByteLength('hey Kemal'), equals(9));
+      expect(utf8ByteLength('isik'), equals(4)); // ASCII: bytes == code units
+      expect(utf8ByteLength('\u0131\u015f\u0131k'), equals(7)); // "isik" in Turkish
+      expect(utf8ByteLength('\u0394'), equals(2)); // GREEK CAPITAL LETTER DELTA
+      expect(utf8ByteLength('\u0927'), equals(3)); // DEVANAGARI DHA
+      expect(utf8ByteLength('\u7159'), equals(3)); // CJK "smoke"
+      expect(utf8ByteLength('\uD83D\uDE00'), equals(4)); // one grinning face
+      expect('\uD83D\uDE00'.length, equals(2)); // but two UTF-16 code units
+      // A lone surrogate encodes as U+FFFD in both engines. `utf8.encode` throws on
+      // these by default, which is why the rule is written out in utf8ByteLength
+      // rather than delegated: the TypeScript TextEncoder replaces, so the two
+      // would otherwise disagree.
+      expect(utf8ByteLength('\uD83D'), equals(3));
+      expect(utf8ByteLength('\uDE00'), equals(3));
+    });
+
+    test('agrees with utf8.encode on every script the app will meet first', () {
+      final samples = <String>[
+        '',
+        'hey Kemal',
+        'ping all',
+        'Duman: \u0131\u015f\u0131k \u00e7\u0131\u011f \u015ei\u015fli',
+        'Marcu \u021aepe\u0219',
+        '\u0394\u03BF\u03C5\u03BC\u03AC\u03BD\u03B9',
+        '\u0414\u0443\u043C\u0430\u043D',
+        '\u062F\u062E\u0627\u0646',
+        '\u0927\u0941\u0906\u0901',
+        '\u0E04\u0E27\u0E31\u0E19',
+        '\u7159',
+        '\uACF0\uAE30',
+        '\u3051\u3080\u308A',
+        '\uD83C\uDD98\uD83D\uDC65\uD83D\uDCE6',
+      ];
+      for (final text in samples) {
+        expect(utf8ByteLength(text), equals(utf8.encode(text).length), reason: text);
+      }
+    });
+
+    test('moves a non-ASCII body to the transport that can actually carry it', () {
+      final emoji = '\uD83D\uDE00' * 300;
+      expect(emoji.length, equals(600)); // code units
+      expect(utf8ByteLength(emoji), equals(1200)); // bytes on air
+      // By code units this is a 768 B packet that rides BLE. By bytes it is 1536 B
+      // and needs Wi-Fi Direct. Only one of those is a packet a radio can send.
+      expect(wireSizeOf(emoji.length), equals(768));
+      expect(selectTransport(wireSizeOf(emoji.length)), equals(TransportType.ble));
+      expect(wireSizeOfBody(emoji), equals(1536));
+      expect(selectTransport(wireSizeOfBody(emoji)), equals(TransportType.wifiDirect));
+    });
+
+    test('leaves every ASCII result exactly where wireSizeOf put it', () {
+      for (final chars in <int>[0, 1, 160, 161, 162, 241, 700, 900, 929, 930, 1200]) {
+        expect(wireSizeOfBody('x' * chars), equals(wireSizeOf(chars)), reason: '$chars');
+      }
+      // Every fixture body is ASCII, so no golden vector moves.
+      expect(createMessage('m3', 0.0, 'a', 'b', 'merhaba \u0131\u015f\u0131k').sizeBytes,
+          equals(256));
+      expect(createMessage('m4', 0.0, 'a', 'b', 'hey Kemal').sizeBytes, equals(256));
+    });
+  });
+
+  group('abuse limits (docs/04 §6)', () {
+    test('the caps are the numbers docs/04 §6 states', () {
+      expect(broadcastPerMinuteCapDefault, equals(5));
+      expect(relayPerSourcePerMinuteCapDefault, equals(30));
+      expect(rateWindowMs, equals(60000));
+    });
+
+    test('admits exactly cap messages, then refuses', () {
+      final buckets = <String, RateBucket>{};
+      for (var i = 0; i < broadcastPerMinuteCapDefault; i++) {
+        expect(admitByRate(buckets, 'a|src', broadcastPerMinuteCapDefault, 0.0).ok,
+            isTrue,
+            reason: 'message $i');
+      }
+      final refused =
+          admitByRate(buckets, 'a|src', broadcastPerMinuteCapDefault, 0.0);
+      expect(refused.ok, isFalse);
+      expect(refused.reason, contains('rate limit'));
+      expect(refused.reason, contains('5 per minute'));
+      expect(refused.retryInMs, greaterThan(0));
+    });
+
+    test('refills continuously, so a rate is enforced rather than a tally', () {
+      // A tumbling counter would admit 5 at t=59 999 and 5 more at t=60 001: ten
+      // broadcasts in two milliseconds while never breaking a per-minute count.
+      final buckets = <String, RateBucket>{};
+      for (var i = 0; i < 5; i++) {
+        admitByRate(buckets, 'k', 5, 0.0);
+      }
+      expect(admitByRate(buckets, 'k', 5, 1000.0).ok, isFalse);
+      // One token per rateWindowMs / cap = 12 s at cap 5.
+      expect(admitByRate(buckets, 'k', 5, 11999.0).ok, isFalse);
+      expect(admitByRate(buckets, 'k', 5, 12001.0).ok, isTrue);
+      expect(admitByRate(buckets, 'k', 5, 12002.0).ok, isFalse);
+    });
+
+    test('never refills above the cap, so silence does not bank a burst', () {
+      final buckets = <String, RateBucket>{};
+      admitByRate(buckets, 'k', 5, 0.0);
+      final after = admitByRate(buckets, 'k', 5, 600000.0);
+      expect(after.ok, isTrue);
+      expect(after.tokensLeft, lessThanOrEqualTo(5.0));
+      var admitted = 1;
+      while (admitByRate(buckets, 'k', 5, 600000.0).ok) {
+        admitted++;
+      }
+      expect(admitted, equals(5));
+    });
+
+    test('keeps sources and enforcers apart', () {
+      final buckets = <String, RateBucket>{};
+      for (var i = 0; i < 5; i++) {
+        admitByRate(buckets, 'a|src1', 5, 0.0);
+      }
+      expect(admitByRate(buckets, 'a|src1', 5, 0.0).ok, isFalse);
+      expect(admitByRate(buckets, 'a|src2', 5, 0.0).ok, isTrue);
+      expect(admitByRate(buckets, 'b|src1', 5, 0.0).ok, isTrue);
+    });
+
+    test('treats a non-positive cap as no cap', () {
+      final buckets = <String, RateBucket>{};
+      for (var i = 0; i < 500; i++) {
+        expect(admitByRate(buckets, 'k', 0, i.toDouble()).ok, isTrue);
+      }
+      expect(buckets.length, equals(0));
+      expect(admitByRate(buckets, 'k', -1, 0.0).ok, isTrue);
+    });
+
+    test('grants no refill when the clock goes backwards', () {
+      final buckets = <String, RateBucket>{};
+      for (var i = 0; i < 5; i++) {
+        admitByRate(buckets, 'k', 5, 10000.0);
+      }
+      expect(admitByRate(buckets, 'k', 5, 0.0).ok, isFalse);
+      expect(buckets['k']!.atMs, equals(0.0));
+    });
+
+    test('reports one token every 2 s at the relay cap', () {
+      final buckets = <String, RateBucket>{};
+      for (var i = 0; i < 30; i++) {
+        admitByRate(buckets, 'k', 30, 0.0);
+      }
+      final refused = admitByRate(buckets, 'k', 30, 0.0);
+      expect(refused.ok, isFalse);
+      expect(refused.retryInMs.round(), equals(2000));
+      expect(refused.reason, contains('2.0 s'));
+    });
+
+    test('exempts control-plane traffic from the relay cap', () {
+      expect(countsAgainstRelayCap(createMessage('m', 0.0, 'a', 'b', '', type: MsgType.ogm)),
+          isFalse);
+      expect(countsAgainstRelayCap(createMessage('m', 0.0, 'a', 'b', '', type: MsgType.ack)),
+          isFalse);
+      expect(countsAgainstRelayCap(createMessage('m', 0.0, 'a', 'b', '', type: MsgType.sync)),
+          isFalse);
+      for (final type in <MsgType>[
+        MsgType.text,
+        MsgType.broadcast,
+        MsgType.voice,
+        MsgType.file,
+        MsgType.sos,
+      ]) {
+        expect(countsAgainstRelayCap(createMessage('m', 0.0, 'a', 'b', '', type: type)),
+            isTrue,
+            reason: type.name);
+      }
+    });
+
+    test('counting beacons would cost a node 90% of its sustained data rate', () {
+      // docs/03 §1: an OGM every 2 s. docs/04 §6: cap relay at 30/min per source.
+      // 60 000 / 2 000 = 30 — a source's own beacons arrive at exactly the cap rate.
+      const ogmIntervalMs = 2000.0;
+      expect(rateWindowMs / ogmIntervalMs, equals(relayPerSourcePerMinuteCapDefault));
+
+      int sustained(bool countOgms) {
+        final buckets = <String, RateBucket>{};
+        var admitted = 0;
+        for (var t = 0.0; t < 10 * rateWindowMs; t += ogmIntervalMs) {
+          if (countOgms) {
+            admitByRate(buckets, 'relay|src', relayPerSourcePerMinuteCapDefault, t);
+          }
+          if (admitByRate(buckets, 'relay|src', relayPerSourcePerMinuteCapDefault, t).ok) {
+            admitted++;
+          }
+        }
+        return admitted;
+      }
+
+      // Counting beacons: the bucket refills one token per slot and the beacon spends
+      // it, so data runs off the initial burst alone and then starves.
+      expect(sustained(true), equals(29));
+      // Exempting them: the full 30/min is available to user traffic.
+      expect(sustained(false), equals(300));
+      // And the exemption does not disable the cap: a burst is still refused.
+      final flooding = <String, RateBucket>{};
+      var refused = 0;
+      for (var i = 0; i < 100; i++) {
+        if (!admitByRate(flooding, 'relay|src', relayPerSourcePerMinuteCapDefault, 0.0).ok) {
+          refused++;
+        }
+      }
+      expect(refused, equals(100 - relayPerSourcePerMinuteCapDefault));
+    });
+
+    test('is off by default, so nothing a shipped run does changes', () {
+      final config = campusQuad(42);
+      expect(config.rateLimits, isFalse);
+      expect(config.broadcastPerMinuteCap, equals(broadcastPerMinuteCapDefault));
+      expect(config.relayPerSourcePerMinuteCap,
+          equals(relayPerSourcePerMinuteCapDefault));
+      final on = config.copyWith(rateLimits: true);
+      expect(on.rateLimits, isTrue);
+      // copyWith carries every other knob across unchanged.
+      expect(on.nodeCount, equals(config.nodeCount));
+      expect(on.mediaBackpressure, equals(config.mediaBackpressure));
+      expect(on.broadcastCapScope, equals(config.broadcastCapScope));
+    });
+  });
+
+  group('broadcast cap enforcement scope', () {
+    // Mirrors the TypeScript engine's `broadcastCapScope` knob: docs/04 §6 says
+    // "SUPERs drop excess", which bounds how *far* a flood travels and not whether the
+    // flooder's own one-hop neighbours see it. docs/06 §21.5 measures the two scopes
+    // against each other rather than asserting one is better.
+
+    Map<String, num> flooded(bool rateLimits, BroadcastCapScope scope) {
+      final sim = MeshSimulation(campusQuad(42).copyWith(
+        rateLimits: rateLimits,
+        broadcastCapScope: scope,
+      ));
+      sim.runFor(60000.0); // settle elections, so there are SUPERs either way
+      sim.refresh();
+      final source = sim.nodes.first.id;
+      for (var i = 0; i < 24; i++) {
+        sim.sendMessage(source, 'BROADCAST', 'flood \$i', MsgType.broadcast);
+        sim.runFor(200.0);
+      }
+      sim.runFor(20000.0);
+      sim.refresh();
+      return {
+        'broadcastDrops': sim.stats.rateBroadcastDrops,
+        'relayDrops': sim.stats.rateRelayDrops,
+        'transmissions': sim.nodes.fold<int>(0, (sum, n) => sum + n.txCount),
+      };
+    }
+
+    test('defaults to docs/04 §6 — SUPERs only', () {
+      expect(campusQuad(42).broadcastCapScope, equals(BroadcastCapScope.superOnly));
+      expect(BroadcastCapScope.superOnly.wire, equals('super'));
+      expect(BroadcastCapScope.all.wire, equals('all'));
+    });
+
+    test('suppresses more when every node enforces than when only SUPERs do', () {
+      final superOnly = flooded(true, BroadcastCapScope.superOnly);
+      final everywhere = flooded(true, BroadcastCapScope.all);
+      expect(superOnly['broadcastDrops']!, greaterThan(0));
+      expect(everywhere['broadcastDrops']!,
+          greaterThan(superOnly['broadcastDrops']!));
+    });
+
+    test('cuts the airtime a flood costs, which is what the cap is for', () {
+      final uncapped = flooded(false, BroadcastCapScope.superOnly)['transmissions']!;
+      final superOnly = flooded(true, BroadcastCapScope.superOnly)['transmissions']!;
+      final everywhere = flooded(true, BroadcastCapScope.all)['transmissions']!;
+      expect(uncapped, greaterThan(superOnly));
+      expect(superOnly, greaterThan(everywhere));
+    });
+
+    test('still costs an honest network nothing under either scope', () {
+      for (final scope in <BroadcastCapScope>[
+        BroadcastCapScope.superOnly,
+        BroadcastCapScope.all,
+      ]) {
+        final sim = MeshSimulation(campusQuad(42).copyWith(
+          rateLimits: true,
+          broadcastCapScope: scope,
+        ));
+        sim.runFor(60000.0);
+        sim.refresh();
+        final source = sim.nodes.first.id;
+        // One broadcast every 20 s is 3/min, under the cap of 5 — and a NORMAL node
+        // filtering its own honest neighbour is exactly the risk `all` would introduce.
+        for (var i = 0; i < 6; i++) {
+          sim.sendMessage(source, 'BROADCAST', 'honest \$i', MsgType.broadcast);
+          sim.runFor(20000.0);
+        }
+        sim.refresh();
+        expect(sim.stats.rateBroadcastDrops, equals(0), reason: scope.name);
+        expect(sim.stats.rateRelayDrops, equals(0), reason: scope.name);
+      }
+    });
+  });
+
+  group('local blocklist (docs/04 §6, bullet 1)', () {
+    // "Block/mute peer locally (ignore msgs from pubKey)". Mirrors
+    // `src/__tests__/blocklist.test.ts`. Three properties: it is local, it filters user
+    // traffic rather than the protocol, and it is inert while empty.
+
+    MeshSimulation world([BlockScope scope = BlockScope.delivery]) {
+      final sim =
+          MeshSimulation(campusQuad(42).copyWith(blockScope: scope));
+      sim.runFor(60000.0);
+      sim.refresh();
+      return sim;
+    }
+
+    test('isBlockableTraffic covers user traffic and exempts protocol and SOS', () {
+      MeshMessage msg(MsgType type) =>
+          createMessage('m', 0.0, 'a', 'b', '', type: type);
+      for (final type in <MsgType>[
+        MsgType.text,
+        MsgType.broadcast,
+        MsgType.voice,
+        MsgType.file,
+      ]) {
+        expect(isBlockableTraffic(msg(type)), isTrue, reason: type.name);
+      }
+      for (final type in <MsgType>[
+        MsgType.ogm,
+        MsgType.ack,
+        MsgType.sync,
+        MsgType.sos,
+      ]) {
+        expect(isBlockableTraffic(msg(type)), isFalse, reason: type.name);
+      }
+      // SOS is user traffic for the relay cap and exempt from the block, so the two
+      // predicates are deliberately not the same set.
+      expect(countsAgainstRelayCap(msg(MsgType.sos)), isTrue);
+    });
+
+    test('defaults to delivery scope and is inert while empty', () {
+      expect(campusQuad(42).blockScope, equals(BlockScope.delivery));
+      expect(BlockScope.delivery.wire, equals('delivery'));
+      expect(BlockScope.relay.wire, equals('relay'));
+      final sim = world();
+      sim.runFor(60000.0);
+      sim.refresh();
+      expect(sim.stats.blockedDrops, equals(0));
+    });
+
+    test('blocks, unblocks, refuses a self-block, and reports the list sorted', () {
+      final sim = world();
+      final a = sim.nodes[0].id;
+      final b = sim.nodes[1].id;
+      final c = sim.nodes[2].id;
+      expect(sim.blockPeer(a, b), isTrue);
+      expect(sim.blockPeer(a, b), isFalse); // already blocked: the list did not change
+      expect(sim.blockPeer(a, a), isFalse); // a node cannot block itself
+      expect(sim.isBlocked(a, b), isTrue);
+      expect(sim.isBlocked(b, a), isFalse); // and it is not mutual
+      sim.blockPeer(a, c);
+      expect(sim.blockedPeers(a), equals(<NodeId>[b, c]..sort()));
+      expect(sim.unblockPeer(a, b), isTrue);
+      expect(sim.unblockPeer(a, b), isFalse);
+      expect(sim.isBlocked(a, b), isFalse);
+      sim.unblockPeer(a, c);
+      expect(sim.blockedPeers(a), isEmpty);
+    });
+
+    test('keeps a blocked peer out of the blocker inbox but not out of the mesh', () {
+      final sim = world();
+      final sender = sim.nodes[0].id;
+      final blocker = sim.nodes[1].id;
+      sim.blockPeer(blocker, sender);
+      for (var i = 0; i < 8; i++) {
+        sim.sendMessage(sender, broadcastAddress, 'spam \$i', MsgType.broadcast);
+        sim.runFor(1000.0);
+      }
+      sim.runFor(20000.0);
+      sim.refresh();
+      final inbox = sim.nodes.firstWhere((n) => n.id == blocker).inbox;
+      expect(inbox.where((m) => m.from == sender), isEmpty);
+      expect(sim.stats.blockedDrops, greaterThan(0));
+      // Local means local: other nodes still hear the blocked peer.
+      final others = sim.nodes
+          .where((n) => n.id != blocker)
+          .where((n) => n.inbox.any((m) => m.from == sender))
+          .length;
+      expect(others, greaterThan(1));
+    });
+
+    test('lets a blocked peer SOS through, and still lets the blocker send', () {
+      final sim = world();
+      final sender = sim.nodes[0].id;
+      final blocker = sim.nodes[1].id;
+      sim.blockPeer(blocker, sender);
+      sim.sendMessage(sender, broadcastAddress, 'sos help', MsgType.sos);
+      sim.sendMessage(blocker, sender, 'still allowed to send', MsgType.text);
+      sim.runFor(30000.0);
+      sim.refresh();
+      final blockerInbox = sim.nodes.firstWhere((n) => n.id == blocker).inbox;
+      expect(blockerInbox.any((m) => m.type == MsgType.sos), isTrue);
+      final senderInbox = sim.nodes.firstWhere((n) => n.id == sender).inbox;
+      expect(senderInbox.any((m) => m.body == 'still allowed to send'), isTrue);
+    });
+
+    test('keeps the blocked peer in the routing table, because OGMs are not blockable',
+        () {
+      final sim = world();
+      final blockerNode = sim.nodes[1];
+      sim.blockPeer(blockerNode.id, sim.nodes[0].id);
+      final peersBefore = blockerNode.peerIds.length;
+      sim.runFor(30000.0);
+      sim.refresh();
+      // Not a strict equality: peers come and go with mobility. The property is that
+      // blocking does not empty the table, which is what filtering OGMs would do.
+      expect(blockerNode.peerIds, isNotEmpty);
+      expect(blockerNode.peerIds.length, greaterThanOrEqualTo(peersBefore - 2));
+    });
+
+    test('relay scope costs the blocked source airtime that delivery scope spends', () {
+      Map<String, int> flooded(BlockScope scope) {
+        final sim = world(scope);
+        final sender = sim.nodes[0].id;
+        for (final n in sim.nodes) {
+          if (n.id != sender) sim.blockPeer(n.id, sender);
+        }
+        for (var i = 0; i < 24; i++) {
+          sim.sendMessage(sender, broadcastAddress, 'spam \$i', MsgType.broadcast);
+          sim.runFor(300.0);
+        }
+        sim.runFor(20000.0);
+        sim.refresh();
+        return {
+          'transmissions': sim.nodes.fold<int>(0, (sum, n) => sum + n.txCount),
+          'forwarded': sim.stats.totalForwarded,
+          'blocked': sim.stats.blockedDrops,
+        };
+      }
+
+      final delivery = flooded(BlockScope.delivery);
+      final relay = flooded(BlockScope.relay);
+      expect(delivery['transmissions']!, greaterThan(relay['transmissions']!));
+      expect(delivery['forwarded']!, greaterThan(relay['forwarded']!));
+      // One broadcast heard by four blockers is four entries under delivery; under relay
+      // the first to hear it stops the other three ever hearing it.
+      expect(delivery['blocked']!, greaterThan(relay['blocked']!));
+    });
+  });
+
+  group('cover traffic (docs/04 §5, dummy beacons)', () {
+    // Mirrors `src/__tests__/cover-traffic.test.ts`. The measurement behind this feature is
+    // a null result — docs/06 §23 — so these tests assert what makes the knob shippable
+    // rather than what makes it useful: inert when off, emits at the rate it is told to,
+    // costs airtime in proportion, and does not starve the network. Nothing here asserts
+    // that a sender is hidden, because on this observable in this topology they are not.
+
+    const windowMs = 60000.0;
+
+    /// [traffic] injects honest messages in the window. Only the delivery floor needs them
+    /// — without traffic there is nothing to deliver and the ratio is 0 by definition — and
+    /// only the airtime test must go without, because `injectTraffic` draws from the same
+    /// RNG the cover beacons do, so the arms diverge and real traffic varies by more than
+    /// the cover packets add.
+    Map<String, num> world(bool cover,
+        [double intervalMs = 30000.0, bool traffic = false]) {
+      final sim = MeshSimulation(campusQuad(42).copyWith(
+        coverTraffic: cover,
+        coverIntervalMs: intervalMs,
+      ));
+      sim.runFor(90000.0); // settle elections, as the probes do
+      sim.refresh();
+      sim.clearRecords();
+      final before = sim.nodes.map((n) => n.txCount).toList();
+      if (traffic) sim.injectTraffic(20, windowMs);
+      sim.runFor(windowMs);
+      sim.refresh();
+      var tx = 0;
+      for (var i = 0; i < sim.nodes.length; i++) {
+        tx += sim.nodes[i].txCount - before[i];
+      }
+      return {
+        'coverTx': sim.stats.coverTx,
+        'transmissions': tx,
+        'deliveryRatio': sim.stats.deliveryRatio,
+        'controlOverhead': sim.stats.controlOverhead,
+      };
+    }
+
+    test('is off by default at a rate the document does not specify', () {
+      final config = campusQuad(42);
+      expect(config.coverTraffic, isFalse);
+      // "Low rate" is an adjective, so the default is a round guess and docs/06 §23 sweeps
+      // 60/30/10/5 s rather than defending one.
+      expect(config.coverIntervalMs, equals(30000.0));
+      final on = config.copyWith(coverTraffic: true);
+      expect(on.coverTraffic, isTrue);
+      expect(on.coverIntervalMs, equals(config.coverIntervalMs));
+    });
+
+    test('emits nothing when off, which is what keeps every published number intact', () {
+      expect(world(false)['coverTx'], equals(0));
+    });
+
+    test('emits at the rate it is told to, and faster when told to be faster', () {
+      final off = world(false)['coverTx']!;
+      final slow = world(true, 30000.0)['coverTx']!;
+      final fast = world(true, 5000.0)['coverTx']!;
+      expect(off, equals(0));
+      expect(slow, greaterThan(0));
+      expect(fast, greaterThan(slow));
+      // Order of magnitude, not an exact count: a node that is offline or out of battery
+      // does not beacon, and the interval carries the same ±ogmJitterMs as a real OGM.
+      const nodes = 20;
+      expect(fast, greaterThanOrEqualTo(nodes * (windowMs / 5000.0) * 0.5));
+      expect(fast, lessThanOrEqualTo(nodes * (windowMs / 5000.0) * 2));
+    });
+
+    test('costs airtime in proportion to its rate', () {
+      final off = world(false)['transmissions']!;
+      final slow = world(true, 30000.0)['transmissions']!;
+      final fast = world(true, 5000.0)['transmissions']!;
+      expect(slow, greaterThan(off));
+      expect(fast, greaterThan(slow));
+    });
+
+    test('does not starve the network, which is the floor §23 asserts not an equality', () {
+      // Not an equality: cover packets consume RNG draws, so the two worlds diverge from
+      // the first dummy beacon and unrelated counts differ the way any two sequences do.
+      for (final interval in <double>[30000.0, 5000.0]) {
+        expect(world(true, interval, true)['deliveryRatio']!, greaterThan(0.5),
+            reason: '\${interval}ms');
+      }
+    });
+
+    test('counts cover separately from the routing protocol own beacons', () {
+      final r = world(true, 5000.0);
+      // `controlOverhead` is the OGM count the routing protocol needs; cover traffic is
+      // optional and its whole cost belongs in `coverTx`, so neither is folded into the
+      // other and a reader can see what disabling cover would actually save.
+      expect(r['coverTx']!, greaterThan(0));
+      expect(r['controlOverhead']!, greaterThan(0));
+    });
+  });
+
+  group('wake-lock accounting (skills/07, fourth telemetry item)', () {
+    // Mirrors `src/__tests__/wake-locks.test.ts`. One acquisition per transmission and per
+    // reception, held for as long as that packet occupies the radio. The shares are a split
+    // between roles rather than a percentage of wall clock, because docs/06 §24 measures the
+    // model demanding roughly four times the airtime that exists.
+
+    MeshSimulation measured(void Function(MeshSimulation) traffic) {
+      final sim = MeshSimulation(campusQuad(42));
+      sim.runFor(90000.0);
+      sim.refresh();
+      sim.clearRecords();
+      traffic(sim);
+      sim.runFor(60000.0);
+      sim.refresh();
+      return sim;
+    }
+
+    void honest(MeshSimulation sim) => sim.injectTraffic(30, 40000.0);
+
+    test('counts under the shipped radio baseline, which maintains no busy-radio maps', () {
+      final sim = measured(honest);
+      expect(sim.config.channelAccess, equals(ChannelAccess.free));
+      expect(sim.config.channelCapture, equals(ChannelCapture.none));
+      expect(sim.stats.wakeLocks, greaterThan(0));
+      expect(sim.stats.wakeLockMs, greaterThan(0));
+    });
+
+    test('reports per node what it reports in total', () {
+      final sim = measured(honest);
+      final locks = sim.nodes.fold<int>(0, (sum, n) => sum + sim.wakeLocksFor(n.id));
+      final ms = sim.nodes.fold<double>(0, (sum, n) => sum + sim.wakeLockMsFor(n.id));
+      expect(locks, equals(sim.stats.wakeLocks));
+      expect(ms, closeTo(sim.stats.wakeLockMs, 1e-6));
+    });
+
+    test('splits the radio demand between roles, and the shares sum to 100', () {
+      final sim = measured(honest);
+      final normal = sim.stats.wakeLockShareNormal;
+      final superShare = sim.stats.wakeLockShareSuper;
+      expect(normal, greaterThan(0));
+      expect(superShare, greaterThan(0));
+      expect(normal + superShare, closeTo(100, 1e-6));
+      // SUPERs are the relays and a minority of the network, so their share of the radio
+      // demand has to exceed their share of the nodes.
+      final supers = sim.nodes.where((n) => n.role == Role.superNode).length;
+      expect(superShare / 100, greaterThan(supers / sim.nodes.length));
+    });
+
+    test('reports the model over-subscription plainly instead of hiding it', () {
+      // docs/06 §24: pinned as a floor rather than an exact figure, so the test says "this
+      // is a property of the model, and it is documented" rather than "this number is
+      // right". The upper bound keeps it from being a runaway.
+      final sim = measured(honest);
+      expect(sim.stats.radioDemandRatio, greaterThan(1));
+      expect(sim.stats.radioDemandRatio, lessThan(10));
+    });
+
+    test('measures the window, not the whole run', () {
+      final sim = MeshSimulation(campusQuad(42));
+      sim.runFor(90000.0);
+      sim.refresh();
+      expect(sim.stats.wakeLocks, greaterThan(0));
+      sim.clearRecords();
+      // `clearRecords` re-baselines the window but does not recompute stats — `refresh`
+      // does, and the first version of the TypeScript twin asserted on stale numbers.
+      sim.refresh();
+      expect(sim.stats.wakeLocks, equals(0));
+      expect(sim.stats.wakeLockMs, equals(0));
+    });
+
+    test('prices concentration on the neighbours who have to hear it', () {
+      void spread(MeshSimulation sim) {
+        for (var i = 0; i < 30; i++) {
+          sim.sendMessage(sim.nodes[i % sim.nodes.length].id, broadcastAddress,
+              'q \$i', MsgType.broadcast);
+          sim.runFor(1000.0);
+        }
+      }
+
+      void concentrated(MeshSimulation sim) {
+        for (var i = 0; i < 30; i++) {
+          sim.sendMessage(
+              sim.nodes[0].id, broadcastAddress, 'f \$i', MsgType.broadcast);
+          sim.runFor(1000.0);
+        }
+      }
+
+      double others(MeshSimulation sim) => sim.nodes
+          .skip(1)
+          .fold<double>(0, (sum, n) => sum + sim.wakeLockMsFor(n.id));
+      expect(others(measured(concentrated)), greaterThan(others(measured(spread))));
+    });
+  });
+
+  group('radio occupancy and the derived beacon size (docs/06 §24.6)', () {
+    // Mirrors `src/__tests__/radio-occupancy.test.ts`. What a radio is *busy* for is not
+    // how long a packet takes to arrive, and the shipped model charged one for the other.
+
+    // Takes a config rather than a scenario function: Dart's scenarios are declared with an
+    // optional positional seed (`SimConfig campusQuad([int seed = 42])`), and whether that
+    // type is assignable to a required-parameter function type is a subtyping question this
+    // repository has no compiler to answer. Passing the built config avoids asking it.
+    MeshSimulation run(SimConfig base,
+        {ChannelAccess? access,
+        RadioOccupancy? occupancy,
+        int? aliasBytes}) {
+      final sim = MeshSimulation(base.copyWith(
+          channelAccess: access,
+          radioOccupancy: occupancy,
+          ogmAliasBytes: aliasBytes));
+      sim.runFor(90000.0);
+      sim.refresh();
+      sim.clearRecords();
+      sim.injectTraffic(30, 40000.0);
+      sim.runFor(60000.0);
+      sim.refresh();
+      return sim;
+    }
+
+    test('derives a beacon from the fields docs/03 §4 says an OGM carries', () {
+      expect(ogmIdBytes, equals(32));
+      expect(ogmHopEntryBytes, equals(33));
+      expect(ogmFixedBytes, equals(46));
+      expect(ogmWireBytes(0, 0), equals(ogmFixedBytes));
+      expect(ogmWireBytes(10, 8), equals(46 + 10 * 32 + 8 * 33));
+      expect(ogmWireBytes(10, 8), equals(630));
+      expect(ogmWireBytes(-5, -5), equals(ogmFixedBytes));
+    });
+
+    test('ties the literal widths to the named ones, which is what makes them safe', () {
+      // `check-parity.py` compares the two engines' non-scalar initialisers as *text*, and
+      // identifier case is the one thing Dart and TypeScript cannot agree on, so these are
+      // spelled as literals on both sides. These assertions are what stop a width change
+      // from silently invalidating the literal.
+      expect(ogmHopEntryBytes, equals(ogmIdBytes + 1));
+      expect(
+          ogmFixedBytes,
+          equals(ogmIdBytes +
+              ogmSeqBytes +
+              ogmScoreBytes +
+              ogmFlagBytes +
+              ogmBatteryBytes));
+      expect(mprNeighborAdvertiseLimit, equals(30));
+      expect(bestHopAdvertiseLimit, equals(8));
+      expect(ogmMaxWireBytes,
+          equals(ogmWireBytes(mprNeighborAdvertiseLimit, bestHopAdvertiseLimit)));
+      expect(ogmMaxWireBytes, equals(1270));
+    });
+
+    test('puts a fully loaded beacon over the BLE ceiling', () {
+      // A node advertising 30 neighbours and 8 routes sends 1270 B, and `selectTransport`
+      // flips to Wi-Fi Direct above 1024. Nothing sized beacons before, so nothing noticed.
+      expect(ogmMaxWireBytes, greaterThan(bleMaxBytes));
+      expect(ogmWireBytes(10, 8), lessThan(bleMaxBytes));
+    });
+
+    test('ships on the model every published number was measured under', () {
+      expect(campusQuad(42).radioOccupancy, equals(RadioOccupancy.hopLatency));
+      expect(festivalCrowd(42).radioOccupancy, equals(RadioOccupancy.hopLatency));
+    });
+
+    test('charges airtime from the rate constants the engine already had', () {
+      final sim = MeshSimulation(campusQuad(42));
+      // 1024 B at 80 kbit/s is 102.4 ms — which is why a 120 ms hop latency can claim to
+      // include one full-sized GATT write, and why the two models agree near the ceiling.
+      expect(sim.airtimeMs(1024, TransportType.ble), closeTo(102.4, 1e-9));
+      expect(sim.airtimeMs(256, TransportType.ble), closeTo(25.6, 1e-9));
+      expect(sim.airtimeMs(0, TransportType.ble), equals(0));
+      expect(sim.airtimeMs(630, TransportType.ble), closeTo(63.0, 1e-9));
+      expect(sim.airtimeMs(1024, TransportType.wifiDirect), closeTo(0.4096, 1e-9));
+    });
+
+    test('changes telemetry and nothing else under the shipped radio baseline', () {
+      // Under free/none no code path reads occupancy except the wake-lock accounting, so the
+      // two models must produce identical worlds and different telemetry. This is what makes
+      // the knob safe to add defaulted off: it cannot move a published delivery, latency or
+      // overhead figure unless a contention model is switched on at the same time.
+      final flat = run(campusQuad(42), occupancy: RadioOccupancy.hopLatency);
+      final sized = run(campusQuad(42), occupancy: RadioOccupancy.airtime);
+      expect(flat.config.channelAccess, equals(ChannelAccess.free));
+      expect(flat.config.channelCapture, equals(ChannelCapture.none));
+      expect(sized.stats.totalDelivered, equals(flat.stats.totalDelivered));
+      expect(sized.stats.totalForwarded, equals(flat.stats.totalForwarded));
+      expect(sized.stats.deliveryRatio, equals(flat.stats.deliveryRatio));
+      expect(sized.stats.broadcastReach, equals(flat.stats.broadcastReach));
+      expect(sized.stats.overheadRatio, equals(flat.stats.overheadRatio));
+      expect(sized.stats.mprSuppressed, equals(flat.stats.mprSuppressed));
+      expect(sized.stats.controlOverhead, equals(flat.stats.controlOverhead));
+      expect(sized.stats.sentUnicast, equals(flat.stats.sentUnicast));
+      expect(sized.stats.sentBroadcast, equals(flat.stats.sentBroadcast));
+      // Same events, different durations.
+      expect(sized.stats.wakeLocks, equals(flat.stats.wakeLocks));
+      expect(sized.stats.wakeLockMs, lessThan(flat.stats.wakeLockMs));
+    });
+
+    test('halves the demanded radio time without making it physical', () {
+      // The over-subscription docs/06 §24.3 measured is only partly the flat per-packet
+      // charge: the dominant term is the volume of beacon receptions and their gossip.
+      final flat = run(campusQuad(42), occupancy: RadioOccupancy.hopLatency);
+      final sized = run(campusQuad(42), occupancy: RadioOccupancy.airtime);
+      expect(sized.stats.radioDemandRatio, lessThan(flat.stats.radioDemandRatio));
+      expect(sized.stats.radioDemandRatio, greaterThan(1));
+      expect(flat.stats.radioDemandRatio, greaterThan(3));
+      expect(sized.stats.radioDemandRatio, lessThan(2.5));
+    });
+
+    test('sizes the alias encoding docs/03 §4 prescribes', () {
+      // An alias shortens the advertised neighbours and route entries. The sender's own id
+      // stays 32 B: an alias cannot identify a node nobody has heard from yet, and
+      // identifying exactly that node is the whole purpose of a beacon. So the floor is the
+      // 46 B of fixed fields, not 2 B.
+      expect(ogmWireBytes(10, 8, 2), equals(46 + 10 * 2 + 8 * 3));
+      expect(ogmWireBytes(10, 8, 2), equals(90));
+      expect(ogmWireBytes(0, 0, 2), equals(ogmFixedBytes));
+      expect(ogmWireBytes(30, 8, 2), equals(130));
+      // The consequence that makes docs/03 §4's aside matter: a fully loaded beacon is over
+      // the BLE ceiling on public keys and a sixth of it on aliases.
+      expect(ogmWireBytes(30, 8, 32), greaterThan(bleMaxBytes));
+      expect(ogmWireBytes(30, 8, 2), lessThan(bleMaxBytes));
+      // The default is the width this engine really transmits, so adding the parameter
+      // cannot move an existing caller's number.
+      expect(ogmWireBytes(10, 8), equals(ogmWireBytes(10, 8, ogmIdBytes)));
+    });
+
+    test('defaults to the encoding the engine transmits', () {
+      expect(campusQuad(42).ogmAliasBytes, equals(32));
+      expect(festivalCrowd(42).ogmAliasBytes, equals(32));
+    });
+
+    test('cuts demanded radio time by beacon width, not by beacon count', () {
+      // docs/06 §24.7: the encoding is the bigger lever, and it is free in the sense that
+      // matters — the same OGMs are sent, so route freshness, election convergence and MPR
+      // coverage are untouched. Measured on campus_quad, where the crowd arm is too slow to
+      // re-measure in a unit test.
+      final keys = run(campusQuad(42),
+          occupancy: RadioOccupancy.airtime, aliasBytes: 32);
+      final aliases = run(campusQuad(42),
+          occupancy: RadioOccupancy.airtime, aliasBytes: 2);
+      expect(aliases.stats.controlOverhead, equals(keys.stats.controlOverhead));
+      expect(aliases.stats.radioDemandRatio,
+          lessThan(keys.stats.radioDemandRatio));
+      expect(aliases.stats.wakeLockMs, lessThan(keys.stats.wakeLockMs));
+      // Same beacons, same world: delivery and reach do not move.
+      expect(aliases.stats.deliveryRatio, equals(keys.stats.deliveryRatio));
+      expect(aliases.stats.broadcastReach, equals(keys.stats.broadcastReach));
+      // And the cut tracks the width ratio, which is what makes it an encoding effect rather
+      // than a knock-on one: 90 B against 630 B for a typical beacon.
+      expect(keys.stats.radioDemandRatio / aliases.stats.radioDemandRatio,
+          greaterThan(3));
+    });
+
+    test('samples connectivity in-window, which an end-of-window graph cannot', () {
+      // docs/06 §24.10: a 60-node crowd splits and re-joins inside a measurement window, so
+      // broadcastReach reads as two modes unless the reader can see how much of the window the
+      // network was in one piece. Seed 2024 is the case §24.9 got wrong — whole at the end of
+      // the window, split for most of it.
+      final crowd = MeshSimulation(festivalCrowd(2024));
+      crowd.runFor(90000.0);
+      crowd.refresh();
+      crowd.clearRecords();
+      crowd.injectTraffic(30, 40000.0);
+      crowd.runFor(60000.0);
+      crowd.refresh();
+      // Whole at the end — the measurement that misled §24.9.
+      expect(crowd.componentSizes(), equals(<int>[crowd.nodes.length]));
+      // And not whole during the window. Thresholds are deliberately loose: the sampler runs
+      // on the physics tick, so which instants it lands on is not worth pinning.
+      expect(crowd.stats.connectivitySamples, greaterThan(0));
+      expect(crowd.stats.connectedSampleShare, lessThan(1.0));
+      expect(crowd.stats.meanLargestComponent, lessThan(1.0));
+      expect(crowd.stats.broadcastReach, lessThan(0.9));
+    });
+  });
+
+  group('connectivity sampling (docs/06 §24.10)', () {
+    // Mirrors `src/__tests__/connectivity.test.ts`.
+
+    MeshSimulation world(SimConfig config) {
+      final sim = MeshSimulation(config);
+      sim.runFor(90000.0);
+      sim.refresh();
+      sim.clearRecords();
+      sim.injectTraffic(30, 40000.0);
+      sim.runFor(60000.0);
+      sim.refresh();
+      return sim;
+    }
+
+    test('reports the radio graph components, largest first, summing to the network', () {
+      final sim = world(campusQuad(42));
+      final sizes = sim.componentSizes();
+      expect(sizes, isNotEmpty);
+      expect(sizes.fold<int>(0, (a, b) => a + b), equals(sim.nodes.length));
+      for (var i = 1; i < sizes.length; i++) {
+        expect(sizes[i - 1], greaterThanOrEqualTo(sizes[i]));
+      }
+    });
+
+    test('samples the window at the configured interval, not the settle period', () {
+      final sim = world(campusQuad(42).copyWith(connectivitySampleMs: 5000.0));
+      // 60 s window at 5 s per sample, and the sampler runs on the 250 ms physics tick, so a
+      // sample lands on the first tick at or after each boundary rather than exactly on it.
+      expect(sim.stats.connectivitySamples, greaterThanOrEqualTo(11));
+      expect(sim.stats.connectivitySamples, lessThanOrEqualTo(13));
+    });
+
+    test('can be disabled, and a disabled run reports trivially connected defaults', () {
+      final sim = world(campusQuad(42).copyWith(connectivitySampleMs: 0));
+      expect(sim.stats.connectivitySamples, equals(0));
+      // Zero samples must not read as "never connected": with nothing measured the shares are
+      // 1, so a consumer comparing them against a threshold is not misled.
+      expect(sim.stats.connectedSampleShare, equals(1.0));
+      expect(sim.stats.meanLargestComponent, equals(1.0));
+    });
+
+    test('splits what is out of range, largest piece first', () {
+      final comps = radioComponents(<MeshNode>[
+        makeNode('a', 0, 0),
+        makeNode('b', 10, 0),
+        makeNode('c', 90, 90),
+      ], rfWith());
+      expect(comps, hasLength(2));
+      expect(comps[0]..sort(), equals(<NodeId>['a', 'b']));
+      expect(comps[1], equals(<NodeId>['c']));
+    });
+
+    test('makes an offline node its own component rather than absorbing it', () {
+      // `peersInRange` filters the far end on isOnline and never the near one, so without
+      // forcing this the offline node lists live neighbours that do not list it back — an
+      // asymmetric edge a depth-first search follows, reporting one piece while a node in it
+      // hears nobody.
+      final comps = radioComponents(<MeshNode>[
+        makeNode('a', 0, 0),
+        makeNode('off', 10, 0, isOnline: false),
+        makeNode('b', 20, 0),
+      ], rfWith());
+      expect(comps.firstWhere((c) => c.contains('off')), equals(<NodeId>['off']));
+      expect(comps[0]..sort(), equals(<NodeId>['a', 'b']));
+    });
+
+    test('is what componentSizes reports the sizes of, so metric and picture agree', () {
+      final sim = world(campusQuad(42));
+      expect(sim.components().map((c) => c.length).toList(),
+          equals(sim.componentSizes()));
+      // The premise the published numbers in docs/06 §24.10-§24.13 rest on: nothing was
+      // offline in those runs, so forcing offline nodes into their own components cannot
+      // have moved any of them.
+      expect(sim.nodes.every((n) => n.isOnline), isTrue);
+    });
+
+    test('says a settled 20-node campus stays in one piece', () {
+      final sim = world(campusQuad(42).copyWith(connectivitySampleMs: 5000.0));
+      expect(sim.stats.connectedSampleShare, equals(1.0));
+      expect(sim.stats.meanLargestComponent, equals(1.0));
+      expect(sim.componentSizes(), equals(<int>[sim.nodes.length]));
+    });
+
+    test('does not change the world it measures', () {
+      // Sampling reads the graph and writes counters: no random number, no scheduled event. So
+      // a run that samples and a run that does not must agree on everything that is not a
+      // connectivity statistic — which is what makes it safe to leave on by default.
+      final on = world(campusQuad(42).copyWith(connectivitySampleMs: 5000.0));
+      final off = world(campusQuad(42).copyWith(connectivitySampleMs: 0));
+      expect(on.stats.totalDelivered, equals(off.stats.totalDelivered));
+      expect(on.stats.totalForwarded, equals(off.stats.totalForwarded));
+      expect(on.stats.deliveryRatio, equals(off.stats.deliveryRatio));
+      expect(on.stats.broadcastReach, equals(off.stats.broadcastReach));
+      expect(on.stats.overheadRatio, equals(off.stats.overheadRatio));
+      expect(on.stats.controlOverhead, equals(off.stats.controlOverhead));
+      expect(on.stats.routeExpiries, equals(off.stats.routeExpiries));
+      expect(on.stats.wakeLocks, equals(off.stats.wakeLocks));
+      expect(on.stats.connectivitySamples, greaterThan(0));
+      expect(off.stats.connectivitySamples, equals(0));
+    });
+  });
+
+  group('adaptive scan intervals (docs/05 §1.2, layer 3)', () {
+    // Mirrors `src/__tests__/scan-interval.test.ts`. The direction is the inverse of the
+    // beacon rule §24.11 rejected, and deliberately: a scan is this device waking to look, a
+    // beacon is every neighbour waking to listen.
+
+    MeshSimulation world(SimConfig config) {
+      final sim = MeshSimulation(config);
+      sim.runFor(90000.0);
+      sim.refresh();
+      sim.clearRecords();
+      sim.injectTraffic(30, 40000.0);
+      sim.runFor(60000.0);
+      sim.refresh();
+      return sim;
+    }
+
+    test('ships fixed, so nothing published moves', () {
+      // Written out rather than iterated over a list of scenario functions: Dart declares them
+      // with an optional positional seed (`SimConfig campusQuad([int seed = 42])`), and whether
+      // that type is assignable to a required-parameter function type is a subtyping question
+      // this repository has no compiler to answer. The same reason the occupancy group's helper
+      // takes a built config instead of a scenario.
+      for (final config in <SimConfig>[
+        campusQuad(42),
+        sparseVillage(42),
+        festivalCrowd(42)
+      ]) {
+        expect(config.scanIntervalMode, equals(ScanIntervalMode.fixed));
+        expect(config.scanDensityReferencePeers, equals(10));
+      }
+    });
+
+    test('scans less in a sparse world, which is the row claimed saving', () {
+      final fixed = world(sparseVillage(42));
+      final adaptive =
+          world(sparseVillage(42).copyWith(scanIntervalMode: ScanIntervalMode.density));
+      expect(adaptive.stats.scansPerSec, lessThan(fixed.stats.scansPerSec));
+      // Fewer scans in a sparse world must not strand a message, because there is little to
+      // discover either way.
+      expect(adaptive.stats.deliveryRatio,
+          greaterThanOrEqualTo(fixed.stats.deliveryRatio - 0.05));
+    });
+
+    test('scans more in a dense world, which is what the row says and what it costs', () {
+      final fixed = world(festivalCrowd(42));
+      final adaptive =
+          world(festivalCrowd(42).copyWith(scanIntervalMode: ScanIntervalMode.density));
+      expect(adaptive.stats.scansPerSec, greaterThan(fixed.stats.scansPerSec));
+    });
+
+    test('is anchored, so a reference-density node scans at the configured interval', () {
+      // At ten peers both modes agree, so a difference anywhere is attributable to density and
+      // not to a re-tuned constant. campus_quad's median peer count is near ten, which is why
+      // the two modes land close there and far apart at the extremes.
+      final fixed = world(campusQuad(42));
+      final adaptive =
+          world(campusQuad(42).copyWith(scanIntervalMode: ScanIntervalMode.density));
+      final ratio = adaptive.stats.scansPerSec / fixed.stats.scansPerSec;
+      expect(ratio, greaterThan(0.6));
+      expect(ratio, lessThan(1.6));
+    });
+
+    test('clamps, so one peer does not stop a scan and a crowd does not pin a node awake', () {
+      final fixed = world(festivalCrowd(42));
+      final adaptive =
+          world(festivalCrowd(42).copyWith(scanIntervalMode: ScanIntervalMode.density));
+      expect(adaptive.stats.scansPerSec, lessThan(fixed.stats.scansPerSec * 4.5));
+      expect(adaptive.stats.scansPerSec, greaterThan(fixed.stats.scansPerSec / 4.5));
+    });
+  });
+
+  group('density-derived beacon interval (docs/06 §24.11)', () {
+    // The first two tests mirror the second describe in `src/__tests__/connectivity.test.ts`;
+    // the third mirrors `src/__tests__/radio-occupancy.test.ts`. §24.7 argued for
+    // deriving the interval per node because no single interval served both densities; §24.11
+    // measures it and rejects it, so these tests pin the default and the direction that made
+    // it lose rather than any benefit.
+
+    MeshSimulation world(SimConfig config) {
+      final sim = MeshSimulation(config);
+      sim.runFor(90000.0);
+      sim.refresh();
+      sim.clearRecords();
+      sim.injectTraffic(30, 40000.0);
+      sim.runFor(60000.0);
+      sim.refresh();
+      return sim;
+    }
+
+    test('ships on the fixed interval docs/03 §4 specifies', () {
+      final config = campusQuad(42);
+      expect(config.ogmIntervalMode, equals(OgmIntervalMode.fixed));
+      expect(config.ogmDensityReferencePeers, equals(10));
+      expect(config.ogmIntervalMs, equals(2000));
+      // The rule is anchored, not a replacement: at the reference peer count the derived mode
+      // reproduces the specified interval, so it cannot be blamed for a change it did not make.
+      final derived = config.copyWith(ogmIntervalMode: OgmIntervalMode.density);
+      expect(derived.ogmIntervalMode, equals(OgmIntervalMode.density));
+      expect(derived.ogmIntervalMs, equals(config.ogmIntervalMs));
+    });
+
+    test('spends more airtime in a sparse world, where the clamp floor bites', () {
+      // docs/06 §24.11: sparse_village pays 3.1x the demanded radio time for 1.6 points of
+      // delivery, because a node with three peers hits the ogmIntervalMs / 4 floor and beacons
+      // four times the specified rate to hold a reception load nobody was struggling with.
+      // Thresholds are loose — the two modes are different worlds — and the direction is what
+      // is being pinned, which is the direction that made the lever get rejected.
+      final fixed = world(
+          sparseVillage(42).copyWith(radioOccupancy: RadioOccupancy.airtime));
+      final derived = world(sparseVillage(42).copyWith(
+          radioOccupancy: RadioOccupancy.airtime,
+          ogmIntervalMode: OgmIntervalMode.density));
+      expect(derived.stats.controlOverhead,
+          greaterThan(fixed.stats.controlOverhead));
+      expect(derived.stats.radioDemandRatio,
+          greaterThan(fixed.stats.radioDemandRatio));
+      // And the topologies are comparable, which is what makes the comparison readable at all:
+      // §24.10's metric says both worlds are equally partitioned, so the cost is not a
+      // topology difference in disguise.
+      expect(derived.stats.meanLargestComponent,
+          closeTo(fixed.stats.meanLargestComponent, 0.1));
+    });
+
+    test('costs a dense crowd fewer deferrals under csma, and buys it delivery', () {
+      // Mirrors `costs a dense crowd fewer deferrals and buys it delivery, once contention is
+      // modelled` in src/__tests__/radio-occupancy.test.ts — a different file from the two tests
+      // above, which mirror connectivity.test.ts — so it has to use the same harness, and it did
+      // not. It hand-rolled a shorter sequence: 120 s of warm-up, no `clearRecords()` and no
+      // `injectTraffic()`, which measures a crowd with nothing to send. Both arms recorded zero
+      // deferrals and zero drops, and `expect(0, lessThan(0))` failed on the first Dart run this
+      // repository has ever had (2026-10-27, run 40428343622). The failure is the good outcome:
+      // the same mistake with a `greaterThanOrEqual` in it would have passed for ever while
+      // measuring nothing.
+      //
+      // The magnitudes quoted for this comparison are the TypeScript mirror's, about six points
+      // of delivery; docs/08 §12's published contention numbers were measured under the flat
+      // charge and are pessimistic here. No Dart magnitude is published anywhere, because until
+      // that run no Dart SDK existed in this pipeline to measure one with. The direction is what
+      // this test pins.
+      final flat = world(festivalCrowd(42).copyWith(
+          channelAccess: ChannelAccess.csma, radioOccupancy: RadioOccupancy.hopLatency));
+      final sized = world(festivalCrowd(42).copyWith(
+          channelAccess: ChannelAccess.csma, radioOccupancy: RadioOccupancy.airtime));
+      // The guard that makes the comparison non-vacuous: a world that never contends has nothing
+      // to defer, and 0 < 0 is not a measurement. Implied by the assertions below, stated because
+      // the version without it failed for exactly this reason.
+      expect(flat.stats.channelDeferrals, greaterThan(0),
+          reason: 'the flat arm must actually contend, or nothing below is measured');
+      expect(flat.stats.channelDrops, greaterThan(0),
+          reason: 'the flat arm must actually drop, or nothing below is measured');
+      expect(sized.stats.channelDeferrals, lessThan(flat.stats.channelDeferrals));
+      expect(sized.stats.channelDrops, lessThan(flat.stats.channelDrops));
+      expect(sized.stats.deliveryRatio, greaterThan(flat.stats.deliveryRatio));
     });
   });
 }

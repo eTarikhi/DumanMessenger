@@ -1,0 +1,276 @@
+{
+  "schema": 1,
+  "purpose": "offline failure association only; NOT a routing selector",
+  "liveEligible": false,
+  "dataSha256": "81aefcf2ed725c02c986442d4c845b5a91550eedbbfd03007e25c6206ec43dc4",
+  "features": [
+    "intercept",
+    "duty flag",
+    "elapsed traffic time /225000 ms",
+    "campus indicator",
+    "sparse indicator",
+    "partition indicator"
+  ],
+  "missingContract": "all required; reject incomplete rows; no imputation",
+  "excluded": [
+    "eventual hops",
+    "delivery/latency",
+    "post-send diagnostic tags",
+    "retries/exhaustion",
+    "horizon/contact oracle",
+    "identity/seed"
+  ],
+  "trainSeeds": [
+    4301,
+    4302,
+    6301
+  ],
+  "validationSeeds": [
+    4303,
+    4304
+  ],
+  "exposedAuditSeeds": [
+    5301,
+    5302,
+    5303,
+    5304,
+    5305,
+    5306,
+    6302
+  ],
+  "futureUntouchedBaselineSeeds": [
+    7401,
+    7402,
+    7403,
+    7404
+  ],
+  "logisticWeights": [
+    -1.1196844770062384,
+    0.049095306149982657,
+    0.14787595433043127,
+    -2.4111914669193286,
+    1.8454905690832684,
+    1.2141659017304598
+  ],
+  "logisticL2": 0.002,
+  "gradientIterations": 600,
+  "constant": 0.3606666666666667,
+  "stump": {
+    "feature": 3,
+    "threshold": 0.5,
+    "probabilities": [
+      0.45,
+      0.0033333333333333335
+    ]
+  },
+  "selectedByValidationBrier": "logistic",
+  "validation": {
+    "constant": {
+      "n": 600,
+      "worlds": 4,
+      "failurePrevalence": 0.12,
+      "tp": 0,
+      "fp": 0,
+      "fn": 72,
+      "tn": 528,
+      "precision": null,
+      "recall": 0.0,
+      "accuracy": 0.88,
+      "brier": 0.16352044444444447,
+      "logLoss": 0.5160259277312981,
+      "auc": 0.5,
+      "calibration": [
+        {
+          "bin": [
+            0.2,
+            0.4
+          ],
+          "n": 600,
+          "predicted": 0.3606666666666667,
+          "observed": 0.12
+        }
+      ],
+      "ece": 0.24066666666666667
+    },
+    "logistic": {
+      "n": 600,
+      "worlds": 4,
+      "failurePrevalence": 0.12,
+      "tp": 0,
+      "fp": 0,
+      "fn": 72,
+      "tn": 528,
+      "precision": null,
+      "recall": 0.0,
+      "accuracy": 0.88,
+      "brier": 0.12659920365199354,
+      "logLoss": 0.43017098054837033,
+      "auc": 0.5086279461279462,
+      "calibration": [
+        {
+          "bin": [
+            0.2,
+            0.4
+          ],
+          "n": 600,
+          "predicted": 0.2648089790446409,
+          "observed": 0.12
+        }
+      ],
+      "ece": 0.1448089790446409
+    },
+    "stump": {
+      "n": 600,
+      "worlds": 4,
+      "failurePrevalence": 0.12,
+      "tp": 0,
+      "fp": 0,
+      "fn": 72,
+      "tn": 528,
+      "precision": null,
+      "recall": 0.0,
+      "accuracy": 0.88,
+      "brier": 0.21450000000000002,
+      "logLoss": 0.6219174842110785,
+      "auc": 0.5,
+      "calibration": [
+        {
+          "bin": [
+            0.4,
+            0.6
+          ],
+          "n": 600,
+          "predicted": 0.45,
+          "observed": 0.12
+        }
+      ],
+      "ece": 0.33
+    }
+  },
+  "exposedAudit": {
+    "constant": {
+      "n": 2700,
+      "worlds": 18,
+      "failurePrevalence": 0.26925925925925925,
+      "tp": 0,
+      "fp": 0,
+      "fn": 727,
+      "tn": 1973,
+      "precision": null,
+      "recall": 0.0,
+      "accuracy": 0.7307407407407407,
+      "brier": 0.20511402469135803,
+      "logLoss": 0.6014726439545919,
+      "auc": 0.5,
+      "calibration": [
+        {
+          "bin": [
+            0.2,
+            0.4
+          ],
+          "n": 2700,
+          "predicted": 0.3606666666666667,
+          "observed": 0.26925925925925925
+        }
+      ],
+      "ece": 0.09140740740740744
+    },
+    "logistic": {
+      "n": 2700,
+      "worlds": 18,
+      "failurePrevalence": 0.26925925925925925,
+      "tp": 418,
+      "fp": 182,
+      "fn": 309,
+      "tn": 1791,
+      "precision": 0.6966666666666667,
+      "recall": 0.5749656121045392,
+      "accuracy": 0.8181481481481482,
+      "brier": 0.1490418055927378,
+      "logLoss": 0.46465136931780393,
+      "auc": 0.7797958129382148,
+      "calibration": [
+        {
+          "bin": [
+            0.0,
+            0.2
+          ],
+          "n": 300,
+          "predicted": 0.03131789048242253,
+          "observed": 0
+        },
+        {
+          "bin": [
+            0.2,
+            0.4
+          ],
+          "n": 1800,
+          "predicted": 0.2648089790446409,
+          "observed": 0.17166666666666666
+        },
+        {
+          "bin": [
+            0.4,
+            0.6
+          ],
+          "n": 300,
+          "predicted": 0.5479417443263567,
+          "observed": 0.66
+        },
+        {
+          "bin": [
+            0.6,
+            0.8
+          ],
+          "n": 300,
+          "predicted": 0.6949419510899287,
+          "observed": 0.7333333333333333
+        }
+      ],
+      "ece": 0.0822912669630351
+    },
+    "stump": {
+      "n": 2700,
+      "worlds": 18,
+      "failurePrevalence": 0.26925925925925925,
+      "tp": 0,
+      "fp": 0,
+      "fn": 727,
+      "tn": 1973,
+      "precision": null,
+      "recall": 0.0,
+      "accuracy": 0.7307407407407407,
+      "brier": 0.20692716049382717,
+      "logLoss": 0.5858140991830101,
+      "auc": 0.5760263558033452,
+      "calibration": [
+        {
+          "bin": [
+            0.0,
+            0.2
+          ],
+          "n": 300,
+          "predicted": 0.0033333333333333335,
+          "observed": 0
+        },
+        {
+          "bin": [
+            0.4,
+            0.6
+          ],
+          "n": 2400,
+          "predicted": 0.45,
+          "observed": 0.30291666666666667
+        }
+      ],
+      "ece": 0.13111111111111112
+    }
+  },
+  "limitations": [
+    "No pre-send topology/link/queue features retained in old records; no invented reconstruction.",
+    "Elapsed-time association is benchmark-specific, not a deployed signal schema.",
+    "6301/6302 provide only one seed per protected training/test context.",
+    "Seed groups disjoint; within-world packets dependent; no IID packet CIs.",
+    "Failure prediction is not policy value or causation. No SHAP, survival hazards or deep learner justified."
+  ]
+}

@@ -15,7 +15,7 @@ import {
 } from "../src/simulation";
 import { campusQuad } from "../src/scenarios";
 import { canReach } from "../src/rf";
-import { selectTransport, wireSizeOf } from "../src/routing";
+import { selectTransport, wireSizeOfBody } from "../src/routing";
 import type { Group, MeshNode, NodeId } from "../src/types";
 
 const MEMBERS = 5;
@@ -185,8 +185,8 @@ function main(): void {
   const beacon = encodeHistoryBeacon("grp-1", 0, historyDigest([]));
   console.log("Group history anti-entropy — measured, not assumed.");
   console.log(
-    `A beacon is ${beacon.length} characters -> ${wireSizeOf(beacon.length)} B on the wire ` +
-      `(${selectTransport(wireSizeOf(beacon.length))}), constant in the size of the history.`
+    `A beacon is ${beacon.length} characters -> ${wireSizeOfBody(beacon)} B on the wire ` +
+      `(${selectTransport(wireSizeOfBody(beacon))}), constant in the size of the history.`
   );
 
   for (const close of [false, true]) {

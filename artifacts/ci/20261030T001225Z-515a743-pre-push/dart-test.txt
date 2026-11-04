@@ -1,0 +1,346 @@
+00:00 +0: loading test/acceptance_test.dart
+00:00 +0: test/atrium_test.dart: the atrium becomes a router (docs/06 §18) elects a healthy open node in campus_quad within two cycles
+00:00 +1: test/atrium_test.dart: the atrium becomes a router (docs/06 §18) elects a healthy open node in sparse_village within two cycles
+00:00 +2: test/atrium_test.dart: the atrium becomes a router (docs/06 §18) elects a healthy open node in festival_crowd within two cycles
+00:03 +3: test/atrium_test.dart: the atrium becomes a router (docs/06 §18) elects a healthy open node in partitioned_pair within two cycles
+00:03 +4: test/atrium_test.dart: the atrium becomes a router (docs/06 §18) weighs openness against health, and says where the crossover is
+00:03 +5: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) raises every open node's score and leaves the ranking exactly where it was
+00:08 +6: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +7: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +8: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +9: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +10: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +11: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +12: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +13: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +14: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +15: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +16: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +17: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +18: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +19: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +20: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +21: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +22: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +23: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +24: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:08 +25: test/atrium_test.dart: observed-maximum peer normalisation, measured and rejected (docs/06 §18.4) what it does move is the promote gate and the size of the elected set
+00:12 +26: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:19 +27: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +28: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +29: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +30: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +31: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +32: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +33: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +34: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +35: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +36: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +37: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +38: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +39: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:20 +40: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +41: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +42: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +43: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +44: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +45: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +46: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +47: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +48: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:22 +49: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:25 +50: test/acceptance_test.dart: dense crowd (docs/02 §6: 50+ nodes) stays stable and cheap at 60 nodes
+00:26 +51: test/community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:27 +52: test/community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:27 +53: test/community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:27 +54: test/community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:27 +55: test/community_relay_test.dart: exempting tablets from the cap elects all six and fills skills/02 band to the top
+00:35 +56: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:40 +57: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:40 +58: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:40 +59: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:40 +60: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:40 +61: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +62: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +63: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +64: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +65: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +66: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +67: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +68: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +69: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +70: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +71: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +72: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +73: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +74: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +75: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +76: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +77: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +78: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +79: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +80: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +81: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +82: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +83: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +84: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +85: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +86: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +87: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +88: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +89: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +90: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +91: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +92: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +93: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +94: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +95: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +96: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +97: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +98: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +99: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +100: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +101: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +102: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +103: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +104: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +105: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +106: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +107: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +108: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +109: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +110: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +111: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +112: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:41 +113: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:42 +114: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:42 +115: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:43 +116: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:43 +117: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:43 +118: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +119: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:44 +120: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +121: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:45 +122: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:46 +123: test/acceptance_test.dart: supports the documented 10-200 node range without a quadratic fallback
+00:46 +124: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") refuses to shrink a group below three
+00:46 +125: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") refuses to shrink a group below three
+00:46 +126: test/golden_test.dart: golden vectors v2 reproduces the seeded spawn geometry
+00:46 +127: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") rotates on join, so a joiner cannot read the history it missed
+00:46 +128: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") rotates on join, so a joiner cannot read the history it missed
+00:46 +129: test/golden_test.dart: golden vectors v2 serialises an anti-entropy reply exactly as the reference engine does
+00:46 +130: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") counts a stale key epoch as rejected, not as a delivery
+00:47 +131: test/history_test.dart: group history anti-entropy repairs a flood a member missed while it was offline
+00:47 +132: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") lets only the admin rotate the key
+00:47 +133: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") lets only the admin rotate the key
+00:47 +134: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") lets only the admin rotate the key
+00:47 +135: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") lets only the admin rotate the key
+00:47 +136: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") lets only the admin rotate the key
+00:47 +137: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") lets only the admin rotate the key
+00:47 +138: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") lets only the admin rotate the key
+00:47 +139: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") offers per-member unicast, with ACKs and the same reach
+00:47 +140: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") offers per-member unicast, with ACKs and the same reach
+00:47 +141: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") offers per-member unicast, with ACKs and the same reach
+00:47 +142: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") offers per-member unicast, with ACKs and the same reach
+00:47 +143: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") offers per-member unicast, with ACKs and the same reach
+00:47 +144: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") offers per-member unicast, with ACKs and the same reach
+00:47 +145: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") offers per-member unicast, with ACKs and the same reach
+00:47 +146: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") offers per-member unicast, with ACKs and the same reach
+00:47 +147: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") offers per-member unicast, with ACKs and the same reach
+00:48 +148: test/media_test.dart: media transport carries a 10 MB image three hops on Wi-Fi Direct inside a minute
+00:48 +149: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") logs membership changes when capture is on
+00:48 +150: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") logs membership changes when capture is on
+00:48 +151: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") logs membership changes when capture is on
+00:48 +152: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") logs membership changes when capture is on
+00:48 +153: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") logs membership changes when capture is on
+00:48 +154: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") logs membership changes when capture is on
+00:48 +155: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") logs membership changes when capture is on
+00:48 +156: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") logs membership changes when capture is on
+00:48 +157: test/media_test.dart: media against skills/05 (Voice PTT & Media) resumes a 10 MB Wi-Fi Direct image after a mid-transfer disconnect
+00:48 +158: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") lists a node's groups, and forgets them when the world is rebuilt
+00:48 +159: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") lists a node's groups, and forgets them when the world is rebuilt
+00:48 +160: test/engine_test.dart: group channels (docs/04, roadmap Phase 1 "group (3-10 members)") defaults to the mode whose cost does not depend on the route table
+00:48 +161: test/engine_test.dart: MPR fallback at density (skills/08 nodeCount 10-200) floods to every peer while a beacon can describe the neighbourhood
+00:48 +162: test/engine_test.dart: MPR fallback at density (skills/08 nodeCount 10-200) caps the fan-out once the neighbourhood no longer fits in a beacon
+00:48 +163: test/routing_benchmark_test.dart: campus_quad duty=false baseline-v1 parity
+00:48 +164: test/routing_benchmark_test.dart: campus_quad duty=false baseline-v1 parity
+00:48 +165: test/routing_benchmark_test.dart: campus_quad duty=false baseline-v1 parity
+00:48 +166: test/routing_benchmark_test.dart: campus_quad duty=false baseline-v1 parity
+00:49 +167: test/routing_benchmark_test.dart: campus_quad duty=false baseline-v1 parity
+00:49 +168: test/routing_benchmark_test.dart: campus_quad duty=false baseline-v1 parity
+00:50 +169: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) gives a single-flood arm to measure against
+00:50 +170: test/routing_benchmark_test.dart: campus_quad duty=false ack-2000-v1 parity
+00:50 +171: test/routing_benchmark_test.dart: campus_quad duty=false ack-2000-v1 parity
+00:51 +172: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches every radio-connected node — the roadmap exit criterion
+00:51 +173: test/routing_benchmark_test.dart: campus_quad duty=false ack-6000-v1 parity
+00:52 +174: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:53 +175: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:54 +176: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) reaches all of a 60-node crowd, which TTL=5 cannot span
+00:55 +177: test/routing_benchmark_test.dart: campus_quad duty=false route-flood-v1 parity
+00:55 +178: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) collapses repeats into one alert per receiver, newest fix wins
+00:56 +179: test/routing_benchmark_test.dart: campus_quad duty=true baseline-v1 parity
+00:56 +180: test/routing_benchmark_test.dart: campus_quad duty=true baseline-v1 parity
+00:56 +181: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) floods to every peer whatever the relay policy says
+00:56 +182: test/routing_benchmark_test.dart: campus_quad duty=true ack-2000-v1 parity
+00:57 +183: test/routing_benchmark_test.dart: campus_quad duty=true ack-2000-v1 parity
+00:57 +184: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) logs every flood when capture is on
+00:57 +185: test/routing_benchmark_test.dart: campus_quad duty=true ack-6000-v1 parity
+00:58 +186: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) buys reach with radio time, and the cost is visible
+00:58 +187: test/routing_benchmark_test.dart: campus_quad duty=true super-carrier-v1 parity
+00:59 +188: test/engine_test.dart: SOS mode: repeated flood of GPS + text (docs/05, roadmap Phase 3) leaves the unicast metrics baseline alone
+00:59 +189: test/routing_benchmark_test.dart: campus_quad duty=true community-carrier-v1 parity
+00:59 +190: test/routing_benchmark_test.dart: campus_quad duty=true community-carrier-v1 parity
+01:00 +191: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) recovers the route chain from the fan-out tree
+01:00 +192: test/routing_benchmark_test.dart: campus_quad duty=true route-flood-v1 parity
+01:00 +193: test/routing_benchmark_test.dart: campus_quad duty=true route-flood-v1 parity
+01:00 +194: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) traces hops always, and captures the log only when asked
+01:01 +195: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) traces hops always, and captures the log only when asked
+01:01 +196: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) traces hops always, and captures the log only when asked
+01:01 +197: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) traces hops always, and captures the log only when asked
+01:01 +198: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) traces hops always, and captures the log only when asked
+01:01 +199: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) traces hops always, and captures the log only when asked
+01:01 +200: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) traces hops always, and captures the log only when asked
+01:01 +201: test/routing_benchmark_test.dart: sparse_village duty=true baseline-v1 parity
+01:01 +202: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) logs beacons too when captureOgm is set
+01:01 +203: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) logs beacons too when captureOgm is set
+01:02 +204: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) logs beacons too when captureOgm is set
+01:02 +205: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) logs beacons too when captureOgm is set
+01:02 +206: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) logs beacons too when captureOgm is set
+01:02 +207: test/routing_benchmark_test.dart: sparse_village duty=true route-flood-v1 parity
+01:02 +208: test/engine_test.dart: hop traces and the capture log (roadmap Phase 4) keeps the capture bounded and in time order
+01:02 +209: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:04 +210: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:04 +211: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:05 +212: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:05 +213: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:06 +214: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:06 +215: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:06 +216: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:06 +217: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:07 +218: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:08 +219: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +220: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +221: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +222: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +223: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +224: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +225: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +226: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +227: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +228: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +229: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +230: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +231: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +232: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +233: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +234: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +235: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +236: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +237: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +238: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +239: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:09 +240: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:10 +241: test/routing_benchmark_test.dart: festival_crowd duty=false baseline-v1 parity
+01:11 +242: test/engine_test.dart: broadcast cap enforcement scope cuts the airtime a flood costs, which is what the cap is for
+01:11 +243: test/routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:13 +244: test/routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:13 +245: test/routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:13 +246: test/routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:14 +247: test/routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:14 +248: test/routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:14 +249: test/routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:15 +250: test/routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:15 +251: test/routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:15 +252: test/routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:16 +253: test/routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:18 +254: test/routing_benchmark_test.dart: festival_crowd duty=false ack-2000-v1 parity
+01:19 +255: test/engine_test.dart: cover traffic (docs/04 §5, dummy beacons) costs airtime in proportion to its rate
+01:20 +256: test/routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:21 +257: test/routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:21 +258: test/routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:22 +259: test/routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:23 +260: test/routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:23 +261: test/routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:24 +262: test/routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:24 +263: test/routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:26 +264: test/routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:26 +265: test/routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:26 +266: test/routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:26 +267: test/routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:26 +268: test/routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:26 +269: test/routing_benchmark_test.dart: festival_crowd duty=false ack-6000-v1 parity
+01:27 +270: test/engine_test.dart: radio occupancy and the derived beacon size (docs/06 §24.6) changes telemetry and nothing else under the shipped radio baseline
+01:27 +271: test/routing_benchmark_test.dart: festival_crowd duty=false super-carrier-v1 parity
+01:28 +272: test/routing_benchmark_test.dart: festival_crowd duty=false super-carrier-v1 parity
+01:28 +273: test/routing_benchmark_test.dart: festival_crowd duty=false super-carrier-v1 parity
+01:28 +274: test/routing_benchmark_test.dart: festival_crowd duty=false super-carrier-v1 parity
+01:30 +275: test/routing_benchmark_test.dart: festival_crowd duty=false super-carrier-v1 parity
+01:35 +276: test/routing_benchmark_test.dart: festival_crowd duty=false super-carrier-v1 parity
+01:36 +277: test/engine_test.dart: connectivity sampling (docs/06 §24.10) reports the radio graph components, largest first, summing to the network
+01:36 +278: test/routing_benchmark_test.dart: festival_crowd duty=false community-carrier-v1 parity
+01:37 +279: test/routing_benchmark_test.dart: festival_crowd duty=false community-carrier-v1 parity
+01:37 +280: test/routing_benchmark_test.dart: festival_crowd duty=false community-carrier-v1 parity
+01:37 +281: test/routing_benchmark_test.dart: festival_crowd duty=false community-carrier-v1 parity
+01:37 +282: test/routing_benchmark_test.dart: festival_crowd duty=false community-carrier-v1 parity
+01:38 +283: test/routing_benchmark_test.dart: festival_crowd duty=false community-carrier-v1 parity
+01:39 +284: test/routing_benchmark_test.dart: festival_crowd duty=false community-carrier-v1 parity
+01:40 +285: test/routing_benchmark_test.dart: festival_crowd duty=false community-carrier-v1 parity
+01:40 +286: test/routing_benchmark_test.dart: festival_crowd duty=false community-carrier-v1 parity
+01:40 +287: test/routing_benchmark_test.dart: festival_crowd duty=false community-carrier-v1 parity
+01:44 +288: test/engine_test.dart: adaptive scan intervals (docs/05 §1.2, layer 3) scans more in a dense world, which is what the row says and what it costs
+01:52 +289: test/routing_benchmark_test.dart: festival_crowd duty=false route-flood-v1 parity
+01:53 +290: test/engine_test.dart: adaptive scan intervals (docs/05 §1.2, layer 3) is anchored, so a reference-density node scans at the configured interval
+01:53 +291: test/routing_benchmark_test.dart: festival_crowd duty=true baseline-v1 parity
+02:00 +292: test/engine_test.dart: adaptive scan intervals (docs/05 §1.2, layer 3) clamps, so one peer does not stop a scan and a crowd does not pin a node awake
+02:05 +293: test/routing_benchmark_test.dart: festival_crowd duty=true ack-2000-v1 parity
+02:05 +294: test/routing_benchmark_test.dart: festival_crowd duty=true ack-2000-v1 parity
+02:05 +295: test/routing_benchmark_test.dart: festival_crowd duty=true ack-2000-v1 parity
+02:07 +296: test/engine_test.dart: density-derived beacon interval (docs/06 §24.11) costs a dense crowd fewer deferrals under csma, and buys it delivery
+02:13 +297: test/engine_test.dart: density-derived beacon interval (docs/06 §24.11) costs a dense crowd fewer deferrals under csma, and buys it delivery
+02:15 +298: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:15 +299: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:15 +300: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:15 +301: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:15 +302: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:15 +303: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:15 +304: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:15 +305: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:15 +306: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:15 +307: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:15 +308: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:15 +309: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:15 +310: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:15 +311: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +312: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +313: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +314: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +315: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +316: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +317: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +318: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +319: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +320: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +321: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +322: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +323: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +324: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +325: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +326: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +327: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +328: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:16 +329: test/routing_benchmark_test.dart: festival_crowd duty=true super-carrier-v1 parity
+02:18 +330: test/routing_benchmark_test.dart: festival_crowd duty=true community-carrier-v1 parity
+02:22 +331: test/routing_benchmark_test.dart: festival_crowd duty=true route-flood-v1 parity
+02:33 +332: test/routing_benchmark_test.dart: partitioned_pair duty=false baseline-v1 parity
+02:33 +333: test/routing_benchmark_test.dart: partitioned_pair duty=false ack-2000-v1 parity
+02:34 +334: test/routing_benchmark_test.dart: partitioned_pair duty=false ack-6000-v1 parity
+02:34 +335: test/routing_benchmark_test.dart: partitioned_pair duty=false super-carrier-v1 parity
+02:34 +336: test/routing_benchmark_test.dart: partitioned_pair duty=false community-carrier-v1 parity
+02:34 +337: test/routing_benchmark_test.dart: partitioned_pair duty=false route-flood-v1 parity
+02:34 +338: test/routing_benchmark_test.dart: partitioned_pair duty=true baseline-v1 parity
+02:34 +339: test/routing_benchmark_test.dart: partitioned_pair duty=true ack-2000-v1 parity
+02:34 +340: test/routing_benchmark_test.dart: partitioned_pair duty=true ack-6000-v1 parity
+02:35 +341: test/routing_benchmark_test.dart: partitioned_pair duty=true super-carrier-v1 parity
+02:35 +342: test/routing_benchmark_test.dart: partitioned_pair duty=true community-carrier-v1 parity
+02:35 +343: test/routing_benchmark_test.dart: partitioned_pair duty=true route-flood-v1 parity
+02:35 +344: All tests passed!

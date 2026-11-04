@@ -1,0 +1,97 @@
+Duman mesh simulator — campus_quad (seed 42, policy mpr)
+──────────────────────────────────────────────────────────────
+  scenario                 campus_quad
+  seed                     42
+  policy                   mpr
+  nodes                    20
+  sent                     150
+  deliveredUnicast         150
+  deliveryRatio            1.0
+  deliveredWithinFiveHops  148
+  withinFiveRatio          0.9867
+  deliveredWithinThreeHops 134
+  withinThreeRatio         0.8933
+  superNodes               4
+  superRatio               0.2
+  timeAvgSuperRatio        0.2429
+  electionsPerMin          0.0773
+  avgHops                  2.0267
+  latencyP50Ms             545.483
+  latencyP95Ms             4190.9395
+  relayTx                  3652
+  floodAllRelayTx          44654
+  overheadVsFloodAll       0.0818
+  routeFloodRelayTx        5574
+  overheadVsRouteFlood     0.6552
+  overheadRatio            24.3467
+  mprSuppressed            286
+  retriesSent              31
+  retriesExhausted         4
+  acksReceived             149
+  controlOverhead          123664
+  lostTransmissions        109
+  lostOgmTransmissions     3438
+  totalQueued              5
+  avgPeers                 7.9
+  isolatedNodes            0
+  avgScore                 0.628
+  simTimeMs                233000.0
+  dutyCycle                false
+  batteryPctPerHourNormal  2.5619
+  batteryPctPerHourSuper   6.9562
+  batteryPct8hNormal       20.4948
+  batteryPct8hSuper        55.65
+  scansPerSec              33.2
+  relaysPerSec             16.2311
+  awakeRatio               1.0
+  scansSkippedAsleep       0
+  electionEvents           6
+  media                    {files: [{hops: 1, chunks: 160, transport: wifiDirect, complete: true, ms: 7598.7411, kbps: 11039.4707, retransmitted: 0, stalls: 0}, {hops: 2, chunks: 160, transport: wifiDirect, complete: true, ms: 17989.8357, kbps: 4662.9709, retransmitted: 15, stalls: 0}, {hops: 3, chunks: 160, transport: wifiDirect, complete: true, ms: 33002.8405, kbps: 2541.7836, retransmitted: 0, stalls: 0}], bleOnly: {chunks: 20480, transport: ble, complete: false, ms: null, receivedIn15Min: 14667, mtuBytes: 512}, bleLadder: [{bytes: 262144, complete: true, ms: 32135.8723, received: 512, chunks: 512}, {bytes: 1048576, complete: true, ms: 126222.466, received: 2048, chunks: 2048}, {bytes: 2097152, complete: true, ms: 251213.2896, received: 4096, chunks: 4096}, {bytes: 5242880, complete: false, ms: null, received: 4896, chunks: 10240}], voice: [{hops: 1, mode: streamed, transport: ble, frames: 6, firstAudioMs: 989.4972, playDelayMs: 407.2272, maxGapMs: 517.7174, underruns: 0, retransmitted: 0, budgetMs: 3000.0, meetsBudget: true}, {hops: 1, mode: blob, transport: wifiDirect, frames: 1, firstAudioMs: 3427.2465, playDelayMs: 427.2465, maxGapMs: 0.0, underruns: 0, retransmitted: 0, budgetMs: 3000.0, meetsBudget: true}, {hops: 2, mode: streamed, transport: ble, frames: 6, firstAudioMs: 1270.4112, playDelayMs: 585.4262, maxGapMs: 1110.5012, underruns: 1, retransmitted: 1, budgetMs: 3000.0, meetsBudget: true}, {hops: 2, mode: blob, transport: wifiDirect, frames: 1, firstAudioMs: 3578.0499, playDelayMs: 578.0499, maxGapMs: 0.0, underruns: 0, retransmitted: 0, budgetMs: 3000.0, meetsBudget: true}, {hops: 3, mode: streamed, transport: ble, frames: 6, firstAudioMs: 1742.1003, playDelayMs: 1104.3214, maxGapMs: 575.5366, underruns: 0, retransmitted: 0, budgetMs: 8000.0, meetsBudget: true}, {hops: 3, mode: blob, transport: wifiDirect, frames: 1, firstAudioMs: 3990.5622, playDelayMs: 990.5622, maxGapMs: 0.0, underruns: 0, retransmitted: 0, budgetMs: 8000.0, meetsBudget: true}], acceptance: {wifiPttRoundTripMs: 291.7667, wifiPttBufferExcludedMs: 91.7667, wifiPttUnder1s: true, bleNoteIntact: true, bleNoteFrames: 6, bleNoteFrameCount: 6, resumeAfterDisconnect: true, resume: {atDisconnect: 50, chunks: 160, stallsWhileAway: 6, stalls: 6, retransmitted: 1, complete: true, ms: 44594.0966}, overCeilingRefused: true}, channel: {files: [{channel: free, window: 1, complete: true, ms: 103365.3111, retransmitted: 1, drops: 0}, {channel: free, window: 4, complete: true, ms: 33002.8405, retransmitted: 0, drops: 0}, {channel: halfDuplex, window: 1, complete: true, ms: 302365.8158, retransmitted: 19, drops: 3876}, {channel: halfDuplex, window: 4, complete: true, ms: 266191.559, retransmitted: 34, drops: 6698}], text: [{channel: free, arm: quiet, sent: 39, delivered: 39, ratio: 1.0, retries: 6, parked: 1, deferrals: 0, deferMs: 0.0, drops: 0, fileComplete: false}, {channel: free, arm: file w4, sent: 39, delivered: 39, ratio: 1.0, retries: 13, parked: 0, deferrals: 0, deferMs: 0.0, drops: 0, fileComplete: true}, {channel: halfDuplex, arm: quiet, sent: 39, delivered: 39, ratio: 1.0, retries: 9, parked: 0, deferrals: 687, deferMs: 656020.6677, drops: 107, fileComplete: false}, {channel: halfDuplex, arm: file w4, sent: 39, delivered: 37, ratio: 0.9487, retries: 321, parked: 6, deferrals: 1442, deferMs: 1754004.9872, drops: 451, fileComplete: false}, {channel: halfDuplex, arm: file w1, sent: 39, delivered: 38, ratio: 0.9744, retries: 253, parked: 2, deferrals: 1250, deferMs: 1204338.5276, drops: 220, fileComplete: false}], priority: [{arm: voice behind a 2 MB file, priority: fifo, metric: 10/10 frames before the file, ms: 13645.7287, what: note finished in}, {arm: voice behind a 2 MB file, priority: class, metric: 10/10 frames before the file, ms: 6127.2972, what: note finished in}, {arm: an ACK behind a 2 MB file, priority: fifo, metric: 8/32 chunks before the ACK, ms: 13366.2793, what: file finished in}, {arm: an ACK behind a 2 MB file, priority: ackFirst, metric: 5/32 chunks before the ACK, ms: 21231.3295, what: file finished in}]}, pttMeetsBudget: true, imageMeetsBudget: true, verdict: a 10 MB image crosses 1-3 hops on Wi-Fi Direct; 3 hops in 33 s; BLE-only: unfinished in 15 min; push-to-talk plays inside the budget at every hop count; streaming starts audio at 989 ms against 3427 ms for one blob}
+
+Media probe (10 MB image, 64 KB chunks behind a 4-deep window; 3 s Opus note in 500 ms frames at 12 kbit/s)
+  hops transport   chunks  time       kbit/s   retrans  stalls
+  1    wifiDirect  160     7598.7411 ms11039.47070        0
+  2    wifiDirect  160     17989.8357 ms4662.970915       0
+  3    wifiDirect  160     33002.8405 ms2541.78360        0
+  BLE-only at the 512 B MTU skills/05 specifies (no Wi-Fi Direct peer): not finished in 15 min for 10 MB over 20480 chunks
+    256 KB over BLE → 32135.8723 ms
+    1024 KB over BLE → 126222.466 ms
+    2048 KB over BLE → 251213.2896 ms
+    5120 KB over BLE → >5 min (4896/10240 chunks)
+  note  mode      hops  radio       first audio  play delay  max gap   underruns  budget
+  3 s   streamed  1     ble         989.4972 ms  407.2272 ms 517.7174 ms0          PASS (<3 s)
+  3 s   blob      1     wifiDirect  3427.2465 ms 427.2465 ms 0.0 ms    0          PASS (<3 s)
+  3 s   streamed  2     ble         1270.4112 ms 585.4262 ms 1110.5012 ms1          PASS (<3 s)
+  3 s   blob      2     wifiDirect  3578.0499 ms 578.0499 ms 0.0 ms    0          PASS (<3 s)
+  3 s   streamed  3     ble         1742.1003 ms 1104.3214 ms575.5366 ms0          PASS (<8 s)
+  3 s   blob      3     wifiDirect  3990.5622 ms 990.5622 ms 0.0 ms    0          PASS (<8 s)
+  skills/05 acceptance:
+    [1] 1-hop Wi-Fi PTT round trip 291.7667 ms (buffer excluded 91.7667 ms) → PASS <1 s
+    [2] 3-hop BLE voice note 6/6 frames → intact PASS
+    [3] 10 MB Wi-Fi Direct, receiver offline at 50/160 chunks for 20 s → resumed, 44594.0966 ms PASS (6 window stalls, 6 while away)
+    [ ] 11 MB send → refused (skills/05 "Max 10 MB")
+  channel access (docs/08 §12) — `free` is the shipped model:
+    model      window 10 MB @3 hops  retrans  dropped
+    free       1      103365.3111 ms 1       0
+    free       4      33002.8405 ms  0       0
+    halfDuplex 1      302365.8158 ms 19      3876
+    halfDuplex 4      266191.559 ms  34      6698
+    model      arm        delivery  retries parked deferred  dropped  file done
+    free       quiet      1.0       6       1      0.0 ms    0        —
+    free       file w4    1.0       13      0      0.0 ms    0        yes
+    halfDuplex quiet      1.0       9       0      656020.6677 ms107      —
+    halfDuplex file w4    0.9487    321     6      1754004.9872 ms451      no
+    halfDuplex file w1    0.9744    253     2      1204338.5276 ms220      no
+    queue discipline on one radio (docs/08 §12.8):
+      voice behind a 2 MB file    fifo      note finished in 13645.7287 ms10/10 frames before the file
+      voice behind a 2 MB file    class     note finished in 6127.2972 ms10/10 frames before the file
+      an ACK behind a 2 MB file   fifo      file finished in 13366.2793 ms8/32 chunks before the ACK
+      an ACK behind a 2 MB file   ackFirst  file finished in 21231.3295 ms5/32 chunks before the ACK
+  a 10 MB image crosses 1-3 hops on Wi-Fi Direct; 3 hops in 33 s; BLE-only: unfinished in 15 min; push-to-talk plays inside the budget at every hop count; streaming starts audio at 989 ms against 3427 ms for one blob
+  latencyByHop             hops      n     avg     p95
+                              1     62   247 ms   314 ms
+                              2     38   646 ms   829 ms
+                              3     27   902 ms  1127 ms
+                              4     12  1066 ms  1550 ms
+                              5      1  1257 ms  1257 ms
+                              6      2  1746 ms  2026 ms

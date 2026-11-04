@@ -1,0 +1,8 @@
+dart analyze — 0 error(s), 0 warning(s), 0 info(s)
+  (no analyzer issues with a location; raw output below if non-empty)
+
+dart test — 279 passed, 0 failed, 0 skipped
+  (no failing tests parsed)
+
+CLI acceptance (campus_quad, seed 42) — last 15 lines
+  | (no output captured)

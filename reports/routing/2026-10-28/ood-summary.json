@@ -1,0 +1,1058 @@
+{
+  "schemaVersion": 1,
+  "sourceSha": "9b90713a747603d4839d7914a99b2a2222f37e46",
+  "summaries": [
+    {
+      "split": "ood",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "strategy": "ack-2000-v1",
+      "n": 3,
+      "deltaFiveMean": 0.011111111111111072,
+      "deltaFiveCI95": [
+        -0.014186109114340241,
+        0.036408331336562384
+      ],
+      "worstPairedFiveDelta": 0.0,
+      "relayRatioMean": 1.0734217625314293,
+      "relayRatioMax": 1.1393308853529172,
+      "latencyDeltaMax": -1956.654023437295,
+      "energyDeltaMax": 0.025413190405061403,
+      "stabilityDeltaMax": 0.025751072961373384,
+      "metrics": {
+        "fiveRatio": 0.6333333333333333,
+        "deliveryRatio": 0.6755555555555556,
+        "threeRatio": 0.5444444444444445,
+        "hopsMean": 2.0906334906334907,
+        "hopsP95": 4.666666666666667,
+        "latencyMeanMs": 738.3435532175411,
+        "latencyP95Ms": 2631.5283535871035,
+        "totalTx": 47423.666666666664,
+        "undeliveredAtHorizon": 48.666666666666664
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 2.8577390339094713,
+        "batteryPercentPerHourSuper": 6.542760449421501,
+        "roleChangesPerNodeMin": 0.09155937052932761,
+        "totalForwarded": 47423.666666666664,
+        "retriesSent": 144,
+        "retriesExhausted": 60.666666666666664,
+        "totalQueued": 61.666666666666664
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "strategy": "ack-6000-v1",
+      "n": 3,
+      "deltaFiveMean": 0.013333333333333308,
+      "deltaFiveCI95": [
+        -0.030482737387407595,
+        0.05714940405407421
+      ],
+      "worstPairedFiveDelta": 0.0,
+      "relayRatioMean": 1.0016476186732148,
+      "relayRatioMax": 1.0116279069767442,
+      "latencyDeltaMax": 2008.4258779184893,
+      "energyDeltaMax": 0.08021553456204567,
+      "stabilityDeltaMax": 0.03433476394849787,
+      "metrics": {
+        "fiveRatio": 0.6355555555555555,
+        "deliveryRatio": 0.68,
+        "threeRatio": 0.54,
+        "hopsMean": 2.0968070293912993,
+        "hopsP95": 4.666666666666667,
+        "latencyMeanMs": 1011.5956530546215,
+        "latencyP95Ms": 4910.852293732266,
+        "totalTx": 44770.333333333336,
+        "undeliveredAtHorizon": 48
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 2.9486188838844347,
+        "batteryPercentPerHourSuper": 6.694654122871894,
+        "roleChangesPerNodeMin": 0.09585121602288985,
+        "totalForwarded": 44770.333333333336,
+        "retriesSent": 129,
+        "retriesExhausted": 56.333333333333336,
+        "totalQueued": 56.666666666666664
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "strategy": "baseline-v1",
+      "n": 3,
+      "deltaFiveMean": 0.0,
+      "deltaFiveCI95": [
+        0.0,
+        0.0
+      ],
+      "worstPairedFiveDelta": 0.0,
+      "relayRatioMean": 1.0,
+      "relayRatioMax": 1.0,
+      "latencyDeltaMax": 0.0,
+      "energyDeltaMax": 0.0,
+      "stabilityDeltaMax": 0.0,
+      "metrics": {
+        "fiveRatio": 0.6222222222222222,
+        "deliveryRatio": 0.6822222222222223,
+        "threeRatio": 0.5333333333333333,
+        "hopsMean": 2.1666939666939666,
+        "hopsP95": 4.666666666666667,
+        "latencyMeanMs": 980.6388258591452,
+        "latencyP95Ms": 4627.018293098857,
+        "totalTx": 44729.666666666664,
+        "undeliveredAtHorizon": 47.666666666666664
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 2.8795549532855755,
+        "batteryPercentPerHourSuper": 6.650649629018364,
+        "roleChangesPerNodeMin": 0.09155937052932761,
+        "totalForwarded": 44729.666666666664,
+        "retriesSent": 132.33333333333334,
+        "retriesExhausted": 58,
+        "totalQueued": 58
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "strategy": "community-carrier-v1",
+      "n": 3,
+      "deltaFiveMean": 0.0,
+      "deltaFiveCI95": [
+        0.0,
+        0.0
+      ],
+      "worstPairedFiveDelta": 0.0,
+      "relayRatioMean": 1.0,
+      "relayRatioMax": 1.0,
+      "latencyDeltaMax": 0.0,
+      "energyDeltaMax": 0.0,
+      "stabilityDeltaMax": 0.0,
+      "metrics": {
+        "fiveRatio": 0.6222222222222222,
+        "deliveryRatio": 0.6822222222222223,
+        "threeRatio": 0.5333333333333333,
+        "hopsMean": 2.1666939666939666,
+        "hopsP95": 4.666666666666667,
+        "latencyMeanMs": 980.6388258591452,
+        "latencyP95Ms": 4627.018293098857,
+        "totalTx": 44729.666666666664,
+        "undeliveredAtHorizon": 47.666666666666664
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 2.8795549532855755,
+        "batteryPercentPerHourSuper": 6.650649629018364,
+        "roleChangesPerNodeMin": 0.09155937052932761,
+        "totalForwarded": 44729.666666666664,
+        "retriesSent": 132.33333333333334,
+        "retriesExhausted": 58,
+        "totalQueued": 58
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "strategy": "route-flood-v1",
+      "n": 3,
+      "deltaFiveMean": 0.013333333333333308,
+      "deltaFiveCI95": [
+        -0.05885403498659046,
+        0.08552070165325708
+      ],
+      "worstPairedFiveDelta": -0.00666666666666671,
+      "relayRatioMean": 2.6341764017166507,
+      "relayRatioMax": 3.104175166598667,
+      "latencyDeltaMax": 193.81670753238723,
+      "energyDeltaMax": 0.056145856241367476,
+      "stabilityDeltaMax": 0.017167381974248927,
+      "metrics": {
+        "fiveRatio": 0.6355555555555555,
+        "deliveryRatio": 0.6799999999999999,
+        "threeRatio": 0.5422222222222222,
+        "hopsMean": 2.122189795429232,
+        "hopsP95": 5,
+        "latencyMeanMs": 805.305685946068,
+        "latencyP95Ms": 3669.163271401388,
+        "totalTx": 111480.66666666667,
+        "undeliveredAtHorizon": 48
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 2.8866698485065836,
+        "batteryPercentPerHourSuper": 6.946306704391375,
+        "roleChangesPerNodeMin": 0.08869814020028612,
+        "totalForwarded": 111480.66666666667,
+        "retriesSent": 132,
+        "retriesExhausted": 57.333333333333336,
+        "totalQueued": 59
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "festival_crowd",
+      "duty": false,
+      "strategy": "super-carrier-v1",
+      "n": 3,
+      "deltaFiveMean": -3.700743415417188e-17,
+      "deltaFiveCI95": [
+        -0.016560918079299863,
+        0.016560918079299786
+      ],
+      "worstPairedFiveDelta": -0.00666666666666671,
+      "relayRatioMean": 1.0050575458778397,
+      "relayRatioMax": 1.0264275480966025,
+      "latencyDeltaMax": 102.29318488854915,
+      "energyDeltaMax": 0.04978200900270524,
+      "stabilityDeltaMax": 0.017167381974248927,
+      "metrics": {
+        "fiveRatio": 0.6222222222222222,
+        "deliveryRatio": 0.6799999999999999,
+        "threeRatio": 0.54,
+        "hopsMean": 2.125859662479381,
+        "hopsP95": 4.666666666666667,
+        "latencyMeanMs": 1050.5797757719945,
+        "latencyP95Ms": 4663.587709041312,
+        "totalTx": 45141.666666666664,
+        "undeliveredAtHorizon": 48
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 2.87952437805398,
+        "batteryPercentPerHourSuper": 6.853315165319932,
+        "roleChangesPerNodeMin": 0.09298998569384835,
+        "totalForwarded": 45141.666666666664,
+        "retriesSent": 130.66666666666666,
+        "retriesExhausted": 57.333333333333336,
+        "totalQueued": 162.33333333333334
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "strategy": "ack-2000-v1",
+      "n": 3,
+      "deltaFiveMean": 0.004444444444444473,
+      "deltaFiveCI95": [
+        -0.014678456577777877,
+        0.023567345466666823
+      ],
+      "worstPairedFiveDelta": 0.0,
+      "relayRatioMean": 1.0872985534815711,
+      "relayRatioMax": 1.1843669160316017,
+      "latencyDeltaMax": 1210.8714739466086,
+      "energyDeltaMax": -0.038129103829215305,
+      "stabilityDeltaMax": 0.012875536480686692,
+      "metrics": {
+        "fiveRatio": 0.6444444444444445,
+        "deliveryRatio": 0.6799999999999999,
+        "threeRatio": 0.5511111111111111,
+        "hopsMean": 2.085152758392195,
+        "hopsP95": 4.333333333333333,
+        "latencyMeanMs": 752.7641888229983,
+        "latencyP95Ms": 2687.608994122129,
+        "totalTx": 48089.333333333336,
+        "undeliveredAtHorizon": 48
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 1.3787205601964174,
+        "batteryPercentPerHourSuper": 6.493997756575031,
+        "roleChangesPerNodeMin": 0.07296137339055794,
+        "totalForwarded": 48089.333333333336,
+        "retriesSent": 143.66666666666666,
+        "retriesExhausted": 59.666666666666664,
+        "totalQueued": 59.333333333333336
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "strategy": "ack-6000-v1",
+      "n": 3,
+      "deltaFiveMean": 0.0022222222222222365,
+      "deltaFiveCI95": [
+        -0.0073392282888889385,
+        0.011783672733333412
+      ],
+      "worstPairedFiveDelta": 0.0,
+      "relayRatioMean": 1.0005165346474736,
+      "relayRatioMax": 1.0218485632384815,
+      "latencyDeltaMax": 2169.3915638304316,
+      "energyDeltaMax": 0.14240609805055882,
+      "stabilityDeltaMax": 0.02145922746781115,
+      "metrics": {
+        "fiveRatio": 0.6422222222222222,
+        "deliveryRatio": 0.6799999999999999,
+        "threeRatio": 0.5488888888888889,
+        "hopsMean": 2.0713290755544276,
+        "hopsP95": 4.666666666666667,
+        "latencyMeanMs": 1017.6288332868976,
+        "latencyP95Ms": 5038.936579904985,
+        "totalTx": 44773.333333333336,
+        "undeliveredAtHorizon": 48
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 1.5207180582542215,
+        "batteryPercentPerHourSuper": 6.406573359321216,
+        "roleChangesPerNodeMin": 0.08869814020028612,
+        "totalForwarded": 44773.333333333336,
+        "retriesSent": 129,
+        "retriesExhausted": 54.666666666666664,
+        "totalQueued": 55.333333333333336
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "strategy": "baseline-v1",
+      "n": 3,
+      "deltaFiveMean": 0.0,
+      "deltaFiveCI95": [
+        0.0,
+        0.0
+      ],
+      "worstPairedFiveDelta": 0.0,
+      "relayRatioMean": 1.0,
+      "relayRatioMax": 1.0,
+      "latencyDeltaMax": 0.0,
+      "energyDeltaMax": 0.0,
+      "stabilityDeltaMax": 0.0,
+      "metrics": {
+        "fiveRatio": 0.64,
+        "deliveryRatio": 0.6777777777777778,
+        "threeRatio": 0.5422222222222222,
+        "hopsMean": 2.087174408451004,
+        "hopsP95": 4.333333333333333,
+        "latencyMeanMs": 962.5509222740685,
+        "latencyP95Ms": 3675.538740384703,
+        "totalTx": 44939,
+        "undeliveredAtHorizon": 48.333333333333336
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 1.4389595574257468,
+        "batteryPercentPerHourSuper": 6.7389723522234375,
+        "roleChangesPerNodeMin": 0.0815450643776824,
+        "totalForwarded": 44939,
+        "retriesSent": 132,
+        "retriesExhausted": 58.333333333333336,
+        "totalQueued": 58.333333333333336
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "strategy": "community-carrier-v1",
+      "n": 3,
+      "deltaFiveMean": 0.0,
+      "deltaFiveCI95": [
+        0.0,
+        0.0
+      ],
+      "worstPairedFiveDelta": 0.0,
+      "relayRatioMean": 1.0,
+      "relayRatioMax": 1.0,
+      "latencyDeltaMax": 0.0,
+      "energyDeltaMax": 0.0,
+      "stabilityDeltaMax": 0.0,
+      "metrics": {
+        "fiveRatio": 0.64,
+        "deliveryRatio": 0.6777777777777778,
+        "threeRatio": 0.5422222222222222,
+        "hopsMean": 2.087174408451004,
+        "hopsP95": 4.333333333333333,
+        "latencyMeanMs": 962.5509222740685,
+        "latencyP95Ms": 3675.538740384703,
+        "totalTx": 44939,
+        "undeliveredAtHorizon": 48.333333333333336
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 1.4389595574257468,
+        "batteryPercentPerHourSuper": 6.7389723522234375,
+        "roleChangesPerNodeMin": 0.0815450643776824,
+        "totalForwarded": 44939,
+        "retriesSent": 132,
+        "retriesExhausted": 58.333333333333336,
+        "totalQueued": 58.333333333333336
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "strategy": "route-flood-v1",
+      "n": 3,
+      "deltaFiveMean": 0.0022222222222222365,
+      "deltaFiveCI95": [
+        -0.02307499800322935,
+        0.027519442447673823
+      ],
+      "worstPairedFiveDelta": -0.00666666666666671,
+      "relayRatioMean": 2.5708278285951893,
+      "relayRatioMax": 2.996119695168846,
+      "latencyDeltaMax": -340.4384794877842,
+      "energyDeltaMax": 0.01798469387743018,
+      "stabilityDeltaMax": 0.03862660944206012,
+      "metrics": {
+        "fiveRatio": 0.6422222222222222,
+        "deliveryRatio": 0.6822222222222223,
+        "threeRatio": 0.5444444444444445,
+        "hopsMean": 2.111636811636812,
+        "hopsP95": 4.666666666666667,
+        "latencyMeanMs": 862.5439951258485,
+        "latencyP95Ms": 2420.895515130833,
+        "totalTx": 109633,
+        "undeliveredAtHorizon": 47.666666666666664
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 1.4278694901789017,
+        "batteryPercentPerHourSuper": 6.517429132140936,
+        "roleChangesPerNodeMin": 0.10157367668097282,
+        "totalForwarded": 109633,
+        "retriesSent": 123.33333333333333,
+        "retriesExhausted": 56.666666666666664,
+        "totalQueued": 57.333333333333336
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "festival_crowd",
+      "duty": true,
+      "strategy": "super-carrier-v1",
+      "n": 3,
+      "deltaFiveMean": 0.00888888888888891,
+      "deltaFiveCI95": [
+        -0.01023401213333336,
+        0.028011789911111182
+      ],
+      "worstPairedFiveDelta": 0.0,
+      "relayRatioMean": 1.0236159962378937,
+      "relayRatioMax": 1.0526812556806264,
+      "latencyDeltaMax": 2996.3422799576074,
+      "energyDeltaMax": 0.04533254930680641,
+      "stabilityDeltaMax": 0.0,
+      "metrics": {
+        "fiveRatio": 0.6488888888888888,
+        "deliveryRatio": 0.6799999999999999,
+        "threeRatio": 0.5466666666666666,
+        "hopsMean": 2.079346952586389,
+        "hopsP95": 4.666666666666667,
+        "latencyMeanMs": 1105.2710466257308,
+        "latencyP95Ms": 4779.155987724662,
+        "totalTx": 45653,
+        "undeliveredAtHorizon": 48
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 1.4353658079591338,
+        "batteryPercentPerHourSuper": 6.465189686366037,
+        "roleChangesPerNodeMin": 0.06723891273247497,
+        "totalForwarded": 45653,
+        "retriesSent": 133,
+        "retriesExhausted": 57.333333333333336,
+        "totalQueued": 157
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "campus_quad",
+      "duty": false,
+      "strategy": "ack-2000-v1",
+      "n": 3,
+      "deltaFiveMean": -0.031111111111111128,
+      "deltaFiveCI95": [
+        -0.09804126468888895,
+        0.03581904246666669
+      ],
+      "worstPairedFiveDelta": -0.046666666666666745,
+      "relayRatioMean": 0.9325935814228211,
+      "relayRatioMax": 0.9827235772357723,
+      "latencyDeltaMax": -5540.3508245535195,
+      "energyDeltaMax": 0.0,
+      "stabilityDeltaMax": 0.03862660944206012,
+      "metrics": {
+        "fiveRatio": 0.8288888888888889,
+        "deliveryRatio": 0.8333333333333334,
+        "threeRatio": 0.7577777777777778,
+        "hopsMean": 1.900374425864622,
+        "hopsP95": 3.6666666666666665,
+        "latencyMeanMs": 5896.892576668762,
+        "latencyP95Ms": 18744.13476753949,
+        "totalTx": 3488.6666666666665,
+        "undeliveredAtHorizon": 25
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 2.6372652661850773,
+        "batteryPercentPerHourSuper": 6.48124999995332,
+        "roleChangesPerNodeMin": 0.18454935622317598,
+        "totalForwarded": 3488.6666666666665,
+        "retriesSent": 215.33333333333334,
+        "retriesExhausted": 84.66666666666667,
+        "totalQueued": 64
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "campus_quad",
+      "duty": false,
+      "strategy": "ack-6000-v1",
+      "n": 3,
+      "deltaFiveMean": 0.0,
+      "deltaFiveCI95": [
+        -0.04968275423789961,
+        0.04968275423789961
+      ],
+      "worstPairedFiveDelta": -0.020000000000000018,
+      "relayRatioMean": 0.9249305799534588,
+      "relayRatioMax": 0.9587496797335383,
+      "latencyDeltaMax": 5599.024867414497,
+      "energyDeltaMax": -0.05026381192761509,
+      "stabilityDeltaMax": -0.06437768240343347,
+      "metrics": {
+        "fiveRatio": 0.86,
+        "deliveryRatio": 0.8666666666666667,
+        "threeRatio": 0.7777777777777778,
+        "hopsMean": 1.9533694270128379,
+        "hopsP95": 4,
+        "latencyMeanMs": 9476.713153744317,
+        "latencyP95Ms": 31105.34716246246,
+        "totalTx": 3448.6666666666665,
+        "undeliveredAtHorizon": 20
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 2.645423270919641,
+        "batteryPercentPerHourSuper": 6.189048291773158,
+        "roleChangesPerNodeMin": 0.09012875536480686,
+        "totalForwarded": 3448.6666666666665,
+        "retriesSent": 173,
+        "retriesExhausted": 60,
+        "totalQueued": 47.666666666666664
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "campus_quad",
+      "duty": false,
+      "strategy": "baseline-v1",
+      "n": 3,
+      "deltaFiveMean": 0.0,
+      "deltaFiveCI95": [
+        0.0,
+        0.0
+      ],
+      "worstPairedFiveDelta": 0.0,
+      "relayRatioMean": 1.0,
+      "relayRatioMax": 1.0,
+      "latencyDeltaMax": 0.0,
+      "energyDeltaMax": 0.0,
+      "stabilityDeltaMax": 0.0,
+      "metrics": {
+        "fiveRatio": 0.86,
+        "deliveryRatio": 0.8644444444444445,
+        "threeRatio": 0.7733333333333333,
+        "hopsMean": 1.9604828042328042,
+        "hopsP95": 3.6666666666666665,
+        "latencyMeanMs": 9356.864765170041,
+        "latencyP95Ms": 27184.285900881514,
+        "totalTx": 3719.3333333333335,
+        "undeliveredAtHorizon": 20.333333333333332
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 2.8201464518518775,
+        "batteryPercentPerHourSuper": 4.706249999995293,
+        "roleChangesPerNodeMin": 0.16738197424892703,
+        "totalForwarded": 3719.3333333333335,
+        "retriesSent": 201.33333333333334,
+        "retriesExhausted": 74.66666666666667,
+        "totalQueued": 54.666666666666664
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "campus_quad",
+      "duty": false,
+      "strategy": "community-carrier-v1",
+      "n": 3,
+      "deltaFiveMean": -0.013333333333333345,
+      "deltaFiveCI95": [
+        -0.08552070165325729,
+        0.05885403498659059
+      ],
+      "worstPairedFiveDelta": -0.046666666666666745,
+      "relayRatioMean": 0.963537999126263,
+      "relayRatioMax": 0.9825775044837305,
+      "latencyDeltaMax": 8177.135248489212,
+      "energyDeltaMax": -0.13078641415456005,
+      "stabilityDeltaMax": 0.012875536480686678,
+      "metrics": {
+        "fiveRatio": 0.8466666666666667,
+        "deliveryRatio": 0.8488888888888889,
+        "threeRatio": 0.7533333333333333,
+        "hopsMean": 1.9494322736746978,
+        "hopsP95": 4,
+        "latencyMeanMs": 8882.971556142733,
+        "latencyP95Ms": 28305.35806412234,
+        "totalTx": 3589.3333333333335,
+        "undeliveredAtHorizon": 22.666666666666668
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 2.6120937250186365,
+        "batteryPercentPerHourSuper": 5.8406155278390175,
+        "roleChangesPerNodeMin": 0.13733905579399142,
+        "totalForwarded": 3589.3333333333335,
+        "retriesSent": 200,
+        "retriesExhausted": 72,
+        "totalQueued": 62.666666666666664
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "campus_quad",
+      "duty": false,
+      "strategy": "route-flood-v1",
+      "n": 3,
+      "deltaFiveMean": -0.06888888888888893,
+      "deltaFiveCI95": [
+        -0.14715273433313358,
+        0.009374956555355737
+      ],
+      "worstPairedFiveDelta": -0.09333333333333338,
+      "relayRatioMean": 1.1033825687202188,
+      "relayRatioMax": 1.1735462488701416,
+      "latencyDeltaMax": 8270.06929225428,
+      "energyDeltaMax": 0.006880683277188382,
+      "stabilityDeltaMax": -0.012875536480686678,
+      "metrics": {
+        "fiveRatio": 0.7911111111111111,
+        "deliveryRatio": 0.8044444444444444,
+        "threeRatio": 0.7133333333333334,
+        "hopsMean": 1.9275136766647802,
+        "hopsP95": 4.333333333333333,
+        "latencyMeanMs": 10281.138320115346,
+        "latencyP95Ms": 33887.71302789636,
+        "totalTx": 4089.6666666666665,
+        "undeliveredAtHorizon": 29.333333333333332
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 2.625361779812438,
+        "batteryPercentPerHourSuper": 5.959881625111911,
+        "roleChangesPerNodeMin": 0.13304721030042918,
+        "totalForwarded": 4089.6666666666665,
+        "retriesSent": 212.66666666666666,
+        "retriesExhausted": 79,
+        "totalQueued": 54.333333333333336
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "campus_quad",
+      "duty": false,
+      "strategy": "super-carrier-v1",
+      "n": 3,
+      "deltaFiveMean": 0.0022222222222221997,
+      "deltaFiveCI95": [
+        -0.07426938186666664,
+        0.07871382631111103
+      ],
+      "worstPairedFiveDelta": -0.033333333333333326,
+      "relayRatioMean": 1.0214182130386371,
+      "relayRatioMax": 1.0503048780487805,
+      "latencyDeltaMax": 1141.8021715325303,
+      "energyDeltaMax": -0.05026381192761509,
+      "stabilityDeltaMax": 0.012875536480686678,
+      "metrics": {
+        "fiveRatio": 0.8622222222222222,
+        "deliveryRatio": 0.8711111111111111,
+        "threeRatio": 0.768888888888889,
+        "hopsMean": 1.9598510401368558,
+        "hopsP95": 4.333333333333333,
+        "latencyMeanMs": 8689.961510649156,
+        "latencyP95Ms": 27914.972344072845,
+        "totalTx": 3800.6666666666665,
+        "undeliveredAtHorizon": 19.333333333333332
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 2.628760391684909,
+        "batteryPercentPerHourSuper": 5.715615527841973,
+        "roleChangesPerNodeMin": 0.1630901287553648,
+        "totalForwarded": 3800.6666666666665,
+        "retriesSent": 198,
+        "retriesExhausted": 71,
+        "totalQueued": 77
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "campus_quad",
+      "duty": true,
+      "strategy": "ack-2000-v1",
+      "n": 3,
+      "deltaFiveMean": 0.05777777777777778,
+      "deltaFiveCI95": [
+        -0.07608252937777776,
+        0.19163808493333334
+      ],
+      "worstPairedFiveDelta": 0.026666666666666616,
+      "relayRatioMean": 0.9461078959059752,
+      "relayRatioMax": 0.986761980407731,
+      "latencyDeltaMax": -40.41255025193095,
+      "energyDeltaMax": 0.03749963935715894,
+      "stabilityDeltaMax": 0.025751072961373384,
+      "metrics": {
+        "fiveRatio": 0.8755555555555555,
+        "deliveryRatio": 0.8822222222222222,
+        "threeRatio": 0.8066666666666666,
+        "hopsMean": 1.9546698250526782,
+        "hopsP95": 4,
+        "latencyMeanMs": 6531.709436468517,
+        "latencyP95Ms": 21247.828244272154,
+        "totalTx": 3420.6666666666665,
+        "undeliveredAtHorizon": 17.666666666666668
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 1.2144056023977148,
+        "batteryPercentPerHourSuper": 5.957437556399646,
+        "roleChangesPerNodeMin": 0.14163090128755365,
+        "totalForwarded": 3420.6666666666665,
+        "retriesSent": 206.66666666666666,
+        "retriesExhausted": 81.66666666666667,
+        "totalQueued": 60
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "campus_quad",
+      "duty": true,
+      "strategy": "ack-6000-v1",
+      "n": 3,
+      "deltaFiveMean": 0.022222222222222216,
+      "deltaFiveCI95": [
+        -0.05947084675537925,
+        0.10391529119982368
+      ],
+      "worstPairedFiveDelta": 0.0,
+      "relayRatioMean": 1.046102504367504,
+      "relayRatioMax": 1.0587115201523325,
+      "latencyDeltaMax": 6707.599434726872,
+      "energyDeltaMax": 0.38920706329392796,
+      "stabilityDeltaMax": 0.012875536480686678,
+      "metrics": {
+        "fiveRatio": 0.84,
+        "deliveryRatio": 0.8466666666666667,
+        "threeRatio": 0.7444444444444445,
+        "hopsMean": 1.9494847374847375,
+        "hopsP95": 4.333333333333333,
+        "latencyMeanMs": 9852.155950104763,
+        "latencyP95Ms": 33909.017774386644,
+        "totalTx": 3778,
+        "undeliveredAtHorizon": 23
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 1.3316414103766376,
+        "batteryPercentPerHourSuper": 4.8293336625807175,
+        "roleChangesPerNodeMin": 0.13304721030042918,
+        "totalForwarded": 3778,
+        "retriesSent": 183.33333333333334,
+        "retriesExhausted": 65.66666666666667,
+        "totalQueued": 56.666666666666664
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "campus_quad",
+      "duty": true,
+      "strategy": "baseline-v1",
+      "n": 3,
+      "deltaFiveMean": 0.0,
+      "deltaFiveCI95": [
+        0.0,
+        0.0
+      ],
+      "worstPairedFiveDelta": 0.0,
+      "relayRatioMean": 1.0,
+      "relayRatioMax": 1.0,
+      "latencyDeltaMax": 0.0,
+      "energyDeltaMax": 0.0,
+      "stabilityDeltaMax": 0.0,
+      "metrics": {
+        "fiveRatio": 0.8177777777777778,
+        "deliveryRatio": 0.8288888888888889,
+        "threeRatio": 0.7355555555555555,
+        "hopsMean": 1.9332411258060354,
+        "hopsP95": 4,
+        "latencyMeanMs": 8568.800590007133,
+        "latencyP95Ms": 31513.219695858035,
+        "totalTx": 3614.6666666666665,
+        "undeliveredAtHorizon": 25.666666666666668
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 1.222887865468997,
+        "batteryPercentPerHourSuper": 5.905548940351184,
+        "roleChangesPerNodeMin": 0.1459227467811159,
+        "totalForwarded": 3614.6666666666665,
+        "retriesSent": 202.66666666666666,
+        "retriesExhausted": 71.66666666666667,
+        "totalQueued": 60.333333333333336
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "campus_quad",
+      "duty": true,
+      "strategy": "community-carrier-v1",
+      "n": 3,
+      "deltaFiveMean": 0.04,
+      "deltaFiveCI95": [
+        -0.06859720221101037,
+        0.1485972022110104
+      ],
+      "worstPairedFiveDelta": 0.0,
+      "relayRatioMean": 1.0396980985333595,
+      "relayRatioMax": 1.0675975880672803,
+      "latencyDeltaMax": 8793.692365166266,
+      "energyDeltaMax": 0.6730249624263354,
+      "stabilityDeltaMax": 0.025751072961373384,
+      "metrics": {
+        "fiveRatio": 0.8577777777777778,
+        "deliveryRatio": 0.8622222222222222,
+        "threeRatio": 0.7777777777777778,
+        "hopsMean": 1.9464791265348953,
+        "hopsP95": 4.666666666666667,
+        "latencyMeanMs": 8286.414337041651,
+        "latencyP95Ms": 27476.904714039683,
+        "totalTx": 3750.6666666666665,
+        "undeliveredAtHorizon": 20.666666666666668
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 1.4262473767541068,
+        "batteryPercentPerHourSuper": 4.928812829246867,
+        "roleChangesPerNodeMin": 0.1459227467811159,
+        "totalForwarded": 3750.6666666666665,
+        "retriesSent": 202.33333333333334,
+        "retriesExhausted": 74.66666666666667,
+        "totalQueued": 63.333333333333336
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "campus_quad",
+      "duty": true,
+      "strategy": "route-flood-v1",
+      "n": 3,
+      "deltaFiveMean": -0.06444444444444446,
+      "deltaFiveCI95": [
+        -0.23839978979231607,
+        0.10951090090342717
+      ],
+      "worstPairedFiveDelta": -0.1333333333333333,
+      "relayRatioMean": 1.1592707692498547,
+      "relayRatioMax": 1.2453189463662329,
+      "latencyDeltaMax": 8159.236644043587,
+      "energyDeltaMax": 0.21243622996173128,
+      "stabilityDeltaMax": 0.025751072961373384,
+      "metrics": {
+        "fiveRatio": 0.7533333333333333,
+        "deliveryRatio": 0.76,
+        "threeRatio": 0.6622222222222222,
+        "hopsMean": 1.935240810508095,
+        "hopsP95": 4.333333333333333,
+        "latencyMeanMs": 10052.025893940416,
+        "latencyP95Ms": 32968.026869747635,
+        "totalTx": 4170,
+        "undeliveredAtHorizon": 36
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 1.3160696571954116,
+        "batteryPercentPerHourSuper": 5.563708662575786,
+        "roleChangesPerNodeMin": 0.14163090128755365,
+        "totalForwarded": 4170,
+        "retriesSent": 218,
+        "retriesExhausted": 80,
+        "totalQueued": 61
+      }
+    },
+    {
+      "split": "ood",
+      "scenario": "campus_quad",
+      "duty": true,
+      "strategy": "super-carrier-v1",
+      "n": 3,
+      "deltaFiveMean": 0.00888888888888891,
+      "deltaFiveCI95": [
+        -0.156996077575238,
+        0.17477385535301584
+      ],
+      "worstPairedFiveDelta": -0.06666666666666665,
+      "relayRatioMean": 1.0222665849287178,
+      "relayRatioMax": 1.1085369723897176,
+      "latencyDeltaMax": 9933.908385324758,
+      "energyDeltaMax": 0.32809662222504943,
+      "stabilityDeltaMax": 0.012875536480686678,
+      "metrics": {
+        "fiveRatio": 0.8266666666666667,
+        "deliveryRatio": 0.8311111111111111,
+        "threeRatio": 0.7444444444444445,
+        "hopsMean": 1.9178889252115796,
+        "hopsP95": 4,
+        "latencyMeanMs": 9206.445573210933,
+        "latencyP95Ms": 30160.584889966995,
+        "totalTx": 3672.3333333333335,
+        "undeliveredAtHorizon": 25.333333333333332
+      },
+      "stats": {
+        "batteryPercentPerHourNormal": 1.409947924937132,
+        "batteryPercentPerHourSuper": 6.698473457644312,
+        "roleChangesPerNodeMin": 0.13304721030042918,
+        "totalForwarded": 3672.3333333333335,
+        "retriesSent": 207.66666666666666,
+        "retriesExhausted": 77,
+        "totalQueued": 94
+      }
+    }
+  ],
+  "aggregate": [
+    {
+      "split": "ood",
+      "strategy": "ack-2000-v1",
+      "fiveMean": 0.7455555555555555,
+      "fiveSeedStd": 0.07630955476313662,
+      "worstContextMean": 0.6333333333333333,
+      "worstPairedDelta": -0.046666666666666745,
+      "pairedDeltaMean": 0.010555555555555549,
+      "pairedCI95": [
+        -0.031734276355704194,
+        0.05284538746681529
+      ],
+      "relays": 307267,
+      "wallMs": 116826.20703999998
+    },
+    {
+      "split": "ood",
+      "strategy": "ack-6000-v1",
+      "fiveMean": 0.7444444444444445,
+      "fiveSeedStd": 0.0795356896363257,
+      "worstContextMean": 0.6355555555555555,
+      "worstPairedDelta": -0.020000000000000018,
+      "pairedDeltaMean": 0.009444444444444441,
+      "pairedCI95": [
+        -0.020506713434466313,
+        0.03939560232335519
+      ],
+      "relays": 290311,
+      "wallMs": 101724.98597199997
+    },
+    {
+      "split": "ood",
+      "strategy": "baseline-v1",
+      "fiveMean": 0.735,
+      "fiveSeedStd": 0.08278150625458433,
+      "worstContextMean": 0.6222222222222222,
+      "worstPairedDelta": 0.0,
+      "pairedDeltaMean": 0.0,
+      "pairedCI95": [
+        0.0,
+        0.0
+      ],
+      "relays": 291008,
+      "wallMs": 109743.46408400004
+    },
+    {
+      "split": "ood",
+      "strategy": "community-carrier-v1",
+      "fiveMean": 0.7416666666666667,
+      "fiveSeedStd": 0.06647890225059713,
+      "worstContextMean": 0.6222222222222222,
+      "worstPairedDelta": -0.046666666666666745,
+      "pairedDeltaMean": 0.006666666666666664,
+      "pairedCI95": [
+        -0.03535207378463075,
+        0.04868540711796407
+      ],
+      "relays": 291026,
+      "wallMs": 109316.45952300023
+    },
+    {
+      "split": "ood",
+      "strategy": "route-flood-v1",
+      "fiveMean": 0.7055555555555556,
+      "fiveSeedStd": 0.07513567974251896,
+      "worstContextMean": 0.6355555555555555,
+      "worstPairedDelta": -0.1333333333333333,
+      "pairedDeltaMean": -0.029444444444444457,
+      "pairedCI95": [
+        -0.07173427635570415,
+        0.012845387466815229
+      ],
+      "relays": 688120,
+      "wallMs": 111033.90934200001
+    },
+    {
+      "split": "ood",
+      "strategy": "super-carrier-v1",
+      "fiveMean": 0.74,
+      "fiveSeedStd": 0.07088723439378915,
+      "worstContextMean": 0.6222222222222222,
+      "worstPairedDelta": -0.06666666666666665,
+      "pairedDeltaMean": 0.004999999999999995,
+      "pairedCI95": [
+        -0.030374136523858692,
+        0.040374136523858684
+      ],
+      "relays": 294803,
+      "wallMs": 109746.86474900006
+    }
+  ],
+  "decisions": [
+    {
+      "strategy": "ack-2000-v1",
+      "status": "not-promoted",
+      "reasons": [
+        "no held-out validation",
+        "no positive seed-paired 95% interval in any validation context",
+        "authoritative Dart candidate/OOD/release gate verification required"
+      ]
+    },
+    {
+      "strategy": "ack-6000-v1",
+      "status": "not-promoted",
+      "reasons": [
+        "no held-out validation",
+        "no positive seed-paired 95% interval in any validation context",
+        "authoritative Dart candidate/OOD/release gate verification required"
+      ]
+    },
+    {
+      "strategy": "community-carrier-v1",
+      "status": "not-promoted",
+      "reasons": [
+        "no held-out validation",
+        "no positive seed-paired 95% interval in any validation context",
+        "authoritative Dart candidate/OOD/release gate verification required"
+      ]
+    },
+    {
+      "strategy": "route-flood-v1",
+      "status": "not-promoted",
+      "reasons": [
+        "no held-out validation",
+        "no positive seed-paired 95% interval in any validation context",
+        "authoritative Dart candidate/OOD/release gate verification required"
+      ]
+    },
+    {
+      "strategy": "super-carrier-v1",
+      "status": "not-promoted",
+      "reasons": [
+        "no held-out validation",
+        "no positive seed-paired 95% interval in any validation context",
+        "authoritative Dart candidate/OOD/release gate verification required"
+      ]
+    }
+  ],
+  "warning": "Unadjusted seed-level t intervals; three seeds give low power. Not packet-level CIs. No deployment authorization."
+}

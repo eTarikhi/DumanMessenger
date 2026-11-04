@@ -1,0 +1,399 @@
+
+> duman-mesh-simulator@0.1.0 test
+> vitest run
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.12 [39m[90mC:/Users/Administrator/Desktop/Git-Clones/DumanMessenger[39m
+
+ [32m✓[39m src/__tests__/wake-locks.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 25851[2mms[22m[39m
+     [33m[2m✓[22m[39m counts under the shipped radio baseline, which maintains no busy-radio maps [33m 3735[2mms[22m[39m
+     [33m[2m✓[22m[39m reports per node what it reports in total [33m 3539[2mms[22m[39m
+     [33m[2m✓[22m[39m holds at least one lock per transmission, and a second for whoever hears it [33m 2978[2mms[22m[39m
+     [33m[2m✓[22m[39m splits the network's radio demand between the two roles, and the shares sum to 100 [33m 2537[2mms[22m[39m
+     [33m[2m✓[22m[39m reports the model's over-subscription plainly instead of hiding it in a percentage [33m 2743[2mms[22m[39m
+     [33m[2m✓[22m[39m does not let the packet share be read as the energy gap between roles [33m 4217[2mms[22m[39m
+     [33m[2m✓[22m[39m prices concentration on the neighbours who have to hear it [33m 4948[2mms[22m[39m
+     [33m[2m✓[22m[39m measures the window, not the whole run [33m 1147[2mms[22m[39m
+ [31m❯[39m src/__tests__/cover-traffic.test.ts [2m([22m[2m6 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 22067[2mms[22m[39m
+     [32m✓[39m is off by default at a rate the document does not specify[32m 4[2mms[22m[39m
+     [33m[2m✓[22m[39m emits nothing when off, which is what keeps every published number intact [33m 2609[2mms[22m[39m
+[31m     [31m×[31m emits at the rate it is told to, and faster when told to be faster[39m[33m 6984[2mms[22m[39m
+[31m     [31m×[31m costs airtime in proportion to its rate — a dummy that is free is not on air[39m[33m 6050[2mms[22m[39m
+     [33m[2m✓[22m[39m does not starve the network, which is the floor §23 asserts instead of an equality [33m 4190[2mms[22m[39m
+     [33m[2m✓[22m[39m counts cover separately from the routing protocol's own beacons [33m 2222[2mms[22m[39m
+ [31m❯[39m src/__tests__/radio-occupancy.test.ts [2m([22m[2m15 tests[22m[2m | [22m[31m3 failed[39m[2m)[22m[33m 54063[2mms[22m[39m
+     [32m✓[39m is the sum of the fields docs/03 §4 says a beacon carries[32m 6[2mms[22m[39m
+     [32m✓[39m bounds a beacon by the advertise limits the engine actually enforces[32m 1[2mms[22m[39m
+     [32m✓[39m ties the literal widths to the named ones, which is what makes the literals safe[32m 1[2mms[22m[39m
+     [32m✓[39m puts a fully loaded beacon over the BLE ceiling, which is a finding not a defect[32m 1[2mms[22m[39m
+     [32m✓[39m never goes negative on an empty or clamped field[32m 0[2mms[22m[39m
+     [32m✓[39m sizes the alias encoding docs/03 §4 prescribes, keeping the originator's id full width[32m 1[2mms[22m[39m
+     [32m✓[39m defaults to the encoding the engine transmits, so nothing published moves[32m 5[2mms[22m[39m
+[31m     [31m×[31m cuts demanded radio time by the beacon width and not by the beacon count[39m[33m 7084[2mms[22m[39m
+     [32m✓[39m ships on the model every published number was measured under[32m 1[2mms[22m[39m
+     [32m✓[39m charges airtime from the rate constants the engine already had[32m 124[2mms[22m[39m
+[31m     [31m×[31m changes telemetry and nothing else under the shipped radio baseline[39m[33m 5015[2mms[22m[39m
+     [33m[2m✓[22m[39m halves the demanded radio time without making it physically possible [33m 4446[2mms[22m[39m
+[31m     [31m×[31m costs a dense crowd fewer deferrals and buys it delivery, once contention is modelled[39m[33m 29636[2mms[22m[39m
+     [33m[2m✓[22m[39m counts route churn, and a beacon interval near the soft-state TTL churns more [33m 2801[2mms[22m[39m
+     [33m[2m✓[22m[39m leaves a sparse mesh's delivery alone under contention, which bounds the finding [33m 4932[2mms[22m[39m
+ [32m✓[39m src/__tests__/components.test.tsx [2m([22m[2m32 tests[22m[2m)[22m[33m 65470[2mms[22m[39m
+     [33m[2m✓[22m[39m offers the group as a destination and reports member reach [33m 2253[2mms[22m[39m
+     [33m[2m✓[22m[39m collapses per-member unicasts into the one send the user made [33m 2088[2mms[22m[39m
+     [33m[2m✓[22m[39m shows membership, the admin badge and the rules that bind the buttons [33m 2183[2mms[22m[39m
+     [33m[2m✓[22m[39m disables leaving a three-member group and rotating without admin [33m 1950[2mms[22m[39m
+     [33m[2m✓[22m[39m counts group traffic on the dashboard, and only when there is any [33m 3802[2mms[22m[39m
+     [33m[2m✓[22m[39m shows one alert card for four floods, with the fix and the reach [33m 1712[2mms[22m[39m
+     [33m[2m✓[22m[39m counts live alerts and the newest fix on the dashboard [33m 1707[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps the SOS row off the dashboard until there is an SOS [33m 1514[2mms[22m[39m
+     [33m[2m✓[22m[39m reports the repair traffic, and only once a group has beaconed [33m 3534[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps digest beacons out of the chat log [33m 2097[2mms[22m[39m
+     [33m[2m✓[22m[39m offers the file and push-to-talk controls, and explains why they are greyed out [33m 2075[2mms[22m[39m
+     [33m[2m✓[22m[39m shows one progress row per transfer, with the radio it is riding [33m 2261[2mms[22m[39m
+     [33m[2m✓[22m[39m counts media on the dashboard, and only once there is any [33m 3554[2mms[22m[39m
+     [33m[2m✓[22m[39m renders the battery, radio and hop-budget figures [33m 1750[2mms[22m[39m
+     [33m[2m✓[22m[39m shows the awake ratio only when the duty cycle is running [33m 1314[2mms[22m[39m
+     [33m[2m✓[22m[39m names the relays a delivered message went via [33m 1551[2mms[22m[39m
+     [33m[2m✓[22m[39m says so plainly when nothing relayed the message [33m 1851[2mms[22m[39m
+     [33m[2m✓[22m[39m offers a picker before anything is traced [33m 1446[2mms[22m[39m
+     [33m[2m✓[22m[39m explains itself while capture is off [33m 1656[2mms[22m[39m
+     [33m[2m✓[22m[39m renders captured events with their kinds and reasons [33m 1788[2mms[22m[39m
+     [33m[2m✓[22m[39m filters to the message being traced [33m 1494[2mms[22m[39m
+     [33m[2m✓[22m[39m shows waiting and drops under half-duplex, and nothing at all under the shipped model [33m 3353[2mms[22m[39m
+     [33m[2m✓[22m[39m splits the shedding by who did it, and only once there is shedding [33m 3507[2mms[22m[39m
+     [33m[2m✓[22m[39m offers the queue, discipline and backpressure knobs — and hides them under the shipped radio [33m 1931[2mms[22m[39m
+     [33m[2m✓[22m[39m offers both abuse controls from docs/04 §6, with the measurement in the tooltip [33m 1844[2mms[22m[39m
+     [33m[2m✓[22m[39m offers both channel models in the config panel, and says which one ships [33m 1571[2mms[22m[39m
+     [33m[2m✓[22m[39m adds the capture effect as a third receiver model, with its margin beside it [33m 3694[2mms[22m[39m
+     [33m[2m✓[22m[39m counts the receivers a stronger packet took over, and only when there were any [33m 1686[2mms[22m[39m
+     [33m[2m✓[22m[39m offers the control on every peer in range, and says what a block does not do [33m 1546[2mms[22m[39m
+     [33m[2m✓[22m[39m shows a blocked peer as blocked, and lists it even when it is out of range [33m 1403[2mms[22m[39m
+     [33m[2m✓[22m[39m is the same state the engine's block gate reads [33m 1313[2mms[22m[39m
+ [31m❯[39m src/__tests__/rate-limits.test.ts [2m([22m[2m18 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 20282[2mms[22m[39m
+     [32m✓[39m is 5 broadcasts and 30 relays per minute[32m 5[2mms[22m[39m
+     [32m✓[39m admits exactly `cap` messages, then refuses[32m 2[2mms[22m[39m
+     [32m✓[39m refills continuously, so a rate is enforced rather than a per-minute tally[32m 1[2mms[22m[39m
+     [32m✓[39m never refills above the cap, so a quiet source does not bank an unlimited burst[32m 1[2mms[22m[39m
+     [32m✓[39m keeps sources and enforcers apart[32m 1[2mms[22m[39m
+     [32m✓[39m treats a non-positive cap as no cap[32m 33[2mms[22m[39m
+     [32m✓[39m grants no refill when the clock goes backwards[32m 1[2mms[22m[39m
+     [32m✓[39m reports how long until the next token, which is what a UI has to show[32m 0[2mms[22m[39m
+     [32m✓[39m exempts control-plane traffic and counts everything a user sends[32m 1[2mms[22m[39m
+     [32m✓[39m would otherwise cost a node 90 % of its sustained data rate, at the documented numbers[32m 7[2mms[22m[39m
+     [32m✓[39m is off by default, so nothing a shipped run does changes[32m 2[2mms[22m[39m
+     [33m[2m✓[22m[39m suppresses a broadcast flood at the SUPERs when it is on, and not when it is off [33m 4361[2mms[22m[39m
+     [33m[2m✓[22m[39m leaves an honest sender alone, which is the property that makes the cap shippable [33m 2780[2mms[22m[39m
+     [33m[2m✓[22m[39m does not rate-limit an SOS, which docs/04 §6 gives its own mechanism instead [33m 1180[2mms[22m[39m
+     [32m✓[39m defaults to §6's rule — SUPERs only[32m 0[2mms[22m[39m
+     [33m[2m✓[22m[39m suppresses more when every node enforces than when only SUPERs do [33m 2532[2mms[22m[39m
+     [33m[2m✓[22m[39m cuts the airtime a flood costs, which is what the cap is for [33m 4023[2mms[22m[39m
+[31m     [31m×[31m still costs an honest network nothing under either scope[39m[33m 5344[2mms[22m[39m
+ [32m✓[39m src/__tests__/blocklist.test.ts [2m([22m[2m12 tests[22m[2m)[22m[33m 16280[2mms[22m[39m
+     [33m[2m✓[22m[39m is off by default and inert while empty [33m 2578[2mms[22m[39m
+     [33m[2m✓[22m[39m blocks, unblocks, refuses a self-block, and reports the list sorted [33m 1023[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps a blocked peer's messages out of the blocker's inbox [33m 1579[2mms[22m[39m
+     [33m[2m✓[22m[39m still lets everybody else hear the blocked peer — blocking is local [33m 1667[2mms[22m[39m
+     [33m[2m✓[22m[39m does not stop the blocker talking to the peer it blocked [33m 1387[2mms[22m[39m
+     [33m[2m✓[22m[39m lets a blocked peer's SOS through, which is the asymmetry §6 relies on [33m 1395[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps the blocked peer in the routing table, because OGMs are not blockable [33m 1336[2mms[22m[39m
+     [33m[2m✓[22m[39m costs less airtime when the blocker also refuses to relay [33m 2693[2mms[22m[39m
+     [33m[2m✓[22m[39m counts fewer suppressions under relay, because the copy dies earlier [33m 2603[2mms[22m[39m
+ [32m✓[39m src/__tests__/routing-backup.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 5796[2mms[22m[39m
+   [33m[2m✓[22m[39m diagnostic ON/OFF preserves the new arm exactly, including RNG [33m 5783[2mms[22m[39m
+ [31m❯[39m src/__tests__/connectivity.test.ts [2m([22m[2m14 tests[22m[2m | [22m[31m4 failed[39m[2m)[22m[33m 75218[2mms[22m[39m
+     [33m[2m✓[22m[39m reports the radio graph's components, largest first, summing to the network [33m 3575[2mms[22m[39m
+     [33m[2m✓[22m[39m samples the window at the configured interval, and not the settle period [33m 3417[2mms[22m[39m
+     [33m[2m✓[22m[39m can be disabled, and a disabled run reports the trivially connected defaults [33m 2889[2mms[22m[39m
+     [33m[2m✓[22m[39m says a settled 20-node campus stays in one piece [33m 1999[2mms[22m[39m
+[31m     [31m×[31m catches the crowd splitting, which an end-of-window graph cannot[39m[33m 12311[2mms[22m[39m
+     [33m[2m✓[22m[39m does not change the world it measures [33m 4173[2mms[22m[39m
+     [32m✓[39m ships on the fixed interval docs/03 §4 specifies[32m 1[2mms[22m[39m
+[31m     [31m×[31m beacons a reference-density node at exactly the specified interval[39m[33m 6005[2mms[22m[39m
+     [33m[2m✓[22m[39m spends more airtime in a sparse world, where the floor bites [33m 667[2mms[22m[39m
+[31m     [31m×[31m holds the topology still, and there the derived interval is cheaper without losing reach[39m[33m 23622[2mms[22m[39m
+     [32m✓[39m splits what is out of range, largest piece first[32m 2[2mms[22m[39m
+     [32m✓[39m partitions every node exactly once[32m 1[2mms[22m[39m
+     [32m✓[39m makes an offline node its own component rather than absorbing it into a neighbour's[32m 1[2mms[22m[39m
+[31m     [31m×[31m is what componentSizes reports the sizes of, so the metric and the picture agree[39m[33m 16507[2mms[22m[39m
+ [32m✓[39m src/__tests__/engine.test.ts [2m([22m[2m68 tests[22m[2m)[22m[33m 2236[2mms[22m[39m
+     [33m[2m✓[22m[39m stays inside [0, 1) over a long stream [33m 1981[2mms[22m[39m
+ [32m✓[39m src/__tests__/routing-selector.test.ts [2m([22m[2m20 tests[22m[2m)[22m[33m 5856[2mms[22m[39m
+     [33m[2m✓[22m[39m baseline integration leaves exact baseline routing intact [33m 1765[2mms[22m[39m
+     [33m[2m✓[22m[39m shadow integration leaves exact baseline routing intact [33m 1629[2mms[22m[39m
+     [33m[2m✓[22m[39m canary integration leaves exact baseline routing intact [33m 1308[2mms[22m[39m
+     [33m[2m✓[22m[39m isolates motion reproducibly when explicitly requested [33m 1110[2mms[22m[39m
+ [32m✓[39m src/crypto/__tests__/session.test.ts [2m([22m[2m31 tests[22m[2m)[22m[33m 964[2mms[22m[39m
+ [32m✓[39m src/crypto/__tests__/handshake.test.ts [2m([22m[2m22 tests[22m[2m)[22m[32m 278[2mms[22m[39m
+ [32m✓[39m src/__tests__/failure-diagnostics.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 6756[2mms[22m[39m
+   [33m[2m✓[22m[39m opt-in diagnosis preserves complete statistics, deliveries, nodes, logs and RNG state [33m 6741[2mms[22m[39m
+ [32m✓[39m src/crypto/__tests__/packet.test.ts [2m([22m[2m19 tests[22m[2m)[22m[33m 425[2mms[22m[39m
+ [32m✓[39m src/crypto/__tests__/recovery.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 310[2mms[22m[39m
+ [32m✓[39m src/crypto/__tests__/ratchet.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 254[2mms[22m[39m
+ [32m✓[39m src/__tests__/routing-learning-artifact.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 82[2mms[22m[39m
+ [32m✓[39m src/__tests__/import-graph.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 117[2mms[22m[39m
+ [32m✓[39m src/__tests__/wire-bytes.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 40[2mms[22m[39m
+ [32m✓[39m src/__tests__/routing-strategies.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 54[2mms[22m[39m
+ [32m✓[39m src/__tests__/transport.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 31[2mms[22m[39m
+ [32m✓[39m src/__tests__/routing-epoch.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m src/__tests__/routing-contact-bound.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [31m❯[39m src/__tests__/scan-interval.test.ts [2m([22m[2m6 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 83406[2mms[22m[39m
+     [32m✓[39m ships fixed, so nothing published moves[32m 7[2mms[22m[39m
+     [33m[2m✓[22m[39m scans less in a sparse world, which is the row's claimed saving [33m 662[2mms[22m[39m
+[31m     [31m×[31m scans more in a dense world, which is what the row says and what it costs[39m[33m 38682[2mms[22m[39m
+     [33m[2m✓[22m[39m is anchored, so a reference-density node scans at exactly the configured interval [33m 4260[2mms[22m[39m
+[31m     [31m×[31m clamps, so one peer does not stop a node scanning and a crowd does not pin it awake[39m[33m 35737[2mms[22m[39m
+     [33m[2m✓[22m[39m does not consume random numbers the fixed mode does not, so the default is untouched [33m 4053[2mms[22m[39m
+[90mstdout[2m | src/__tests__/simulation.test.ts[2m > [22m[2mcommunity relays (roadmap Phase 5: a plugged tablet in a café)[2m > [22m[2melects the plugged tablets and moves relay work off other people's batteries
+[22m[39m{
+ "baseMpr": {
+  "sent": 100,
+  "delivered": 91,
+  "ratio": 0.91,
+  "relayTx": 23518,
+  "superRatio": 0.18333333333333332,
+  "relaysAreSuper": 0,
+  "burdenOnOthers": 23518,
+  "burdenOnRelays": 0,
+  "normalPctPerHour": 2.914336878318547,
+  "blocked": [],
+  "superCount": 11
+ },
+ "baseFloodRelays": 223538,
+ "baseFloodRatio": 1,
+ "relayMpr": {
+  "sent": 100,
+  "delivered": 91,
+  "ratio": 0.91,
+  "relayTx": 26540,
+  "superRatio": 0.21666666666666667,
+  "relaysAreSuper": 3,
+  "burdenOnOthers": 23414,
+  "burdenOnRelays": 3126,
+  "normalPctPerHour": 2.8216262927405293,
+  "blocked": [],
+  "superCount": 13
+ },
+ "relayFloodRelays": 206528,
+ "relayFloodRatio": 1,
+ "sixMpr": {
+  "sent": 100,
+  "delivered": 98,
+  "ratio": 0.98,
+  "relayTx": 24444,
+  "superRatio": 0.21666666666666667,
+  "relaysAreSuper": 4,
+  "burdenOnOthers": 19148,
+  "burdenOnRelays": 5296,
+  "normalPctPerHour": 2.877188545930059,
+  "blocked": [
+   {
+    "id": "node-1",
+    "reason": "NORMAL: score 0.78, rank 7/24",
+    "betterTablets": 6,
+    "betterPhones": 0
+   },
+   {
+    "id": "node-19",
+    "reason": "NORMAL: score 0.79, rank 6/25",
+    "betterTablets": 5,
+    "betterPhones": 0
+   }
+  ],
+  "superCount": 13
+ }
+}
+
+ [31m❯[39m src/__tests__/simulation.test.ts [2m([22m[2m140 tests[22m[2m | [22m[31m14 failed[39m[2m)[22m[33m 280371[2mms[22m[39m
+     [32m✓[39m does not blow the stack when two adjacent nodes exchange one message[32m 69[2mms[22m[39m
+     [33m[2m✓[22m[39m brings up a connected world by default [33m 611[2mms[22m[39m
+     [32m✓[39m never spawns a node inside a building[32m 124[2mms[22m[39m
+     [33m[2m✓[22m[39m learns routes beyond one hop by gossiping OGMs [33m 590[2mms[22m[39m
+     [33m[2m✓[22m[39m delivers a multi-hop unicast along a routed path [33m 696[2mms[22m[39m
+     [33m[2m✓[22m[39m measures latency on a virtual clock that grows with hop count [33m 1287[2mms[22m[39m
+     [33m[2m✓[22m[39m counts broadcast deliveries instead of silently dropping them [33m 707[2mms[22m[39m
+[31m     [31m×[31m expires soft state on simulated time, not wall-clock time[39m[33m 10849[2mms[22m[39m
+     [33m[2m✓[22m[39m reproduces a run exactly for the same seed [33m 1290[2mms[22m[39m
+     [32m✓[39m diverges for a different seed[32m 134[2mms[22m[39m
+     [33m[2m✓[22m[39m resets back to the seeded world [33m 354[2mms[22m[39m
+     [32m✓[39m carries a message across a partition until the groups meet[32m 81[2mms[22m[39m
+     [32m✓[39m keeps undeliverable traffic in a sparse village instead of dropping it[32m 112[2mms[22m[39m
+     [33m[2m✓[22m[39m takes a node offline when its battery is exhausted [33m 382[2mms[22m[39m
+[31m     [31m×[31m honours manual offline/online and charging toggles[39m[33m 9057[2mms[22m[39m
+     [32m✓[39m refuses to send from an offline node[32m 143[2mms[22m[39m
+     [33m[2m✓[22m[39m retransmits from the source when no ACK returns, and stops at the budget [33m 1700[2mms[22m[39m
+     [33m[2m✓[22m[39m suppresses redundant NORMAL relays under MPR but not under flood-all [33m 2983[2mms[22m[39m
+     [33m[2m✓[22m[39m elects super-nodes only from eligible candidates [33m 1673[2mms[22m[39m
+     [33m[2m✓[22m[39m disables election when configured to [33m 1286[2mms[22m[39m
+       [33m[2m✓[22m[39m records when each hop arrived, over what link, and what it decided [33m 1552[2mms[22m[39m
+       [33m[2m✓[22m[39m recovers the route chain from the fan-out tree [33m 2031[2mms[22m[39m
+       [33m[2m✓[22m[39m marks the relays MPR suppressed, with the reason [33m 1918[2mms[22m[39m
+       [33m[2m✓[22m[39m traces hops always, and captures the log only when asked [33m 3811[2mms[22m[39m
+       [33m[2m✓[22m[39m logs beacons too when captureOgm is set [33m 1381[2mms[22m[39m
+       [33m[2m✓[22m[39m keeps the capture bounded and in time order [33m 1755[2mms[22m[39m
+       [33m[2m✓[22m[39m does not perturb the run it is measuring [33m 3772[2mms[22m[39m
+       [33m[2m✓[22m[39m drops the log when metrics are re-baselined [33m 2331[2mms[22m[39m
+       [33m[2m✓[22m[39m logs the DTN last resort as a queue event [33m 537[2mms[22m[39m
+       [33m[2m✓[22m[39m never promotes a node the user opted out of, and steps it down at once [33m 2514[2mms[22m[39m
+       [33m[2m✓[22m[39m keeps the mesh routing when a third of the nodes decline the role [33m 1948[2mms[22m[39m
+       [33m[2m✓[22m[39m never auto-promotes with battery saver on [33m 2083[2mms[22m[39m
+       [33m[2m✓[22m[39m leaves duty cycling off by default [33m 876[2mms[22m[39m
+       [33m[2m✓[22m[39m scans 3 s out of every 10 s when duty cycling, and never sleeps a SUPER [33m 1355[2mms[22m[39m
+       [33m[2m✓[22m[39m spreads duty phases so a crowd does not sleep in lockstep [33m 812[2mms[22m[39m
+       [33m[2m✓[22m[39m trades discovery for battery when duty cycling [33m 864[2mms[22m[39m
+       [33m[2m✓[22m[39m reports battery %/h per role, scans/sec and relays/sec [33m 425[2mms[22m[39m
+       [33m[2m✓[22m[39m spends exactly the skills/07 budget always-on, and buys headroom by sleeping [33m 4822[2mms[22m[39m
+       [33m[2m✓[22m[39m excludes charging nodes from the measured drain rate [33m 872[2mms[22m[39m
+       [33m[2m✓[22m[39m buckets latency by hop for first-attempt routed traffic [33m 872[2mms[22m[39m
+       [32m✓[39m runs at the bottom of the range with nobody cut off[32m 48[2mms[22m[39m
+[31m       [31m×[31m runs at the top of the range, and the fallback does not go quadratic[39m[33m 46378[2mms[22m[39m
+[31m       [31m×[31m keeps the dense branch out of the worlds that do not need it[39m[33m 5175[2mms[22m[39m
+       [33m[2m✓[22m[39m enforces the 3-10 member bound, and nothing else can create a group [33m 634[2mms[22m[39m
+       [33m[2m✓[22m[39m reaches every member and nobody else [33m 773[2mms[22m[39m
+       [33m[2m✓[22m[39m relays through non-members, so a spread group still works [33m 750[2mms[22m[39m
+       [33m[2m✓[22m[39m keeps group traffic out of the unicast metrics [33m 865[2mms[22m[39m
+       [33m[2m✓[22m[39m never arms a retry timer for a scoped flood [33m 860[2mms[22m[39m
+       [33m[2m✓[22m[39m rotates the key when a member leaves, and the departed node can relay but not read [33m 708[2mms[22m[39m
+       [33m[2m✓[22m[39m refuses to shrink a group below three [33m 629[2mms[22m[39m
+       [33m[2m✓[22m[39m rotates on join, so a joiner cannot read the history it missed [33m 749[2mms[22m[39m
+       [33m[2m✓[22m[39m counts a member that cannot decrypt as a rejected epoch, not a delivery [33m 719[2mms[22m[39m
+       [33m[2m✓[22m[39m lets only the admin rotate the key [33m 650[2mms[22m[39m
+       [33m[2m✓[22m[39m offers per-member unicast as the alternative, with ACKs and the same reach [33m 898[2mms[22m[39m
+       [33m[2m✓[22m[39m logs membership changes and stale epochs when capture is on [33m 677[2mms[22m[39m
+       [33m[2m✓[22m[39m lists a node's groups, and forgets them when the world is rebuilt [33m 868[2mms[22m[39m
+       [32m✓[39m defaults to the mode whose cost does not depend on the route table[32m 0[2mms[22m[39m
+       [32m✓[39m takes its TTL from the documented value, not from a longer data TTL[32m 53[2mms[22m[39m
+       [33m[2m✓[22m[39m carries a GPS fix and goes out on the transport that moves it fastest [33m 1185[2mms[22m[39m
+       [33m[2m✓[22m[39m re-floods on the interval, every flood with a fresh id [33m 1084[2mms[22m[39m
+       [33m[2m✓[22m[39m gives a single-flood arm to measure against [33m 1084[2mms[22m[39m
+       [33m[2m✓[22m[39m reaches every radio-connected node — the roadmap exit criterion [33m 988[2mms[22m[39m
+[31m       [31m×[31m reaches all of a 60-node crowd, which TTL=5 cannot span[39m[33m 6952[2mms[22m[39m
+       [33m[2m✓[22m[39m re-floods with a fresh fix, so a moving sender stays trackable [33m 1043[2mms[22m[39m
+       [33m[2m✓[22m[39m collapses repeats into one alert per receiver, holding the newest fix [33m 992[2mms[22m[39m
+       [32m✓[39m keeps a late copy from overwriting a newer fix[32m 1[2mms[22m[39m
+       [33m[2m✓[22m[39m floods to every peer whatever the relay policy says [33m 989[2mms[22m[39m
+       [33m[2m✓[22m[39m stops flooding when the sender goes dark [33m 849[2mms[22m[39m
+       [33m[2m✓[22m[39m logs every flood when capture is on [33m 1030[2mms[22m[39m
+       [33m[2m✓[22m[39m buys reach with radio time, and the cost is visible [33m 2045[2mms[22m[39m
+       [33m[2m✓[22m[39m leaves the unicast metrics baseline alone [33m 950[2mms[22m[39m
+     [32m✓[39m charges air time only for the part of a payload above one packet[32m 2[2mms[22m[39m
+     [32m✓[39m sends a file as 64 KB chunks and completes the transfer[32m 5[2mms[22m[39m
+     [32m✓[39m keeps media out of the 1:1 delivery metrics[32m 2[2mms[22m[39m
+     [32m✓[39m slides a window instead of putting the whole file on air at once[32m 14[2mms[22m[39m
+     [32m✓[39m slices to the BLE ceiling when there is no Wi-Fi Direct capacity[32m 9[2mms[22m[39m
+     [32m✓[39m keeps a 500 ms Opus frame inside one BLE packet at 12 kbps, and not at 24[32m 2[2mms[22m[39m
+     [32m✓[39m streams a note while it is being recorded, so audio starts before release[32m 3[2mms[22m[39m
+     [32m✓[39m meets the roadmap's push-to-talk budget at 1 and 3 hops[32m 6[2mms[22m[39m
+     [32m✓[39m carries a 10 MB image three hops on Wi-Fi Direct inside a minute[32m 58[2mms[22m[39m
+     [32m✓[39m cannot carry a 10 MB image over BLE in any reasonable time[32m 116[2mms[22m[39m
+     [32m✓[39m re-sends the chunks a stalled window is missing, and resumes when the peer returns[32m 3[2mms[22m[39m
+     [32m✓[39m retries a chunk on the media timer, not the text plane's[32m 3[2mms[22m[39m
+     [32m✓[39m refuses media from a node that is offline or to nobody[32m 2[2mms[22m[39m
+     [32m✓[39m sends voice chunks as VOICE_CHUNK: type voice, priority high, ttl 3[32m 4[2mms[22m[39m
+     [32m✓[39m rides Wi-Fi Direct for a voice note when the group owner is already connected[32m 1[2mms[22m[39m
+     [32m✓[39m refuses a transfer over the 10 MB ceiling[32m 1[2mms[22m[39m
+     [32m✓[39m resumes a 10 MB Wi-Fi Direct image after a mid-transfer disconnect[32m 52[2mms[22m[39m
+     [32m✓[39m slices to the 512 B BLE MTU when there is no Wi-Fi Direct capacity[32m 112[2mms[22m[39m
+     [32m✓[39m repairs a flood a member missed while it was offline[32m 5[2mms[22m[39m
+     [32m✓[39m digests a set, not a sequence: the union properties the merge relies on[32m 1[2mms[22m[39m
+     [32m✓[39m keeps a beacon inside one BLE packet whatever the history holds[32m 1[2mms[22m[39m
+     [32m✓[39m repairs a long absence in bounded rounds rather than one huge reply[32m 10[2mms[22m[39m
+     [32m✓[39m cannot repair history a key rotation made unreadable[32m 4[2mms[22m[39m
+     [32m✓[39m costs control traffic only: no ACKs, no deliveries, no unicast count[32m 11[2mms[22m[39m
+     [32m✓[39m stops beaconing when a node leaves its last group, and can be switched off[32m 13[2mms[22m[39m
+     [32m✓[39m weighs openness against health, and says where the crossover is[32m 3[2mms[22m[39m
+     [33m[2m✓[22m[39m elects a healthy open node in campus_quad within two cycles [33m 564[2mms[22m[39m
+     [32m✓[39m elects a healthy open node in sparse_village within two cycles[32m 37[2mms[22m[39m
+     [33m[2m✓[22m[39m elects a healthy open node in festival_crowd within two cycles [33m 4018[2mms[22m[39m
+     [32m✓[39m elects a healthy open node in partitioned_pair within two cycles[32m 60[2mms[22m[39m
+[31m     [31m×[31m elects the plugged tablets and moves relay work off other people's batteries[39m[33m 38720[2mms[22m[39m
+     [32m✓[39m carries a bundle for a destination that was offline, and delivers it on contact[32m 11[2mms[22m[39m
+     [32m✓[39m never puts more than three copies of one bundle on air[32m 6[2mms[22m[39m
+     [32m✓[39m hands a bundle to a SUPER when the carrier has no route of its own[32m 222[2mms[22m[39m
+     [32m✓[39m prunes a bundle when its ACK is overheard, and evicts by priority then age[32m 9[2mms[22m[39m
+[31m     [31m×[31m costs radio work and nothing else: text delivery is identical, seed for seed[39m[33m 5025[2mms[22m[39m
+     [33m[2m✓[22m[39m has no mechanism by which media could harm text, and says so [33m 608[2mms[22m[39m
+     [33m[2m✓[22m[39m occupies no radio by default: nothing is ever deferred, and nothing is ever dropped [33m 961[2mms[22m[39m
+     [32m✓[39m makes a packet wait its turn, and still delivers it[32m 4[2mms[22m[39m
+     [32m✓[39m wakes a radio that went busy with an empty queue[32m 2[2mms[22m[39m
+     [32m✓[39m sheds load when the queue is full instead of promising air time it does not have[32m 2[2mms[22m[39m
+     [32m✓[39m takes the parallelism out of the sliding window, which is the whole finding[32m 107[2mms[22m[39m
+     [32m✓[39m keeps up with the capture clock at one hop and falls behind at three[32m 26[2mms[22m[39m
+     [32m✓[39m lets a voice note overtake the bulk transfer, and charges the transfer for it[32m 13[2mms[22m[39m
+     [32m✓[39m promoting acknowledgements moves them, and the bulk transfer pays for it[32m 10[2mms[22m[39m
+     [32m✓[39m is never consulted on the shipped radio, because nothing ever waits there[32m 3[2mms[22m[39m
+[31m     [31m×[31m the cap a tablet loses is being spent on other tablets, not on phones[39m[33m 7842[2mms[22m[39m
+[31m     [31m×[31m exempting tablets from the cap elects all six and pushes the ratio to the top of the band[39m[33m 16075[2mms[22m[39m
+[31m     [31m×[31m reserving half the cap does not reserve it for tablets — it hands a slot to a phone[39m[33m 7687[2mms[22m[39m
+[31m     [31m×[31m raises every open node's score and leaves the ranking exactly where it was[39m[33m 8420[2mms[22m[39m
+[31m     [31m×[31m what it does move is the promote gate and the size of the elected set[39m[33m 7275[2mms[22m[39m
+[31m     [31m×[31m holds skills/02's band on the campus world, and puts one seed on its floor[39m[33m 10416[2mms[22m[39m
+     [32m✓[39m wins an equal-coverage MPR tie, which is the only thing it can change[32m 1[2mms[22m[39m
+     [32m✓[39m hands a routeless bundle to a plugged carrier when asked, and parks it when not[32m 11[2mms[22m[39m
+[31m     [31m×[31m and that is where the benefit stops: the bundle waits on a node that never moves[39m[33m 18314[2mms[22m[39m
+     [32m✓[39m takes the receiver over for a stronger newcomer, and never for a weaker one[32m 19[2mms[22m[39m
+     [32m✓[39m is first-packet-wins under a margin the geometry cannot reach, and inert when shipped[32m 39[2mms[22m[39m
+     [32m✓[39m does not condemn a retry of the message it took over[32m 5[2mms[22m[39m
+     [32m✓[39m loses the second of two packets that arrive together, and only when asked to[32m 4[2mms[22m[39m
+     [32m✓[39m loses a packet that arrives while its receiver is transmitting[32m 4[2mms[22m[39m
+     [33m[2m✓[22m[39m counts nothing at all in the shipped model, whatever the transmitter does [33m 2005[2mms[22m[39m
+     [32m✓[39m turns a collision into a wait, and the retry goes away with it[32m 3[2mms[22m[39m
+     [32m✓[39m cannot help a hidden terminal, which is the limitation the geometry reproduces[32m 3[2mms[22m[39m
+     [32m✓[39m fires where carrier sense defers, and costs waiting to do it[32m 8[2mms[22m[39m
+     [32m✓[39m doubles the window after a collision, which is the exponential half of the backoff[32m 24[2mms[22m[39m
+     [32m✓[39m is carrier sense's lever: a radio with no shared medium does not move[32m 5[2mms[22m[39m
+     [32m✓[39m measures silence after a transmission, not after a hand-over[32m 2[2mms[22m[39m
+     [32m✓[39m stops a transfer overrunning its own queue, and the transfer is faster for it[32m 4[2mms[22m[39m
+     [32m✓[39m is inert on the shipped radio, where nothing ever queues[32m 2[2mms[22m[39m
+ [31m❯[39m src/__tests__/acceptance.test.ts [2m([22m[2m49 tests[22m[2m | [22m[31m3 failed[39m[2m)[22m[33m 332364[2mms[22m[39m
+     [32m✓[39m seed 42 elects a stable 15-25% super-node set[32m 9[2mms[22m[39m
+     [32m✓[39m seed 7 elects a stable 15-25% super-node set[32m 1[2mms[22m[39m
+     [32m✓[39m seed 1234 elects a stable 15-25% super-node set[32m 0[2mms[22m[39m
+     [32m✓[39m seed 99 elects a stable 15-25% super-node set[32m 1[2mms[22m[39m
+     [32m✓[39m seed 2026 elects a stable 15-25% super-node set[32m 1[2mms[22m[39m
+     [32m✓[39m seed 555 elects a stable 15-25% super-node set[32m 6[2mms[22m[39m
+     [32m✓[39m seed 42 delivers >=90% of messages[32m 0[2mms[22m[39m
+     [32m✓[39m seed 7 delivers >=90% of messages[32m 0[2mms[22m[39m
+     [32m✓[39m seed 1234 delivers >=90% of messages[32m 0[2mms[22m[39m
+     [32m✓[39m seed 99 delivers >=90% of messages[32m 0[2mms[22m[39m
+     [32m✓[39m seed 2026 delivers >=90% of messages[32m 0[2mms[22m[39m
+     [32m✓[39m seed 555 delivers >=90% of messages[32m 0[2mms[22m[39m
+     [32m✓[39m seed 42 delivers >=90% within five hops[32m 0[2mms[22m[39m
+     [32m✓[39m seed 7 delivers >=90% within five hops[32m 0[2mms[22m[39m
+     [32m✓[39m seed 1234 delivers >=90% within five hops[32m 0[2mms[22m[39m
+     [32m✓[39m seed 99 delivers >=90% within five hops[32m 0[2mms[22m[39m
+     [32m✓[39m seed 2026 delivers >=90% within five hops[32m 0[2mms[22m[39m
+     [32m✓[39m seed 555 delivers >=90% within five hops[32m 0[2mms[22m[39m
+     [32m✓[39m seed 42 reports the three-hop reading without gating on it[32m 1[2mms[22m[39m
+     [32m✓[39m seed 7 reports the three-hop reading without gating on it[32m 23[2mms[22m[39m
+     [32m✓[39m seed 1234 reports the three-hop reading without gating on it[32m 0[2mms[22m[39m
+     [32m✓[39m seed 99 reports the three-hop reading without gating on it[32m 0[2mms[22m[39m
+     [32m✓[39m seed 2026 reports the three-hop reading without gating on it[32m 0[2mms[22m[39m
+     [32m✓[39m seed 555 reports the three-hop reading without gating on it[32m 0[2mms[22m[39m
+     [32m✓[39m seed 42 uses <=70% of the naive flood-all relay budget[32m 1[2mms[22m[39m
+     [32m✓[39m seed 7 uses <=70% of the naive flood-all relay budget[32m 0[2mms[22m[39m
+     [32m✓[39m seed 1234 uses <=70% of the naive flood-all relay budget[32m 0[2mms[22m[39m
+     [32m✓[39m seed 99 uses <=70% of the naive flood-all relay budget[32m 0[2mms[22m[39m
+     [32m✓[39m seed 2026 uses <=70% of the naive flood-all relay budget[32m 0[2mms[22m[39m
+     [32m✓[39m seed 555 uses <=70% of the naive flood-all relay budget[32m 0[2mms[22m[39m
+     [32m✓[39m MPR buys a further cut over routing without suppression, on the mean[32m 0[2mms[22m[39m
+     [32m✓[39m seed 42 keeps a fully connected world with no isolated node[32m 8[2mms[22m[39m
+     [32m✓[39m seed 7 keeps a fully connected world with no isolated node[32m 1[2mms[22m[39m
+     [32m✓[39m seed 1234 keeps a fully connected world with no isolated node[32m 3[2mms[22m[39m
+     [32m✓[39m seed 99 keeps a fully connected world with no isolated node[32m 1[2mms[22m[39m
+     [32m✓[39m seed 2026 keeps a fully connected world with no isolated node[32m 1[2mms[22m[39m
+     [32m✓[39m seed 555 keeps a fully connected world with no isolated node[32m 0[2mms[22m[39m
+     [32m✓[39m respects the docs/04 latency budget[32m 1[2mms[22m[39m
+     [32m✓[39m suppression actually fires, and only under MPR[32m 1[2mms[22m[39m
+[31m     [31m×[31m stays stable and cheap at 60 nodes[39m[33m 54457[2mms[22m[39m
+[31m     [31m×[31m holds its delivery bar on seeds the gate above does not use[39m[33m 125085[2mms[22m[39m
+[31m     [31m×[31m costs MPR nothing against the same engine without suppression[39m[33m 150425[2mms[22m[39m
+     [33m[2m✓[22m[39m carries traffic in a sparse village instead of dropping it [33m 354[2mms[22m[39m
+     [33m[2m✓[22m[39m exposes every named scenario through the same factory [33m 557[2mms[22m[39m
+     [33m[2m✓[22m[39m honours the skills/08 configuration envelope [33m 1045[2mms[22m[39m
+     [32m✓[39m reproduces the mulberry32 stream bit-for-bit[32m 1[2mms[22m[39m
+     [32m✓[39m reproduces the seeded spawn geometry[32m 9[2mms[22m[39m
+     [32m✓[39m serialises an anti-entropy reply exactly as the fixture says[32m 1[2mms[22m[39m
+     [33m[2m✓[22m[39m reproduces the reference run [33m 356[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 29 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+

@@ -1,0 +1,50 @@
+Duman mesh simulator — partitioned_pair (seed 42, policy mpr)
+──────────────────────────────────────────────────────────────
+  scenario                 partitioned_pair
+  seed                     42
+  policy                   mpr
+  nodes                    10
+  sent                     150
+  deliveredUnicast         66
+  deliveryRatio            0.44
+  deliveredWithinFiveHops  66
+  withinFiveRatio          0.44
+  deliveredWithinThreeHops 66
+  withinThreeRatio         0.44
+  superNodes               2
+  superRatio               0.2
+  timeAvgSuperRatio        0.2
+  electionsPerMin          0.0515
+  avgHops                  1.0
+  latencyP50Ms             241.8162
+  latencyP95Ms             310.7336
+  relayTx                  1773
+  floodAllRelayTx          7112
+  overheadVsFloodAll       0.2493
+  routeFloodRelayTx        5134
+  overheadVsRouteFlood     0.3453
+  overheadRatio            26.8636
+  mprSuppressed            836
+  retriesSent              169
+  retriesExhausted         80
+  acksReceived             66
+  controlOverhead          18016
+  lostTransmissions        16
+  lostOgmTransmissions     267
+  totalQueued              80
+  avgPeers                 4.0
+  isolatedNodes            0
+  avgScore                 0.6164
+  simTimeMs                233000.0
+  dutyCycle                false
+  batteryPctPerHourNormal  1.979
+  batteryPctPerHourSuper   0.0
+  batteryPct8hNormal       15.8319
+  batteryPct8hSuper        0.0
+  scansPerSec              15.4
+  relaysPerSec             7.88
+  awakeRatio               1.0
+  scansSkippedAsleep       0
+  electionEvents           2
+  latencyByHop             hops      n     avg     p95
+                              1     65   240 ms   310 ms

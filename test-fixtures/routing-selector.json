@@ -1,0 +1,900 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "name": "dwell-hysteresis-rate-limit",
+      "mode": "shadow",
+      "model": {
+        "schema": 1,
+        "api": 1,
+        "experimental": true,
+        "threshold": 8,
+        "left": "baseline-v1",
+        "right": "ack-6000-v1",
+        "confidence": 1
+      },
+      "steps": [
+        {
+          "now": 0,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 0
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 0
+          }
+        },
+        {
+          "now": 1000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 1000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 0
+          }
+        },
+        {
+          "now": 2000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 2000
+          },
+          "expected": {
+            "proposed": "ack-6000-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 1
+          }
+        },
+        {
+          "now": 3000,
+          "context": {
+            "neighbors": 2,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 3000
+          },
+          "expected": {
+            "proposed": "ack-6000-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 1
+          }
+        },
+        {
+          "now": 4000,
+          "context": {
+            "neighbors": 2,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 4000
+          },
+          "expected": {
+            "proposed": "ack-6000-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 1
+          }
+        },
+        {
+          "now": 5000,
+          "context": {
+            "neighbors": 2,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 5000
+          },
+          "expected": {
+            "proposed": "ack-6000-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 1
+          }
+        },
+        {
+          "now": 32000,
+          "context": {
+            "neighbors": 2,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 32000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 2
+          }
+        },
+        {
+          "now": 33000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 33000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 2
+          }
+        },
+        {
+          "now": 34000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 34000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 2
+          }
+        },
+        {
+          "now": 35000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 35000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 2
+          }
+        },
+        {
+          "now": 62000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 62000
+          },
+          "expected": {
+            "proposed": "ack-6000-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 3
+          }
+        },
+        {
+          "now": 63000,
+          "context": {
+            "neighbors": 2,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 63000
+          },
+          "expected": {
+            "proposed": "ack-6000-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 3
+          }
+        },
+        {
+          "now": 64000,
+          "context": {
+            "neighbors": 2,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 64000
+          },
+          "expected": {
+            "proposed": "ack-6000-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 3
+          }
+        },
+        {
+          "now": 92000,
+          "context": {
+            "neighbors": 2,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 92000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 4
+          }
+        },
+        {
+          "now": 93000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 93000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 4
+          }
+        },
+        {
+          "now": 94000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 94000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 4
+          }
+        },
+        {
+          "now": 122000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 122000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 4
+          }
+        }
+      ]
+    },
+    {
+      "name": "power-override",
+      "mode": "shadow",
+      "model": {
+        "schema": 1,
+        "api": 1,
+        "experimental": true,
+        "threshold": 8,
+        "left": "baseline-v1",
+        "right": "ack-6000-v1",
+        "confidence": 1
+      },
+      "steps": [
+        {
+          "now": 0,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 0
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 0
+          }
+        },
+        {
+          "now": 1000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 1000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 0
+          }
+        },
+        {
+          "now": 2000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 2000
+          },
+          "expected": {
+            "proposed": "ack-6000-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 1
+          }
+        },
+        {
+          "now": 3000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": true,
+            "observedAt": 3000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "power-override",
+            "switches": 1
+          }
+        },
+        {
+          "now": 4000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 1,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 4000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "power-override",
+            "switches": 1
+          }
+        },
+        {
+          "now": 5000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.1,
+            "saver": false,
+            "observedAt": 5000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "power-override",
+            "switches": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "stale-latches",
+      "mode": "shadow",
+      "model": {
+        "schema": 1,
+        "api": 1,
+        "experimental": true,
+        "threshold": 8,
+        "left": "baseline-v1",
+        "right": "ack-6000-v1",
+        "confidence": 1
+      },
+      "steps": [
+        {
+          "now": 12000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 0
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "invalid-context",
+            "switches": 0
+          }
+        },
+        {
+          "now": 13000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 13000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "latched-baseline",
+            "switches": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "drift-latches",
+      "mode": "shadow",
+      "model": {
+        "schema": 1,
+        "api": 1,
+        "experimental": true,
+        "threshold": 8,
+        "left": "baseline-v1",
+        "right": "ack-6000-v1",
+        "confidence": 1
+      },
+      "steps": [
+        {
+          "now": 0,
+          "context": {
+            "neighbors": 129,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 0
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "invalid-context",
+            "switches": 0
+          }
+        },
+        {
+          "now": 1000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 1000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "latched-baseline",
+            "switches": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "clock-rewind",
+      "mode": "shadow",
+      "model": {
+        "schema": 1,
+        "api": 1,
+        "experimental": true,
+        "threshold": 8,
+        "left": "baseline-v1",
+        "right": "ack-6000-v1",
+        "confidence": 1
+      },
+      "steps": [
+        {
+          "now": 2000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 2000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 0
+          }
+        },
+        {
+          "now": 1000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 1000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "invalid-context",
+            "switches": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "baseline-independent",
+      "mode": "baseline",
+      "model": null,
+      "steps": [
+        {
+          "now": 0,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 0
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "baseline-mode",
+            "switches": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "missing-model",
+      "mode": "shadow",
+      "model": null,
+      "steps": [
+        {
+          "now": 0,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 0
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "invalid-model",
+            "switches": 0
+          }
+        },
+        {
+          "now": 1000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 1000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "latched-baseline",
+            "switches": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "unsupported-api",
+      "mode": "shadow",
+      "model": {
+        "schema": 1,
+        "api": 2,
+        "experimental": true,
+        "threshold": 8,
+        "left": "baseline-v1",
+        "right": "ack-6000-v1",
+        "confidence": 1
+      },
+      "steps": [
+        {
+          "now": 0,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 0
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "invalid-model",
+            "switches": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalid-action",
+      "mode": "shadow",
+      "model": {
+        "schema": 1,
+        "api": 1,
+        "experimental": true,
+        "threshold": 8,
+        "left": "baseline-v1",
+        "right": "flood-all",
+        "confidence": 1
+      },
+      "steps": [
+        {
+          "now": 0,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 0
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "invalid-model",
+            "switches": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "low-confidence",
+      "mode": "shadow",
+      "model": {
+        "schema": 1,
+        "api": 1,
+        "experimental": true,
+        "threshold": 8,
+        "left": "baseline-v1",
+        "right": "ack-6000-v1",
+        "confidence": 0.59
+      },
+      "steps": [
+        {
+          "now": 0,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 0
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "low-confidence",
+            "switches": 0
+          }
+        },
+        {
+          "now": 1000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 1000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "low-confidence",
+            "switches": 0
+          }
+        },
+        {
+          "now": 2000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 2000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "low-confidence",
+            "switches": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "unapproved-canary",
+      "mode": "canary",
+      "model": {
+        "schema": 1,
+        "api": 1,
+        "experimental": true,
+        "threshold": 8,
+        "left": "baseline-v1",
+        "right": "ack-6000-v1",
+        "confidence": 1
+      },
+      "steps": [
+        {
+          "now": 0,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 0
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "approval-required",
+            "switches": 0
+          }
+        },
+        {
+          "now": 1000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 1000
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "approval-required",
+            "switches": 0
+          }
+        },
+        {
+          "now": 2000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 2000
+          },
+          "expected": {
+            "proposed": "ack-6000-v1",
+            "applied": "baseline-v1",
+            "reason": "approval-required",
+            "switches": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "repeated-observation-not-votes",
+      "mode": "shadow",
+      "model": {
+        "schema": 1,
+        "api": 1,
+        "experimental": true,
+        "threshold": 8,
+        "left": "baseline-v1",
+        "right": "ack-6000-v1",
+        "confidence": 1
+      },
+      "steps": [
+        {
+          "now": 0,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 0
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 0
+          }
+        },
+        {
+          "now": 1000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 0
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 0
+          }
+        },
+        {
+          "now": 2000,
+          "context": {
+            "neighbors": 20,
+            "queue": 0,
+            "duty": 0,
+            "battery": 0.8,
+            "saver": false,
+            "observedAt": 0
+          },
+          "expected": {
+            "proposed": "baseline-v1",
+            "applied": "baseline-v1",
+            "reason": "shadow-only",
+            "switches": 0
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -119,6 +119,27 @@ function main(): void {
           });
         }
       }
+      // One network-wide record per sample boundary, beside the per-device ones. `device` is
+      // `"*"` because the record is about the graph and not about a phone, which is the
+      // convention `docs/09` §4 documents for it.
+      //
+      // This exists because `docs/06` §24.10 measured what happens without it: a 60-node crowd
+      // splits and re-joins inside a window, so broadcast reach reads as two modes, and a graph
+      // sampled once *after* the walk cannot tell a partition that healed from one that never
+      // happened. §24.9 drew exactly that wrong conclusion from exactly that measurement.
+      // `docs/09` §5 asks the field team to log connectivity during the walk; this is the
+      // simulator's half of that, so §7 can validate the analyzer against known ground truth.
+      const sizes = sim.componentSizes();
+      lines.push({
+        v: 1,
+        kind: "topology",
+        atMs: nextSample,
+        device: "*",
+        nodes: sim.nodes.length,
+        components: sizes.length,
+        largest: sizes[0] ?? 0,
+        connected: sizes.length === 1,
+      });
       nextSample += SAMPLE_MS;
     }
   }

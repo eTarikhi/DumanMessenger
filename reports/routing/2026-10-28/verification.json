@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-28",
+  "branch": "arena/ff85cb12-dumanmessenger",
+  "behaviorAndFixtureRevision": "0082fd5239387d5407e607e81453594da9c94dc4",
+  "local": [
+    {
+      "command": "npm test",
+      "status": "passed",
+      "files": 19,
+      "tests": 484,
+      "durationSec": 806.8
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    },
+    {
+      "command": "npx tsc -p tool/tsconfig.golden.json",
+      "status": "passed"
+    },
+    {
+      "command": "python3 -m unittest discover -s tool/routing -p 'test_*.py'",
+      "status": "passed",
+      "tests": 3
+    },
+    {
+      "command": "npx vitest run src/__tests__/routing-strategies.test.ts",
+      "status": "passed",
+      "tests": 4
+    },
+    {
+      "command": "python3 tool/ci/check-docs.py",
+      "status": "passed"
+    },
+    {
+      "command": "python3 tool/ci/check-parity.py",
+      "status": "passed"
+    },
+    {
+      "command": "python3 tool/ci/check-dart-sites.py",
+      "status": "passed"
+    },
+    {
+      "command": "python3 tool/ci/check-dart-balance.py",
+      "status": "passed"
+    },
+    {
+      "command": "dart test",
+      "status": "not-run",
+      "reason": "Dart SDK unavailable locally; authoritative CI evidence below"
+    }
+  ],
+  "experiments": {
+    "mainRuns": 288,
+    "oodRuns": 72,
+    "messagesPerRun": 150,
+    "totalMessages": 54000,
+    "engine": "TypeScript reference",
+    "allSourceDenominatorsAndUniqueDeliveryAssertions": "passed"
+  },
+  "ci": [
+    {
+      "runId": 40637366654,
+      "revision": "6418cd8",
+      "conclusion": "success",
+      "jobsPassed": 9,
+      "dartTests": 281
+    },
+    {
+      "runId": 40638171141,
+      "revision": "9b90713",
+      "conclusion": "success",
+      "jobsPassed": 9
+    },
+    {
+      "runId": 40638583664,
+      "revision": "0082fd5",
+      "conclusion": "success",
+      "dartJob": "success",
+      "dartTests": 329,
+      "dartFailed": 0,
+      "dartSkipped": 0,
+      "dartAnnotationJobId": 122651184061,
+      "includes48StrategyScenarioPowerParityCases": true,
+      "jobsPassed": 9
+    }
+  ],
+  "engineSHA256": {
+    "src/simulation.ts": "150c14782b43f2d04310fcb03db850e3f9b5c9e78a72de916981536e70b7e2d6",
+    "src/routing.ts": "d1f4674e81dc08f9fba50f43eed8eab4337003866e0f5da3aae2b57e03df3b1b",
+    "src/election.ts": "4bccd535aca8d641b376372e19ad94234e9514ea475c36fad53214df300b2af6",
+    "src/events.ts": "c9ea7c840986f602d3eff10b5c2786bf3d560951603c5ea5d7ab91c70daf7bdf",
+    "src/rf.ts": "76a25493c9b6b794195f6042f14b75c9a3461d033291c2b0810beeb4e0f25f26",
+    "src/types.ts": "650850e86627c20caa48af9a692c865841c7aa2fd7e97daf26ec15afc9b085d1",
+    "src/rng.ts": "e017a99b597be68455c65b764f9bd68754016bbf0df982bd0c3195a15c3b0b8b",
+    "src/scenarios.ts": "b67e751deb40f2ea47d7e4c0d7179620c212b2b40ac81e585e71afd6af5e33e3"
+  },
+  "notVerified": [
+    "All held-out and OOD candidate runs in Dart (only seed-42 cross-language fixture plus existing CI gates tested)",
+    "Real phones, battery joules, RF/mobility model calibration",
+    "Learned classifier, bandit, deep RL or live switching controller (not implemented/trained)",
+    "New Windows dispatcher execution for this mission; historical owner daily evidence is preserved separately"
+  ]
+}

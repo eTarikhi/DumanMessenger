@@ -6,7 +6,62 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Successive pushes to one branch used to start one pipeline each: six runs in the 45 minutes
+# while the discovery-beacon work landed, each superseded by the next before it had finished.
+# Cancelling a superseded run costs no evidence — the newest commit is the one anybody reads —
+# except on the default branch, where the run for a merged commit is the record of what landed
+# and must survive whatever follows it. Hence cancel-in-progress for every ref but main.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
+  # First because it is the cheapest and the only job with no toolchain dependency: it needs
+  # python3 and nothing else, so it answers even when the Node or Dart setup steps fail. It is
+  # also the only job that catches a protocol constant changed in one engine and not the other,
+  # a config knob added to one engine and not the other, a statistics field missing from the
+  # Dart `toJson()`, or a document naming a command that does not exist — none of which any
+  # compiler on either side would report.
+  checks:
+    name: Toolchain-free static checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Documentation drift
+        run: python3 tool/ci/check-docs.py
+
+      - name: Dart delimiter balance
+        run: python3 tool/ci/check-dart-balance.py
+
+      - name: Cross-language parity (constants, coverage weights, type inventories)
+        run: python3 tool/ci/check-parity.py
+
+      - name: Dart declaration sites
+        run: python3 tool/ci/check-dart-sites.py
+
+      # make.ps1 is the Windows entry point — 21 targets — and no runner here can
+      # execute it: PowerShell is not installed, and its release asset is served from a host
+      # this sandbox cannot reach. Until now the checker existed (`make check-ps1`) and no
+      # pipeline called it, so neither the workflow nor the local mirror ever looked at the
+      # front door; only a human typing the command did. This is a *static* check and is
+      # recorded as one (docs/11 §3) — unbalanced delimiters and PowerShell-7-only syntax that
+      # fails on the 5.1 Windows 11 ships. It is not execution, and nothing here claims it is.
+      - name: PowerShell static check (make.ps1)
+        run: python3 tool/ci/check-ps1.py make.ps1
+
+      # A check that always passes is indistinguishable from a broken one. All four have found
+      # bugs in themselves, so the self-tests run in CI rather than only on request.
+      - name: Checker self-tests
+        run: |
+          python3 tool/ci/check-docs.py --self-test
+          python3 tool/ci/check-dart-balance.py --self-test
+          python3 tool/ci/check-parity.py --self-test
+          python3 tool/ci/check-dart-sites.py --self-test
+
   web:
     name: TypeScript engine + React simulator
     runs-on: ubuntu-latest
@@ -24,9 +79,45 @@ jobs:
         run: npx tsc --noEmit -p tsconfig.json
 
       # Includes the skills/02 + skills/08 acceptance criteria and the golden
-      # vectors that the Dart job asserts against too.
+      # vectors that the Dart job asserts against too. `pipefail` is what keeps `tee` from
+      # masking a failing suite's exit code, which would make this gate vacuous.
+      - name: Deployment regressions and dependency audit
+        run: |
+          npm run test:deployment
+          npm audit --audit-level=low
+
+      - name: Record toolchain versions
+        run: echo "::notice title=Node toolchain::Node $(node --version), npm $(npm --version)"
+
       - name: Unit + acceptance tests
-        run: npm test
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee /tmp/vitest.txt
+
+      # The tally, as an annotation, for the reason the dart job's reporter gives: this
+      # repository's development sandbox cannot download a log archive
+      # (results-receiver.actions.githubusercontent.com is outside its egress allowlist) and
+      # $GITHUB_STEP_SUMMARY is not exposed by the check-runs API, so a green run's numbers are
+      # otherwise unreadable. Until this step existed, the TypeScript count quoted in the docs was
+      # whatever somebody last measured locally — which is how "451 tests" survived being wrong by
+      # twenty-two.
+      - name: Publish the test tally
+        if: always()
+        continue-on-error: true
+        run: |
+          # ANSI escapes are stripped first: vitest colours its summary when it thinks it has a
+          # terminal, and a colour code between "Tests" and its count makes the grep below find
+          # nothing and publish an empty notice — measured with a coloured capture, not guessed.
+          # The % escape is the one workflow commands require, so a summary containing a percent
+          # sign cannot truncate the annotation.
+          summary="$(sed -e 's/\x1b\[[0-9;]*[mK]//g' /tmp/vitest.txt 2>/dev/null \
+            | grep -E '(Test Files|Tests)[[:space:]]' \
+            | tr -s '[:space:]' ' ' | paste -sd'; ' - | sed -e 's/%/%25/g' || true)"
+          if [ -n "$summary" ]; then
+            echo "::notice title=npm test::$summary"
+          else
+            echo "::warning::no vitest summary in the capture, so the tally is not published"
+          fi
 
       - name: Golden vectors are up to date
         run: |
@@ -40,6 +131,21 @@ jobs:
       - name: Production build
         run: npm run build
 
+      - name: Package simulator for private staging (no deployment)
+        run: |
+          npm run package:simulator
+          tar -czf artifacts/duman-simulator.tar.gz -C artifacts/package .
+          (cd artifacts && sha256sum duman-simulator.tar.gz > duman-simulator.tar.gz.sha256)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simulator-staging-${{ github.sha }}
+          path: |
+            artifacts/duman-simulator.tar.gz
+            artifacts/duman-simulator.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+
   dart:
     name: Dart mesh_sim (authoritative engine)
     runs-on: ubuntu-latest
@@ -51,9 +157,25 @@ jobs:
 
       - uses: dart-lang/setup-dart@v1
         with:
-          sdk: stable
+          sdk: "3.13.7"
 
-      - run: dart pub get
+      # `pubspec.lock` was git-ignored until 5d408cd, so every run resolved `test: ^1.25.0` afresh
+      # against whatever pub.dev served that morning — a caret range in an application package
+      # (`publish_to: none`), which is exactly the case the Dart guidance says to pin. It is
+      # committed as of 991d11c, generated on a machine that could reach pub.dev, so the enforced
+      # branch below is the live one: 49 packages pinned, and `--enforce-lockfile` fails the build
+      # if the lock ever stops matching `pubspec.yaml`. The warning branch is not decoration — it
+      # fired on all seven Dart-resolving jobs of every run before 991d11c, and it stays for a
+      # checkout that has no lock, because a lock cannot be generated where pub.dev is unreachable
+      # (`docs/11` §2 measured both sides of that gate).
+      - name: Resolve Dart dependencies
+        run: |
+          if [ -f pubspec.lock ]; then
+            dart pub get --enforce-lockfile
+          else
+            echo "::warning::pubspec.lock is not committed, so this run resolves Dart dependencies fresh; commit it (docs/11 §2) for a reproducible build"
+            dart pub get
+          fi
 
       # All three steps below run unconditionally and capture their output, so a
       # single red build reports the analyzer, the test failures *and* the CLI
@@ -87,6 +209,28 @@ jobs:
           set -o pipefail
           dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 2>&1 |
             tee /tmp/dart-cli.txt
+
+      - name: Compile authoritative CLI and smoke executable
+        run: |
+          mkdir -p build
+          dart compile exe bin/mesh_sim.dart -o build/duman-mesh-sim
+          build/duman-mesh-sim --help
+          build/duman-mesh-sim --scenario campus_quad --seed 42 --json > build/compiled-campus-42.json
+          cp ../../LICENSE build/LICENSE
+          dart --version > build/BUILD-INFO.txt 2>&1
+          echo "::notice title=Dart SDK::$(cat build/BUILD-INFO.txt)"
+          (cd build && sha256sum duman-mesh-sim > SHA256SUMS)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dart-cli-linux-x64-${{ github.sha }}
+          path: |
+            sim/mesh_sim/build/duman-mesh-sim
+            sim/mesh_sim/build/LICENSE
+            sim/mesh_sim/build/BUILD-INFO.txt
+            sim/mesh_sim/build/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
 
       # Shares tool/ci/diagnostics.py with the local pipeline in tool/ci/, so the same
       # parser runs here and on a developer's machine and the two cannot drift. It
@@ -139,18 +283,54 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dart-lang/setup-dart@v1
         with:
-          sdk: stable
-      - run: dart pub get
+          sdk: "3.13.7"
+      # `pubspec.lock` was git-ignored until 5d408cd, so every run resolved `test: ^1.25.0` afresh
+      # against whatever pub.dev served that morning — a caret range in an application package
+      # (`publish_to: none`), which is exactly the case the Dart guidance says to pin. It is
+      # committed as of 991d11c, generated on a machine that could reach pub.dev, so the enforced
+      # branch below is the live one: 49 packages pinned, and `--enforce-lockfile` fails the build
+      # if the lock ever stops matching `pubspec.yaml`. The warning branch is not decoration — it
+      # fired on all seven Dart-resolving jobs of every run before 991d11c, and it stays for a
+      # checkout that has no lock, because a lock cannot be generated where pub.dev is unreachable
+      # (`docs/11` §2 measured both sides of that gate).
+      - name: Resolve Dart dependencies
+        run: |
+          if [ -f pubspec.lock ]; then
+            dart pub get --enforce-lockfile
+          else
+            echo "::warning::pubspec.lock is not committed, so this run resolves Dart dependencies fresh; commit it (docs/11 §2) for a reproducible build"
+            dart pub get
+          fi
       # The DTN scenarios are deliberately partitioned, so they report metrics
       # without the connected-world delivery gate. The duty-cycle arm is where
       # skills/07's "<15% per 8 h" budget is asserted: an always-scanning NORMAL
       # node measures 18-25% per 8 h once mobility is included (docs/06 §7), so
       # the sleep slot is load-bearing for that criterion, not a refinement.
       - name: ${{ matrix.scenario }} (${{ matrix.power }})
+        run: |
+          set -o pipefail
+          dart run bin/mesh_sim.dart --scenario ${{ matrix.scenario }} --seed 42 \
+            ${{ matrix.power == 'duty-cycle' && '--duty-cycle' || '' }} \
+            ${{ matrix.scenario == 'campus_quad' && '' || '--no-check' }} \
+            2>&1 | tee /tmp/cli.txt
+
+      # What this arm measured, as an annotation. `pipefail` above is what keeps `tee` from
+      # hiding the CLI's exit code — without it a failing gate would have exited 0.
+      #
+      # Annotations are the only readable channel out of a runner for anybody who cannot reach
+      # `results-receiver.actions.githubusercontent.com`: the log archive is not downloadable
+      # from this repository's development sandbox and `$GITHUB_STEP_SUMMARY` is not exposed by
+      # the check-runs API at all. A green run whose numbers nobody can read cannot be
+      # reconciled against the acceptance criteria in skills/02, skills/07 and skills/08, so
+      # the numbers travel as a notice. continue-on-error for the reason the dart job's
+      # reporter gives: a bug in a reporter must not fail an otherwise green build.
+      - name: Publish the numbers this arm measured
+        if: always()
+        continue-on-error: true
         run: >-
-          dart run bin/mesh_sim.dart --scenario ${{ matrix.scenario }} --seed 42
-          ${{ matrix.power == 'duty-cycle' && '--duty-cycle' || '' }}
-          ${{ matrix.scenario == 'campus_quad' && '' || '--no-check' }}
+          python3 ../../tool/ci/diagnostics.py --format github --no-summary
+          --analyze /dev/null --test /dev/null --cli /tmp/cli.txt
+          --title "${{ matrix.scenario }} (${{ matrix.power }})"
 
   probes:
     name: CLI probes (SOS, groups, media)
@@ -163,34 +343,67 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dart-lang/setup-dart@v1
         with:
-          sdk: stable
-      - run: dart pub get
+          sdk: "3.13.7"
+      # `pubspec.lock` was git-ignored until 5d408cd, so every run resolved `test: ^1.25.0` afresh
+      # against whatever pub.dev served that morning — a caret range in an application package
+      # (`publish_to: none`), which is exactly the case the Dart guidance says to pin. It is
+      # committed as of 991d11c, generated on a machine that could reach pub.dev, so the enforced
+      # branch below is the live one: 49 packages pinned, and `--enforce-lockfile` fails the build
+      # if the lock ever stops matching `pubspec.yaml`. The warning branch is not decoration — it
+      # fired on all seven Dart-resolving jobs of every run before 991d11c, and it stays for a
+      # checkout that has no lock, because a lock cannot be generated where pub.dev is unreachable
+      # (`docs/11` §2 measured both sides of that gate).
+      - name: Resolve Dart dependencies
+        run: |
+          if [ -f pubspec.lock ]; then
+            dart pub get --enforce-lockfile
+          else
+            echo "::warning::pubspec.lock is not committed, so this run resolves Dart dependencies fresh; commit it (docs/11 §2) for a reproducible build"
+            dart pub get
+          fi
       # Each probe runs in its own world, so what a mechanism costs is reported
       # without contaminating the acceptance run's overhead ratio. --no-check
       # because a probe's numbers are about the mechanism under test, not about
       # the connected-world delivery gate.
       - name: SOS flood reach (roadmap Phase 3)
-        run: >-
-          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --sos
-          --no-check
+        run: |
+          set -o pipefail
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --sos \
+            --no-check 2>&1 | tee /tmp/probe-sos.txt
 
       - name: Group delivery modes (docs/06 §14)
-        run: >-
-          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --group 5
-          --no-check
+        run: |
+          set -o pipefail
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --group 5 \
+            --no-check 2>&1 | tee /tmp/probe-group.txt
 
       # Roadmap Phase 1's "CRDT for group/broadcast history (hash beacon
       # anti-entropy)": a member that missed a whole conversation catches up, and
       # the same world with repair switched off shows it otherwise would not.
       - name: Group history anti-entropy (docs/06 §17)
-        run: >-
-          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --history
-          --no-check
+        run: |
+          set -o pipefail
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --history \
+            --no-check 2>&1 | tee /tmp/probe-history.txt
 
       # The roadmap Phase 3 media exit criteria: a <10 MB image across a Wi-Fi
       # Direct mesh, and a push-to-talk note that plays in <3 s at one hop and
       # <8 s at three (docs/08).
       - name: Media transport and push-to-talk (docs/08)
-        run: >-
-          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media
-          --no-check
+        run: |
+          set -o pipefail
+          dart run bin/mesh_sim.dart --scenario campus_quad --seed 42 --media \
+            --no-check 2>&1 | tee /tmp/probe-media.txt
+
+      # Four notices, one per probe, for the reason given in cli-matrix: this is the only way
+      # the numbers a probe measured leave a runner whose logs cannot be downloaded. The titles
+      # are the capture filenames, so `probe-media` is the media transport and PTT block.
+      - name: Publish the numbers these probes measured
+        if: always()
+        continue-on-error: true
+        run: |
+          for capture in /tmp/probe-sos.txt /tmp/probe-group.txt /tmp/probe-history.txt /tmp/probe-media.txt; do
+            python3 ../../tool/ci/diagnostics.py --format github --no-summary \
+              --analyze /dev/null --test /dev/null --cli "$capture" \
+              --title "$(basename "$capture" .txt)"
+          done

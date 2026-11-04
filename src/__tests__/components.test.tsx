@@ -68,7 +68,11 @@ function groupWorld(over: Partial<SimConfig> = {}): MeshSimulation {
   return sim;
 }
 
-function inspector(sim: MeshSimulation, nodeId: string) {
+function inspector(
+  sim: MeshSimulation,
+  nodeId: string,
+  over: { blockedPeers?: string[]; onToggleBlock?: (peerId: string) => void } = {}
+) {
   return renderToStaticMarkup(
     <NodeInspector
       node={sim.nodes.find((n) => n.id === nodeId) ?? null}
@@ -80,6 +84,8 @@ function inspector(sim: MeshSimulation, nodeId: string) {
       onToggleCharging={() => {}}
       onToggleSuperOptOut={() => {}}
       onToggleBatterySaver={() => {}}
+      blockedPeers={over.blockedPeers ?? []}
+      onToggleBlock={over.onToggleBlock ?? (() => {})}
       onClose={() => {}}
       groups={[...sim.groups.values()]}
       onCreateGroup={() => {}}
@@ -645,6 +651,39 @@ describe("the radio channel in the UI (docs/08 §12)", () => {
     expect(csma).toContain("Binary exponential");
   });
 
+  it("offers both abuse controls from docs/04 §6, with the measurement in the tooltip", () => {
+    const sim = world();
+    const panel = (config: SimConfig) =>
+      renderToStaticMarkup(
+        <ConfigPanel
+          config={config}
+          onChange={() => null}
+          showLinks={false}
+          showRanges={false}
+          onToggleLinks={() => null}
+          onToggleRanges={() => null}
+          autoTraffic={false}
+          onToggleAutoTraffic={() => null}
+        />
+      );
+
+    const html = panel(sim.config);
+    expect(html).toContain("Abuse limits");
+    expect(html).toContain("BLOCK REACH");
+    expect(html).toContain("this inbox only");
+    expect(html).toContain("and refuse to relay");
+    // The §22 numbers travel with the control, so choosing a scope is choosing with the
+    // trade-off visible rather than reading it afterwards.
+    expect(html).toContain("9.7% of airtime saved");
+    expect(html).toContain("a hole in that source");
+    expect(html).toContain("cannot censor anybody");
+
+    // The control reflects the config rather than being decoration: the two scopes render
+    // differently, and the shipped one is the literal reading of §6.
+    expect(sim.config.blockScope).toBe("delivery");
+    expect(panel({ ...sim.config, blockScope: "relay" })).not.toEqual(html);
+  });
+
   it("offers both channel models in the config panel, and says which one ships", () => {
     const sim = world();
     const html = renderToStaticMarkup(
@@ -728,5 +767,50 @@ describe("the radio channel in the UI (docs/08 §12)", () => {
     // And the panel has to say what the third model is, not just count it.
     expect(contested).toContain("strongest");
     expect(contested).toContain('monospace">488<');
+  });
+});
+
+describe("blocking a peer from the inspector (docs/04 §6, bullet 1)", () => {
+  it("offers the control on every peer in range, and says what a block does not do", () => {
+    const sim = groupWorld();
+    const node = sim.nodes.find((n) => n.peerIds.length > 0) ?? sim.nodes[0];
+    const html = inspector(sim, node.id);
+    // Every peer row gets the control, so the feature is reachable without a console.
+    expect(html).toContain(">block<");
+    // The asymmetry is in the tooltip rather than left to be discovered: a block is local and
+    // one-way, and SOS, beacons and ACKs still get through (docs/06 §22).
+    expect(html).toContain("One-way");
+    expect(html).toContain("SOS still gets through");
+  });
+
+  it("shows a blocked peer as blocked, and lists it even when it is out of range", () => {
+    const sim = groupWorld();
+    const node = sim.nodes.find((n) => n.peerIds.length > 0) ?? sim.nodes[0];
+    const peer = node.peerIds[0];
+    const html = inspector(sim, node.id, { blockedPeers: [peer] });
+    expect(html).toContain(">blocked<");
+    expect(html).toContain("Blocked locally (1)");
+    expect(html).toContain("unblock");
+    // A block outlives the radio link, which is why it gets its own list: the peer row above
+    // would not show it once the peer walks out of range.
+    const away = inspector(sim, node.id, { blockedPeers: ["node-that-is-not-a-peer"] });
+    expect(away).toContain("Blocked locally (1)");
+  });
+
+  it("is the same state the engine's block gate reads", () => {
+    // The UI is a view onto blockPeer/isBlocked, not a second copy of the rule, so wiring it
+    // up cannot make the UI and the engine disagree about who is blocked.
+    const sim = groupWorld();
+    const node = sim.nodes.find((n) => n.peerIds.length > 0) ?? sim.nodes[0];
+    const peer = node.peerIds[0];
+    expect(sim.isBlocked(node.id, peer)).toBe(false);
+    sim.blockPeer(node.id, peer);
+    expect(sim.isBlocked(node.id, peer)).toBe(true);
+    expect(sim.blockedPeers(node.id)).toEqual([peer]);
+    expect(inspector(sim, node.id, { blockedPeers: sim.blockedPeers(node.id) })).toContain(
+      "Blocked locally (1)"
+    );
+    sim.unblockPeer(node.id, peer);
+    expect(sim.blockedPeers(node.id)).toEqual([]);
   });
 });

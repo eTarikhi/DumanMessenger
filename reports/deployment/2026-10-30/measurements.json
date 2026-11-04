@@ -1,0 +1,334 @@
+{
+  "initialSha": "544f17bb16ed3d440df9b34ef56572e1a3a08e81",
+  "initialCi": "https://github.com/eTarikhi/DumanMessenger/actions/runs/40982630009",
+  "tools": {
+    "node": "22.22.3",
+    "npm": "10.9.8",
+    "vitest": "4.1.12"
+  },
+  "timeoutMs": 5000,
+  "scope": "Original522 cases, file-scoped V8 CPU profiles; five new regression cases verified separately. Single paired full-suite measurements, not confidence intervals.",
+  "before": {
+    "exit": 1,
+    "wallSeconds": 375.872198137,
+    "userSeconds": 414.794403,
+    "systemSeconds": 23.494842,
+    "maxRssKiB": 444168,
+    "topSelfCpuSeconds": [
+      {
+        "function": "pruneStaleEntries",
+        "file": "election.ts",
+        "seconds": 73.684
+      },
+      {
+        "function": "(garbage collector)",
+        "file": "",
+        "seconds": 44.839
+      },
+      {
+        "function": "receiveOGM",
+        "file": "election.ts",
+        "seconds": 32.208
+      },
+      {
+        "function": "tqWindowFor",
+        "file": "election.ts",
+        "seconds": 26.213
+      },
+      {
+        "function": "selectMprSet",
+        "file": "election.ts",
+        "seconds": 23.331
+      },
+      {
+        "function": "acceptOgm",
+        "file": "simulation.ts",
+        "seconds": 21.607
+      },
+      {
+        "function": "recordTqSample",
+        "file": "election.ts",
+        "seconds": 20.753
+      },
+      {
+        "function": "segmentsIntersect",
+        "file": "rf.ts",
+        "seconds": 17.555
+      },
+      {
+        "function": "countWallCrossings",
+        "file": "rf.ts",
+        "seconds": 17.342
+      },
+      {
+        "function": "rssiModel",
+        "file": "rf.ts",
+        "seconds": 15.23
+      },
+      {
+        "function": "onScan",
+        "file": "simulation.ts",
+        "seconds": 11.965
+      },
+      {
+        "function": "buildOGM",
+        "file": "election.ts",
+        "seconds": 8.945
+      },
+      {
+        "function": "peersInRange",
+        "file": "rf.ts",
+        "seconds": 8.33
+      },
+      {
+        "function": "pruneSeenCache",
+        "file": "routing.ts",
+        "seconds": 6.536
+      },
+      {
+        "function": "holdWakeLock",
+        "file": "simulation.ts",
+        "seconds": 4.158
+      },
+      {
+        "function": "onMsgReceive",
+        "file": "simulation.ts",
+        "seconds": 3.72
+      },
+      {
+        "function": "refreshPeerList",
+        "file": "simulation.ts",
+        "seconds": 3.627
+      },
+      {
+        "function": "beacon",
+        "file": "simulation.ts",
+        "seconds": 3.247
+      },
+      {
+        "function": "orient",
+        "file": "rf.ts",
+        "seconds": 2.74
+      },
+      {
+        "function": "onAir",
+        "file": "simulation.ts",
+        "seconds": 2.268
+      }
+    ]
+  },
+  "after": {
+    "exit": 1,
+    "wallSeconds": 314.6263663489999,
+    "userSeconds": 355.019463,
+    "systemSeconds": 18.917778,
+    "maxRssKiB": 497808,
+    "topSelfCpuSeconds": [
+      {
+        "function": "(garbage collector)",
+        "file": "",
+        "seconds": 44.1
+      },
+      {
+        "function": "receiveOGM",
+        "file": "election.ts",
+        "seconds": 33.58
+      },
+      {
+        "function": "tqWindowFor",
+        "file": "election.ts",
+        "seconds": 23.912
+      },
+      {
+        "function": "selectMprSet",
+        "file": "election.ts",
+        "seconds": 22.481
+      },
+      {
+        "function": "acceptOgm",
+        "file": "simulation.ts",
+        "seconds": 22.003
+      },
+      {
+        "function": "recordTqSample",
+        "file": "election.ts",
+        "seconds": 20.977
+      },
+      {
+        "function": "rssiModel",
+        "file": "rf.ts",
+        "seconds": 17.433
+      },
+      {
+        "function": "segmentsIntersect",
+        "file": "rf.ts",
+        "seconds": 17.123
+      },
+      {
+        "function": "countWallCrossings",
+        "file": "rf.ts",
+        "seconds": 15.471
+      },
+      {
+        "function": "pruneStaleEntries",
+        "file": "election.ts",
+        "seconds": 14.572
+      },
+      {
+        "function": "buildOGM",
+        "file": "election.ts",
+        "seconds": 8.926
+      },
+      {
+        "function": "pruneSeenCache",
+        "file": "routing.ts",
+        "seconds": 6.362
+      },
+      {
+        "function": "onScan",
+        "file": "simulation.ts",
+        "seconds": 5.922
+      },
+      {
+        "function": "add",
+        "file": "tq-history.ts",
+        "seconds": 5.129
+      },
+      {
+        "function": "peersInRange",
+        "file": "rf.ts",
+        "seconds": 4.109
+      },
+      {
+        "function": "holdWakeLock",
+        "file": "simulation.ts",
+        "seconds": 4.057
+      },
+      {
+        "function": "onMsgReceive",
+        "file": "simulation.ts",
+        "seconds": 3.547
+      },
+      {
+        "function": "refreshPeerList",
+        "file": "simulation.ts",
+        "seconds": 3.518
+      },
+      {
+        "function": "beacon",
+        "file": "simulation.ts",
+        "seconds": 3.208
+      },
+      {
+        "function": "prune",
+        "file": "tq-history.ts",
+        "seconds": 3.143
+      }
+    ]
+  },
+  "cases": [
+    {
+      "file": "src/__tests__/acceptance.test.ts",
+      "name": "dense crowd (docs/02 \u00a76: 50+ nodes) stays stable and cheap at 60 nodes",
+      "beforeMs": 23610.861,
+      "afterMs": 19995.981,
+      "afterStatus": "failed",
+      "additionalLocalFailure": false
+    },
+    {
+      "file": "src/__tests__/acceptance.test.ts",
+      "name": "dense crowd (docs/02 \u00a76: 50+ nodes) holds its delivery bar on seeds the gate above does not use",
+      "beforeMs": 63270.548,
+      "afterMs": 52737.474,
+      "afterStatus": "failed",
+      "additionalLocalFailure": false
+    },
+    {
+      "file": "src/__tests__/acceptance.test.ts",
+      "name": "dense crowd (docs/02 \u00a76: 50+ nodes) costs MPR nothing against the same engine without suppression",
+      "beforeMs": 66733.864,
+      "afterMs": 57647.852,
+      "afterStatus": "failed",
+      "additionalLocalFailure": false
+    },
+    {
+      "file": "src/__tests__/connectivity.test.ts",
+      "name": "the density-derived beacon interval (docs/06 \u00a724.11) holds the topology still, and there the derived interval is cheaper without losing reach",
+      "beforeMs": 6927.94,
+      "afterMs": 4465.747,
+      "afterStatus": "passed",
+      "additionalLocalFailure": false
+    },
+    {
+      "file": "src/__tests__/radio-occupancy.test.ts",
+      "name": "radioOccupancy costs a dense crowd fewer deferrals and buys it delivery, once contention is modelled",
+      "beforeMs": 7310.019,
+      "afterMs": 6938.179,
+      "afterStatus": "failed",
+      "additionalLocalFailure": false
+    },
+    {
+      "file": "src/__tests__/scan-interval.test.ts",
+      "name": "adaptive scan intervals (docs/05 \u00a71.2, layer 3) scans more in a dense world, which is what the row says and what it costs",
+      "beforeMs": 9636.947,
+      "afterMs": 7748.258,
+      "afterStatus": "failed",
+      "additionalLocalFailure": false
+    },
+    {
+      "file": "src/__tests__/scan-interval.test.ts",
+      "name": "adaptive scan intervals (docs/05 \u00a71.2, layer 3) clamps, so one peer does not stop a node scanning and a crowd does not pin it awake",
+      "beforeMs": 9390.398,
+      "afterMs": 7224.745,
+      "afterStatus": "failed",
+      "additionalLocalFailure": false
+    },
+    {
+      "file": "src/__tests__/simulation.test.ts",
+      "name": "protocol behaviour scale: the documented 10-200 node range (skills/08) runs at the top of the range, and the fallback does not go quadratic",
+      "beforeMs": 15532.514,
+      "afterMs": 15034.308,
+      "afterStatus": "failed",
+      "additionalLocalFailure": false
+    },
+    {
+      "file": "src/__tests__/simulation.test.ts",
+      "name": "community relays (roadmap Phase 5: a plugged tablet in a caf\u00e9) elects the plugged tablets and moves relay work off other people's batteries",
+      "beforeMs": 17372.949,
+      "afterMs": 15223.206,
+      "afterStatus": "failed",
+      "additionalLocalFailure": false
+    },
+    {
+      "file": "src/__tests__/simulation.test.ts",
+      "name": "cap-aware community-relay promotion, measured and rejected (docs/06 \u00a719.4) exempting tablets from the cap elects all six and pushes the ratio to the top of the band",
+      "beforeMs": 8533.067,
+      "afterMs": 6588.826,
+      "afterStatus": "failed",
+      "additionalLocalFailure": false
+    },
+    {
+      "file": "src/__tests__/simulation.test.ts",
+      "name": "observed-maximum peer normalisation, measured and rejected (docs/06 \u00a718.4) holds skills/02's band on the campus world, and puts one seed on its floor",
+      "beforeMs": 5570.133,
+      "afterMs": 3944.413,
+      "afterStatus": "passed",
+      "additionalLocalFailure": true
+    },
+    {
+      "file": "src/__tests__/simulation.test.ts",
+      "name": "preferring a community relay, measured and rejected (docs/06 \u00a719.5) and that is where the benefit stops: the bundle waits on a node that never moves",
+      "beforeMs": 9385.454,
+      "afterMs": 8021.406,
+      "afterStatus": "failed",
+      "additionalLocalFailure": false
+    }
+  ],
+  "sourceHashes": {
+    "src/election.ts": "0cdc1a7e1eb3cd7301f43cdc105e177319af3a60cce8d765a808a03be206c6d2",
+    "src/simulation.ts": "cd30964267ea5ce2eb1edb952a604c4e0934973f447a2baea09b08504754b8e2",
+    "src/tq-history.ts": "60084c5cdd937596497cd7b72009a99cd029a8a16ff2ca1d527a7bda67446797",
+    "vitest.config.ts": "2c29a03ef36c7bd163de1b8290cc71c72501522bd1c5533a91640aad4e42b0e8",
+    "package-lock.json": "429884d3b6eed26c6b3758d2508e211917a0ac5ec28d87c48145ac5302dd47c2"
+  }
+}

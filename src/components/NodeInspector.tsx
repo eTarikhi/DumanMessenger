@@ -15,6 +15,10 @@ interface Props {
   onToggleCharging: (id: string) => void;
   onToggleSuperOptOut: (id: string) => void;
   onToggleBatterySaver: (id: string) => void;
+  /** Peers this node has blocked locally (`docs/04` §6: "Block/mute peer locally"). */
+  blockedPeers: string[];
+  /** Block or unblock one peer for the selected node. */
+  onToggleBlock: (peerId: string) => void;
   onClose: () => void;
   /** Group channels this node may belong to (roadmap Phase 1 / Phase 4 Group UX). */
   groups?: Group[];
@@ -28,6 +32,8 @@ export function NodeInspector({
   node,
   allNodes,
   rf,
+  blockedPeers,
+  onToggleBlock,
   dutyCycleEnabled,
   awake,
   onToggleOnline,
@@ -135,9 +141,16 @@ export function NodeInspector({
         {peers.map((p) => {
           const rssi = rssiModel(node, p, rf);
           const q = normRssi(rssi);
+          const blocked = blockedPeers.includes(p.id);
           return (
             <div key={p.id} style={rowStyle}>
-              <span style={{ color: p.role === "SUPER" ? "#b6ff4a" : "#cfe0f2", minWidth: 96 }}>
+              <span
+                style={{
+                  color: blocked ? "#6b7a8c" : p.role === "SUPER" ? "#b6ff4a" : "#cfe0f2",
+                  minWidth: 96,
+                  textDecoration: blocked ? "line-through" : undefined,
+                }}
+              >
                 {p.name} {p.role === "SUPER" && "★"}
               </span>
               <span style={{ color: "#9fb0c3", fontFamily: "monospace", minWidth: 62, textAlign: "right" }}>
@@ -149,10 +162,75 @@ export function NodeInspector({
                   background: q > 0.6 ? "#b6ff4a" : q > 0.3 ? "#ffb84d" : "#ff4d6d",
                 }} />
               </div>
+              {/* docs/04 §6's first bullet, reachable from the UI. A block is local and
+                  one-way: this node stops seeing that peer's messages, the peer keeps seeing
+                  this node's, and SOS still gets through in both directions — which is what
+                  docs/06 §22 measures and what the tooltip says rather than leaving the
+                  asymmetry to be discovered. */}
+              <button
+                type="button"
+                onClick={() => onToggleBlock(p.id)}
+                title={
+                  blocked
+                    ? "Unblock: this node will accept its messages again"
+                    : "Block locally: this node stops accepting its messages. One-way — it can still hear you. SOS still gets through, and so do beacons and ACKs, because blocking those would make the blocked peer retransmit forever."
+                }
+                style={{
+                  marginLeft: "auto",
+                  padding: "1px 7px",
+                  borderRadius: 6,
+                  fontSize: 10,
+                  cursor: "pointer",
+                  border: `1px solid ${blocked ? "#ff4d6d" : "#2a3a4d"}`,
+                  background: blocked ? "rgba(255,77,109,0.16)" : "rgba(255,255,255,0.03)",
+                  color: blocked ? "#ff8fa3" : "#9fb0c3",
+                }}
+              >
+                {blocked ? "blocked" : "block"}
+              </button>
             </div>
           );
         })}
       </Section>
+
+      {blockedPeers.length > 0 && (
+        <Section title={`Blocked locally (${blockedPeers.length})`}>
+          {/* Listed separately because a block outlives the radio link: a peer that walks out
+              of range is still blocked when it comes back, and the peer list above would not
+              show it while it is away. */}
+          {blockedPeers.map((id) => {
+            const p = allNodes.find((n) => n.id === id);
+            return (
+              <div key={id} style={rowStyle}>
+                <span style={{ color: "#ff8fa3", minWidth: 96 }}>
+                  {p ? p.name : id} {!p?.isOnline && "(offline)"}
+                </span>
+                <span style={{ color: "#9fb0c3", fontFamily: "monospace", minWidth: 62, textAlign: "right" }}>
+                  {p && peers.some((x) => x.id === id)
+                    ? `${rssiModel(node, p, rf).toFixed(0)} dBm`
+                    : "out of range"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onToggleBlock(id)}
+                  style={{
+                    marginLeft: "auto",
+                    padding: "1px 7px",
+                    borderRadius: 6,
+                    fontSize: 10,
+                    cursor: "pointer",
+                    border: "1px solid #2a3a4d",
+                    background: "rgba(255,255,255,0.03)",
+                    color: "#9fb0c3",
+                  }}
+                >
+                  unblock
+                </button>
+              </div>
+            );
+          })}
+        </Section>
+      )}
 
       <Section title={`Routing table (${usableRoutes.length}/${routeEntries.length} usable)`}>
         {routeEntries.length === 0 && <Empty>No routes known</Empty>}

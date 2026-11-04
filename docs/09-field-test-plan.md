@@ -114,6 +114,29 @@ slot is load-bearing for that criterion, not a refinement — and the analyzer m
 npm run field:report -- /sdcard/duman/mpr-run.jsonl /sdcard/duman/flood-all-run.jsonl
 ```
 
+Four sections, and two of them exist because of what `docs/06` §24 measured:
+
+* **Traffic** — sent/delivered, delivery ratio, within-5-hops, latency p50/p95, relay
+  transmissions, tx per message, losses and duplicates, and overhead against the flood-all
+  baseline when one is given. Two annotations are printed inline rather than left to the
+  reader. If the capture's node count is not 20, the report says so before printing the
+  criteria, because those criteria are `skills/02`'s and `skills/08`'s and both are written
+  for a 20-node network — a FAIL on a 60-node capture is a category error before it is a
+  defect, and §24.13 has what a crowd's own floor measures. If the network split during the
+  walk, the delivery row is followed by how many samples were split and how bad the worst
+  one was.
+* **Connectivity during the walk** — topology samples, how many were in one piece, and the
+  mean and worst largest-component share. Placed directly after Traffic because it qualifies
+  it: a reach or delivery number from a walk during which the network was sometimes in two
+  pieces is a different quantity from the same number from a walk that never split, and the
+  two must not be compared with each other or with a simulator prediction without saying
+  which was which. A capture with no `topology` records is told so explicitly, with the reason
+  — §24.9 drew the wrong conclusion from a graph reconstructed after the run, because a
+  partition that has healed looks exactly like one that never happened.
+* **Election and power** — role timeline, flapping, battery drain per role.
+* **Radio model** — the calibration walk's RSSI-against-distance fit, which §3.1 exists to
+  produce and §6 says to re-fit before trusting any prediction.
+
 ---
 
 ## 4. The capture schema
@@ -148,6 +171,11 @@ denominator. `v` is the schema version.
 // One reading of the calibration walk.
 {"v":1,"kind":"calibration","atMs":1200,"device":"device-01","peerId":"device-02",
  "rssi":-73.5,"distanceM":10.0,"walls":1}
+
+// Periodic, every 30 s, ONE per boundary for the whole network — hence device "*".
+// Whether the graph is in one piece at that instant, and how big the biggest piece is.
+{"v":1,"kind":"topology","atMs":30000,"device":"*","nodes":60,"components":2,
+ "largest":35,"connected":false}
 ```
 
 Field rules that matter to the analyzer:
@@ -163,10 +191,29 @@ Field rules that matter to the analyzer:
 * `msgType` values the analyzer skips for traffic metrics: `ack`, `ogm`, `sync`. They are
   control plane, and counting them would make the delivery ratio a statement about
   beacons.
+* `topology` records are **not optional in a crowd**, and the reason is measured rather than
+  tidy. `docs/06` §24.10 found a 60-node simulated crowd splitting and re-joining inside a
+  measurement window — two components with 35 of 60 nodes in the larger at one sample, one
+  component of 60 at the next — and broadcast reach reads as two modes (98% against 50-79%)
+  depending on how much of the window was spent split. A graph reconstructed *after* the walk
+  cannot show any of that, because a partition that has healed looks exactly like one that
+  never happened; §24.9 drew precisely that wrong conclusion in simulation before §24.10
+  sampled inside the window. Emit one `topology` record at every `sample` boundary. `device`
+  is `"*"`, the convention for a record about the network rather than about a phone.
+* Reach and delivery are different quantities in a partitioned world and must not be inferred
+  from one another: a unicast can be queued, retried and carried by a phone walking between
+  clusters, so `docs/06` §24.13 measured one seed in one piece a third of the window still
+  delivering 93.3%, while a broadcast cannot cross a gap that exists when it is sent. The
+  analyzer should report both against the `topology` timeline and never one from the other.
 
 `npm run field:capture -- <scenario> <seed> <out.jsonl> [policy]` produces exactly this
-schema from a simulated run, including the `sample` and `calibration` records, so a new
-app build's logger can be checked against a reference file before anybody travels.
+schema from a simulated run, including the `sample`, `calibration` and `topology` records, so a
+new app build's logger can be checked against a reference file before anybody travels. On
+`festival_crowd` the reference file's five `topology` records read split, whole, whole, split,
+whole across the walk — which is the pattern §24.10 predicts and the thing a field capture has
+to be able to show before its reach numbers mean anything. On `campus_quad` all five read
+whole, which is why that scenario's three-seed numbers were sound and the crowd's were not
+(§24.8).
 
 ---
 
@@ -176,9 +223,10 @@ app build's logger can be checked against a reference file before anybody travel
 
 | criterion | prediction | source | if the field disagrees |
 |---|---|---|---|
-| delivery ratio | **99.7%** (97.3-100% over six seeds) | §6 | below 90% → look at the loss records first: the model's margin-based loss is the most likely thing to be wrong |
-| overhead vs flood-all | **9.3%** of naive flood's relays (7-9% over six seeds); flood-all reaches 100% for 7-9× the transmissions | §6 | above 70% → suppression is not firing; check `decision` records for the MPR reason |
-| within 5 hops | 99.7% of sent | §6 | — |
+| delivery ratio | **99.9%** (99.3-100% over six seeds) | §6 | below 90% → look at the loss records first: the model's margin-based loss is the most likely thing to be wrong |
+| overhead vs flood-all | **9.3%** of naive flood's relays (8-10% over six seeds); flood-all reaches 100% for 10-12× the transmissions | §6 | above 70% → suppression is not firing; check `decision` records for the MPR reason |
+| within 5 hops | **99.6%** of sent (98.7-100% over six seeds) | §6 | — |
+| within 3 hops | **92.6%** of sent (89.3-96.0% over six seeds) | §6 | below 85% → the topology being walked is not the campus the simulator builds; compare the hop histogram before blaming routing. Which of the two readings the criterion means is finding F2, an owner decision — the analyzer reports both, and `(hop ?? 0) + 1` matches the engines' `hops: msg.hopCount + 1` (§5) |
 | SUPER ratio | **20-25%** of nodes, 0.06-0.22 role changes per node per minute | §5 | outside 15-25% → the coverage weights need this building's numbers |
 | atrium node | SUPER within **2 election cycles** (60 s) **if it is also healthy** — full battery, long uptime, low packet loss. Verified in all four simulated worlds | §18.1 | it does not → read its battery and uptime before reading its position: a drained phone at 199 peers (0.688) still loses to a healthy one at nine (0.708), because the peer term saturates logarithmically (§18) |
 | atrium node, drained | **NORMAL**, in three of four worlds — health carries 0.45 of the score and position only 0.55 of a compressed term | §18 | if a drained atrium phone *is* elected, something is inflating the position terms: check the RSSI normalization against the calibration fit |
@@ -191,7 +239,11 @@ app build's logger can be checked against a reference file before anybody travel
 | latency | p50 ~0.3 s, p95 ~1.3-4.8 s (traffic-dependent); 1 hop ≈ 0.16-0.5 s | §4, §8 | p95 over 5 s at 3 hops → the retry timer, not the routing |
 | NORMAL battery, duty cycle on | **10.0%/8 h** campus, 10.9% crowd, 7.1% stationary | §7 | over 15% → the scan window is not being honoured by the OS |
 | NORMAL battery, always on | 19.4%/8 h campus, 22.5% crowd — **fails the criterion by design** | §7 | this is the prediction, not a surprise |
-| 60-node crowd analogue | 91.3-95.3% delivery at 12-14% of naive flood | §6, §16 | — |
+| 60-node crowd analogue | 91.3-95.3% delivery at **10.6-12.8%** of naive flood | §6, §16 | **Read `docs/06` §24.8 and §24.13 before quoting this row.** Over nine seeds the same world delivers 85.3-98.7%, and the spread is bimodal rather than noisy: a seed either reaches ~98% of the network with a broadcast or 50-79%. The 91.3-95.3% range is a mean over the strong mode. |
+| crowd broadcast reach, by connectivity | **98%** when the network stays in one piece for the window; **50-79%** when it does not. Which happens is a property of the seed and of how much of the window the crowd spends split | `docs/06` §24.10 | This is the row to instrument. Log whether the graph is connected *during* the walk, not after it: a partition that heals by the time anybody looks is indistinguishable from one that never happened, and that mistake was made in simulation first (§24.9). `connectedSampleShare` and `meanLargestComponent` are in `SimulationStats` for exactly this. |
+| crowd **standing still** | *Worse* than the same crowd moving: 74.4% delivery against 92.0%, and in one piece 50% of the window against 76% | `docs/06` §24.12 | Counter-intuitive and worth a walk of its own. The scenario spawns clusters, and nodes wandering between them are the bridges, so mobility is what *connects* a crowd rather than what threatens it. If a static field crowd delivers as well as a moving one, the clustering in `festivalCrowd` is not the clustering in the building — which is a finding about the scenario, not about the protocol. |
+| unicast delivery under partition | Does **not** fall the way broadcast reach does: one seed is in one piece a third of the window and still delivers 93.3%, while two seeds in one piece half the window deliver the two worst ratios | `docs/06` §24.13 | A unicast can be queued, retried and carried by a phone walking between clusters; a broadcast cannot cross a gap that exists when it is sent. So do not infer unicast delivery from measured reach, or reach from unicast delivery — they are different quantities in this world, and §24.11 nearly drew that inference. |
+| beacon size on air | **630 B** typically and **1 270 B** at the advertise limits if a beacon carries 32-byte public keys — over the 1 024 B BLE ceiling — against **90 B** and **130 B** carrying 2-byte aliases | `docs/06` §24.6-§24.7 | Measure the real OGM size on air before anything else about the control plane. It is the single largest lever found in simulation: at 60 nodes the demanded radio time is 5.7× what exists on public keys and **0.78×** on aliases, with the same beacon count and no change to delivery, because an alias shortens a beacon without thinning them. `docs/03` §4 already prescribes aliases. |
 | media: 10 MB image, 3 hops | 33.0 s over Wi-Fi Direct; **unfinished in 15 min** over BLE at a 512 B MTU | `docs/08` §2-§3 | Wi-Fi Direct GO formation is modelled as a setup latency, so expect the real number to carry 1-3 s the simulator does not |
 | media: PTT play delay | 407 ms at 1 hop, 1.10 s at 3 hops, streamed | `docs/08` §5 | — |
 | group history repair | 20/20 recovered, converged in 8.8 s when the membership can hear itself; **never converges** when it cannot | §17 | a spread membership that does not converge is the prediction, not a failure |

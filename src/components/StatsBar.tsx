@@ -57,6 +57,22 @@ export function StatsBar({
       value: pct(stats.broadcastReach),
       color: stats.broadcastReach > 0.6 ? "#b6ff4a" : "#ffb84d",
     },
+    {
+      // Beside reach on purpose, and not in the telemetry panel: docs/06 §24.10 measured a
+      // 60-node crowd splitting and re-joining inside a window, so reach reads as two modes
+      // (98% against 54-79%) unless the reader can see how much of the window the network was
+      // in one piece. A graph measured after the window cannot show that — a partition that
+      // healed looks like one that never happened.
+      label: "Connected in-window",
+      value:
+        stats.connectivitySamples === 0
+          ? "not sampled"
+          : `${pct(stats.connectedSampleShare)} · largest ${pct(stats.meanLargestComponent)}`,
+      color:
+        stats.connectivitySamples === 0 || stats.connectedSampleShare > 0.9
+          ? "#b6ff4a"
+          : "#ffb84d",
+    },
     { label: "Relay overhead", value: `${stats.overheadRatio.toFixed(2)}×`, color: "#ffb84d" },
     { label: "Avg latency", value: ms(stats.avgLatencyMs), color: "#eaf2ff" },
     { label: "p95 latency", value: ms(stats.p95LatencyMs), color: "#eaf2ff" },

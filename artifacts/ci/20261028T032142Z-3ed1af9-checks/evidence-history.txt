@@ -1,0 +1,30 @@
+
+> duman-mesh-simulator@0.1.0 history
+> tsc -p tool/tsconfig.golden.json && node -e "require('fs').writeFileSync('tool/.build/package.json','{\"type\":\"commonjs\"}')" && node tool/.build/tool/history-probe.js
+
+Group history anti-entropy — measured, not assumed.
+A beacon is 156 characters -> 256 B on the wire (ble), constant in the size of the history.
+
+=== 5 members spread across the world, 20 messages, one member out of range for all of them ===
+member peer graph    6 of 20 directed links can carry a beacon, connected=false
+the sender held      20 entries (the absent member missed all of them)
+without repair       0 recovered, converged=false — a missed flood is missed for good
+with repair          20/20 recovered, converged=false in >300 s (2 bounded rounds, 0 dropped as unreadable)
+radio cost           166 beacons, 3 requests, 2 replies = 171 packets, 29750 payload bytes
+
+=== 5 members a membership that can hear itself (5 nearest nodes), 20 messages, one member out of range for all of them ===
+member peer graph    20 of 20 directed links can carry a beacon, connected=true
+the sender held      20 entries (the absent member missed all of them)
+without repair       0 recovered, converged=false — a missed flood is missed for good
+with repair          20/20 recovered, converged=true in 8.8 s (4 bounded rounds, 0 dropped as unreadable)
+radio cost           52 beacons, 4 requests, 4 replies = 60 packets, 15656 payload bytes
+
+=== what it costs when there is nothing to repair ===
+62 beacons in 120 s (31.0/min for 5 members), 9672 payload bytes — 81 B/s of background traffic
+For scale: a 20-node campus sends ~2.8k relay transmissions in 300 s of ordinary traffic,
+so a five-member group's beacons are noise next to the routing plane they ride on.
+
+Beacons go to co-members in range and nowhere else, so what anti-entropy repairs is the
+last hop of a loss — a member that was asleep, out of range or switched off. It cannot
+bridge a membership that cannot hear itself: that is the scoped flood's job, and the
+spread arm above is the measurement of where the two responsibilities meet.

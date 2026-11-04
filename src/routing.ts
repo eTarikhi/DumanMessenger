@@ -26,8 +26,77 @@ export const SPRAY_LIMIT = 3;
 export const MPR_WAIT_MS = 300;
 export const INBOX_MAX = 200;
 
+// --- abuse limits (docs/04 §6) -------------------------------------------------
+
+/** docs/04 §6: "Max 5 broadcasts / minute per node; SUPERs drop excess." */
+export const BROADCAST_PER_MINUTE_CAP = 5;
+/** docs/04 §6: "Cap relay to 30 msgs/min per source; ignore floods." */
+export const RELAY_PER_SOURCE_PER_MINUTE_CAP = 30;
+/** Both caps in docs/04 §6 are stated per minute. Written as an expression rather
+ *  than `60_000` because Dart has no digit separators, and `check-parity.py` compares
+ *  the two engines' non-scalar initialisers as text. */
+export const RATE_WINDOW_MS = 60 * 1000;
+
 /** Text < 1 KB rides BLE; larger payloads need Wi-Fi Direct (docs/02 §3.1). */
 export const BLE_MAX_BYTES = 1024;
+
+/**
+ * One OGM's field widths, derived from `src/types.ts`'s `OGM` and `docs/03` §4 the way
+ * `PACKET_OVERHEAD_BYTES` derives the sealed packet's 95 B from `skills/03`'s layout —
+ * because a beacon's size has to come from the fields it actually carries, not from a guess.
+ *
+ * 32 is the X25519 public-key width `docs/07` §4 specifies, the same field
+ * `PACKET_OVERHEAD_BYTES` spells as `from`. `src/crypto/identity.ts` exports it as
+ * `NODE_ID_BYTES` and this file may not import it: nothing in `App.tsx`'s import graph may
+ * reach `src/crypto`, or `node:crypto` lands in the Vite bundle.
+ */
+export const OGM_ID_BYTES = 32;
+/** Sequence number, 4 B, and the coverage score, a float32 in [0,1]. */
+export const OGM_SEQ_BYTES = 4;
+export const OGM_SCORE_BYTES = 4;
+/** `isSuper`, `declinedRouter` and `hopCount` at 1 B each, `peerCount` at 2 B. */
+export const OGM_FLAG_BYTES = 1 + 1 + 1 + 2;
+/** `batteryBucket` is `floor(battery * 10)`, so 0-10 fits one byte. */
+export const OGM_BATTERY_BYTES = 1;
+/** One `bestHopTo` entry: a destination id and its hop count. Spelled as literals, like
+ *  `PACKET_OVERHEAD_BYTES` above, because `check-parity.py` compares the two engines'
+ *  non-scalar initialisers as *text* and identifier case is the one thing the two languages
+ *  cannot agree on. `radio-occupancy.test.ts` ties each of these to the named widths, so a
+ *  width change fails a test instead of silently propagating. */
+export const OGM_HOP_ENTRY_BYTES = 32 + 1;
+/** The part of a beacon that does not depend on how much it advertises:
+ *  `OGM_ID_BYTES + OGM_SEQ_BYTES + OGM_SCORE_BYTES + OGM_FLAG_BYTES + OGM_BATTERY_BYTES`.
+ *  The originator's own id is always the full 32-byte public key — an alias cannot identify
+ *  a sender that has not been heard from yet, which is the whole purpose of a beacon — so
+ *  only the *advertised* neighbours and route entries are affected by `aliasBytes`. */
+export const OGM_FIXED_BYTES = 32 + 4 + 4 + (1 + 1 + 1 + 2) + 1;
+
+/**
+ * What one beacon costs on air, in bytes.
+ *
+ * The engine had no answer to this before `docs/06` §24.5 asked for one: OGMs ride
+ * `beacon()` rather than `onAir()`, so they have no `sizeBytes`, and every duration charged
+ * to a beacon was `hopLatencyBleMs` by default. A beacon is not a small packet — it carries
+ * the MPR neighbour set that makes two-hop coverage knowable (`docs/01`'s OLSR MPR) plus up
+ * to eight route advertisements — and that is the difference between the two occupancy
+ * models `radioOccupancy` selects.
+ */
+export function ogmWireBytes(
+  neighborCount: number,
+  bestHopCount: number,
+  aliasBytes: number = OGM_ID_BYTES
+): number {
+  return (
+    OGM_FIXED_BYTES +
+    Math.max(0, neighborCount) * Math.max(0, aliasBytes) +
+    Math.max(0, bestHopCount) * (Math.max(0, aliasBytes) + 1)
+  );
+}
+
+/** A beacon at both advertise limits, which is what a dense mesh actually sends:
+ *  `ogmWireBytes(MPR_NEIGHBOR_ADVERTISE_LIMIT, BEST_HOP_ADVERTISE_LIMIT)`, spelled out for
+ *  `check-parity.py` and tied back to the limits by a test. */
+export const OGM_MAX_WIRE_BYTES = 46 + 30 * 32 + 8 * 33;
 
 /** Padding block, per `skills/03`: "DO pad to 256B blocks". */
 export const PAD_BLOCK_BYTES = 256;
@@ -53,6 +122,62 @@ export const PACKET_OVERHEAD_BYTES = 27 + 12 + 16 + 32 + 8;
 export function wireSizeOf(bodyChars: number): number {
   const raw = PACKET_OVERHEAD_BYTES + Math.max(0, bodyChars);
   return Math.ceil(raw / PAD_BLOCK_BYTES) * PAD_BLOCK_BYTES;
+}
+
+/**
+ * Length of `text` in UTF-8 bytes, not in UTF-16 code units.
+ *
+ * `String.length` counts code units, and a packet carries bytes. For ASCII they
+ * agree, which is why this went unnoticed: every name in `NAMES`, every fixture
+ * body in `test-fixtures/golden-vectors.json` and every body the traffic generator
+ * produces (`"hey " + name`) is ASCII, so no golden vector changes. The moment a
+ * user types Turkish, Arabic, Devanagari, CJK or an emoji, they disagree — by 2×
+ * for most of the Latin supplements, 3× for the scripts this app is likeliest to
+ * meet first, and 4× per astral character (which `.length` also counts as 2).
+ *
+ * Getting this wrong is optimistic in exactly the direction `docs/07` §4 calls
+ * dangerous: a 300-emoji body is `.length` 600 (1 024 B on the wire, BLE) but
+ * 1 200 UTF-8 bytes (1 280 B, Wi-Fi Direct). The engine would put a payload on a
+ * transport that cannot carry it, then report the BLE latency for it.
+ *
+ * Counted by hand rather than through `TextEncoder` for two reasons: it allocates
+ * nothing, and it makes the lone-surrogate rule explicit — `TextEncoder` replaces
+ * an unpaired surrogate with U+FFFD (3 bytes), and the Dart port has to agree, so
+ * the rule is written down here instead of being whatever two standard libraries
+ * happen to do.
+ */
+export function utf8ByteLength(text: string): number {
+  let bytes = 0;
+  for (let i = 0; i < text.length; i++) {
+    const unit = text.charCodeAt(i);
+    if (unit < 0x80) {
+      bytes += 1;
+    } else if (unit < 0x800) {
+      bytes += 2;
+    } else if (unit >= 0xd800 && unit <= 0xdbff && i + 1 < text.length) {
+      const low = text.charCodeAt(i + 1);
+      if (low >= 0xdc00 && low <= 0xdfff) {
+        bytes += 4; // a valid surrogate pair is one 4-byte character
+        i += 1;
+        continue;
+      }
+      bytes += 3; // a lone high surrogate encodes as U+FFFD
+    } else {
+      bytes += 3; // BMP above U+07FF, and any lone surrogate
+    }
+  }
+  return bytes;
+}
+
+/**
+ * Wire size of a body given as text. This is what [createMessage] uses.
+ *
+ * [wireSizeOf] stays exported and unchanged because callers that already hold a
+ * byte count — media chunks, whose payload size is declared rather than padded
+ * (`docs/08` §8) — must not have their number run through a text encoding.
+ */
+export function wireSizeOfBody(body: string): number {
+  return wireSizeOf(utf8ByteLength(body));
 }
 
 export function selectTransport(sizeBytes: number): TransportType {
@@ -87,7 +212,8 @@ export function createMessage(
   ttl = 5,
   priority: MeshMessage["priority"] = "normal"
 ): MeshMessage {
-  const sizeBytes = wireSizeOf(body.length);
+  // Bytes, not code units: see `utf8ByteLength`.
+  const sizeBytes = wireSizeOfBody(body);
   return {
     id,
     type,
@@ -105,6 +231,127 @@ export function createMessage(
     transport: selectTransport(sizeBytes),
     sizeBytes,
   };
+}
+
+/**
+ * A token bucket, and why the limits are buckets rather than counters.
+ *
+ * `docs/04` §6 states both caps as a rate ("per minute"), which a tumbling counter
+ * satisfies only on average: a source that sends 5 broadcasts in the last second of
+ * one minute and 5 in the first second of the next has sent 10 in two seconds while
+ * never breaking a per-minute count. A bucket refills continuously at `cap` per
+ * [RATE_WINDOW_MS] and bursts up to `cap`, so it enforces the rate the sentence
+ * means and still lets a legitimate sender open with a burst.
+ *
+ * One bucket per (enforcer, source) pair, so memory is bounded by the number of
+ * distinct sources a node has heard — at most `nodeCount`, which `skills/08` caps at
+ * 200. There is no eviction because there is nothing to evict: a bucket that stops
+ * being fed simply sits full, which is the correct state for a source that went
+ * quiet.
+ */
+export interface RateBucket {
+  tokens: number;
+  atMs: number;
+}
+
+export interface RateDecision {
+  ok: boolean;
+  /** Empty when admitted; otherwise the reason, for the capture log. */
+  reason: string;
+  tokensLeft: number;
+  /** Seconds until one token exists. `0` when admitted, `Infinity` when uncapped. */
+  retryInMs: number;
+}
+
+/**
+ * Take one token from `buckets[key]`, creating the bucket full if it is new.
+ *
+ * Pure except for the map it is handed, which is what makes `docs/04` §6's two
+ * limits unit-testable without constructing a mesh: the caller owns the state and
+ * decides which pairs share a bucket.
+ */
+export function admitByRate(
+  buckets: Map<string, RateBucket>,
+  key: string,
+  cap: number,
+  nowMs: number
+): RateDecision {
+  if (cap <= 0) return { ok: true, reason: "", tokensLeft: Number.POSITIVE_INFINITY, retryInMs: 0 };
+  let bucket = buckets.get(key);
+  if (!bucket) {
+    bucket = { tokens: cap, atMs: nowMs };
+    buckets.set(key, bucket);
+  }
+  const elapsed = nowMs - bucket.atMs;
+  if (elapsed > 0) {
+    bucket.tokens = Math.min(cap, bucket.tokens + (elapsed * cap) / RATE_WINDOW_MS);
+    bucket.atMs = nowMs;
+  } else if (elapsed < 0) {
+    // The clock went backwards — a metrics reset, or a caller reusing a map across
+    // runs. Grant no refill and resynchronise rather than subtracting tokens.
+    bucket.atMs = nowMs;
+  }
+  if (bucket.tokens < 1) {
+    const retryInMs = ((1 - bucket.tokens) / cap) * RATE_WINDOW_MS;
+    return {
+      ok: false,
+      reason: `rate limit: ${cap} per minute exceeded, next token in ${(retryInMs / 1000).toFixed(1)} s`,
+      tokensLeft: bucket.tokens,
+      retryInMs,
+    };
+  }
+  bucket.tokens -= 1;
+  return { ok: true, reason: "", tokensLeft: bucket.tokens, retryInMs: 0 };
+}
+
+/**
+ * Whether a message counts against the relay cap.
+ *
+ * It does not, for control-plane traffic, and the arithmetic is why: `docs/03` §1
+ * beacons an OGM every 2 s, which is **30 per minute per source** — exactly the cap
+ * `docs/04` §6 states. Counting beacons does not drop a source's first data message;
+ * it does something slower and worse. A bucket refills one token every 2 s at that
+ * cap, and the beacon spends it every 2 s, so the *sustained* budget for everything
+ * else is zero. Data traffic then runs entirely off the initial burst: 29 messages
+ * in the first minute and roughly nothing after, which `rate-limits.test.ts` measures
+ * as 29 messages admitted in ten minutes instead of 300 — a 90 % cut in a node's
+ * sustained data rate, caused by its own routing protocol.
+ *
+ * `ack` and `sync` are exempt for the same reason `src/crypto/packet.ts`'s
+ * `isSealedType` treats them as control plane: an acknowledgement that is
+ * rate-limited turns one lost packet into a retransmission storm, and anti-entropy
+ * beacons are how `docs/06` §17 repairs group history.
+ *
+ * This is a correction to the number as written, not a relaxation of it: the cap
+ * still applies to everything a user sends, which is what "ignore floods" is about.
+ */
+export function countsAgainstRelayCap(msg: MeshMessage): boolean {
+  return msg.type !== "ogm" && msg.type !== "ack" && msg.type !== "sync";
+}
+
+/**
+ * Whether a local block (`docs/04` §6: *"Block/mute peer locally (ignore msgs from
+ * pubKey)"*) applies to this message.
+ *
+ * Two exclusions, for two different reasons:
+ *
+ * - **Control plane** (`ogm`, `ack`, `sync`) is excluded for the same reason
+ *   `countsAgainstRelayCap` excludes it. Blocking an `ack` does not silence the peer, it
+ *   makes them retransmit: the blocked node never learns its message was received, so it
+ *   burns *more* of the airtime the block was meant to save. Blocking an `ogm` is worse
+ *   still — it removes the peer from the blocker's routing table, which changes MPR
+ *   selection and can cost other nodes a route through a node that merely dislikes one of
+ *   its neighbours. A block is a local filter on what a user sees, not a routing change.
+ * - **SOS** is excluded because `docs/04` §6 already gives it its own two mechanisms
+ *   (opt-in listening, and §11's collapsing of a repeated flood into one alert), and the
+ *   asymmetry is not close: the cost of showing one SOS from a blocked peer is a
+ *   notification the user opted into, and the cost of suppressing a real one is a life.
+ *
+ * What is left is exactly the traffic a user would call harassment — text, broadcast,
+ * voice and file — which is what §6's bullet is about.
+ */
+export function isBlockableTraffic(msg: MeshMessage): boolean {
+  return countsAgainstRelayCap(msg) && msg.type !== "sos";
 }
 
 // --- dedup cache -------------------------------------------------------------

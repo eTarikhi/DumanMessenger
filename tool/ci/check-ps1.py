@@ -6,7 +6,7 @@ Why this exists
 The Windows entry point (make.ps1) cannot be executed on a Linux CI runner or in a
 sandbox without PowerShell, and shipping a script nobody has run is how a repository
 ends up with a broken front door. This is not a parser and does not pretend to be one:
-it catches the two failure classes that account for almost all hand-written PowerShell
+it catches the four failure classes that account for almost all hand-written PowerShell
 bugs found late, and it does so with no dependencies.
 
   1. Unbalanced delimiters. A missing brace in PowerShell often does not fail at the
@@ -18,7 +18,26 @@ bugs found late, and it does so with no dependencies.
      pipeline chain operators, and `$PSStyle` all parse on pwsh 7 and all fail on 5.1
      with a message that does not say "your PowerShell is too old".
 
-Both checks run on *code only*: strings and comments are stripped by a character walk
+  3. A pass-through parameter that PowerShell will not bind positionally. This one is not
+     theoretical: `make.ps1` declared `[Parameter(ValueFromRemainingArguments = $true)]
+     [string[]]$Task` with no `Position`, and PowerShell excludes such a parameter from
+     positional binding, so the first positional argument went to the *next* parameter —
+     `$Runtime`, whose `ValidateSet('auto','wsl','bash')` then rejected `doctor`. The first
+     real execution of the script, on Windows 11, failed on the invocation every document in
+     this repository tells you to type. Rule: such a parameter declares its own `Position`,
+     and its siblings are either explicitly positioned too or excluded by
+     `[CmdletBinding(PositionalBinding = $false)]`.
+
+  4. A repository root computed from a false assumption about where the script lives.
+     `make.ps1` is committed beside `Makefile`, `tool/` and `sim/`, so `$PSScriptRoot` *is* the
+     root; the script took its parent instead, and every forwarded command ran one directory too
+     high. On the first real Windows 11 execution that surfaced as
+     `bash: /mnt/c/Users/…/Git-Clones/tool/ci/doctor.sh: No such file or directory` with exit 127 —
+     a runtime error three layers away from the arithmetic that caused it. This check only fires for
+     a script whose own directory really does contain `tool/`, so a script that legitimately lives
+     in a subdirectory is not accused of anything.
+
+All four run on *code only*: strings and comments are stripped by a character walk
 first, because a regex over raw source mis-pairs apostrophes in prose ("the
 repository's intent") with real string delimiters and reports braces that are not
 there. That false positive is the reason this is a walk and not a one-liner.
@@ -48,6 +67,83 @@ PS7_PATTERNS = (
 )
 
 PAIRS = (("{", "}"), ("(", ")"), ("[", "]"))
+
+NOT_PARAMETERS = {"true", "false", "null"}
+
+
+def _balanced(text: str, start: int) -> str:
+    """The parenthesised group that starts at `start`, or '' if it never closes."""
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "(":
+            depth += 1
+        elif text[i] == ")":
+            depth -= 1
+            if depth == 0:
+                return text[start + 1 : i]
+    return ""
+
+
+def repo_root_problems(code: str, path: Path) -> list[str]:
+    """Failure class 4: a repo root that climbs above the directory holding the script.
+
+    Only asserted when that directory really is a repository root — `tool/` sits in it — because
+    for a script in a subdirectory, taking the parent is correct and accusing it is a false positive.
+    """
+    if not (path.parent / "tool").is_dir():
+        return []
+    m = re.search(r"\$RepoRoot\s*=\s*(.+)$", code, re.M)
+    if not m:
+        return []
+    expr = m.group(1).strip()
+    if "Split-Path" in expr and "$PSScriptRoot" in expr:
+        return [
+            "$RepoRoot = %s climbs above the directory holding this script, but that directory is "
+            "the repository root (tool/ is its sibling) — use $PSScriptRoot, or every forwarded "
+            "command runs one level too high and fails as a missing file" % expr
+        ]
+    return []
+
+
+def param_binding_problems(code: str) -> list[str]:
+    """Failure class 3: a pass-through parameter nobody can reach positionally.
+
+    Only meaningful for a script whose whole job is forwarding arguments, which is what a
+    dispatcher is, and only when it declares ValueFromRemainingArguments at all.
+    """
+    problems: list[str] = []
+    m = re.search(r"\bparam\s*\(", code)
+    if not m:
+        return problems
+    block = _balanced(code, m.end() - 1)
+    if not block or not re.search(r"ValueFromRemainingArguments\s*=\s*\$true", block):
+        return problems
+
+    for attr in re.findall(r"\[Parameter\s*\(([^\]]*)\)\]", block):
+        if re.search(r"ValueFromRemainingArguments\s*=\s*\$true", attr) and not re.search(
+            r"\bPosition\s*=", attr
+        ):
+            problems.append(
+                "a ValueFromRemainingArguments parameter has no Position: PowerShell excludes it "
+                "from positional binding, so the first positional argument binds to the next "
+                "parameter instead and its ValidateSet rejects it — give it `Position = 0`"
+            )
+
+    binding = re.search(r"\[CmdletBinding\s*\(([^\]]*)\)\]", code)
+    positional_off = bool(binding and re.search(r"PositionalBinding\s*=\s*\$false", binding.group(1)))
+    names = [
+        n
+        for n in re.findall(r"\$(\w+)", block)
+        if n not in NOT_PARAMETERS and not n.startswith("Matches")
+    ]
+    if not positional_off and len(set(names)) > 1:
+        problems.append(
+            "%d parameters remain positionally bindable while one collects the rest: a second "
+            "positional argument is offered to them rather than forwarded — set "
+            "`[CmdletBinding(PositionalBinding = $false)]` or give each one a Position"
+            % len(set(names))
+        )
+    return problems
 
 
 def strip_to_code(source: str) -> tuple[str, int]:
@@ -140,6 +236,9 @@ def check(path: Path, allow_ps7: bool) -> list[str]:
                         f"line {lineno}: {name} — fails on Windows PowerShell 5.1 "
                         f"(use --ps7-ok if this script is pwsh-only)"
                     )
+
+    problems.extend(param_binding_problems(code))
+    problems.extend(repo_root_problems(code, path))
 
     if source.count("\ufeff"):
         problems.append("file contains a byte-order mark; PowerShell tolerates it but git diffs do not")

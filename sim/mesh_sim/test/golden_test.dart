@@ -103,6 +103,17 @@ void main() {
       expect(s.totalQueued, equals(expect_['totalQueued']));
       expect(unicast.fold<int>(0, (sum, d) => sum + d.hops),
           equals(expect_['sumHopCounts']));
+      // Both readings of the hop criterion, pinned from the other side of the same fixture. Finding
+      // F2 is an owner decision about which one the suite enforces; neither engine gets to drift on
+      // the numbers that decision is made from. Counted over every unicast delivery, retries and
+      // DTN bundles included — not over latencyByHop, which is scoped to first-attempt routed
+      // unicast and so counts a different set.
+      expect(unicast.where((d) => d.hops <= 5).length,
+          equals(expect_['deliveredWithinFiveHops']),
+          reason: 'the five-hop reading diverged from the reference engine');
+      expect(unicast.where((d) => d.hops <= 3).length,
+          equals(expect_['deliveredWithinThreeHops']),
+          reason: 'the three-hop reading diverged from the reference engine');
 
       // Floating aggregates carry a tolerance so a last-ULP difference between
       // the JS and Dart libm implementations cannot fail the build.
@@ -113,6 +124,35 @@ void main() {
           closeTo((expect_['avgLatencyMs'] as num).toDouble(), 1e-2));
       expect(s.p95LatencyMs,
           closeTo((expect_['p95LatencyMs'] as num).toDouble(), 1e-2));
+    });
+
+    test('serialises an anti-entropy reply exactly as the reference engine does', () {
+      // The other half of the contract `src/__tests__/acceptance.test.ts` asserts from the
+      // TypeScript side. Both engines rebuild these entries and must produce byte-identical JSON,
+      // because a repair that costs different bytes on the two engines is two protocols — and
+      // `docs/06` §17.6 accounts sync bytes separately, so the number is one somebody reads.
+      //
+      // This is not a hypothetical. The first CI run that compiled this engine reported the same
+      // 166 beacons, 3 requests, 2 replies and 171 packets as the reference for the same history
+      // probe, and 30 430 payload bytes against its 29 750: `"synced":false` was emitted for every
+      // entry (15 bytes to say nothing the receiver does not already know, since it sets the flag
+      // itself) and an integral `at` was written as `1200.0` rather than `1200` (2 more). Seventeen
+      // bytes an entry, twenty entries, two replies.
+      final spec = fixture['history'] as Map<String, dynamic>;
+      final entries = (spec['entries'] as List<dynamic>)
+          .map((e) => HistoryEntry.fromJson(e as Map<String, dynamic>))
+          .toList();
+      expect(entries, hasLength(3));
+
+      final body = jsonEncode(entries.map((e) => e.toJson()).toList());
+      expect(body, equals(spec['replyBody']),
+          reason: 'the history reply body diverged from the TypeScript engine');
+      expect(body.length, equals(spec['replyBytes']),
+          reason: 'the reply costs a different number of bytes than the reference engine');
+      expect(body.contains('"synced":false'), isFalse,
+          reason: 'a false synced flag costs 15 bytes an entry and tells the receiver nothing');
+      expect(body.contains('1200.0'), isFalse,
+          reason: 'an integral timestamp must not carry a decimal point');
     });
   });
 }

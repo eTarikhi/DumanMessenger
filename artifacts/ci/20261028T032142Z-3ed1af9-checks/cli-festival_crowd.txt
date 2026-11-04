@@ -1,0 +1,55 @@
+Duman mesh simulator — festival_crowd (seed 42, policy mpr)
+──────────────────────────────────────────────────────────────
+  scenario                 festival_crowd
+  seed                     42
+  policy                   mpr
+  nodes                    60
+  sent                     150
+  deliveredUnicast         142
+  deliveryRatio            0.9467
+  deliveredWithinFiveHops  128
+  withinFiveRatio          0.8533
+  deliveredWithinThreeHops 85
+  withinThreeRatio         0.5667
+  superNodes               11
+  superRatio               0.1833
+  timeAvgSuperRatio        0.1833
+  electionsPerMin          0.1159
+  avgHops                  3.007
+  latencyP50Ms             1116.5481
+  latencyP95Ms             15560.1268
+  relayTx                  45978
+  floodAllRelayTx          359719
+  overheadVsFloodAll       0.1278
+  routeFloodRelayTx        91896
+  overheadVsRouteFlood     0.5003
+  overheadRatio            323.7887
+  mprSuppressed            2958
+  retriesSent              131
+  retriesExhausted         46
+  acksReceived             140
+  controlOverhead          796685
+  lostTransmissions        1603
+  lostOgmTransmissions     28349
+  totalQueued              62
+  avgPeers                 17.65
+  isolatedNodes            0
+  avgScore                 0.6359
+  simTimeMs                233000.0
+  dutyCycle                false
+  batteryPctPerHourNormal  2.887
+  batteryPctPerHourSuper   6.6121
+  batteryPct8hNormal       23.0964
+  batteryPct8hSuper        52.8971
+  scansPerSec              89.6578
+  relaysPerSec             204.3467
+  awakeRatio               1.0
+  scansSkippedAsleep       0
+  electionEvents           27
+  latencyByHop             hops      n     avg     p95
+                              1     40   254 ms   313 ms
+                              2     11   659 ms   826 ms
+                              3     23   968 ms  1217 ms
+                              4     18  1336 ms  1807 ms
+                              5      8  1888 ms  2091 ms
+                              6     10  1696 ms  2254 ms

@@ -1,0 +1,60 @@
+{
+  "api": 1,
+  "status": "offline-experimental-not-approved",
+  "feature": "user duty-cycle flag",
+  "trainingSeeds": [
+    1101,
+    1102
+  ],
+  "selected": [
+    {
+      "beacon": 3000,
+      "ack": 6000
+    },
+    {
+      "beacon": 1000,
+      "ack": 3000
+    }
+  ],
+  "population": [
+    {
+      "beacon": 2000,
+      "ack": 4000
+    },
+    {
+      "beacon": 1000,
+      "ack": 4000
+    },
+    {
+      "beacon": 3000,
+      "ack": 4000
+    },
+    {
+      "beacon": 5000,
+      "ack": 4000
+    },
+    {
+      "beacon": 3000,
+      "ack": 3000
+    },
+    {
+      "beacon": 3000,
+      "ack": 6000
+    },
+    {
+      "beacon": 1000,
+      "ack": 3000
+    },
+    {
+      "beacon": 1000,
+      "ack": 6000
+    }
+  ],
+  "sourceSha": "709a2ecc1b6c19128fbc86bd3450455d76a4bf0c",
+  "codeHash": "1d91c9ff47bfe9def0d8e2e1b151b3bfb9f6d449fb0da6c8cc27a707012007de",
+  "baseline": {
+    "beacon": 2000,
+    "ack": 4000
+  },
+  "objective": "maximize worst training seed five-hop ratio, then mean, then lower relays"
+}

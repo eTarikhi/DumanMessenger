@@ -1,0 +1,12 @@
+documentation drift — does every documented command exist?
+  ok    dart-cli-flags     34 CLI flags vs 34 documented
+  ok    media-sections     18 sections in the probe, 9 named in the docs
+  ok    e2ee-sections      4 sections in the probe, 4 named in the docs
+  ok    make-targets       49 targets, 47 named in the docs
+  ok    ps1-targets        17 make.ps1 targets, all backed by the Makefile
+  ok    ci-script-flags    5 scripts, 19 flag uses checked
+  ok    help-covers-targets 49 documented targets, all visible in help
+  ok    doc-section-refs   335 section citations, all resolve
+  ok    npm-scripts        14 scripts, 12 referenced in the docs
+
+all 9 checks passed.

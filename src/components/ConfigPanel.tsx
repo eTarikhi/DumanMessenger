@@ -40,6 +40,10 @@ type Draft = {
   enableDtn: boolean;
   batteryDrainMultiplier: number;
   dutyCycleEnabled: boolean;
+  /** docs/04 §6's two caps: 5 broadcasts/min/node and 30 relays/min/source. */
+  rateLimits: boolean;
+  /** How far a local block reaches: one inbox, or refusing to forward as well. */
+  blockScope: SimConfig["blockScope"];
   normalScanWindowMs: number;
   normalScanCycleMs: number;
   sleepDrainFactor: number;
@@ -68,6 +72,8 @@ function toDraft(c: SimConfig): Draft {
     enableDtn: c.enableDtn,
     batteryDrainMultiplier: c.batteryDrainMultiplier,
     dutyCycleEnabled: c.dutyCycleEnabled,
+    rateLimits: c.rateLimits,
+    blockScope: c.blockScope,
     normalScanWindowMs: c.normalScanWindowMs,
     normalScanCycleMs: c.normalScanCycleMs,
     sleepDrainFactor: c.sleepDrainFactor,
@@ -120,6 +126,8 @@ export function ConfigPanel({
       enableDtn: draft.enableDtn,
       batteryDrainMultiplier: draft.batteryDrainMultiplier,
       dutyCycleEnabled: draft.dutyCycleEnabled,
+      rateLimits: draft.rateLimits,
+      blockScope: draft.blockScope,
       normalScanWindowMs: draft.normalScanWindowMs,
       normalScanCycleMs: draft.normalScanCycleMs,
       sleepDrainFactor: draft.sleepDrainFactor,
@@ -319,6 +327,43 @@ export function ConfigPanel({
           onChange={() => set("enableDtn", !draft.enableDtn)} />
         <Toggle label="Duty cycle (NORMAL sleeps)" value={draft.dutyCycleEnabled}
           onChange={() => set("dutyCycleEnabled", !draft.dutyCycleEnabled)} />
+        <Toggle label="Abuse limits (docs/04 §6 caps)" value={draft.rateLimits}
+          onChange={() => set("rateLimits", !draft.rateLimits)} />
+      </div>
+
+      {/* docs/04 §6, both halves of it: the caps above and the local block below. Block a
+          peer from the node inspector; this decides how far that block reaches. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontSize: 10, color: "#5a6a7a", letterSpacing: 0.4 }}>
+          BLOCK REACH — set per node in the inspector
+        </span>
+        <div style={{ display: "flex", gap: 4 }}>
+          {(["delivery", "relay"] as const).map((scope) => (
+            <button
+              key={scope}
+              type="button"
+              aria-pressed={draft.blockScope === scope}
+              onClick={() => set("blockScope", scope)}
+              title={
+                scope === "delivery"
+                  ? "Ships, and is the literal reading of docs/04 §6's 'ignore msgs': this node stops accepting the blocked peer's messages and nothing else changes. It cannot censor anybody, because every other node still relays them."
+                  : "docs/04 §6's battery-drain bullet, 'ignore floods': this node also refuses to forward the blocked peer's traffic. Measured at 9.7% of airtime saved and 17 copies per seed lost at nodes that never blocked — a blocker that will not forward is a hole in that source's routes."
+              }
+              style={{
+                flex: 1,
+                padding: "4px 6px",
+                borderRadius: 7,
+                fontSize: 11,
+                cursor: "pointer",
+                border: "1px solid #1e2a3a",
+                background: draft.blockScope === scope ? "rgba(77,224,255,0.18)" : "rgba(255,255,255,0.03)",
+                color: draft.blockScope === scope ? "#4de0ff" : "#9fb0c3",
+              }}
+            >
+              {scope === "delivery" ? "this inbox only" : "and refuse to relay"}
+            </button>
+          ))}
+        </div>
       </div>
 
       {draft.dutyCycleEnabled && (

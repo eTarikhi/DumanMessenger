@@ -1,0 +1,786 @@
+[
+  {
+    "context": {
+      "split": "reproduce",
+      "scenario": "campus_quad",
+      "seed": 42,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "reproduce",
+      "scenario": "festival_crowd",
+      "seed": 31415,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "diagnosis",
+      "scenario": "festival_crowd",
+      "seed": 31415,
+      "duty": false,
+      "staticWorld": true
+    },
+    "frontier": [
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "diagnosis",
+      "scenario": "festival_crowd",
+      "seed": 31415,
+      "duty": true,
+      "staticWorld": true
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "campus_quad",
+      "seed": 101,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "campus_quad",
+      "seed": 101,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "sparse_village",
+      "seed": 101,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "sparse_village",
+      "seed": 101,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "festival_crowd",
+      "seed": 101,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "festival_crowd",
+      "seed": 101,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "partitioned_pair",
+      "seed": 101,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "partitioned_pair",
+      "seed": 101,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "campus_quad",
+      "seed": 202,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "campus_quad",
+      "seed": 202,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "sparse_village",
+      "seed": 202,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "sparse_village",
+      "seed": 202,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "festival_crowd",
+      "seed": 202,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "festival_crowd",
+      "seed": 202,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "partitioned_pair",
+      "seed": 202,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "partitioned_pair",
+      "seed": 202,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "campus_quad",
+      "seed": 303,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "campus_quad",
+      "seed": 303,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "sparse_village",
+      "seed": 303,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "sparse_village",
+      "seed": 303,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "festival_crowd",
+      "seed": 303,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "festival_crowd",
+      "seed": 303,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "partitioned_pair",
+      "seed": 303,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "train",
+      "scenario": "partitioned_pair",
+      "seed": 303,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "tune",
+      "scenario": "campus_quad",
+      "seed": 404,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "tune",
+      "scenario": "campus_quad",
+      "seed": 404,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "tune",
+      "scenario": "sparse_village",
+      "seed": 404,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "tune",
+      "scenario": "sparse_village",
+      "seed": 404,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "tune",
+      "scenario": "festival_crowd",
+      "seed": 404,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "tune",
+      "scenario": "festival_crowd",
+      "seed": 404,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "tune",
+      "scenario": "partitioned_pair",
+      "seed": 404,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "tune",
+      "scenario": "partitioned_pair",
+      "seed": 404,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "validation",
+      "scenario": "campus_quad",
+      "seed": 505,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "validation",
+      "scenario": "campus_quad",
+      "seed": 505,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "validation",
+      "scenario": "sparse_village",
+      "seed": 505,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "validation",
+      "scenario": "sparse_village",
+      "seed": 505,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "validation",
+      "scenario": "festival_crowd",
+      "seed": 505,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "validation",
+      "scenario": "festival_crowd",
+      "seed": 505,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "validation",
+      "scenario": "partitioned_pair",
+      "seed": 505,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "validation",
+      "scenario": "partitioned_pair",
+      "seed": 505,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "exposed-audit",
+      "scenario": "campus_quad",
+      "seed": 606,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "exposed-audit",
+      "scenario": "campus_quad",
+      "seed": 606,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "exposed-audit",
+      "scenario": "sparse_village",
+      "seed": 606,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "exposed-audit",
+      "scenario": "sparse_village",
+      "seed": 606,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "exposed-audit",
+      "scenario": "festival_crowd",
+      "seed": 606,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "exposed-audit",
+      "scenario": "festival_crowd",
+      "seed": 606,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "exposed-audit",
+      "scenario": "partitioned_pair",
+      "seed": 606,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "exposed-audit",
+      "scenario": "partitioned_pair",
+      "seed": 606,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "holdout",
+      "scenario": "campus_quad",
+      "seed": 909,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "holdout",
+      "scenario": "campus_quad",
+      "seed": 909,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "holdout",
+      "scenario": "sparse_village",
+      "seed": 909,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "holdout",
+      "scenario": "sparse_village",
+      "seed": 909,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "holdout",
+      "scenario": "festival_crowd",
+      "seed": 909,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "holdout",
+      "scenario": "festival_crowd",
+      "seed": 909,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "holdout",
+      "scenario": "partitioned_pair",
+      "seed": 909,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "holdout",
+      "scenario": "partitioned_pair",
+      "seed": 909,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "exogenous",
+      "scenario": "festival_crowd",
+      "seed": 31415,
+      "duty": false,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  },
+  {
+    "context": {
+      "split": "exogenous",
+      "scenario": "festival_crowd",
+      "seed": 31415,
+      "duty": true,
+      "staticWorld": false
+    },
+    "frontier": [
+      "baseline-v1",
+      "ack-6000-v1"
+    ]
+  }
+]

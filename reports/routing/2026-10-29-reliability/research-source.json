@@ -1,0 +1,14 @@
+{
+  "retrieved": "2026-10-29",
+  "implementation": {
+    "repository": "contiki-ng/contiki-ng",
+    "file": "os/net/routing/rpl-lite/rpl-mrhof.c",
+    "lastFileCommit": "a4c3e4373fb55c9b3efde6a0040d6ef79417a03d",
+    "pinnedUrl": "https://github.com/contiki-ng/contiki-ng/blob/a4c3e4373fb55c9b3efde6a0040d6ef79417a03d/os/net/routing/rpl-lite/rpl-mrhof.c"
+  },
+  "standardsInfoRetrieved": [
+    "https://www.rfc-editor.org/info/rfc7181/",
+    "https://www.rfc-editor.org/info/rfc6693/"
+  ],
+  "scope": "Metadata, RFC pages and implementation excerpt; not independent reproduction of external paper results"
+}

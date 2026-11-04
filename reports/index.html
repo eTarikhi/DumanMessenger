@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="0; url=2026-10-23-execution-report.html">
+<meta http-equiv="refresh" content="0; url=2026-10-27-remediation-report.html">
 <title>Duman Messenger · Reports</title>
 <style>
   body { margin:0; background:#0b1017; color:#eaf2ff; padding:40px 24px;
@@ -21,7 +21,21 @@
 <body>
 <div class="wrap">
   <h1>Duman Messenger — reports</h1>
-  <p class="sub">Opening the latest report. Both are self-contained HTML, no network needed.</p>
+  <p class="sub">Opening the latest report. All three are self-contained HTML, no network needed.</p>
+
+  <a class="card" href="2026-10-27-remediation-report.html">
+    <div class="t">Engineering remediation report — 2026-10-27</div>
+    <div class="d">
+      Ten commits from <code>d2fbba3</code> to <code>0734487</code>: the checks job wired to the one
+      checker nothing ran, two new drift checks and their self-tests, a pre-push gate that activates
+      itself, a committed verification digest that survives a wiped sandbox, reproducible Dart
+      dependency resolution, and — because GitHub Actions stopped being refused mid-session — the
+      first Dart run this repository has ever had: <code>analyze</code> clean, 278 tests passing, one
+      vacuous test fixed, and the acceptance numbers of all five scenarios and four probes read back
+      out of the runner. Includes the Windows 11 quick start, all 28 open roadmap items reconciled,
+      and six owner actions with the evidence that closes each.
+    </div>
+  </a>
 
   <a class="card" href="2026-10-23-execution-report.html">
     <div class="t">Execution report — 2026-10-23</div>
