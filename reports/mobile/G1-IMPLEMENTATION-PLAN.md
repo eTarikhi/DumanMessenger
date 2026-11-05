@@ -1,0 +1,132 @@
+# G1 preparation — smallest buildable Flutter foundation
+
+**Status:** Implementation plan only. No Flutter scaffold, app code, platform project, dependency, or GitHub workflow was created. The current Linux host lacks Flutter/Dart, Android build tools, macOS/Xcode, and devices; do not create an unbuildable scaffold here.
+**Source snapshot:** `a1f1916981c2244a2f8664573b66afbd5a2659b4`
+**Distribution scope:** Android target is Google Play; iOS implementation/testing are required; App Store publishing is not authorized.
+
+## 1. Goal and boundary
+
+Create the smallest Flutter application that is independently buildable, installable, launchable, and testable on an Android emulator and an iOS Simulator. This first milestone is an app-shell gate only. It must not imply that secure messaging, contacts, key management, radio transport, persistent chat, background delivery, or mobile protocol interoperability works.
+
+Keep the app separate from `src/` and `sim/mesh_sim/`. Do not import the browser simulator, Node crypto, simulator clock, `MeshSimulation`, `SimulatedMeshTransport`, or protected golden vectors into the Flutter app. Do not add production cryptography, Bluetooth permissions, analytics, remote crash reporting, user tracking, or network access in the shell.
+
+## 2. Smallest buildable project shape
+
+Create only after the exact toolchain and an Android build host plus macOS/Xcode host are approved and available:
+
+```text
+mobile/app/
+  pubspec.yaml                 # pinned Flutter-compatible constraints
+  pubspec.lock                 # committed dependency resolution
+  lib/
+    main.dart                  # entry point, MaterialApp, app theme/routes
+    app.dart                   # small app/router composition
+    screens/
+      onboarding_screen.dart   # local-only welcome, limitations, continue
+      conversation_list_screen.dart # empty, clearly labelled placeholder
+      diagnostics_screen.dart  # local build/platform info; no secrets
+  test/
+    app_navigation_test.dart
+    onboarding_widget_test.dart
+    conversation_list_widget_test.dart
+    diagnostics_redaction_test.dart
+  android/                     # Flutter-generated Android host, debug config
+  ios/                          # Flutter-generated iOS host, Simulator config
+```
+
+Use Flutter SDK navigation (`Navigator`/named routes) and Material widgets initially; do not add a state-management/router/database/plugin dependency without an explicit need and dependency review. Keep placeholder data in memory and visibly mark it as sample/empty. Do not create a session, identity, key, network client, message store, permission request, or hidden analytics call.
+
+## 3. Foundation screens and behavior
+
+### Application entry/navigation
+
+- `main.dart` calls `runApp` with a small `MaterialApp` and a single app theme.
+- Start at onboarding on a fresh app launch; the “Continue” action navigates to an empty conversation list. Persisting onboarding completion is not required in the shell and can remain session-local.
+- A visible app-bar/menu action opens a local diagnostics page; Android system back and iOS navigation back work.
+- Routes use stable identifiers/constants and are covered by widget tests. Avoid deep-link/contact scheme registration in G1.
+
+### Onboarding placeholder
+
+- State clearly that the app is a foundation and secure messaging/radio is not available yet.
+- Present a short privacy/permission statement: the shell does not access contacts, location, Bluetooth, network, camera, microphone, or files.
+- Continue is local navigation only. No key generation, QR scan, notification, account, permission prompt, or credential entry.
+
+### Conversation-list placeholder
+
+- Show an empty state such as “No conversations yet” and “Messaging is not enabled in this foundation build.”
+- Do not display fabricated delivery, encryption, verified-peer, or offline status.
+- No conversation detail, send button, fake ACK, or simulated transport.
+
+### Diagnostics
+
+- Show only app version/build commit if safely available, platform/OS version, and whether this is debug/profile/release.
+- Do not show device serials, stable hardware IDs, account identifiers, IP addresses, contact names, cryptographic fingerprints, keys, message text, full environment variables, or arbitrary file paths.
+- Data is local and read-only; no upload, crash-reporting, clipboard, or log export in G1.
+- Redaction is tested with synthetic values; screen capture is not claimed to be prevented.
+
+## 4. Tests and local commands
+
+### Pure Dart/unit/widget coverage
+
+- App starts on onboarding; continue reaches the conversation list; back/navigation behavior is stable.
+- Empty-state UI explicitly says messaging is unavailable; no UI implies encryption or recipient delivery.
+- Diagnostics render expected non-sensitive platform/build fields and exclude synthetic private IDs/secret-looking values.
+- No network, permissions, Bluetooth, key store, database, or crash-report SDK is instantiated by the shell.
+- `flutter analyze` and `flutter test` pass on the pinned SDK; tests use deterministic widget/test data and do not rely on wall-clock sleeps.
+
+### Android acceptance
+
+On the approved Windows/Android host, record Flutter/Dart, JDK, Gradle/AGP, Android SDK/build-tools, emulator image, OS build, and app commit. Run:
+
+```powershell
+flutter pub get
+flutter analyze
+flutter test
+flutter build apk --debug
+flutter devices
+flutter run -d <approved-android-emulator-id>
+```
+
+Acceptance requires a successful debug APK build, install, launch, first-frame rendering, onboarding-to-empty-list navigation, diagnostics navigation, and Android system-back behavior on an approved emulator. Record exact device/API and observed result. Do not sign a release APK/AAB, upload to Google Play, or use production signing credentials.
+
+### iOS acceptance
+
+On the approved macOS/Xcode host, record macOS, Xcode/iOS SDK, Simulator runtime, Flutter/Dart, app commit, and selected build settings. Run:
+
+```bash
+flutter pub get
+flutter analyze
+flutter test
+flutter build ios --simulator
+flutter devices
+flutter run -d <approved-ios-simulator-id>
+```
+
+Acceptance requires a successful iOS Simulator build, install, launch, first-frame rendering, onboarding-to-empty-list navigation, and diagnostics navigation. Record the exact simulator/runtime and result. Do not archive, sign for distribution, submit to App Store Connect, or claim App Store readiness.
+
+Run the shell smoke test on each platform from a clean install and a second relaunch. Record screenshots/logs only if they contain no user/device secrets. Do not use GitHub Actions or remote CI for this milestone.
+
+## 5. Exact G1 acceptance criteria
+
+G1 Foundation is complete only when **all** criteria below have independent local evidence:
+
+1. Owner-approved, checked-in Flutter/Dart and platform toolchain pins are reproducible on an authorized Windows/Android host and a macOS/Xcode host.
+2. `flutter analyze` and `flutter test` pass on the pinned Flutter/Dart SDK without skipped/disabled/relaxed tests.
+3. Android debug APK builds and installs/launches on the approved Android emulator; navigation and diagnostics smoke test pass.
+4. iOS Simulator app builds and installs/launches with the approved Xcode/runtime; navigation and diagnostics smoke test pass.
+5. No `node:crypto`, production crypto/provider, keys, contacts, storage, real message, route/packet format, BLE/permission, or analytics behavior is present.
+6. No existing simulator test, golden vector, routing default, test timeout, or production simulator semantics was changed to make the shell pass.
+7. Evidence names exact app commit, toolchain/device versions, commands, and outcomes. Emulator/Simulator evidence is clearly separated from later physical-device/radio evidence.
+
+A G1 pass does **not** mean mobile secure messaging, BLE, a key store, or real device-to-device operation is implemented. Physical Android/iOS installation may be recorded as an additional smoke check but is not a substitute for the required emulator/Simulator build gates.
+
+## 6. Dependency-ordered follow-up
+
+1. Owner selects exact supported OS/API/device range and toolchain matrix; see [MOBILE-TOOLCHAIN-READINESS.md](MOBILE-TOOLCHAIN-READINESS.md).
+2. Provide and verify authorized Windows/Android and macOS/Xcode hosts. No scaffold on the current host without these prerequisites.
+3. Create the minimal Flutter project; pin dependencies and SDK; keep the lockfile and platform build configuration reviewable.
+4. Add placeholder screens, navigation, diagnostics redaction, and unit/widget tests only.
+5. Pass both G1 local build/launch gates and record evidence.
+6. Separately obtain owner/security approval for identity, protocol, packet, provider, key storage, and persistence before any secure-messaging or transport implementation. G1 does not authorize those features.
+
+No code scaffold, production behavior, workflow, deployment, or publication is authorized by this plan.
