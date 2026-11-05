@@ -4,6 +4,8 @@
 **Observed agent host:** Linux `6.1.158+` x86_64; `dart`, `flutter`, `java`, `gradle`, `adb`, `sdkmanager`, `xcodebuild`, `xcrun`, and `pod` are unavailable. There is no Flutter app or Android/iOS platform project.
 **Source snapshot:** `a1f1916981c2244a2f8664573b66afbd5a2659b4`.
 
+For the concise Windows 11 G1 sequence and read-only preflight, see [WINDOWS-G1-QUICKSTART.md](../../docs/mobile/WINDOWS-G1-QUICKSTART.md) and [`windows-g1-preflight.ps1`](../../tool/mobile/windows-g1-preflight.ps1). The preflight has not run on Windows in this workspace.
+
 ## 1. Version pins and owner choices
 
 The only existing mobile-adjacent SDK constraint is `sim/mesh_sim/pubspec.yaml`: `sdk: ^3.4.0`, meaning Dart `>=3.4.0 <4.0.0`. This is a simulator constraint, not a Flutter app pin. Flutter bundles its own Dart SDK; the Flutter app must use the Dart version bundled by its owner-approved Flutter release.
