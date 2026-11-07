@@ -1,17 +1,17 @@
 # Mobile toolchain and physical-device requirements
 
-**Status:** Owner setup guide and version-pin blocker list. No Flutter app or mobile toolchain was installed or built in this milestone. This document does not claim Android/iOS tests passed.
-**Observed host:** Linux `6.1.158+`, x86_64; Node `v22.22.3`, npm `10.9.8`; Dart/Flutter/Java/Gradle/Android SDK/Xcode unavailable.
-**Evidence snapshot:** `a1f1916981c2244a2f8664573b66afbd5a2659b4`, reviewed 2026-11-05.
+**Current status (2026-11-08):** Flutter shared source and widget tests exist under `mobile/app`. No Android/iOS host or `pubspec.lock` has been generated, and no Flutter build/test or device validation has run. The owner reports Flutter 3.47.8 / Dart 3.13.7; this agent has not used that Windows environment.
+**Observed agent host:** Linux `6.1.158+`, x86_64; Node `v22.22.3`, npm `10.9.8`; Dart/Flutter/Java/Gradle/Android SDK/Xcode unavailable.
+**Historical source snapshot:** `a1f1916981c2244a2f8664573b66afbd5a2659b4`, reviewed 2026-11-05. This toolchain guide predates the shared G1 source.
 
 ## 1. Version facts and unresolved pins
 
-There is no Flutter application, Flutter `pubspec.yaml`, mobile `pubspec.lock`, Android Gradle project/wrapper, iOS project/Podfile, deployment target, or mobile CI in this checkout. Therefore an exact *mobile* Flutter/Dart/AGP/Gradle/JDK/Android SDK/Xcode/macOS/iOS matrix cannot be truthfully inferred or tested. The owner must approve and pin one compatible matrix before creating the mobile shell. Do not describe “latest stable” as reproducible evidence.
+The shared Flutter `pubspec.yaml` and app/test source now exist. There is no mobile `pubspec.lock`, Android Gradle project/wrapper, iOS project/Podfile, deployment target, or mobile CI in this checkout. The owner-reported Flutter/Dart pair is 3.47.8 / 3.13.7, but it has not been independently verified here. Exact Android/iOS platform toolchain versions still must be selected and checked for compatibility before native-host builds; do not describe “latest stable” as reproducible evidence.
 
 | Component | Exact evidence/requirement now | Pin required before mobile build |
 |---|---|---|
-| Flutter | No Flutter SDK or app project exists. Use an owner-approved stable release compatible with Android/iOS targets and selected dependencies. | Exact Flutter release tag **and Git commit**; record in project setup docs/CI. |
-| Dart | Flutter bundles its Dart SDK; do not install an unrelated standalone Dart for the Flutter app. The existing pure-Dart simulator declares `sdk: ^3.4.0` in `sim/mesh_sim/pubspec.yaml` (Dart `>=3.4.0 <4.0.0` constraint). | Exact bundled Dart version shown by the chosen Flutter release; ensure simulator package compatibility and run its tests on a host with Dart. |
+| Flutter | Owner reports Flutter 3.47.8, framework tag commit `737ba8f885dc774b53b442759999a312c9461e4e`; the agent has not run it. | Keep the exact Flutter tag/commit recorded in the G1 setup docs; no CI pin is authorized. |
+| Dart | Flutter bundles the app SDK; `mobile/app/pubspec.yaml` requires `^3.13.7`. Owner reports bundled Dart 3.13.7. The separate pure-Dart simulator declares `sdk: ^3.4.0`. | Verify the bundled Dart version on the selected Flutter tag; keep simulator and app SDK requirements distinct. |
 | Windows Android host | Supported 64-bit Windows version per the chosen Flutter and Android Studio releases; Android Studio stable, Android SDK command-line tools, platform-tools/`adb`, platform/build-tools, JDK compatible with the pinned Android Gradle Plugin, and Gradle wrapper. | Windows edition/build; exact Android Studio, JDK, AGP, Gradle, `compileSdk`, `targetSdk`, `minSdk`, build-tools, emulator system image, and Flutter/Dart pairing. Check Google Play target API policy again at release time. |
 | Android emulator | Android Emulator and a system image for the approved API levels. | Exact image/API and device profile. Emulator evidence is not physical BLE evidence. |
 | macOS/iOS host | A macOS version supported by the selected Xcode; Xcode and iOS SDK compatible with the chosen Flutter release; Xcode command-line tools and an iOS Simulator runtime. CocoaPods is needed only if chosen Flutter plugins require it. | Exact macOS version/build, Xcode version/build, iOS SDK/deployment target, Simulator runtime, CocoaPods version if applicable, and Flutter/Dart pairing. Xcode and deployment targets must be selected together. |
@@ -150,7 +150,7 @@ After the Flutter app/project exists, run the approved Flutter tests and an iOS 
 
 Emulator/simulator runs are useful for UI, parser, state, and some lifecycle tests, but are not real BLE or physical-device evidence. Test only synthetic contacts, messages, and keys.
 
-## 5. Version-pin decision required before creating the shell
+## 5. Platform/toolchain decisions required before native builds
 
 Owner should approve a single checked-in toolchain matrix containing:
 
@@ -164,4 +164,4 @@ The minimum Android/iOS OS versions, Play target API, JDK/AGP pairing, Xcode/mac
 
 ## 6. Current result and non-claims
 
-The current Linux host has Node/npm only for the runnable local baseline. `dart`, `flutter`, `java`, `gradle`, `adb`, `sdkmanager`, `xcodebuild`, `xcrun`, and `pod` were unavailable. There is no mobile project to build. The full TypeScript suite is 517/527 with ten strict timeouts; that is browser simulator/reference evidence only. The Dart suite, Flutter tests, Android/iOS builds, emulators, and physical-device tests are **not run**, not passed. See [BASELINE.md](BASELINE.md), [TEST-RESULTS.md](TEST-RESULTS.md), and [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md).
+The current Linux agent has Node/npm for the runnable local baseline but lacks `dart`, `flutter`, `java`, `gradle`, `adb`, `sdkmanager`, `xcodebuild`, `xcrun`, and `pod`. Shared Flutter source exists, but no Android/iOS host or lockfile is generated for a platform build. The owner reports Flutter 3.47.8/Dart 3.13.7 and a standalone APK smoke build; that does not validate this repository. The Dart suite, Flutter tests, Android/iOS builds, emulators, and physical-device tests are **not run**, not passed. The historical full TypeScript suite is 517/527 with ten strict timeouts; it is browser simulator/reference evidence only. See [BASELINE.md](BASELINE.md), [TEST-RESULTS.md](TEST-RESULTS.md), and [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md).

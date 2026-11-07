@@ -1,7 +1,7 @@
 # Device and environment test matrix
 
-**Snapshot date:** 2026-11-05
-**Current mobile evidence:** none. This matrix separates modeled simulation, Android emulator, iOS Simulator, and physical-device evidence. Passing a row in one category must never be reported as a pass in another.
+**Snapshot date:** 2026-11-08
+**Current mobile evidence:** Shared Flutter source and widget tests exist, but no Flutter test/build, Android Emulator, iOS Simulator, or physical-device evidence exists. The owner’s standalone APK smoke test is not a DumanMessenger build. This matrix separates modeled simulation, Android emulator, iOS Simulator, and physical-device evidence. Passing a row in one category must never be reported as a pass in another.
 
 ## Evidence labels
 
@@ -19,9 +19,9 @@
 | TypeScript static check and production browser bundle | **SIMULATION / web build** | **Pass** | `npm run typecheck` and `npm run build`; no mobile code is built. |
 | Local simulator deployment checks | **SIMULATION / local Node server** | **5/5 pass** | `npm run test:deployment`; not a phone or radio test. |
 | Pure-Dart authoritative simulator | **SIMULATION** | **Not run** | 13 Dart test files exist; Dart SDK unavailable. |
-| Flutter widget/integration tests | **APP TESTS** | **Not run / no project** | No Flutter app or Flutter SDK. |
-| Android Emulator | **ANDROID EMULATOR** | **Not run / blocked** | No Flutter, JDK, Gradle, Android SDK, `adb`, emulator runtime, or Android app project in this host. |
-| iOS Simulator | **IOS SIMULATOR** | **Not run / blocked** | Linux host; no Xcode/iOS SDK/Simulator or iOS app project. |
+| Flutter widget/integration tests | **APP TESTS** | **Not run / source only** | Widget tests are present in `mobile/app/test`; Flutter/Dart and `pubspec.lock` are unavailable here. |
+| Android Emulator | **ANDROID EMULATOR** | **Not run / blocked** | No Flutter, JDK, Gradle, Android SDK, `adb`, emulator runtime, generated Android host, or Windows repository build evidence is available to this agent. |
+| iOS Simulator | **IOS SIMULATOR** | **Not run / blocked** | Linux host; no Xcode/iOS SDK/Simulator or generated iOS host. |
 | Physical Android | **PHYSICAL ANDROID** | **Not run** | No device/build artifacts or native adapter. |
 | Physical iPhone | **PHYSICAL IOS** | **Not run** | No device/build artifacts or native adapter. |
 | Android↔iOS real-peer exchange | **CROSS-PLATFORM PHYSICAL** | **Not run** | No native transports, installable app, or physical-device evidence. |
@@ -32,9 +32,9 @@ Device models, minimum/current OS versions, and coverage count must be selected 
 
 | Platform / class | Planned test | Evidence to record | Current status |
 |---|---|---|---|
-| Android Emulator | Clean debug install, first launch, navigation, process recreation, no-network behavior, permission prompts/denial/revocation, app upgrade and local reset. | Emulator image/API, host/tool versions, APK hash, logs with synthetic data, pass/fail by case. | Blocked: toolchain and app absent. |
+| Android Emulator | Clean debug install, first launch, navigation, process recreation, no-network behavior, permission prompts/denial/revocation, app upgrade and local reset. | Emulator image/API, host/tool versions, APK hash, logs with synthetic data, pass/fail by case. | Blocked: Android host/toolchain not generated or available to this agent. |
 | Android Emulator | Native bridge lifecycle and malformed/oversized frame handling, bounded queue behavior, cancellation/disconnect UI. | Emulator-only integration test results; clearly label any radio behavior as simulated by the emulator. | Blocked. |
-| iOS Simulator | Clean build/install/launch, onboarding, permission denial, UI state restoration, process restart, data-reset behavior. | Xcode/iOS Simulator versions, simulator model/runtime, app build ID, case results. | Blocked: macOS/Xcode and app absent. |
+| iOS Simulator | Clean build/install/launch, onboarding, permission denial, UI state restoration, process restart, data-reset behavior. | Xcode/iOS Simulator versions, simulator model/runtime, app build ID, case results. | Blocked: generated iOS host, macOS, and Xcode are unavailable to this agent. |
 | iOS Simulator | Bridge error paths and malformed frame bounds using controlled test input. | Simulator-only integration results; no CoreBluetooth/physical radio claim. | Blocked. |
 | Physical Android pair | Advertise/scan, peer identity separately from discovery, connect/disconnect, text-frame exchange, MTU/fragment boundaries, loss/retry, screen off, process death, permission revocation, reconnect. | Exact device models, OEM, OS/API, app SHA, permissions, distance/topology, repetitions, event timestamps, observed delivery state, battery/thermal context. | Blocked: no native adapter or devices. |
 | Physical iOS pair | CoreBluetooth discovery/connection/send/receive; foreground/background transitions, screen lock, app suspension/termination, restoration/reconnect limits, permission denial/revocation. | Exact device models and iOS version, Xcode/app build SHA, lifecycle case outcomes, connection and delivery records. | Blocked. |

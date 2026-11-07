@@ -1,20 +1,20 @@
 # Mobile toolchain readiness — Windows Android and macOS/iOS
 
-**Status:** Setup and verification instructions are prepared; **the mobile toolchains are not installed/verified on this host and no mobile build has run.**
-**Observed agent host:** Linux `6.1.158+` x86_64; `dart`, `flutter`, `java`, `gradle`, `adb`, `sdkmanager`, `xcodebuild`, `xcrun`, and `pod` are unavailable. There is no Flutter app or Android/iOS platform project.
-**Source snapshot:** `a1f1916981c2244a2f8664573b66afbd5a2659b4`.
+**Current status (2026-11-08):** Shared Flutter UI source/tests exist under `mobile/app`; Android/iOS platform hosts and `pubspec.lock` have not been generated, and no mobile build/test has run.
+**Observed agent host:** Linux `6.1.158+` x86_64; `dart`, `flutter`, `java`, `gradle`, `adb`, `sdkmanager`, `xcodebuild`, `xcrun`, and `pod` are unavailable. The owner reports Flutter 3.47.8/Dart 3.13.7, but this agent has not run that Windows environment.
+**Historical source snapshot:** `a1f1916981c2244a2f8664573b66afbd5a2659b4` (pre-G1 source).
 
 For the concise Windows 11 G1 sequence and read-only preflight, see [WINDOWS-G1-QUICKSTART.md](../../docs/mobile/WINDOWS-G1-QUICKSTART.md) and [`windows-g1-preflight.ps1`](../../tool/mobile/windows-g1-preflight.ps1). The preflight has not run on Windows in this workspace.
 
 ## 1. Version pins and owner choices
 
-The only existing mobile-adjacent SDK constraint is `sim/mesh_sim/pubspec.yaml`: `sdk: ^3.4.0`, meaning Dart `>=3.4.0 <4.0.0`. This is a simulator constraint, not a Flutter app pin. Flutter bundles its own Dart SDK; the Flutter app must use the Dart version bundled by its owner-approved Flutter release.
+The existing `sim/mesh_sim/pubspec.yaml` constraint `sdk: ^3.4.0` is for the separate simulator. The new app declares `sdk: ^3.13.7` in `mobile/app/pubspec.yaml`, matching the owner-reported Flutter 3.47.8 / bundled Dart 3.13.7. The agent has not independently verified that toolchain. Flutter must supply the app’s Dart SDK.
 
-No Flutter release, Flutter/Dart pair, Android API range, JDK/AGP/Gradle pair, Android build-tools version, iOS deployment target, Xcode/macOS pair, plugin set, or physical-device models are present or approved. Do not substitute arbitrary “latest stable” versions and call them reproducible. Select and record the exact matrix before creating the Flutter shell:
+Android API range, JDK/AGP/Gradle pair, Android build-tools version, iOS deployment target, Xcode/macOS pair, and physical-device models are not selected or verified. Do not substitute arbitrary “latest stable” versions and call them reproducible. Select and record the remaining platform matrix before native-host builds:
 
 | Decision | Must be recorded before build |
 |---|---|
-| Flutter/Dart | Flutter exact stable tag and Git commit; bundled Dart version from `flutter --version --machine`; dependency lockfile. |
+| Flutter/Dart | Owner reports Flutter 3.47.8, tag commit `737ba8f885dc774b53b442759999a312c9461e4e`, bundled Dart 3.13.7; verify with `flutter --version --machine` on the build host and commit `pubspec.lock`. |
 | Windows/Android | Windows edition/build; Android Studio or command-line tools release; JDK; AGP; Gradle wrapper; `minSdk`, `compileSdk`, `targetSdk`, build-tools, emulator image/API. Check current Google Play target-API policy again at release time. |
 | macOS/iOS | macOS version/build; Xcode version/build; iOS SDK; app deployment target; simulator runtime; CocoaPods version if a selected plugin requires it. |
 | Devices | Exact Android/iPhone models and OS builds, debug-signing/provisioning approach, and supported OS boundary. |
@@ -234,8 +234,8 @@ An Android emulator and iOS Simulator are still required for their respective bu
 
 - Windows Dart/Flutter/Android setup instructions and commands are documented, but none were run here.
 - iOS/macOS/Xcode prerequisites and commands are documented, but none were run here.
-- Exact mobile versions remain **blocked on owner approval**; the Dart simulator constraint `^3.4.0` is not a Flutter pin.
-- No Flutter scaffold, Android project, iOS project, install, build, simulator launch, or physical-device test exists or passed.
+- The owner reports Flutter 3.47.8/Dart 3.13.7; Android JDK/AGP/Gradle/SDK and macOS/Xcode/Simulator matrix details remain unverified.
+- Flutter source/tests exist, but generated Android/iOS hosts, `pubspec.lock`, app install/build, simulator launch, and physical-device tests have not been produced or passed.
 - The current browser build and TypeScript simulator tests are not mobile evidence. Current full TypeScript status remains 517/527 with ten timeouts; see [TIMEOUT-ROOT-CAUSE.md](TIMEOUT-ROOT-CAUSE.md).
 
 For the earlier toolchain assessment, see [TOOLCHAIN-REQUIREMENTS.md](TOOLCHAIN-REQUIREMENTS.md). For the proposed minimum app foundation and build gates, see [G1-IMPLEMENTATION-PLAN.md](G1-IMPLEMENTATION-PLAN.md).

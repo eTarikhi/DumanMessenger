@@ -4,7 +4,7 @@
 
 ## 1. System under consideration
 
-A future Flutter messenger for Android and iOS, operating over an intermittent, offline-capable mesh. The first useful slice is one-to-one text messaging with a verified device contact, maintained cryptographic provider, durable ratchet/replay state, and a platform transport. The repository currently has no Flutter application, native transport, mobile key store, or real-device protocol evidence. `src/` is a browser simulator/Node reference; `sim/mesh_sim/` is a pure-Dart simulator. Neither represents a production handset.
+A future Flutter messenger for Android and iOS, operating over an intermittent, offline-capable mesh. The first useful slice is one-to-one text messaging with a verified device contact, maintained cryptographic provider, durable ratchet/replay state, and a platform transport. The repository now has a source-only Flutter UI shell; it has no native transport, mobile key store, messaging/identity implementation, or real-device protocol evidence. `src/` is a browser simulator/Node reference; `sim/mesh_sim/` is a pure-Dart simulator. Neither the simulators nor the UI shell represent a production handset.
 
 Proposed security boundary:
 
@@ -102,7 +102,7 @@ Severity is provisional and reflects design review, not a quantitative risk asse
 - Current Node reference keys are ordinary buffers with best-effort wipe; there is no mobile keystore, durable ratchet store, native BLE, or device integration.
 - The symmetric reference ratchet is not evidence of a production ratchet or post-compromise recovery.
 
-Source-level observations are not proof of an exploit, nor proof that a production app exists. The current repository contains no Flutter/mobile app.
+Source-level observations are not proof of an exploit, nor proof that a production app exists. The current repository has only a source-level Flutter UI shell; no production messaging, identity, crypto, key storage, native transport, or handset evidence is present.
 
 ## 7. Out of scope and explicit non-guarantees
 

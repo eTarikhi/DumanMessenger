@@ -1,13 +1,15 @@
 # Mobile release readiness
 
-**Status as of 2026-11-05: NOT READY — mobile app not started.** This is a gate checklist, not a store submission or release authorization. There is no Flutter app, Android/iOS project, native transport, production key store, or handset build in the current repository. See [baseline](../../reports/mobile/BASELINE.md), [implementation status](../../reports/mobile/IMPLEMENTATION-STATUS.md), and [device matrix](../../reports/mobile/DEVICE-TEST-MATRIX.md).
+**Historical status as of 2026-11-05: NOT READY — mobile app not started.** This is a gate checklist, not a store submission or release authorization.
+
+**Current update (2026-11-08):** Flutter UI source and widget tests now exist, but no Android/iOS host, lockfile, Flutter test/build, emulator/simulator, or physical-device evidence exists. There is still no native transport, production key store, or handset build. The owner’s standalone Flutter APK smoke test is not a DumanMessenger build. See [implementation status](../../reports/mobile/IMPLEMENTATION-STATUS.md) and [device matrix](../../reports/mobile/DEVICE-TEST-MATRIX.md).
 
 ## Current gate ledger
 
 | Gate | Minimum evidence | Status |
 |---|---|---|
 | G0 — source, environment, architecture, baseline evidence | Record current source boundary, local tests, blocked tools, reuse limits, and architecture/security risks. | **Evidence recorded; not a clean pass.** The TypeScript suite has 10 failures at the unchanged 5,000 ms test timeout; Dart tests and mobile tools are unavailable. See [TEST-RESULTS.md](../../reports/mobile/TEST-RESULTS.md). |
-| G1 — platform build and launch | Build, install, and launch Android and iOS apps independently, with source/app SHA and exact environment. | **NOT ACHIEVED.** Neither project exists; no Android or Apple toolchain was available. Do not infer G1 from the browser simulator or Dart package. |
+| G1 — platform build and launch | Build, install, and launch Android and iOS apps independently, with source/app SHA and exact environment. | **NOT ACHIEVED.** Shared source/tests exist, but generated platform hosts, lockfile, and build/install/launch evidence are pending. Do not infer G1 from the browser simulator or standalone APK. |
 | G2 — minimum real messaging and security | Reviewed identity/exchange-key binding, trust/SAS, maintained crypto provider, encrypted durable store, crash/replay safety, native BLE path, end-to-end text acceptance. | **NOT STARTED.** No real-device messaging or production security claim. |
 | G3 — device/interoperability readiness | Android and iOS emulator/simulator paths plus physical-device Android, physical-device iOS, and cross-platform Android↔iOS tests, reported separately. | **NOT STARTED.** See [DEVICE-TEST-MATRIX.md](../../reports/mobile/DEVICE-TEST-MATRIX.md). |
 | G4 — store and operational readiness | Owner-approved signing, privacy/data-safety material, support/incident ownership, SBOM/license review, upgrade/rollback, release checklist, and store-specific validation. | **NOT STARTED.** No signing/account state or release pipeline was assessed. No credentials were requested or stored. |

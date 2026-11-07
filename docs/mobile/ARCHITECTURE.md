@@ -1,6 +1,6 @@
 # Proposed Flutter / Android / iOS architecture
 
-**Status:** Assessment and proposal only. No Flutter app, native adapter, or mobile dependency is present in the current checkout. Nothing in this document is evidence of a working handset feature. The existing simulator is to remain a separate product and regression baseline.
+**Status (2026-11-08):** A shared Flutter UI foundation and widget tests now exist under `mobile/app`; the Flutter-generated Android/iOS hosts and `pubspec.lock` are not present yet. No native adapter or messaging feature exists. Nothing in this document is evidence of a working handset feature or a completed build. The existing simulator remains a separate product and regression baseline.
 
 ## 1. Design goals and boundaries
 
@@ -13,14 +13,14 @@
 
 ## 2. Suggested workspace boundaries
 
-Suggested layout (not created in this milestone):
+Suggested full workspace (only the Flutter shell source/test subset is present):
 
 ```text
 mobile/
-  app/                         Flutter application
-    lib/                       presentation, application state, use cases
-    android/                   Kotlin host / platform adapter
-    ios/                       Swift host / platform adapter
+  app/                         Flutter shell source/tests present
+    lib/                       onboarding, empty conversations, diagnostics, settings
+    android/                   not generated yet; future Kotlin host / adapter
+    ios/                       not generated yet; future Swift host / adapter
   packages/
     mesh_core/                 pure-Dart domain types and orchestration
     mesh_transport/            production transport contract and frame codec
@@ -96,7 +96,7 @@ Mobile work proceeds in parallel with a simulator-preservation track; neither su
 | iOS | macOS with compatible Xcode/iOS SDK, Flutter toolchain, and iOS Simulator runtime; CocoaPods only if selected dependencies require it; a physical iPhone and owner-controlled development signing for device tests. No iOS build can be produced from this Linux host. App Store publication is not authorized. |
 | Shared | Pinned dependency lockfiles; lint/unit/widget/integration tests; deterministic test fixtures; no production credentials in repo/chat; a physical Android+iOS pair for cross-platform BLE; synthetic test identities/messages only. Emulator/simulator evidence and physical-device evidence must be reported in separate columns. |
 
-The present environment has Node/npm only for the runnable baseline; Dart, Flutter, Java, Gradle, Android SDK tools, Xcode tools, and CocoaPods are absent. See [BASELINE.md](../../reports/mobile/BASELINE.md).
+The agent’s Linux environment has Node/npm for the runnable baseline but lacks Dart, Flutter, Java, Gradle, Android SDK tools, Xcode tools, and CocoaPods. The owner reports a separate Windows Flutter/Android setup; it has not been used to build this repository in this session. See [BASELINE.md](../../reports/mobile/BASELINE.md) and [WINDOWS-G1-QUICKSTART.md](WINDOWS-G1-QUICKSTART.md).
 
 ## 6. Acceptance terminology
 
@@ -105,15 +105,12 @@ The present environment has Node/npm only for the runnable baseline; Dart, Flutt
 - **Physical-device evidence:** named devices/OS versions with test procedure and observed results. Required for radio interoperability, background restrictions, and battery/thermal claims.
 - **G1:** not achieved until independently recorded Android and iOS app builds **and launches** are verified. A browser build, Dart simulator test, source scaffold, or single-platform build is not G1.
 
-## 7. First reviewable milestone completed
+## 7. Historical first reviewable milestone (2026-11-05)
 
-This milestone is documentation-only because neither Flutter/Dart nor native build toolchains are available here. Exact files created:
+The earlier G0/M3 milestone was documentation-only because its Linux agent had no Flutter/Dart or native build toolchains. Exact files and historical verification are listed in `reports/mobile/IMPLEMENTATION-STATUS.md` and `reports/mobile/TEST-RESULTS.md`. No simulator, protocol, timeout, or routing behavior was changed.
 
-- `reports/mobile/BASELINE.md`
-- `reports/mobile/IMPLEMENTATION-STATUS.md`
-- `reports/mobile/TEST-RESULTS.md`
-- `reports/mobile/DEVICE-TEST-MATRIX.md`
-- `docs/mobile/ARCHITECTURE.md`
-- `docs/mobile/RELEASE-READINESS.md`
+## 8. G1 shared-source update (2026-11-08)
 
-Feasible local verification is recorded in `reports/mobile/TEST-RESULTS.md`; no simulator, protocol, source, timeout, or routing behavior was changed. The next code milestone is M1/M2 after review and an SDK-enabled Android host plus macOS/Xcode access.
+The current app contains Flutter-only presentation code: onboarding with explicit limitations, a genuine empty conversations state, local diagnostics limited to target-platform/build-mode, session-only theme settings, named navigation, and widget tests for screens/navigation. The app adds no runtime package, network client, storage, permission flow, identity, key, cryptography, BLE/Wi-Fi transport, or mesh behavior.
+
+The current agent cannot run Flutter/Dart/Java/Android commands. The Android/iOS native hosts and `pubspec.lock` are not generated or checked in yet. The owner-reported Flutter 3.47.8/Dart 3.13.7 environment and standalone APK do not verify this repository. Use the commands and safe host-generation procedure in [WINDOWS-G1-QUICKSTART.md](WINDOWS-G1-QUICKSTART.md); G1 remains unvalidated until actual `flutter analyze`, `flutter test`, Android build/emulator, and separate macOS/Xcode iOS build/simulator evidence are recorded.

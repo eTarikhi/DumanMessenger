@@ -101,7 +101,7 @@ Safe migration proposal:
 4. If the old signing key is lost, create a new device identity and verify it out of band. Never silently recover with an unauthenticated fallback.
 5. Add versioned vectors and negative tests for v2 only after owner approval; preserve old vectors as historical compatibility fixtures unless an explicit versioned migration is approved.
 
-There is no Flutter app or persistent mobile contact database in the current checkout, so no actual migration has run.
+The source-only G1 Flutter shell has no identity or persistent contact database, so no actual migration has run.
 
 ## 7. Open owner decisions
 
