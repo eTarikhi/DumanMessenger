@@ -36,9 +36,8 @@ class OnboardingScreen extends StatelessWidget {
             const SizedBox(height: 28),
             Text(
               'Welcome to Duman Messenger',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+              style: Theme.of(context).textTheme.headlineMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             Text(
@@ -70,9 +69,8 @@ class OnboardingScreen extends StatelessWidget {
             FilledButton.icon(
               key: const Key('onboarding-continue'),
               onPressed: () {
-                Navigator.of(context).pushReplacementNamed(
-                  AppRoutes.conversations,
-                );
+                Navigator.of(context)
+                    .pushReplacementNamed(AppRoutes.conversations);
               },
               icon: const Icon(Icons.arrow_forward),
               label: const Text('Continue'),
@@ -85,7 +83,7 @@ class OnboardingScreen extends StatelessWidget {
 }
 
 class _ScopeItem extends StatelessWidget {
-  const _ScopeItem({super.key, required this.icon, required this.text});
+  const _ScopeItem({required this.icon, required this.text});
 
   final IconData icon;
   final String text;

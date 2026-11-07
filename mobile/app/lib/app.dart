@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+// import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app_routes.dart';
@@ -39,9 +39,9 @@ class _DumanMessengerAppState extends State<DumanMessengerApp> {
             AppRoutes.onboarding: (_) => const OnboardingScreen(),
             AppRoutes.conversations: (_) => const ConversationListScreen(),
             AppRoutes.settings: (_) => SettingsScreen(
-                  themeMode: _themeMode,
-                  onThemeModeChanged: (mode) => _themeMode.value = mode,
-                ),
+              themeMode: _themeMode,
+              onThemeModeChanged: (mode) => _themeMode.value = mode,
+            ),
             AppRoutes.diagnostics: (_) => const DiagnosticsScreen(),
           },
         );

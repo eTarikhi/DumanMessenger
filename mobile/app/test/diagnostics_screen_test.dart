@@ -20,10 +20,7 @@ void main() {
     expect(find.text('Android'), findsOneWidget);
     expect(find.text('Build mode'), findsOneWidget);
     expect(find.text('Debug'), findsOneWidget);
-    expect(
-      find.textContaining('No telemetry, messages'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('No telemetry, messages'), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
     expect(find.byType(ListTile), findsNothing);
   });

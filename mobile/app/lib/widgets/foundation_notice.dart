@@ -18,10 +18,9 @@ class FoundationNotice extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Foundation preview: messaging and mesh are unavailable.'
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: colors.onSecondaryContainer,
-                    ),
+                'Foundation preview: messaging and mesh are unavailable.',
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: colors.onSecondaryContainer),
               ),
             ),
           ],

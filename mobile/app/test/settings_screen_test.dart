@@ -11,10 +11,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Appearance'), findsOneWidget);
-    expect(
-      find.textContaining('resets when the app closes'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('resets when the app closes'), findsOneWidget);
     expect(
       tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
       ThemeMode.system,

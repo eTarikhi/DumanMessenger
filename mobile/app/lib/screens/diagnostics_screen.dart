@@ -61,9 +61,8 @@ class DiagnosticsScreen extends StatelessWidget {
           children: [
             Text(
               'App environment',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             Text(
@@ -82,7 +81,7 @@ class DiagnosticsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'No telemetry, messages, device IDs, or keys are collected.'
+              'No telemetry, messages, device IDs, or keys are collected.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ],
@@ -93,7 +92,7 @@ class DiagnosticsScreen extends StatelessWidget {
 }
 
 class _DiagnosticRow extends StatelessWidget {
-  const _DiagnosticRow({super.key, required this.label, required this.value});
+  const _DiagnosticRow({required this.label, required this.value});
 
   final String label;
   final String value;
