@@ -68,7 +68,7 @@ class DiagnosticsScreen extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'This screen shows app environment details and links to the local '
-              'BLE prerequisite diagnostic.',
+              'BLE prerequisite diagnostic and foreground discovery experiment.',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
             const SizedBox(height: 20),
@@ -90,6 +90,17 @@ class DiagnosticsScreen extends StatelessWidget {
                     .pushNamed(AppRoutes.bleDiagnostics),
                 icon: const Icon(Icons.bluetooth),
                 label: const Text('Android BLE diagnostic'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                key: const Key('diagnostics-open-ble-discovery'),
+                onPressed: () => Navigator.of(context)
+                    .pushNamed(AppRoutes.bleDiscovery),
+                icon: const Icon(Icons.bluetooth_searching),
+                label: const Text('Foreground BLE discovery'),
               ),
             ),
             const SizedBox(height: 16),

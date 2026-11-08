@@ -1,6 +1,8 @@
 # Windows 11 quickstart for DumanMessenger G1 and G2-A
 
-**Purpose:** Validate the checked-in G1 Flutter shell and fresh G2-A Android BLE diagnostic source on the owner’s Windows 11 x64 machine. The Flutter app, widget tests, `pubspec.lock`, and Android host/Gradle files are present under `mobile/app`; G2-A reports prerequisites only and performs no BLE radio operation. Flutter analysis/tests, Android builds, and device validation remain pending. These instructions are not evidence that this repository has built. The owner reports Flutter 3.47.8/Dart 3.13.7 and a successful standalone debug APK smoke build; that is not a DumanMessenger build. The Agent could not run Flutter/Dart/Java/Android tooling or tests. Use `tool/mobile/windows-g1-preflight.ps1` after setup; it is read-only.
+**Purpose:** Validate the checked-in G1 Flutter shell and fresh G2-A Android BLE diagnostic source on the owner’s Windows 11 x64 machine. The Flutter app, widget tests, `pubspec.lock`, and Android host/Gradle files are present under `mobile/app`; G2-A reports prerequisites only and performs no BLE radio operation. Flutter analysis/tests, Android builds, and device validation remain pending. These instructions are not evidence that this repository has built. The owner reports Flutter 3.47.8/Dart 3.13.7 and a successful standalone debug APK smoke build; that is not a DumanMessenger build. Use `tool/mobile/windows-g1-preflight.ps1` after setup; it is read-only.
+
+G2-B is a separate, fresh foreground discovery implementation that explicitly authorizes service-UUID advertising and filtered scanning; it supersedes G2-A's no-scan/no-advertise restriction only for that scope. For its Local PC PowerShell commands, permission matrix, and mandatory physical-device evidence, use [G2-B-ACCEPTANCE-CHECKLIST.md](G2-B-ACCEPTANCE-CHECKLIST.md). This G1/G2-A quickstart is not G2-B acceptance evidence.
 
 ## 1. Install free tools
 

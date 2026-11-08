@@ -4,4 +4,5 @@ abstract final class AppRoutes {
   static const settings = '/settings';
   static const diagnostics = '/diagnostics';
   static const bleDiagnostics = '/diagnostics/ble';
+  static const bleDiscovery = '/diagnostics/ble-discovery';
 }

@@ -3,16 +3,23 @@ import 'package:flutter/material.dart';
 
 import 'app_routes.dart';
 import 'ble/ble_diagnostic_bridge.dart';
+import 'ble/ble_discovery_bridge.dart';
 import 'screens/ble_diagnostic_screen.dart';
+import 'screens/ble_discovery_screen.dart';
 import 'screens/conversation_list_screen.dart';
 import 'screens/diagnostics_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/settings_screen.dart';
 
 class DumanMessengerApp extends StatefulWidget {
-  const DumanMessengerApp({super.key, this.bleDiagnosticApi});
+  const DumanMessengerApp({
+    super.key,
+    this.bleDiagnosticApi,
+    this.bleDiscoveryApi,
+  });
 
   final BleDiagnosticApi? bleDiagnosticApi;
+  final BleDiscoveryApi? bleDiscoveryApi;
 
   @override
   State<DumanMessengerApp> createState() => _DumanMessengerAppState();
@@ -49,6 +56,9 @@ class _DumanMessengerAppState extends State<DumanMessengerApp> {
             AppRoutes.diagnostics: (_) => const DiagnosticsScreen(),
             AppRoutes.bleDiagnostics: (_) => BleDiagnosticScreen(
               bridge: widget.bleDiagnosticApi,
+            ),
+            AppRoutes.bleDiscovery: (_) => BleDiscoveryScreen(
+              bridge: widget.bleDiscoveryApi,
             ),
           },
         );

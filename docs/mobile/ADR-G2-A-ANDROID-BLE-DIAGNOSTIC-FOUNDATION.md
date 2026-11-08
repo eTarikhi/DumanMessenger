@@ -2,7 +2,9 @@
 
 - **Status:** Decision documented; fresh source implementation is awaiting Local PC validation.
 - **Baseline:** G1 commit `58126a9fa0a7628ae04610c1394b7ecfc678d848`.
-- **Scope:** Android-only BLE capability and permission diagnostics. This ADR does not authorize a BLE transport or any radio operation.
+- **Scope:** Android-only BLE capability and permission diagnostics. This ADR does not authorize a BLE transport or any radio operation within G2-A.
+
+> **Subsequent milestone:** G2-B separately authorizes explicitly user-started, foreground-only advertising and service-UUID-filtered scanning. That decision supersedes G2-A's no-scan/no-advertise restriction only for G2-B; the G2-A diagnostic itself remains radio-operation-free. See [ADR-G2-B-FOREGROUND-BLE-DISCOVERY.md](ADR-G2-B-FOREGROUND-BLE-DISCOVERY.md).
 
 ## Context
 
