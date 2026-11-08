@@ -1,4 +1,5 @@
 // import 'package:duman_messenger/app.dart';
+import 'package:duman_messenger/ble/ble_diagnostic_bridge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -6,7 +7,10 @@ import 'test_helpers.dart';
 
 void main() {
   testWidgets('navigates between screens and back', (tester) async {
-    await showConversations(tester);
+    await showConversations(
+      tester,
+      bleDiagnosticApi: BleDiagnosticBridge(isAndroid: false),
+    );
 
     await tester.tap(find.byKey(const Key('open-settings')));
     await tester.pumpAndSettle();
@@ -21,6 +25,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('BLE diagnostic'), findsOneWidget);
     expect(find.text('Android BLE prerequisites'), findsOneWidget);
+    expect(find.text('Unsupported platform'), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
