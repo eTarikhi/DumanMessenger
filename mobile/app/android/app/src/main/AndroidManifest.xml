@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Bluetooth hardware is diagnostic-only, not an installation requirement. -->
+    <!-- Bluetooth and BLE features are optional, not installation requirements. -->
     <uses-feature
         android:name="android.hardware.bluetooth"
         android:required="false" />
@@ -14,12 +14,14 @@
     <uses-permission
         android:name="android.permission.BLUETOOTH_ADMIN"
         android:maxSdkVersion="30" />
-    <!-- Legacy BLE compatibility through API 30; G2-A does not access location. -->
+    <!-- Android 6–11 requests this only for user-started foreground BLE scanning;
+         the app does not read or store location. -->
     <uses-permission
         android:name="android.permission.ACCESS_FINE_LOCATION"
         android:maxSdkVersion="30" />
 
-    <!-- Declared for API-aware diagnostics; G2-A does not scan or advertise. -->
+    <!-- G2-B requests SCAN for scanning and ADVERTISE for advertising separately.
+         CONNECT remains declared for the G2-A diagnostic flow, not G2-B discovery. -->
     <uses-permission
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
