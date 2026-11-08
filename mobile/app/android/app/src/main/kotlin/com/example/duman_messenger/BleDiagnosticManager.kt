@@ -275,6 +275,13 @@ internal class BleDiagnosticManager(private val activity: Activity) :
                 requiredForDiagnostics = legacy && hasBleHardware,
                 runtime = false,
             ),
+            // The manifest entry is required through API 30 but does not gate G2-A's no-scan status.
+            permissionReport(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                applicable = legacy,
+                requiredForDiagnostics = false,
+                runtime = legacy && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M,
+            ),
         )
     }
 

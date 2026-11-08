@@ -391,6 +391,9 @@ class _PermissionTile extends StatelessWidget {
         'Scanning is outside G2-A; this permission is not requested here.',
       'android.permission.BLUETOOTH_ADVERTISE' =>
         'Advertising is outside G2-A; this permission is not requested here.',
+      'android.permission.ACCESS_FINE_LOCATION' =>
+        'Declared through Android 11 (API 30) for legacy BLE compatibility; '
+            'G2-A does not request or use location.',
       _ => permission.requiredForDiagnostics
           ? 'Declared for local Android Bluetooth diagnostics.'
           : 'Not needed by the G2-A diagnostic scope.',
@@ -426,6 +429,7 @@ class _PermissionTile extends StatelessWidget {
         'android.permission.BLUETOOTH_CONNECT' => 'Bluetooth connect',
         'android.permission.BLUETOOTH' => 'Bluetooth (legacy)',
         'android.permission.BLUETOOTH_ADMIN' => 'Bluetooth admin (legacy)',
+        'android.permission.ACCESS_FINE_LOCATION' => 'Location (fine, legacy)',
         _ => permission,
       };
 }

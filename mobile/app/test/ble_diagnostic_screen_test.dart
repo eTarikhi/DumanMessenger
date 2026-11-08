@@ -77,6 +77,44 @@ void main() {
     expect(api.permissionRequestCount, 0);
   });
 
+  testWidgets('reports legacy fine location without requesting it',
+      (tester) async {
+    final api = _FakeBleDiagnosticApi(
+      initialStatus: _status(
+        BleDiagnosticState.ready,
+        apiLevel: 30,
+        additionalPermissions: <BlePermissionStatus>[
+          BlePermissionStatus(
+            name: 'android.permission.ACCESS_FINE_LOCATION',
+            state: BlePermissionState.denied,
+            requiredForDiagnostics: false,
+            isRuntime: true,
+            canRequestAgain: false,
+            shouldShowRationale: false,
+          ),
+        ],
+      ),
+    );
+    addTearDown(api.close);
+
+    await tester.pumpWidget(
+      MaterialApp(home: BleDiagnosticScreen(bridge: api)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Location (fine, legacy)'), findsOneWidget);
+    expect(
+      find.textContaining('Not granted (not requested by G2-A)'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('G2-A does not request or use location.'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('ble-request-permissions')), findsNothing);
+    expect(api.permissionRequestCount, 0);
+  });
+
   testWidgets('cancels the native status stream when disposed', (tester) async {
     final api = _FakeBleDiagnosticApi(
       initialStatus: _status(BleDiagnosticState.ready),
@@ -99,11 +137,14 @@ void main() {
 BleDiagnosticStatus _status(
   BleDiagnosticState state, {
   bool connectPermissionCanRequestAgain = false,
+  int apiLevel = 35,
+  List<BlePermissionStatus> additionalPermissions =
+      const <BlePermissionStatus>[],
 }) {
   final permissionDenied = state == BleDiagnosticState.permissionsDenied;
   return BleDiagnosticStatus(
     state: state,
-    apiLevel: 35,
+    apiLevel: apiLevel,
     bleHardwareSupported: true,
     bluetoothManagerAvailable: true,
     adapterAvailable: true,
@@ -113,16 +154,36 @@ BleDiagnosticStatus _status(
       _ => null,
     },
     permissions: <BlePermissionStatus>[
-      BlePermissionStatus(
-        name: 'android.permission.BLUETOOTH_CONNECT',
-        state: permissionDenied
-            ? BlePermissionState.denied
-            : BlePermissionState.granted,
-        requiredForDiagnostics: true,
-        isRuntime: true,
-        canRequestAgain: connectPermissionCanRequestAgain,
-        shouldShowRationale: connectPermissionCanRequestAgain,
-      ),
+      if (apiLevel >= 31)
+        BlePermissionStatus(
+          name: 'android.permission.BLUETOOTH_CONNECT',
+          state: permissionDenied
+              ? BlePermissionState.denied
+              : BlePermissionState.granted,
+          requiredForDiagnostics: true,
+          isRuntime: true,
+          canRequestAgain: connectPermissionCanRequestAgain,
+          shouldShowRationale: connectPermissionCanRequestAgain,
+        )
+      else ...<BlePermissionStatus>[
+        BlePermissionStatus(
+          name: 'android.permission.BLUETOOTH',
+          state: BlePermissionState.granted,
+          requiredForDiagnostics: true,
+          isRuntime: false,
+          canRequestAgain: false,
+          shouldShowRationale: false,
+        ),
+        BlePermissionStatus(
+          name: 'android.permission.BLUETOOTH_ADMIN',
+          state: BlePermissionState.granted,
+          requiredForDiagnostics: true,
+          isRuntime: false,
+          canRequestAgain: false,
+          shouldShowRationale: false,
+        ),
+      ],
+      ...additionalPermissions,
     ],
     advertisingCapability: BleAdvertisingCapability.unknown,
     reason: switch (state) {

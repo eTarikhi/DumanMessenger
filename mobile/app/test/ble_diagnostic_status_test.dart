@@ -120,6 +120,14 @@ void main() {
             'requiredForDiagnostics': false,
             'runtime': false,
           },
+          <String, Object?>{
+            'name': 'android.permission.ACCESS_FINE_LOCATION',
+            'state': 'denied',
+            'requiredForDiagnostics': false,
+            'runtime': true,
+            'canRequestAgain': false,
+            'shouldShowRationale': false,
+          },
         ],
         'advertisingCapability': 'supported',
       });
@@ -130,6 +138,12 @@ void main() {
         status.permission('android.permission.BLUETOOTH_CONNECT')?.state,
         BlePermissionState.notRequired,
       );
+      final fineLocation =
+          status.permission('android.permission.ACCESS_FINE_LOCATION');
+      expect(fineLocation?.state, BlePermissionState.denied);
+      expect(fineLocation?.isRuntime, isTrue);
+      expect(fineLocation?.requiredForDiagnostics, isFalse);
+      expect(status.canRequestRequiredPermissions, isFalse);
       expect(status.advertisingCapability, BleAdvertisingCapability.supported);
     });
 

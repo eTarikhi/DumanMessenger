@@ -14,6 +14,10 @@
     <uses-permission
         android:name="android.permission.BLUETOOTH_ADMIN"
         android:maxSdkVersion="30" />
+    <!-- Legacy BLE compatibility through API 30; G2-A does not access location. -->
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
 
     <!-- Declared for API-aware diagnostics; G2-A does not scan or advertise. -->
     <uses-permission
