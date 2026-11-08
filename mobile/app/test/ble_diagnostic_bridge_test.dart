@@ -80,8 +80,10 @@ void main() {
     messenger.setMockStreamHandler(
       _eventChannel,
       MockStreamHandler.inline(
-        onListen: (_, events) =>
-            events.error('diagnostic_failure', 'Unavailable'),
+        onListen: (_, events) => events.error(
+          code: 'diagnostic_failure',
+          message: 'Unavailable',
+        ),
       ),
     );
     final bridge = BleDiagnosticBridge(

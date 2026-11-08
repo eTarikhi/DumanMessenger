@@ -402,7 +402,7 @@ class _PermissionTile extends StatelessWidget {
             : 'Normal permission';
     final subtitle = <String>[
       stateLabel,
-      if (typeLabel != null) typeLabel,
+      ?typeLabel,
       detail,
     ].join('. ');
 
