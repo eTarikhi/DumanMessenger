@@ -1,6 +1,6 @@
 # Proposed Flutter / Android / iOS architecture
 
-**Status (2026-11-08):** A shared Flutter UI foundation and widget tests now exist under `mobile/app`; the Flutter-generated Android/iOS hosts and `pubspec.lock` are not present yet. No native adapter or messaging feature exists. Nothing in this document is evidence of a working handset feature or a completed build. The existing simulator remains a separate product and regression baseline.
+**Status:** Shared Flutter UI source, widget tests, `pubspec.lock`, and an Android host are checked in under `mobile/app`. A fresh G2-A Android BLE diagnostic foundation now reports local prerequisites and handles the required permission flow; it performs no radio operation and has not been validated on Local PC. No iOS host or messaging/transport adapter is present. Nothing in this document is evidence of a working handset feature or a completed build. The existing simulator remains a separate product and regression baseline.
 
 ## 1. Design goals and boundaries
 
@@ -13,14 +13,14 @@
 
 ## 2. Suggested workspace boundaries
 
-Suggested full workspace (only the Flutter shell source/test subset is present):
+Suggested full workspace (the current Flutter shell source/tests and Android host are present; production packages remain proposed):
 
 ```text
 mobile/
-  app/                         Flutter shell source/tests present
-    lib/                       onboarding, empty conversations, diagnostics, settings
-    android/                   not generated yet; future Kotlin host / adapter
-    ios/                       not generated yet; future Swift host / adapter
+  app/                         Flutter shell, tests, lockfile, Android host present
+    lib/                       onboarding, empty conversations, diagnostics, settings, BLE status bridge
+    android/                   checked-in Kotlin host; G2-A capability/permission diagnostics only
+    ios/                        not generated yet; future Swift host / adapter
   packages/
     mesh_core/                 pure-Dart domain types and orchestration
     mesh_transport/            production transport contract and frame codec
@@ -41,7 +41,7 @@ The initial app may keep small Dart packages inside `mobile/app` until the depen
 - **Crypto provider boundary:** operations, not exported private-key bytes, for identity creation, signing, key agreement, authenticated encryption, and secure deletion. Select the implementation only after algorithm/platform compatibility, maintenance, license, FFI, and independent security review. Publish cross-language vectors before interoperability work.
 - **Storage boundary:** encrypted local store with schema/version handling; one atomic transaction for accepting a message, advancing receive/replay state, and recording the message. Commit send sequence/ciphertext before it can be retried. Define backup, rollback, corruption, panic-clear, and data-retention behavior before promising recovery or deletion.
 - **Transport boundary:** Dart facade plus a typed Flutter/native bridge (Pigeon or an equivalently reviewed API is a candidate, not a selected dependency). Native code reports capabilities, permission/lifecycle state, scan events, link events, byte frames, and typed failures. Platform events are untrusted input; every frame is bounded and validated before parsing.
-- **Android host (Kotlin):** owns supported BLE advertising/scanning/GATT roles, runtime permission mapping, connection cancellation, and any foreground-service behavior required by the approved use case. Native code must report OS restrictions; it must not claim a scan or send succeeded merely because a request was queued.
+- **Android host (Kotlin):** future approved adapters may own BLE advertising/scanning/GATT roles, runtime permission mapping, connection cancellation, and any foreground-service behavior required by the approved use case. Native code must report OS restrictions; it must not claim a scan or send succeeded merely because a request was queued. The current G2-A host only reports local capability/permission/adapter state; it performs none of those radio operations.
 - **iOS host (Swift):** owns CoreBluetooth state, permission mapping, supported central/peripheral operations, restoration behavior if approved, and app lifecycle. Background modes are restricted and must be measured; foreground success does not imply screen-off or terminated-app delivery.
 
 No app state-management package, database, crypto plugin, audio package, or radio plugin is selected by this assessment. Re-evaluate candidates against supported OS versions, licensing, maintenance, FFI/build constraints, and an actual integration test before adding a dependency.
@@ -109,8 +109,16 @@ The agent’s Linux environment has Node/npm for the runnable baseline but lacks
 
 The earlier G0/M3 milestone was documentation-only because its Linux agent had no Flutter/Dart or native build toolchains. Exact files and historical verification are listed in `reports/mobile/IMPLEMENTATION-STATUS.md` and `reports/mobile/TEST-RESULTS.md`. No simulator, protocol, timeout, or routing behavior was changed.
 
-## 8. G1 shared-source update (2026-11-08)
+## 8. G1 shared-source baseline
 
-The current app contains Flutter-only presentation code: onboarding with explicit limitations, a genuine empty conversations state, local diagnostics limited to target-platform/build-mode, session-only theme settings, named navigation, and widget tests for screens/navigation. The app adds no runtime package, network client, storage, permission flow, identity, key, cryptography, BLE/Wi-Fi transport, or mesh behavior.
+The G1 baseline established Flutter onboarding with explicit limitations, a genuine empty conversations state, local platform/build-mode diagnostics, session-only theme settings, named navigation, and widget tests. It did not contain a BLE permission flow, identity, keys, cryptography, transport, or mesh behavior. The checked-in Android host and `pubspec.lock` are now part of the source tree; no iOS host is present.
 
-The current agent cannot run Flutter/Dart/Java/Android commands. The Android/iOS native hosts and `pubspec.lock` are not generated or checked in yet. The owner-reported Flutter 3.47.8/Dart 3.13.7 environment and standalone APK do not verify this repository. Use the commands and safe host-generation procedure in [WINDOWS-G1-QUICKSTART.md](WINDOWS-G1-QUICKSTART.md); G1 remains unvalidated until actual `flutter analyze`, `flutter test`, Android build/emulator, and separate macOS/Xcode iOS build/simulator evidence are recorded.
+The Agent cannot run Flutter/Dart/Java/Android commands. The owner-reported Flutter 3.47.8/Dart 3.13.7 environment and standalone APK do not verify this repository. Use [WINDOWS-G1-QUICKSTART.md](WINDOWS-G1-QUICKSTART.md) for owner-side setup and validation. G1 device/build acceptance remains separate from G2-A source completion.
+
+## 9. G2-A fresh Android BLE diagnostic foundation
+
+G2-A was implemented fresh from G1 commit `58126a9fa0a7628ae04610c1394b7ecfc678d848`; historical G2-A source was not recovered. The optional BLE hardware feature and API-aware permission declarations support installation on devices without BLE. Android 12+ `BLUETOOTH_CONNECT` is requested only when needed to inspect local adapter state. Scan/advertise permissions are declared for API-aware permission reporting but are not requested; legacy Bluetooth permissions are reported on API 30 and earlier. No location permission is declared or requested.
+
+The Kotlin host reports API level, BLE feature, Bluetooth service/adapter availability, adapter enabled state where permission allows, permission status/rationale/re-requestability, and the adapter's advertising-capability flag. A lifecycle-bound event stream reports status changes while the diagnostic screen is subscribed and the Activity is resumed. Flutter presents typed states and permission guidance in Diagnostics navigation and cancels its event subscription on disposal. See [ADR-G2-A-ANDROID-BLE-DIAGNOSTIC-FOUNDATION.md](ADR-G2-A-ANDROID-BLE-DIAGNOSTIC-FOUNDATION.md) for the decision and validation boundary.
+
+This foundation does not scan, advertise, discover, pair, use GATT, connect, enumerate peers or bonded devices, exchange messages/hello, run background BLE/location work, create identity/keys, read adapter name/MAC, or enable Bluetooth/open settings automatically. The future-reserved UUID `5d1796d0-d8f8-406a-8b3d-1a8684447470` is not used. Simulator, routing, transport, golden-vector, thresholds, and acceptance criteria are unchanged. Model, bridge, UI, and navigation tests are authored but were not run by the Agent. Source-level review is not build/device evidence; the owner must validate on Local PC, and G2-A is not accepted until those gates pass.

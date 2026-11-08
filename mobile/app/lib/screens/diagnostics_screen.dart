@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../app_routes.dart';
 import '../widgets/app_page_body.dart';
 
 class DiagnosticsSnapshot {
@@ -66,7 +67,8 @@ class DiagnosticsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'This screen shows platform and build mode only.',
+              'This screen shows app environment details and links to the local '
+              'BLE prerequisite diagnostic.',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
             const SizedBox(height: 20),
@@ -77,6 +79,17 @@ class DiagnosticsScreen extends StatelessWidget {
                   const Divider(height: 1),
                   _DiagnosticRow(label: 'Build mode', value: details.buildMode),
                 ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                key: const Key('diagnostics-open-ble'),
+                onPressed: () => Navigator.of(context)
+                    .pushNamed(AppRoutes.bleDiagnostics),
+                icon: const Icon(Icons.bluetooth),
+                label: const Text('Android BLE diagnostic'),
               ),
             ),
             const SizedBox(height: 16),

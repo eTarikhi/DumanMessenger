@@ -3,4 +3,5 @@ abstract final class AppRoutes {
   static const conversations = '/conversations';
   static const settings = '/settings';
   static const diagnostics = '/diagnostics';
+  static const bleDiagnostics = '/diagnostics/ble';
 }

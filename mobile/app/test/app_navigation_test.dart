@@ -17,6 +17,15 @@ void main() {
     expect(find.text('Local diagnostics'), findsOneWidget);
     expect(find.text('Platform'), findsOneWidget);
 
+    await tester.tap(find.byKey(const Key('diagnostics-open-ble')));
+    await tester.pumpAndSettle();
+    expect(find.text('BLE diagnostic'), findsOneWidget);
+    expect(find.text('Android BLE prerequisites'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Local diagnostics'), findsOneWidget);
+
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text('Settings'), findsOneWidget);
