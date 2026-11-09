@@ -496,6 +496,29 @@ void main() {
   });
 
 
+  testWidgets('refresh status asks Android to revalidate the current session',
+      (tester) async {
+    final api = _FakeG2cBleApi(
+      _status(state: G2cLinkState.serviceReady, activeRole: 'client'),
+    );
+    addTearDown(api.close);
+
+    await tester.pumpWidget(MaterialApp(home: G2cBleScreen(bridge: api)));
+    await tester.pumpAndSettle();
+    expect(api.refreshCount, 1);
+
+    api.publish(_status(transportOutcome: G2cTransportOutcome.disconnected));
+    await tester.ensureVisible(find.byKey(const Key('g2c-refresh-status')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('g2c-refresh-status')));
+    await tester.pumpAndSettle();
+
+    expect(api.refreshCount, 2);
+    expect(find.text('Disconnected — nothing sent'), findsOneWidget);
+    expect(_sendButton(tester).onPressed, isNull);
+  });
+
+
 }
 
 String _text(WidgetTester tester, Key key) =>
@@ -564,6 +587,7 @@ class _FakeG2cBleApi implements G2cBleApi {
   G2cBleStatus status;
   G2cBleStatus? sendResult;
   int sendCount = 0;
+  int refreshCount = 0;
   final List<String> operations = <String>[];
   final StreamController<G2cBleStatus> _controller =
       StreamController<G2cBleStatus>.broadcast();
@@ -578,7 +602,10 @@ class _FakeG2cBleApi implements G2cBleApi {
   }
 
   @override
-  Future<G2cBleStatus> refresh() async => status;
+  Future<G2cBleStatus> refresh() async {
+    refreshCount++;
+    return status;
+  }
 
   @override
   Future<G2cBleStatus> startDiscovery() async {

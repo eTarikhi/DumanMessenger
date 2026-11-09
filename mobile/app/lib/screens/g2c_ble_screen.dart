@@ -416,6 +416,11 @@ class _G2cBleScreenState extends State<G2cBleScreen> with WidgetsBindingObserver
                       : null,
                   child: const Text('Disconnect'),
                 ),
+                OutlinedButton(
+                  key: const Key('g2c-refresh-status'),
+                  onPressed: canAct ? () => _operation(_bridge.refresh) : null,
+                  child: const Text('Refresh status'),
+                ),
               ]),
             ]),
             const SizedBox(height: 12),
