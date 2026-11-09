@@ -226,10 +226,13 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
             if (adapter == null || !adapter.isEnabled) {
                 result.success(errorStatus("bluetooth_unavailable")); return
             }
-            val newLink = G2cGattLink(appContext) { next ->
-                status = next
-                sink?.success(statusMap())
-            }
+            val newLink = G2cGattLink(
+                appContext,
+                onState = { next ->
+                    status = next
+                    sink?.success(statusMap())
+                },
+            )
             link = newLink
             newLink.connect(device)
             status = newLink.snapshot()
