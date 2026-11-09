@@ -373,6 +373,7 @@ class _G2cBleScreenState extends State<G2cBleScreen> with WidgetsBindingObserver
                 _status.serverClientConnected
                     ? 'Connected — unauthenticated'
                     : 'None',
+                valueKey: const Key('g2c-server-client'),
               ),
               _row(
                 'Notify subscription',
@@ -383,6 +384,11 @@ class _G2cBleScreenState extends State<G2cBleScreen> with WidgetsBindingObserver
               if (serverRoleBlocked)
                 const Text('Server role unavailable: no BLE advertiser on this device.'),
               if (_status.errorCode != null) _error(_status.errorCode!),
+              _row(
+                'Last transition',
+                _status.lastDiagnostic?.label ?? 'None',
+                valueKey: const Key('g2c-last-transition'),
+              ),
               Wrap(spacing: 8, runSpacing: 8, children: [
                 FilledButton.tonal(
                   onPressed: canAct && !_status.serverRunning && !serverRoleBlocked
@@ -411,6 +417,24 @@ class _G2cBleScreenState extends State<G2cBleScreen> with WidgetsBindingObserver
                   child: const Text('Disconnect'),
                 ),
               ]),
+            ]),
+            const SizedBox(height: 12),
+            _section('Connection diagnostics', [
+              const Text(
+                'Bounded event log from Android. A connection is only a transport event: '
+                'service readiness still requires successful discovery and the notifications '
+                'descriptor write. No device addresses, keys, or payload bytes are recorded.',
+              ),
+              const SizedBox(height: 8),
+              if (_status.diagnostics.isEmpty)
+                const Text('No transport events yet.')
+              else
+                ..._status.diagnostics.reversed
+                    .take(8)
+                    .map((event) => _row(
+                          '#${event.sequence}',
+                          event.label,
+                        )),
             ]),
             const SizedBox(height: 12),
             _section('Test frame (unauthenticated)', [

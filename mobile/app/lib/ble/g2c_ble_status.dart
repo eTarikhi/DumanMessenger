@@ -49,6 +49,22 @@ enum G2cTransportOutcome {
   transportFailure,
 }
 
+/// One bounded, privacy-safe native transport event. Codes and small numeric details only:
+/// never device addresses, keys, payload bytes, or scan identifiers.
+class G2cDiagnosticEvent {
+  const G2cDiagnosticEvent({
+    required this.sequence,
+    required this.code,
+    this.detail,
+  });
+
+  final int sequence;
+  final String code;
+  final String? detail;
+
+  String get label => detail == null ? code : '$code ($detail)';
+}
+
 /// Metadata for one actually decoded inbound test frame. The payload is never retained;
 /// only a bounded hex preview of the received bytes is exposed for diagnostics.
 class G2cReceivedFrame {
@@ -97,6 +113,7 @@ class G2cBleStatus {
     this.transportOutcomeDetail,
     this.receivedFrameCount = 0,
     this.lastReceivedFrame,
+    this.diagnostics = const <G2cDiagnosticEvent>[],
   });
 
   final G2cLinkState state;
@@ -133,6 +150,12 @@ class G2cBleStatus {
   final String? transportOutcomeDetail;
   final int receivedFrameCount;
   final G2cReceivedFrame? lastReceivedFrame;
+  /// Oldest first; bounded by the native bridge (at most 24 entries).
+  final List<G2cDiagnosticEvent> diagnostics;
+
+  /// Most recent native transport event, or null before any event.
+  G2cDiagnosticEvent? get lastDiagnostic =>
+      diagnostics.isEmpty ? null : diagnostics.last;
 
   factory G2cBleStatus.fromMap(Map<Object?, Object?> map) {
     final stateText = map['state'];
@@ -232,6 +255,36 @@ class G2cBleStatus {
     if (rawReceivedCount != null && (rawReceivedCount is! int || rawReceivedCount < 0)) {
       throw const FormatException('Invalid G2-C received frame count.');
     }
+    final rawDiagnostics = map['diagnostics'];
+    final diagnostics = <G2cDiagnosticEvent>[];
+    if (rawDiagnostics != null) {
+      if (rawDiagnostics is! List || rawDiagnostics.length > 48) {
+        throw const FormatException('Invalid G2-C diagnostics.');
+      }
+      for (final rawEvent in rawDiagnostics) {
+        if (rawEvent is! Map) {
+          throw const FormatException('Invalid G2-C diagnostic entry.');
+        }
+        final sequence = rawEvent['sequence'];
+        final code = rawEvent['code'];
+        final detail = rawEvent['detail'];
+        final detailText = detail is String ? detail : null;
+        if (sequence is! int ||
+            sequence < 0 ||
+            code is! String ||
+            code.isEmpty ||
+            code.length > 48 ||
+            (detail != null && detailText == null) ||
+            (detailText != null && detailText.length > 64)) {
+          throw const FormatException('Invalid G2-C diagnostic entry.');
+        }
+        diagnostics.add(G2cDiagnosticEvent(
+          sequence: sequence,
+          code: code,
+          detail: detailText,
+        ));
+      }
+    }
     if (rawPermissionNames is! List || rawPermissionNames.any((name) => name is! String)) {
       throw const FormatException('Invalid G2-C permission names.');
     }
@@ -294,6 +347,7 @@ class G2cBleStatus {
           : null,
       receivedFrameCount: rawReceivedCount is int ? rawReceivedCount : 0,
       lastReceivedFrame: lastReceivedFrame,
+      diagnostics: diagnostics,
     );
   }
 

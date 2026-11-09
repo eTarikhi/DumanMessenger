@@ -136,6 +136,81 @@ void main() {
     );
   });
 
+  test('parses bounded transport diagnostics in order', () {
+    final status = G2cBleStatus.fromMap(_map(<Object?, Object?>{
+      'diagnostics': <Object?>[
+        <String, Object?>{
+          'sequence': 1,
+          'code': 'client_connect_attempt',
+          'detail': null,
+        },
+        <String, Object?>{
+          'sequence': 2,
+          'code': 'client_connection_callback',
+          'detail': 'status=0,state=2',
+        },
+        <String, Object?>{
+          'sequence': 3,
+          'code': 'client_service_found',
+          'detail': null,
+        },
+      ],
+    }));
+
+    expect(status.diagnostics.length, 3);
+    expect(status.diagnostics.first.code, 'client_connect_attempt');
+    expect(status.diagnostics.first.label, 'client_connect_attempt');
+    expect(status.diagnostics[1].detail, 'status=0,state=2');
+    expect(status.diagnostics[1].label, 'client_connection_callback (status=0,state=2)');
+    expect(status.lastDiagnostic!.code, 'client_service_found');
+  });
+
+  test('defaults diagnostics to empty when the native field is absent', () {
+    final status = G2cBleStatus.fromMap(_map());
+
+    expect(status.diagnostics, isEmpty);
+    expect(status.lastDiagnostic, isNull);
+  });
+
+  test('rejects malformed diagnostic entries', () {
+    for (final bad in <Object?>[
+      'not-a-list',
+      <Object?>['not-a-map'],
+      <Object?>[
+        <String, Object?>{'sequence': -1, 'code': 'x', 'detail': null},
+      ],
+      <Object?>[
+        <String, Object?>{'sequence': 1, 'code': '', 'detail': null},
+      ],
+      <Object?>[
+        <String, Object?>{'sequence': 1, 'code': 'x', 'detail': 5},
+      ],
+      <Object?>[
+        <String, Object?>{'sequence': 1, 'code': 'x' * 49, 'detail': null},
+      ],
+    ]) {
+      expect(
+        () => G2cBleStatus.fromMap(_map(<Object?, Object?>{'diagnostics': bad})),
+        throwsFormatException,
+      );
+    }
+  });
+
+  test('rejects an unbounded diagnostic list', () {
+    final tooMany = List<Object?>.generate(
+      49,
+      (index) => <String, Object?>{
+        'sequence': index,
+        'code': 'event_$index',
+        'detail': null,
+      },
+    );
+    expect(
+      () => G2cBleStatus.fromMap(_map(<Object?, Object?>{'diagnostics': tooMany})),
+      throwsFormatException,
+    );
+  });
+
   test('still rejects any authentication claim', () {
     expect(
       () => G2cBleStatus.fromMap(<Object?, Object?>{

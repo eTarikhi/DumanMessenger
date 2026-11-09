@@ -271,6 +271,9 @@ void main() {
     expect(find.text('Stopped'), findsWidgets);
     expect(find.text('Not ready'), findsOneWidget);
     expect(find.text('Disconnected — nothing sent'), findsOneWidget);
+    // Disconnect clears connection and subscription state on this device.
+    expect(_text(tester, const Key('g2c-server-client')), 'None');
+    expect(find.text('GATT service ready — unauthenticated'), findsNothing);
     // Reception evidence is historical and is not erased by a later disconnect.
     expect(_text(tester, const Key('g2c-received-count')), '1');
   });
@@ -334,6 +337,161 @@ void main() {
       isNotNull,
     );
   });
+  testWidgets('scanning and discovered candidates do not imply a connection',
+      (tester) async {
+    final api = _FakeG2cBleApi(
+      _status(
+        discoveryState: G2cDiscoveryState.results,
+        discoveredPeerIds: const <String>['candidate-1'],
+        diagnostics: const <G2cDiagnosticEvent>[
+          G2cDiagnosticEvent(sequence: 1, code: 'scan_requested'),
+          G2cDiagnosticEvent(sequence: 2, code: 'scan_candidates', detail: 'count=1'),
+        ],
+      ),
+    );
+    addTearDown(api.close);
+
+    await tester.pumpWidget(MaterialApp(home: G2cBleScreen(bridge: api)));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Temporary candidate 1'), findsOneWidget);
+    expect(find.text('Disconnected'), findsWidgets);
+    expect(find.text('No transport events yet.'), findsNothing);
+    expect(find.text('#2'), findsOneWidget);
+    expect(_sendButton(tester).onPressed, isNull);
+  });
+
+  testWidgets('a connection attempt does not imply service readiness',
+      (tester) async {
+    final api = _FakeG2cBleApi(
+      _status(state: G2cLinkState.connecting, activeRole: 'client'),
+    );
+    addTearDown(api.close);
+
+    await tester.pumpWidget(MaterialApp(home: G2cBleScreen(bridge: api)));
+    await tester.pumpAndSettle();
+    expect(_sendButton(tester).onPressed, isNull);
+
+    api.publish(
+      _status(
+        state: G2cLinkState.connectedUnauthenticated,
+        activeRole: 'client',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(_sendButton(tester).onPressed, isNull);
+    expect(find.text('Connected — unauthenticated'), findsOneWidget);
+    expect(find.text('GATT service ready — unauthenticated'), findsNothing);
+
+    api.publish(
+      _status(state: G2cLinkState.serviceReady, activeRole: 'client'),
+    );
+    await tester.pumpAndSettle();
+    expect(_sendButton(tester).onPressed, isNotNull);
+  });
+
+  testWidgets('failed service discovery never produces a ready state',
+      (tester) async {
+    final api = _FakeG2cBleApi(
+      _status(
+        state: G2cLinkState.protocolError,
+        errorCode: 'service_discovery_failed',
+        activeRole: 'client',
+        diagnostics: const <G2cDiagnosticEvent>[
+          G2cDiagnosticEvent(sequence: 1, code: 'client_connect_attempt'),
+          G2cDiagnosticEvent(
+            sequence: 2,
+            code: 'client_service_discovery_result',
+            detail: 'status=129',
+          ),
+        ],
+      ),
+    );
+    addTearDown(api.close);
+
+    await tester.pumpWidget(MaterialApp(home: G2cBleScreen(bridge: api)));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Error: service_discovery_failed'), findsOneWidget);
+    expect(find.textContaining('service_discovery_result'), findsOneWidget);
+    expect(_sendButton(tester).onPressed, isNull);
+    expect(find.text('GATT service ready — unauthenticated'), findsNothing);
+  });
+
+  testWidgets('server client state follows the server callback only',
+      (tester) async {
+    final api = _FakeG2cBleApi(
+      _status(serverRunning: true, activeRole: 'server'),
+    );
+    addTearDown(api.close);
+
+    await tester.pumpWidget(MaterialApp(home: G2cBleScreen(bridge: api)));
+    await tester.pumpAndSettle();
+    expect(find.text('Server client'), findsOneWidget);
+    expect(find.text('None'), findsWidgets);
+    expect(_sendButton(tester).onPressed, isNull);
+
+    api.publish(
+      _status(
+        state: G2cLinkState.connectedUnauthenticated,
+        serverRunning: true,
+        activeRole: 'server',
+        serverClientConnected: true,
+        diagnostics: const <G2cDiagnosticEvent>[
+          G2cDiagnosticEvent(
+            sequence: 1,
+            code: 'server_connection_callback',
+            detail: 'status=0,state=3',
+          ),
+          G2cDiagnosticEvent(sequence: 2, code: 'server_client_connected'),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      _text(tester, const Key('g2c-server-client')),
+      'Connected — unauthenticated',
+    );
+    expect(
+      _text(tester, const Key('g2c-last-transition')),
+      'server_client_connected',
+    );
+    // Connected but not subscribed: sending must stay disabled.
+    expect(_sendButton(tester).onPressed, isNull);
+  });
+
+
+  testWidgets('a central-only device connects without advertiser capability',
+      (tester) async {
+    final api = _FakeG2cBleApi(
+      _status(
+        state: G2cLinkState.serviceReady,
+        activeRole: 'client',
+        advertiserAvailable: false,
+        scannerAvailable: true,
+      ),
+    );
+    addTearDown(api.close);
+
+    await tester.pumpWidget(MaterialApp(home: G2cBleScreen(bridge: api)));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('GATT service ready — unauthenticated'), findsOneWidget);
+    expect(_sendButton(tester).onPressed, isNotNull);
+    // The missing peripheral role is informational and must not read as a link error.
+    expect(
+      find.text('Server role unavailable: no BLE advertiser on this device.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Error: advertiser'), findsNothing);
+    expect(find.textContaining('Error: advertiser_unavailable'), findsNothing);
+  });
+
+
 }
 
 String _text(WidgetTester tester, Key key) =>
@@ -366,6 +524,7 @@ G2cBleStatus _status({
   String? transportOutcomeDetail,
   int receivedFrameCount = 0,
   G2cReceivedFrame? lastReceivedFrame,
+  List<G2cDiagnosticEvent> diagnostics = const <G2cDiagnosticEvent>[],
 }) =>
     G2cBleStatus(
       state: state,
@@ -392,6 +551,7 @@ G2cBleStatus _status({
       transportOutcomeDetail: transportOutcomeDetail,
       receivedFrameCount: receivedFrameCount,
       lastReceivedFrame: lastReceivedFrame,
+      diagnostics: diagnostics,
     );
 
 class _FakeG2cBleApi implements G2cBleApi {
