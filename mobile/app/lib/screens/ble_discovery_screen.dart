@@ -24,6 +24,7 @@ class _BleDiscoveryScreenState extends State<BleDiscoveryScreen>
   BleDiscoveryStatus _status = BleDiscoveryStatus.initial();
   bool _loading = true;
   bool _actionInProgress = false;
+  int _statusRevision = 0;
 
   @override
   void initState() {
@@ -41,6 +42,9 @@ class _BleDiscoveryScreenState extends State<BleDiscoveryScreen>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
+      // Invalidate in-flight refresh/action results so a late response cannot
+      // restore a pre-pause active state or stale discovery results.
+      _statusRevision++;
       // A permission sheet can temporarily affect lifecycle state. Let that
       // user-initiated request finish; native Activity pause handling still
       // stops any active radio operation.
@@ -62,13 +66,14 @@ class _BleDiscoveryScreenState extends State<BleDiscoveryScreen>
   }
 
   Future<void> _refresh() async {
+    final revision = ++_statusRevision;
     BleDiscoveryStatus nextStatus;
     try {
       nextStatus = await _bridge.refresh();
     } catch (_) {
       nextStatus = BleDiscoveryStatus.channelError();
     }
-    if (!mounted) return;
+    if (!mounted || revision != _statusRevision) return;
     setState(() {
       _status = nextStatus;
       _loading = false;
@@ -76,13 +81,20 @@ class _BleDiscoveryScreenState extends State<BleDiscoveryScreen>
   }
 
   Future<void> _stopForLifecycle() async {
+    final revision = ++_statusRevision;
     try {
       final status = await _bridge.stopAll();
-      if (!mounted) return;
-      setState(() => _status = status);
+      if (!mounted || revision != _statusRevision) return;
+      setState(() {
+        _status = status;
+        _loading = false;
+      });
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _status = BleDiscoveryStatus.channelError());
+      if (!mounted || revision != _statusRevision) return;
+      setState(() {
+        _status = BleDiscoveryStatus.channelError();
+        _loading = false;
+      });
     }
   }
 
@@ -96,6 +108,7 @@ class _BleDiscoveryScreenState extends State<BleDiscoveryScreen>
 
   void _acceptStatus(BleDiscoveryStatus status) {
     if (!mounted) return;
+    _statusRevision++;
     setState(() {
       _status = status;
       _loading = false;
@@ -144,13 +157,14 @@ class _BleDiscoveryScreenState extends State<BleDiscoveryScreen>
     Future<BleDiscoveryStatus> Function() operation,
   ) async {
     if (_actionInProgress || !mounted) return;
+    final revision = ++_statusRevision;
     setState(() => _actionInProgress = true);
     try {
       final status = await operation();
-      if (!mounted) return;
+      if (!mounted || revision != _statusRevision) return;
       setState(() => _status = status);
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || revision != _statusRevision) return;
       setState(() => _status = BleDiscoveryStatus.channelError());
     } finally {
       if (mounted) setState(() => _actionInProgress = false);

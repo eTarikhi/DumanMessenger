@@ -1,6 +1,6 @@
 # ADR — G2-B Foreground BLE Discovery
 
-- **Status:** Fresh source implementation authored; Local PC validation and physical-device evidence are pending. G2-B is **not accepted**.
+- **Status:** Source stabilization is complete. User-reported physical-device results are recorded in the [acceptance checklist](G2-B-ACCEPTANCE-CHECKLIST.md); Local PC automated validation remains pending. G2-B is **not accepted**.
 - **Baseline:** Verified G2-A commit `7d973933a5e51f7a8ca28d6c93b9611395767b77` on `arena/be8aa6c3-dumanmessenger`.
 - **Scope:** Explicit, foreground-only Android BLE advertising and service-UUID-filtered scanning. This decision does not authorize a transport, peer connection, or messaging feature.
 - **Relationship to G2-A:** This ADR explicitly authorizes the narrow G2-B radio operations below and supersedes G2-A's no-scan/no-advertise restriction only for this foreground discovery milestone. G2-A's separate prerequisite diagnostic remains unchanged and remains radio-operation-free.
@@ -29,7 +29,7 @@ Native code keeps device objects only in memory for per-scan duplicate suppressi
 - G2-A remains a useful read-only prerequisite screen; the new G2-B feature is separately navigable and explicitly user initiated.
 - Optional BLE hardware and a safe unsupported state remain supported; the app does not require BLE hardware to install.
 - Android's actual permission prompt and radio behavior must be validated across relevant API levels. Source inspection cannot establish that a particular device advertises or discovers another phone.
-- Flutter model, bridge, screen, and navigation tests are authored but not executed in the Agent environment: **NOT RUN — PROHIBITED**. No test, analysis, build, or physical-device acceptance is claimed here.
+- Flutter model, bridge, screen, and navigation tests are authored but not executed in the Agent environment: **NOT RUN — PROHIBITED**. The user-reported device results are recorded separately in the acceptance checklist and were not reproduced by the Agent. No automated-validation pass or final G2-B acceptance is claimed here.
 
 ## Validation evidence required
 

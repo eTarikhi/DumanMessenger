@@ -237,31 +237,62 @@ void main() {
     expect(find.byKey(const Key('ble-discovery-stop-scanning')), findsOneWidget);
   });
 
-  testWidgets('stops and clears results when app leaves the foreground',
-      (tester) async {
-    final api = _FakeBleDiscoveryApi(
-      _status(
+  testWidgets(
+    'stops and clears results when app leaves the foreground and resumes safely',
+    (tester) async {
+      final activeStatus = _status(
+        advertisingState: BleDiscoveryOperationState.active,
         scanningState: BleDiscoveryOperationState.active,
         results: const <BleDiscoveryResult>[
           BleDiscoveryResult(sessionId: 'temporary-result'),
         ],
-      ),
-    );
-    addTearDown(api.close);
+      );
+      final api = _FakeBleDiscoveryApi(activeStatus);
+      final staleRefresh = Completer<BleDiscoveryStatus>();
+      api.refreshResponse = staleRefresh.future;
+      api.stopAllResponse = Completer<BleDiscoveryStatus>();
+      addTearDown(api.close);
 
-    await tester.pumpWidget(
-      MaterialApp(home: BleDiscoveryScreen(bridge: api)),
-    );
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        MaterialApp(home: BleDiscoveryScreen(bridge: api)),
+      );
+      // Keep the initial status read pending while the app leaves the
+      // foreground.
+      await tester.pump();
 
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-    await tester.pumpAndSettle();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await api.stopAllStarted.future;
+      api.stopAllResponse!.complete(api.status);
+      await tester.pump();
+      await tester.pumpAndSettle();
 
-    expect(api.stopAllCount, 1);
-    expect(api.status.scanningState, BleDiscoveryOperationState.idle);
-    expect(api.status.matchingDeviceCount, 0);
-    expect(find.text('0'), findsOneWidget);
-  });
+      expect(api.stopAllCount, 1);
+      expect(api.status.advertisingState, BleDiscoveryOperationState.idle);
+      expect(api.status.scanningState, BleDiscoveryOperationState.idle);
+      expect(api.status.matchingDeviceCount, 0);
+
+      final countFinder = find.byKey(const Key('ble-discovery-results-count'));
+      await tester.ensureVisible(countFinder);
+      await tester.pump();
+      expect(tester.widget<Text>(countFinder).data, '0');
+      expect(find.text('0'), findsOneWidget);
+
+      // A pre-pause getStatus reply must not repopulate the cleared UI.
+      api.refreshResponse = null;
+      staleRefresh.complete(activeStatus);
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(tester.widget<Text>(countFinder).data, '0');
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(api.status.advertisingState, BleDiscoveryOperationState.idle);
+      expect(api.status.scanningState, BleDiscoveryOperationState.idle);
+      expect(api.startAdvertisingCount, 0);
+      expect(api.startScanningCount, 0);
+      expect(tester.widget<Text>(countFinder).data, '0');
+    },
+  );
 
   testWidgets('cancels the status stream and stops discovery when disposed',
       (tester) async {
@@ -364,9 +395,13 @@ class _FakeBleDiscoveryApi implements BleDiscoveryApi {
   int startScanningCount = 0;
   int stopAllCount = 0;
   bool streamCancelled = false;
+  Future<BleDiscoveryStatus>? refreshResponse;
+  Completer<BleDiscoveryStatus>? stopAllResponse;
+  final Completer<void> stopAllStarted = Completer<void>();
 
   @override
-  Future<BleDiscoveryStatus> refresh() async => status;
+  Future<BleDiscoveryStatus> refresh() =>
+      refreshResponse ?? Future<BleDiscoveryStatus>.value(status);
 
   @override
   Future<BleDiscoveryStatus> startAdvertising() async {
@@ -399,7 +434,7 @@ class _FakeBleDiscoveryApi implements BleDiscoveryApi {
   }
 
   @override
-  Future<BleDiscoveryStatus> stopAll() async {
+  Future<BleDiscoveryStatus> stopAll() {
     stopAllCount++;
     status = _copyStatus(
       advertisingState: BleDiscoveryOperationState.idle,
@@ -407,7 +442,8 @@ class _FakeBleDiscoveryApi implements BleDiscoveryApi {
       results: const <BleDiscoveryResult>[],
     );
     _publish();
-    return status;
+    if (!stopAllStarted.isCompleted) stopAllStarted.complete();
+    return stopAllResponse?.future ?? Future<BleDiscoveryStatus>.value(status);
   }
 
   @override

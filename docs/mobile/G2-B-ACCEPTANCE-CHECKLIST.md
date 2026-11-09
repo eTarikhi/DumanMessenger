@@ -1,6 +1,6 @@
 # G2-B Foreground BLE Discovery — Acceptance Checklist
 
-**Status: NOT ACCEPTED.** This branch contains a fresh source implementation, authored tests, and documentation. Local PC tests/analyze/build results and physical-device discovery evidence have not been supplied. Do not treat source review or an emulator-only result as G2-B acceptance.
+**Status: READY FOR USER ACCEPTANCE — NOT ACCEPTED.** Agent source stabilization and synchronization are complete. The user reports successful physical-device testing on two Android phones; that evidence is recorded below and was not independently reproduced by the Agent. Local PC tests, analysis, and the final build still require user execution on the exact pushed SHA. Do not treat source review or the reported device results alone as complete G2-B acceptance.
 
 See [ADR-G2-B-FOREGROUND-BLE-DISCOVERY.md](ADR-G2-B-FOREGROUND-BLE-DISCOVERY.md) for the exact scope and privacy decisions. G2-B explicitly permits only the foreground discovery operations listed there; it does not begin G2-C.
 
@@ -17,24 +17,32 @@ See [ADR-G2-B-FOREGROUND-BLE-DISCOVERY.md](ADR-G2-B-FOREGROUND-BLE-DISCOVERY.md)
 
 These are source-scope observations only. They do not establish that the app compiles or that Android behaves as intended.
 
+## Agent source-level stabilization record
+
+- **Lifecycle test diagnosis:** The displayed `0` is the discovery result count. The screen renders it in the keyed `ble-discovery-results-count` Text, while the lifecycle handler starts an asynchronous `stopAll` and updates widget state only after its response. The previous test checked the fake API's immediately-mutated state, then relied on generic `pumpAndSettle` and an unkeyed `find.text('0')` rather than awaiting the fake stop response and reading the keyed count. Source inspection also found a production race: a delayed initial/resume refresh could overwrite the cleared snapshot, and a lifecycle stop arriving during initial loading did not clear the loading state.
+- **Correction:** Lifecycle loss now invalidates in-flight status/action responses; status updates are revision-checked so stale snapshots cannot restore active state or results. A lifecycle stop marks loading complete as it applies the cleared status. The focused widget regression now awaits fake stop completion, pumps the UI, reads the count through its stable key, delivers a deliberately stale refresh, and verifies the count stays at zero after resume without starting either operation. This is a source-level diagnosis; the test was not run by the Agent.
+- **Analyzer correction:** The unused `StackTrace __` parameter in `ble_discovery_bridge.dart` now follows the Dart unused-parameter convention with `_`.
+- **Files reviewed:** `BleDiscoveryManager.kt`, `MainActivity.kt`, the unchanged `BleDiagnosticManager.kt`, `AndroidManifest.xml`, the discovery Dart bridge/model/screen, discovery and navigation tests, app routing/diagnostics, the G2-B ADR/checklist, and the simulator/transport diff against the baseline.
+- **Boundary review:** Advertising, scanning, permission gating, in-memory result handling, G2-A separation, and non-goals were reviewed by source inspection. No GATT/pairing/identity/messaging/background discovery or simulator/transport changes were introduced.
+
 ## B. Local PC automated validation — required, not run here
 
-Use the repository checkout on the owner's Windows 11 Local PC, in PowerShell. Do not use an unrelated standalone APK as evidence for this source tree. The commands below run ordinary Flutter tests, analysis, and an Android debug build locally; they are **not** instructions for the Agent environment.
+Use the owner's Windows 11 Local PC checkout and PowerShell. Do not use an unrelated standalone APK as evidence for this source tree. These commands are for the user only; they are **not** instructions for the Agent environment.
 
 ```powershell
+Set-Location "C:\Users\Administrator\Desktop\Git-Clones\DumanMessenger"
+git fetch origin
+git status --short
+git pull --ff-only origin arena/be8aa6c3-dumanmessenger
+
 Set-Location .\mobile\app
-flutter --version
 flutter pub get
-if ($LASTEXITCODE -ne 0) { throw 'Flutter dependency resolution failed.' }
-flutter test
-if ($LASTEXITCODE -ne 0) { throw 'Flutter tests failed.' }
 flutter analyze
-if ($LASTEXITCODE -ne 0) { throw 'Flutter analysis failed.' }
+flutter test
 flutter build apk --debug
-if ($LASTEXITCODE -ne 0) { throw 'Android debug build failed.' }
 ```
 
-Record the Flutter/Dart versions, commit SHA, full command outcomes, and any failures. The authored focused tests are:
+Before this stabilization, the user reported that `flutter pub get` and `flutter build apk --debug` succeeded, one lifecycle widget test failed at its count assertion, and Flutter analyze reported `unnecessary_underscores`. The earlier build/dependency results were not reported against this stabilization SHA and do not validate it. Rerun the sequence above and record Flutter/Dart versions, exact commit SHA, full command outcomes, and any failures. The authored focused tests are:
 
 ```text
 mobile/app/test/ble_discovery_status_test.dart
@@ -85,6 +93,17 @@ Stop the foreground `flutter run` session with Ctrl+C after the manual checks. R
 - [ ] Verify that a nearby non-matching BLE advertiser does not increase the count.
 - [ ] Capture date, Android version/API, device model, permission outcomes, steps, observed counts, stop/lifecycle results, and any limitations. Do not include real device names, addresses, or other stable identifiers in the report.
 - [ ] Confirm no pairing, GATT connection, identity exchange, messaging, or background operation occurred.
+
+## User-reported physical-device evidence (not Agent-reproduced)
+
+The user reports successful physical BLE testing with these two devices:
+
+| Device | User-provided platform detail |
+| --- | --- |
+| Samsung Galaxy S10e — SM-G970F | Android/API version not supplied |
+| Samsung Galaxy J7 — SM-G610F | Android 8.1 / API 27 |
+
+Across the two-device test, the user reports successful BLE advertising and scanning, discovery in both tested directions, stopping advertising/scanning, clearing temporary discovery results, and foreground/background lifecycle behavior. The report is recorded as user-reported evidence only; the Agent did not reproduce these tests. It does not establish authenticated identity, secure trust, pairing, GATT, messaging, or transport capability. The remaining permission, non-matching-advertiser, privacy/non-goal, and Local PC validation items above still need their own evidence.
 
 ## F. Final acceptance gate
 

@@ -72,7 +72,7 @@ class BleDiscoveryBridge implements BleDiscoveryApi {
 
     return _eventChannel.receiveBroadcastStream().map(_decode).transform(
           StreamTransformer<BleDiscoveryStatus, BleDiscoveryStatus>.fromHandlers(
-            handleError: (Object _, StackTrace __,
+            handleError: (Object _, StackTrace _,
                 EventSink<BleDiscoveryStatus> sink) {
               sink.add(BleDiscoveryStatus.channelError());
             },
