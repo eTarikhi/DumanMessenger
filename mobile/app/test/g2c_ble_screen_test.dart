@@ -143,7 +143,7 @@ void main() {
       'Queued for transmission — delivery not confirmed',
     );
     expect(find.textContaining('Queued for transmission only'), findsOneWidget);
-    expect(find.textContaining('actually received'), findsNothing);
+    expect(find.textContaining('transport evidence only'), findsNothing);
     expect(_text(tester, const Key('g2c-received-count')), '0');
 
     api.publish(
@@ -165,7 +165,7 @@ void main() {
     expect(_text(tester, const Key('g2c-transport-outcome')), 'Remote frame received');
     expect(_text(tester, const Key('g2c-received-count')), '2');
     expect(_text(tester, const Key('g2c-received-preview')), '68656c6c6f');
-    expect(find.textContaining('actually received'), findsOneWidget);
+    expect(find.textContaining('transport evidence only'), findsOneWidget);
     expect(find.text('GATT client (central)'), findsWidgets);
   });
 
