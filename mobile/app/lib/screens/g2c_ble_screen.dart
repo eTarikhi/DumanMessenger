@@ -253,7 +253,8 @@ class _G2cBleScreenState extends State<G2cBleScreen> with WidgetsBindingObserver
     return Scaffold(
       appBar: AppBar(title: const Text('G2-C BLE — TEST ONLY')),
       body: AppPageBody(
-        child: ListView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Card(
               color: Theme.of(context).colorScheme.errorContainer,
