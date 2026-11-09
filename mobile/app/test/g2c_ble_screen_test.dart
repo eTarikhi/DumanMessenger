@@ -415,7 +415,11 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Error: service_discovery_failed'), findsOneWidget);
-    expect(find.textContaining('service_discovery_result'), findsOneWidget);
+    expect(
+      _text(tester, const Key('g2c-last-transition')),
+      'client_service_discovery_result (status=129)',
+    );
+    expect(find.text('#2'), findsOneWidget);
     expect(_sendButton(tester).onPressed, isNull);
     expect(find.text('GATT service ready — unauthenticated'), findsNothing);
   });
