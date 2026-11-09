@@ -116,6 +116,8 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
                     return
                 }
                 val accepted = activeLink?.sendFrame(type, payload) ?: activeServer?.sendFrame(type, payload) ?: false
+                // Clear a stale queue-level error for this new attempt; acceptance is still only queued.
+                if (accepted) status = G2cLinkSnapshot(status.state)
                 // A local GATT write or notification acceptance is queued transport only.
                 // Remote reception is reported separately from an actually decoded inbound frame.
                 recordOutcome(
