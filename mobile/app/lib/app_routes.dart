@@ -5,4 +5,5 @@ abstract final class AppRoutes {
   static const diagnostics = '/diagnostics';
   static const bleDiagnostics = '/diagnostics/ble';
   static const bleDiscovery = '/diagnostics/ble-discovery';
+  static const g2cBle = '/diagnostics/g2c-ble-test-only';
 }

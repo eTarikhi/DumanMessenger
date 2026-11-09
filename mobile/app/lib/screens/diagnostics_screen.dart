@@ -103,6 +103,16 @@ class DiagnosticsScreen extends StatelessWidget {
                 label: const Text('Foreground BLE discovery'),
               ),
             ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                key: const Key('diagnostics-open-g2c-ble'),
+                onPressed: () => Navigator.of(context).pushNamed(AppRoutes.g2cBle),
+                icon: const Icon(Icons.security),
+                label: const Text('G2-C BLE link (TEST ONLY)'),
+              ),
+            ),
             const SizedBox(height: 16),
             Text(
               'No telemetry, messages, device IDs, or keys are collected.',

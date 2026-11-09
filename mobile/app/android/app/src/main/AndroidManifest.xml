@@ -20,8 +20,9 @@
         android:name="android.permission.ACCESS_FINE_LOCATION"
         android:maxSdkVersion="30" />
 
-    <!-- G2-B requests SCAN for scanning and ADVERTISE for advertising separately.
-         CONNECT remains declared for the G2-A diagnostic flow, not G2-B discovery. -->
+    <!-- Runtime grants are requested only for the selected BLE operation: SCAN for
+         discovery, ADVERTISE for GATT server advertisement, CONNECT for GATT access.
+         neverForLocation is used for modern scans; legacy location is capped at API 30. -->
     <uses-permission
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />

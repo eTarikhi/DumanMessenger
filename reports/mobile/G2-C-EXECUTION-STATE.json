@@ -1,0 +1,124 @@
+{
+  "feature": "G2-C Fresh Android Implementation",
+  "phase": "phase-4-source-audit-handover-prepared-protocol-selection-blocked-unvalidated",
+  "phase_2_transport_source_criteria_met_unvalidated": true,
+  "phase_3_source_objectives_met_with_protocol_blocker_unvalidated": true,
+  "implementation_complete": false,
+  "acceptance": "NOT ACCEPTED",
+  "baseline_sha": "83606d58ca106496f2da56f5a5676efa0868c0d4",
+  "current_head_sha": "83606d58ca106496f2da56f5a5676efa0868c0d4",
+  "working_tree_changes_uncommitted": true,
+  "branch": "arena/94329f0d-dumanmessenger",
+  "worktree": "/home/user/DumanMessenger-g2c",
+  "primary_checkout_modified": false,
+  "android_gradle_sdk_values": {
+    "min_sdk": "Delegated to Flutter flutter.minSdkVersion; resolved numeric value not pinned/verified here",
+    "target_sdk": "Delegated to Flutter flutter.targetSdkVersion; resolved numeric value not pinned/verified here"
+  },
+  "implemented_source": [
+    "docs/mobile/ADR-G2-C-ANDROID-SECURE-BLE-LINK.md",
+    "mobile/app/android/app/src/main/AndroidManifest.xml",
+    "mobile/app/android/app/src/main/kotlin/com/example/duman_messenger/G2cProtocol.kt",
+    "mobile/app/android/app/src/main/kotlin/com/example/duman_messenger/G2cFragmentation.kt",
+    "mobile/app/android/app/src/main/kotlin/com/example/duman_messenger/G2cBleDiscovery.kt",
+    "mobile/app/android/app/src/main/kotlin/com/example/duman_messenger/G2cGattLink.kt",
+    "mobile/app/android/app/src/main/kotlin/com/example/duman_messenger/G2cGattServer.kt",
+    "mobile/app/android/app/src/main/kotlin/com/example/duman_messenger/G2cBleManager.kt",
+    "mobile/app/android/app/src/main/kotlin/com/example/duman_messenger/MainActivity.kt",
+    "mobile/app/lib/app.dart",
+    "mobile/app/lib/app_routes.dart",
+    "mobile/app/lib/screens/diagnostics_screen.dart",
+    "mobile/app/lib/screens/g2c_ble_screen.dart",
+    "mobile/app/lib/ble/g2c_ble_status.dart",
+    "mobile/app/lib/ble/g2c_ble_bridge.dart",
+    "reports/mobile/G2-C-EXECUTION-CHECKPOINT.md",
+    "reports/mobile/G2-C-EXECUTION-STATE.json",
+    "reports/mobile/G2-C-RECONSTRUCTION-REPORT.md",
+    "docs/mobile/G2-C-WINDOWS-VALIDATION.md"
+  ],
+  "phase_3": {
+    "protocol_selection": "BLOCKED. ADR candidate matrix records observed exact versions or explicitly unverified coordinates, repositories/docs, license/maintenance evidence, API27/JVM status, protocol properties and independent-review gaps. No candidate meets approval bar; no dependency or handshake.",
+    "protocol_candidates": [
+      {
+        "name": "Noise Protocol Framework",
+        "evidence": "noiseprotocol/noise_spec v34 release 2018-07-11; standard specification, not implementation",
+        "decision": "Candidate standard; implementation selection blocked"
+      },
+      {
+        "name": "rweather/noise-java",
+        "evidence": "GitHub metadata MIT; no tags/releases; last push 2024-03-28; Maven POM 1.0-SNAPSHOT and Java 8 source/target; README describes plain-Java reference implementation",
+        "decision": "Not selected: API-27 provider/identity-key behavior and audit/maintenance evidence insufficient"
+      },
+      {
+        "name": "jchambers/java-noise",
+        "evidence": "GitHub metadata MIT; no tags/releases; last push 2025-04-02; POM Java 17; README says unpublished to artifact repositories and not independently security audited; X25519/ChaChaPoly require providers",
+        "decision": "Rejected for current API-27 app on evidence available"
+      },
+      {
+        "name": "tink-crypto/tink-java",
+        "evidence": "GitHub metadata Apache-2.0; v1.24.0 release 2026-10-16; active repo; checked-in Android example minSdk 23",
+        "decision": "Not selected as protocol: vetted primitives/building blocks, not the required mutually authenticated session protocol; composing one here would be custom protocol design"
+      },
+      {
+        "name": "Mutual TLS over GATT stream",
+        "evidence": "No API-27 mutual TLS profile or record adaptation verified in this phase",
+        "decision": "Not selected; API/provider/certificate UX/interoperability unresolved"
+      }
+    ],
+    "identity_trust_design": "ADR specifies G2-C-only local identity, canonical fingerprint requirement, explicit out-of-band first-contact trust after key-possession proof, revocation/rotation, encrypted integrity-protected persistence, no plaintext private key fallback, and peer-bound session records. Not implemented beyond raw fingerprint and volatile pin API.",
+    "flutter_ui": "G2-C TEST-ONLY screen is integrated from Diagnostics and uses actual typed MethodChannel/EventChannel: start/stop discovery, real opaque candidate selection/connect, server start/stop, disconnect, truthful errors/capabilities/permissions, and test-frame send only while service-ready. Disposal cancels subscription and disconnects; Activity pause and native EventChannel cancellation also stop operations. No production messaging or authentication/trust UI.",
+    "runtime_permissions": "Operation-scoped: SCAN only for scan (API31+ BLUETOOTH_SCAN; API23-30 ACCESS_FINE_LOCATION; pre23 no runtime permission), CONNECT only for client connection (API31+), CONNECT+ADVERTISE for server (API31+). Legacy Bluetooth permissions are manifest install-time through API30. Denial blocks operation; requestable/permanent denial and settings are exposed. Permission state refresh re-checks grants; radio status unknown without API31+ CONNECT rather than requesting extra permission. Not device-validated.",
+    "transport_source_review": "Inspected existing GATT/fragment lifecycle and retained bounded queues; corrected variable fragment-size reassembly to accommodate MTU changes safely, stale scan callback acceptance, server callback device matching, send/notification timeout and lifecycle permission/foreground handling. No runtime validation.",
+    "bluetooth_capability_status": "Typed Flutter status now includes BLE hardware and Bluetooth radio enabled; radio state is true/false only when Android permits inspection, otherwise null/unknown. Missing scanner is reported as bluetooth_unavailable, not unsupported hardware.",
+    "server_callback_source_audit": "Duplicate current-peer connection and service-added events ignored; notification advancement requires matching pending index. Residual cross-lifecycle late callback attribution risk remains; not runtime-validated."
+  },
+  "transport_features": {
+    "gatt_client": "Source present: API-27-compatible explicit connect, UUID service/CCCD checks, service readiness, MTU default fallback, writes/notifications and cleanup.",
+    "gatt_server": "Source present: service registration, explicit UUID advertising, one-peer policy, CCCD subscription, bounded receive and notify.",
+    "discovery": "Source present: explicit foreground G2-C UUID scan, 20-second deadline, up to 32 opaque candidates; peer addresses/names never sent to Dart.",
+    "framing": "Version 1 validation only: 512-byte payload max, 516-byte full frame max.",
+    "fragmentation": "MTU-3 ATT capacity clamped 20..514, 9-byte fragment header, 2048-byte message max, 192 fragment max, one in-flight assembly and 15-second timeout.",
+    "production_messaging": "No integration; decoded test frames discarded."
+  },
+  "security_decisions": [
+    "No authenticated protocol implementation or dependency selection; authenticated state remains unreachable and Dart rejects authenticated=true.",
+    "Discovery, connection, service readiness, trust, and authentication are separate concepts; no automatic trust.",
+    "BLE transport encryption is not E2E security.",
+    "No production identity/key reuse, packet format, production messaging, routing, simulator, or golden vector changes.",
+    "Do not write private keys in plaintext; Android Keystore per-algorithm/API27 support must be verified; no silent fallback."
+  ],
+  "not_implemented_or_blocked": [
+    "Protocol/library implementation and authenticated key agreement",
+    "Transcript-bound mutual authentication, session keys, replay defense, rekey/expiry, secure teardown",
+    "Persistent Keystore-backed local identity and protected trusted peer records",
+    "Explicit trust-confirmation/revocation/rotation UI",
+    "Authenticated-only secure data plane",
+    "Compilation, tests, device acceptance, independent security review"
+  ],
+  "validation": {
+    "read_only_source_inspection": "performed",
+    "upstream_metadata": "read-only GitHub API metadata/source inspected; no dependency downloaded or added",
+    "flutter_analyze": "not run (prohibited)",
+    "flutter_tests": "not run (prohibited)",
+    "flutter_build": "not run (prohibited)",
+    "kotlin_compilation": "not run (prohibited)",
+    "gradle": "not run (prohibited)",
+    "apk_generation": "not run (prohibited)",
+    "emulator_device_two_device": "not run (prohibited)",
+    "github_actions_remote_ci": "not run (prohibited)",
+    "security_validation_claims": [],
+    "passed_claims": [],
+    "source_audit": "performed; source inspection only",
+    "handover_archive": "created after docs/source freeze; .git/build/caches/secrets excluded; manifest/inventory checked"
+  },
+  "remote_writes": false,
+  "owner_approval_required_before_protocol_implementation": true,
+  "next_action": "Owner-run Windows validation from docs/mobile/G2-C-WINDOWS-VALIDATION.md in a separate clone, then report evidence. Protocol and identity/trust work remain blocked pending exact artifact/API27 evidence and written owner plus independent security approval. G2-C remains NOT ACCEPTED.",
+  "transport_source_review": "Source inspection only. Client guards ignore duplicate connected/service/descriptor callbacks and require a matching pending write index before fragment advancement. Server callback peer checks, notification callback pacing, fragment bounds and teardown were inspected. No runtime/platform callback correctness validated.",
+  "source_audit": {
+    "scope": "Read-only inspection of all G2-C Kotlin/Dart source, manifest, routing, bridge/event lifecycle, Activity lifecycle/permission wiring, frame/fragment codecs, ADR and reports.",
+    "corrections": "Server now ignores duplicate onServiceAdded and duplicate connected callbacks for the current peer; notification fragment advancement requires the matching pending notification index. Bluetooth radio unavailable is no longer categorized as unsupported hardware.",
+    "residual_risks": "Server callback object is shared across server lifecycles; late callback attribution after rapid stop/restart remains unresolved and needs owner device observation. No compile or runtime correctness established."
+  },
+  "handover_guide": "docs/mobile/G2-C-WINDOWS-VALIDATION.md"
+}

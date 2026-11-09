@@ -14,6 +14,10 @@ class MainActivity : FlutterActivity() {
     private var bleDiscoveryMethodChannel: MethodChannel? = null
     private var bleDiscoveryEventChannel: EventChannel? = null
 
+    private var g2cBleManager: G2cBleManager? = null
+    private var g2cMethodChannel: MethodChannel? = null
+    private var g2cEventChannel: EventChannel? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
@@ -46,17 +50,30 @@ class MainActivity : FlutterActivity() {
         ).also { channel ->
             channel.setStreamHandler(discoveryManager)
         }
+
+        val g2cManager = G2cBleManager(this)
+        g2cBleManager = g2cManager
+        g2cMethodChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            G2cBleManager.METHOD_CHANNEL,
+        ).also { channel -> channel.setMethodCallHandler(g2cManager::onMethodCall) }
+        g2cEventChannel = EventChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            G2cBleManager.EVENT_CHANNEL,
+        ).also { channel -> channel.setStreamHandler(g2cManager) }
     }
 
     override fun onResume() {
         super.onResume()
         bleDiagnosticManager?.onActivityResumed()
         bleDiscoveryManager?.onActivityResumed()
+        g2cBleManager?.onActivityResumed()
     }
 
     override fun onPause() {
         bleDiagnosticManager?.onActivityPaused()
         bleDiscoveryManager?.onActivityPaused()
+        g2cBleManager?.onActivityPaused()
         super.onPause()
     }
 
@@ -76,6 +93,7 @@ class MainActivity : FlutterActivity() {
             permissions,
             grantResults,
         )
+        g2cBleManager?.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
 
     override fun onDestroy() {
@@ -85,7 +103,13 @@ class MainActivity : FlutterActivity() {
         bleEventChannel?.setStreamHandler(null)
         bleDiscoveryMethodChannel?.setMethodCallHandler(null)
         bleDiscoveryEventChannel?.setStreamHandler(null)
+        g2cBleManager?.onDestroy()
+        g2cMethodChannel?.setMethodCallHandler(null)
+        g2cEventChannel?.setStreamHandler(null)
 
+        g2cBleManager = null
+        g2cMethodChannel = null
+        g2cEventChannel = null
         bleDiagnosticManager = null
         bleMethodChannel = null
         bleEventChannel = null
