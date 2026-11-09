@@ -19,6 +19,9 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
         const val METHOD_CHANNEL = "com.dumanmessenger/g2c/methods"
         const val EVENT_CHANNEL = "com.dumanmessenger/g2c/events"
         private const val PERMISSION_REQUEST_CODE = 7253
+
+        /** Bounded hex preview only; a received test payload is never forwarded anywhere. */
+        private const val RECEIVED_PREVIEW_BYTES = 32
     }
 
     private val appContext = activity.applicationContext
@@ -42,6 +45,16 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
     private var discovery: G2cBleDiscovery? = null
     private var status = G2cLinkSnapshot()
 
+    // TEST-ONLY transport diagnostics. Send acceptance is queued, never "delivered";
+    // only an actually decoded inbound frame counts as reception evidence.
+    private var transportOutcome: String? = null
+    private var transportOutcomeDetail: String? = null
+    private var receivedFrameCount = 0
+    private var lastReceivedRole: String? = null
+    private var lastReceivedType: Int? = null
+    private var lastReceivedBytes: Int? = null
+    private var lastReceivedPreview: String? = null
+
     fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "getStatus" -> {
@@ -64,19 +77,58 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
                 server?.stop()
                 server = null
                 status = G2cLinkSnapshot(G2cLinkState.DISCONNECTED)
+                recordOutcome("disconnected", "server_stopped")
                 result.success(statusMap())
                 sink?.success(statusMap())
             }
             "sendTestFrame" -> {
                 val type = call.argument<Int>("type")
                 val payload = call.argument<ByteArray>("payload")
-                if (type == null || payload == null || payload.size > G2cGattProtocol.MAX_PAYLOAD_BYTES) {
-                    result.success(errorStatus("invalid_test_frame")); return
+                if (type == null || payload == null || type !in 1..255 ||
+                    payload.size > G2cGattProtocol.MAX_PAYLOAD_BYTES
+                ) {
+                    recordOutcome("malformed_frame", "invalid_test_frame")
+                    result.success(statusMap() + ("operationError" to "invalid_test_frame"))
+                    sink?.success(statusMap())
+                    return
                 }
-                val accepted = link?.sendFrame(type, payload) ?: server?.sendFrame(type, payload) ?: false
-                if (!accepted) {
-                    result.success(statusMap() + ("operationError" to "transport_not_ready_or_busy"))
-                } else result.success(statusMap())
+                val activeLink = link
+                val activeServer = server
+                val busy = activeLink?.isTransportBusy == true || activeServer?.isTransportBusy == true
+                val linkState = activeLink?.snapshot()?.state
+                val linkSendReady = linkState == G2cLinkState.SERVICE_READY
+                val linkDisconnected = linkState == G2cLinkState.DISCONNECTED ||
+                    linkState == G2cLinkState.DISCONNECTING ||
+                    linkState == G2cLinkState.CONNECTION_FAILED
+                val blocked = when {
+                    activeLink == null && activeServer == null -> "transport_unavailable"
+                    busy -> "busy"
+                    activeLink != null && !linkSendReady ->
+                        if (linkDisconnected) "disconnected" else "transport_unavailable"
+                    activeServer != null && !activeServer.isSubscriptionReady ->
+                        if (activeServer.hasConnectedPeer) "transport_unavailable" else "disconnected"
+                    else -> null
+                }
+                if (blocked != null) {
+                    recordOutcome(blocked, "send_rejected")
+                    result.success(statusMap() + ("operationError" to blocked))
+                    sink?.success(statusMap())
+                    return
+                }
+                val accepted = activeLink?.sendFrame(type, payload) ?: activeServer?.sendFrame(type, payload) ?: false
+                // A local GATT write or notification acceptance is queued transport only.
+                // Remote reception is reported separately from an actually decoded inbound frame.
+                recordOutcome(
+                    if (accepted) "queued" else "transport_failure",
+                    if (accepted) "queued_for_transmission" else "write_rejected",
+                )
+                val response: Map<String, Any?> = if (accepted) {
+                    statusMap()
+                } else {
+                    statusMap() + ("operationError" to "transport_failure")
+                }
+                result.success(response)
+                sink?.success(statusMap())
             }
             "connect" -> {
                 val peerId = call.argument<String>("peerId")
@@ -95,6 +147,7 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
                 server?.stop()
                 server = null
                 status = G2cLinkSnapshot(G2cLinkState.DISCONNECTED)
+                recordOutcome("disconnected", "explicit_disconnect")
                 result.success(statusMap())
                 sink?.success(statusMap())
             }
@@ -144,6 +197,7 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
         server?.stop()
         server = null
         status = G2cLinkSnapshot(G2cLinkState.DISCONNECTED, "foreground_required")
+        recordOutcome("disconnected", "foreground_required")
         sink?.success(statusMap())
     }
 
@@ -201,10 +255,13 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
         }
         discovery?.stop()
         status = G2cLinkSnapshot(G2cLinkState.DISCONNECTED)
-        val g2cServer = G2cGattServer(appContext, { next ->
-            status = next
-            sink?.success(statusMap())
-        }, onFrame = { /* TEST-ONLY transport validation; never forwarded to production messaging. */ })
+        resetReceiveDiagnostics()
+        val g2cServer = G2cGattServer(
+            appContext,
+            onState = { next -> publishSnapshot(next) },
+            // TEST-ONLY transport validation; never forwarded to production messaging.
+            onFrame = { frame -> recordReceivedFrame("server", frame) },
+        )
         server = g2cServer
         val started = g2cServer.start()
         if (!started && status.state == G2cLinkState.DISCONNECTED) {
@@ -226,12 +283,12 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
             if (adapter == null || !adapter.isEnabled) {
                 result.success(errorStatus("bluetooth_unavailable")); return
             }
+            resetReceiveDiagnostics()
             val newLink = G2cGattLink(
                 appContext,
-                onState = { next ->
-                    status = next
-                    sink?.success(statusMap())
-                },
+                onState = { next -> publishSnapshot(next) },
+                // TEST-ONLY inbound diagnostics; never forwarded to production messaging.
+                onMessage = { frame -> recordReceivedFrame("client", frame) },
             )
             link = newLink
             newLink.connect(device)
@@ -244,6 +301,61 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
         } catch (_: RuntimeException) {
             result.success(errorStatus("connection_failed"))
         }
+    }
+
+    private fun publishSnapshot(next: G2cLinkSnapshot) {
+        status = next
+        outcomeForError(next.errorCode)?.let { recordOutcome(it, next.errorCode) }
+        sink?.success(statusMap())
+    }
+
+    private fun recordOutcome(outcome: String, detail: String?) {
+        transportOutcome = outcome
+        transportOutcomeDetail = detail
+    }
+
+    /**
+     * Records an inbound TEST-ONLY frame. Only the metadata and a bounded hex preview are
+     * retained; the payload is zeroed immediately and never forwarded to production messaging.
+     */
+    private fun recordReceivedFrame(role: String, frame: G2cGattProtocol.Frame) {
+        val valid = frame.type in 1..255 &&
+            frame.payload.size <= G2cGattProtocol.MAX_PAYLOAD_BYTES
+        if (!valid) {
+            frame.payload.fill(0)
+            recordOutcome("malformed_frame", "invalid_test_frame")
+            sink?.success(statusMap())
+            return
+        }
+        lastReceivedRole = role
+        lastReceivedType = frame.type
+        lastReceivedBytes = frame.payload.size
+        lastReceivedPreview =
+            frame.payload.take(RECEIVED_PREVIEW_BYTES).joinToString("") { "%02x".format(it) } +
+            if (frame.payload.size > RECEIVED_PREVIEW_BYTES) "…" else ""
+        frame.payload.fill(0)
+        receivedFrameCount = (receivedFrameCount + 1).coerceAtMost(Int.MAX_VALUE - 1)
+        recordOutcome("received", null)
+        sink?.success(statusMap())
+    }
+
+    private fun resetReceiveDiagnostics() {
+        transportOutcome = null
+        transportOutcomeDetail = null
+        receivedFrameCount = 0
+        lastReceivedRole = null
+        lastReceivedType = null
+        lastReceivedBytes = null
+        lastReceivedPreview = null
+    }
+
+    private fun outcomeForError(code: String?): String? = when {
+        code == null -> null
+        code.contains("permission") -> "permission_denied"
+        code.contains("fragment") || code.contains("truncated") ||
+            code.contains("protocol") || code.startsWith("invalid_") -> "malformed_frame"
+        code.contains("timeout") -> "timed_out"
+        else -> "transport_failure"
     }
 
     private fun refreshPermissionSnapshot() {
@@ -369,6 +481,20 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
         }
     }
 
+    /** null means the platform withheld role capability (for example, a missing permission). */
+    private fun roleAvailable(probe: (android.bluetooth.BluetoothAdapter) -> Boolean): Boolean? {
+        if (!capabilityReady()) return false
+        return try {
+            val adapter =
+                (appContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+            if (adapter == null) false else probe(adapter)
+        } catch (_: SecurityException) {
+            null
+        } catch (_: RuntimeException) {
+            null
+        }
+    }
+
     private fun capabilityReady(): Boolean =
         appContext.packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE) &&
             (appContext.getSystemService(Context.BLUETOOTH_SERVICE) is BluetoothManager)
@@ -433,6 +559,22 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
         "permissionPermanentlyDenied" to permanentlyDenied,
         "permissionShouldShowRationale" to permissionShouldShowRationale,
         "serverRunning" to (server?.isRunning == true),
+        "advertiserAvailable" to roleAvailable { it.bluetoothLeAdvertiser != null },
+        "scannerAvailable" to roleAvailable { it.bluetoothLeScanner != null },
+        "activeRole" to when {
+            link != null -> "client"
+            server?.isRunning == true -> "server"
+            else -> null
+        },
+        "serverClientConnected" to (server?.hasConnectedPeer == true),
+        "serverSubscriptionReady" to (server?.isSubscriptionReady == true),
+        "transportOutcome" to transportOutcome,
+        "transportOutcomeDetail" to transportOutcomeDetail,
+        "receivedFrameCount" to receivedFrameCount,
+        "lastReceivedFrameRole" to lastReceivedRole,
+        "lastReceivedFrameType" to lastReceivedType,
+        "lastReceivedFrameBytes" to lastReceivedBytes,
+        "lastReceivedFramePreview" to lastReceivedPreview,
         "discoveryState" to (discovery?.state ?: "idle"),
         "discoveryErrorCode" to discovery?.errorCode,
         "discoveredPeerIds" to (discovery?.results() ?: emptyList<String>()),

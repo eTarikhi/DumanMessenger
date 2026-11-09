@@ -53,6 +53,8 @@ internal class G2cGattLink(
 
     fun snapshot(): G2cLinkSnapshot = snapshot
 
+    val isTransportBusy: Boolean get() = outbound != null
+
     @Synchronized
     fun connect(device: BluetoothDevice): Boolean {
         if (!hasConnectPermission()) {
@@ -290,7 +292,9 @@ internal class G2cGattLink(
     private fun failureState(code: String): G2cLinkState = when {
         code.contains("permission") -> G2cLinkState.PERMISSION_DENIED
         code.contains("timeout") -> G2cLinkState.TIMED_OUT
-        code.contains("service_mismatch") || code.contains("protocol") -> G2cLinkState.PROTOCOL_ERROR
+        code.contains("service_mismatch") || code.contains("protocol") ||
+            code.contains("fragment") || code.contains("truncated") ||
+            code.startsWith("invalid_") -> G2cLinkState.PROTOCOL_ERROR
         else -> G2cLinkState.CONNECTION_FAILED
     }
 

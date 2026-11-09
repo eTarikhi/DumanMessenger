@@ -50,6 +50,11 @@ internal class G2cGattServer(
     private var nextMessageId = 1
     private var destroyed = false
     val isRunning: Boolean get() = server != null
+    /** True only while an accepted GATT client is connected to this test peripheral. */
+    val hasConnectedPeer: Boolean get() = peer != null
+    /** True only after the service is registered and the client subscribed to notifications. */
+    val isSubscriptionReady: Boolean get() = serviceAdded && serviceReady && subscribed
+    val isTransportBusy: Boolean get() = outbound != null
     private val reassembler = G2cFragmentReassembler(
         onComplete = { bytes ->
             try { onFrame(G2cGattProtocol.decode(bytes)) }
@@ -133,7 +138,7 @@ internal class G2cGattServer(
             outbound = G2cFragmentation.split(frame, mtu, nextMessageId)
             nextMessageId = (nextMessageId + 1) and 0xffff
             outboundIndex = 0
-            armTimeout(TRANSPORT_TIMEOUT_MS, "transport_notification_timeout")
+            armTransportTimeout()
             notifyNext(active, target)
         } catch (_: IllegalArgumentException) { outbound = null; false }
     }
@@ -178,9 +183,9 @@ internal class G2cGattServer(
                 pendingNotificationIndex == null || pendingNotificationIndex != outboundIndex - 1
             ) return
             pendingNotificationIndex = null
-            if (status != BluetoothGatt.GATT_SUCCESS) { outbound = null; fail("notification_failed"); return }
+            if (status != BluetoothGatt.GATT_SUCCESS) { abortOutbound("notification_failed"); return }
             val active = server ?: return
-            armTimeout(TRANSPORT_TIMEOUT_MS, "transport_notification_timeout")
+            armTransportTimeout()
             notifyNext(active, device)
         }
 
@@ -264,9 +269,7 @@ internal class G2cGattServer(
             @Suppress("DEPRECATION")
             val accepted = active.notifyCharacteristicChanged(target, characteristic, false)
             if (accepted) outboundIndex++ else {
-                pendingNotificationIndex = null
-                outbound = null
-                fail("notification_failed")
+                abortOutbound("notification_failed")
             }
             accepted
         } catch (_: SecurityException) {
@@ -298,7 +301,9 @@ internal class G2cGattServer(
         val state = when {
             code.contains("permission") -> G2cLinkState.PERMISSION_DENIED
             code.contains("timeout") -> G2cLinkState.TIMED_OUT
-            code.contains("protocol") -> G2cLinkState.PROTOCOL_ERROR
+            code.contains("protocol") || code.contains("fragment") ||
+                code.contains("truncated") || code.startsWith("invalid_") ->
+                G2cLinkState.PROTOCOL_ERROR
             else -> G2cLinkState.CONNECTION_FAILED
         }
         stop()
@@ -310,6 +315,30 @@ internal class G2cGattServer(
         cancelTimeout()
         timeout = Runnable { fail(code) }.also { handler.postDelayed(it, delay) }
     }
+
+    /**
+     * Stops a pending outbound queue without tearing down a still-subscribed peer.
+     * A notification callback that never arrives must not be reported as delivery.
+     */
+    private fun armTransportTimeout() {
+        cancelTimeout()
+        timeout = Runnable { abortOutbound("notification_not_confirmed") }
+            .also { handler.postDelayed(it, TRANSPORT_TIMEOUT_MS) }
+    }
+
+    private fun abortOutbound(code: String) {
+        if (server == null) return
+        outbound = null
+        outboundIndex = 0
+        pendingNotificationIndex = null
+        cancelTimeout()
+        publish(
+            code,
+            if (isSubscriptionReady) G2cLinkState.SERVICE_READY
+            else G2cLinkState.CONNECTED_UNAUTHENTICATED,
+        )
+    }
+
     private fun cancelTimeout() { timeout?.let(handler::removeCallbacks); timeout = null }
     private fun hasConnectPermission(): Boolean = Build.VERSION.SDK_INT < 31 ||
         appContext.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
