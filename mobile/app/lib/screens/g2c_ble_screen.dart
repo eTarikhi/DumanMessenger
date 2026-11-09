@@ -249,7 +249,18 @@ class _G2cBleScreenState extends State<G2cBleScreen> with WidgetsBindingObserver
   @override
   Widget build(BuildContext context) {
     final canAct = !_loading && !_busy && _status.bleHardwareSupported != false;
-    final canSend = canAct && _status.state == G2cLinkState.serviceReady;
+    // Client role: the central link must have subscribed to notifications.
+    final clientSendReady = _status.state == G2cLinkState.serviceReady &&
+        (_status.activeRole == null || _status.activeRole == 'client');
+    // Server role: a GATT client must be connected AND subscribed to notifications.
+    final serverSendReady = (_status.activeRole == null || _status.activeRole == 'server') &&
+        _status.serverRunning &&
+        _status.serverClientConnected &&
+        _status.serverSubscriptionReady;
+    final canSend = canAct && (clientSendReady || serverSendReady);
+    // Honest role capability: never assume a device supports both BLE roles.
+    final serverRoleBlocked = _status.advertiserAvailable == false;
+    final clientRoleBlocked = _status.scannerAvailable == false;
     return Scaffold(
       appBar: AppBar(title: const Text('G2-C BLE — TEST ONLY')),
       body: AppPageBody(
@@ -275,6 +286,18 @@ class _G2cBleScreenState extends State<G2cBleScreen> with WidgetsBindingObserver
               _row('Scan permission', _boolLabel(_status.scanPermissionGranted)),
               _row('Connect permission', _boolLabel(_status.connectPermissionGranted)),
               _row('Advertise permission', _boolLabel(_status.advertisePermissionGranted)),
+              _row('BLE advertiser (peripheral role)', _roleLabel(_status.advertiserAvailable)),
+              _row('BLE scanner (central role)', _roleLabel(_status.scannerAvailable)),
+              if (serverRoleBlocked)
+                const Text(
+                  'This device does not expose a BLE advertiser. The GATT server role is '
+                  'unavailable here; scanner/client testing remains available.',
+                ),
+              if (clientRoleBlocked)
+                const Text(
+                  'This device does not expose a BLE scanner. The GATT client role is '
+                  'unavailable here; server/peripheral testing remains available.',
+                ),
               _row('Permission request', _permissionLabel(_status.permissionState)),
               if (_status.permissionNames.isNotEmpty)
                 _row('Last requested', _status.permissionNames.join(', ')),
@@ -290,6 +313,7 @@ class _G2cBleScreenState extends State<G2cBleScreen> with WidgetsBindingObserver
               Wrap(spacing: 8, runSpacing: 8, children: [
                 FilledButton.tonal(
                   onPressed: canAct &&
+                          !clientRoleBlocked &&
                           _status.discoveryState != G2cDiscoveryState.scanning
                       ? () => _permissionGatedAction(
                             title: 'Allow BLE discovery',
@@ -303,6 +327,7 @@ class _G2cBleScreenState extends State<G2cBleScreen> with WidgetsBindingObserver
                 ),
                 OutlinedButton(
                   onPressed: canAct &&
+                          !clientRoleBlocked &&
                           _status.discoveryState != G2cDiscoveryState.idle
                       ? () => _operation(_bridge.stopDiscovery)
                       : null,
@@ -342,10 +367,25 @@ class _G2cBleScreenState extends State<G2cBleScreen> with WidgetsBindingObserver
               _row('Authenticated', 'No — protocol not implemented'),
               _row('Trusted peer', 'No — trust ceremony/storage not implemented'),
               _row('GATT server', _status.serverRunning ? 'Running (test-only)' : 'Stopped'),
+              _row('Active role', _roleActiveLabel(_status.activeRole)),
+              _row(
+                'Server client',
+                _status.serverClientConnected
+                    ? 'Connected — unauthenticated'
+                    : 'None',
+              ),
+              _row(
+                'Notify subscription',
+                _status.serverSubscriptionReady
+                    ? 'Ready — client subscribed'
+                    : 'Not ready',
+              ),
+              if (serverRoleBlocked)
+                const Text('Server role unavailable: no BLE advertiser on this device.'),
               if (_status.errorCode != null) _error(_status.errorCode!),
               Wrap(spacing: 8, runSpacing: 8, children: [
                 FilledButton.tonal(
-                  onPressed: canAct && !_status.serverRunning
+                  onPressed: canAct && !_status.serverRunning && !serverRoleBlocked
                       ? () => _permissionGatedAction(
                             title: 'Start G2-C GATT server',
                             explanation: 'Android may request Bluetooth Connect and Advertise '
@@ -375,8 +415,10 @@ class _G2cBleScreenState extends State<G2cBleScreen> with WidgetsBindingObserver
             const SizedBox(height: 12),
             _section('Test frame (unauthenticated)', [
               const Text(
-                'Optional raw test bytes only. They are not encrypted or authenticated and are '
-                'discarded by the native test transport; they are never sent as Duman messages.',
+                'Optional raw test bytes only. They are not encrypted or authenticated. A local '
+                'GATT write or notification is only queued for transmission; delivery is not '
+                'confirmed until the remote device reports an actually received frame. These '
+                'bytes are never sent as Duman messages.',
               ),
               const SizedBox(height: 8),
               TextField(
@@ -390,10 +432,51 @@ class _G2cBleScreenState extends State<G2cBleScreen> with WidgetsBindingObserver
               Align(
                 alignment: Alignment.centerLeft,
                 child: OutlinedButton(
+                  key: const Key('g2c-send-test-frame'),
                   onPressed: canSend ? _sendTestFrame : null,
                   child: const Text('Send test frame'),
                 ),
               ),
+              _row(
+                'Last transport outcome',
+                _outcomeLabel(_status.transportOutcome),
+                valueKey: const Key('g2c-transport-outcome'),
+              ),
+              if (_status.transportOutcomeDetail != null)
+                _row('Outcome detail', _status.transportOutcomeDetail!),
+              _row(
+                'Frames received',
+                '${_status.receivedFrameCount}',
+                valueKey: const Key('g2c-received-count'),
+              ),
+              if (_status.lastReceivedFrame != null) ...[
+                _row('Last received via', _receivedRoleLabel(_status.lastReceivedFrame!.role)),
+                _row('Last received type', '${_status.lastReceivedFrame!.type}'),
+                _row('Last received bytes', '${_status.lastReceivedFrame!.payloadBytes}'),
+                _row(
+                  'Received payload preview',
+                  _status.lastReceivedFrame!.payloadPreview.isEmpty
+                      ? '(empty payload)'
+                      : _status.lastReceivedFrame!.payloadPreview,
+                  valueKey: const Key('g2c-received-preview'),
+                ),
+              ],
+              if (_status.transportOutcome == G2cTransportOutcome.received)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    'A remote TEST-ONLY frame was actually received. This is transport '
+                    'evidence only — it is not authentication, trust, or encryption.',
+                  ),
+                ),
+              if (_status.transportOutcome == G2cTransportOutcome.queued)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    'Queued for transmission only. Watch the peer for a received frame; a local '
+                    'write or notification does not prove delivery.',
+                  ),
+                ),
               if (_status.operationError != null) _error(_status.operationError!),
             ]),
           ],
@@ -427,14 +510,14 @@ class _G2cBleScreenState extends State<G2cBleScreen> with WidgetsBindingObserver
         ),
       );
 
-  Widget _row(String label, String value) => Padding(
+  Widget _row(String label, String value, {Key? valueKey}) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(child: Text(label)),
             const SizedBox(width: 12),
-            Flexible(child: Text(value, textAlign: TextAlign.end)),
+            Flexible(child: Text(value, key: valueKey, textAlign: TextAlign.end)),
           ],
         ),
       );
@@ -454,6 +537,34 @@ class _G2cBleScreenState extends State<G2cBleScreen> with WidgetsBindingObserver
         true => 'Enabled',
         false => 'Disabled / unavailable',
         null => 'Unknown (CONNECT permission required to inspect)',
+      };
+
+  String _roleLabel(bool? value) => switch (value) {
+        true => 'Available',
+        false => 'Unavailable on this device',
+        null => 'Unknown',
+      };
+
+  String _roleActiveLabel(String? role) => switch (role) {
+        'client' => 'GATT client (central)',
+        'server' => 'GATT server (peripheral)',
+        _ => 'None',
+      };
+
+  String _receivedRoleLabel(String role) =>
+      role == 'server' ? 'GATT server (peripheral)' : 'GATT client (central)';
+
+  String _outcomeLabel(G2cTransportOutcome outcome) => switch (outcome) {
+        G2cTransportOutcome.none => 'No send or receive yet',
+        G2cTransportOutcome.queued => 'Queued for transmission — delivery not confirmed',
+        G2cTransportOutcome.received => 'Remote frame received',
+        G2cTransportOutcome.busy => 'Transport busy — nothing sent',
+        G2cTransportOutcome.transportUnavailable => 'Transport unavailable — nothing sent',
+        G2cTransportOutcome.disconnected => 'Disconnected — nothing sent',
+        G2cTransportOutcome.malformedFrame => 'Malformed frame rejected',
+        G2cTransportOutcome.timedOut => 'Transport timed out',
+        G2cTransportOutcome.permissionDenied => 'Permission denied',
+        G2cTransportOutcome.transportFailure => 'Transport failure',
       };
 
   String _permissionLabel(G2cRuntimePermissionState state) => switch (state) {

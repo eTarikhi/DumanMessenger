@@ -34,6 +34,38 @@ enum G2cDiscoveryState {
   failed,
 }
 
+/// TEST-ONLY transport diagnostics. `queued` never means delivered: only `received`
+/// reflects an actually decoded inbound test frame on this device.
+enum G2cTransportOutcome {
+  none,
+  queued,
+  received,
+  busy,
+  transportUnavailable,
+  disconnected,
+  malformedFrame,
+  timedOut,
+  permissionDenied,
+  transportFailure,
+}
+
+/// Metadata for one actually decoded inbound test frame. The payload is never retained;
+/// only a bounded hex preview of the received bytes is exposed for diagnostics.
+class G2cReceivedFrame {
+  const G2cReceivedFrame({
+    required this.role,
+    required this.type,
+    required this.payloadBytes,
+    required this.payloadPreview,
+  });
+
+  /// `server` for the GATT peripheral role, `client` for the GATT central role.
+  final String role;
+  final int type;
+  final int payloadBytes;
+  final String payloadPreview;
+}
+
 class G2cBleStatus {
   const G2cBleStatus({
     required this.state,
@@ -56,6 +88,15 @@ class G2cBleStatus {
     this.discoveryState = G2cDiscoveryState.idle,
     this.discoveredPeerIds = const <String>[],
     this.discoveryErrorCode,
+    this.advertiserAvailable,
+    this.scannerAvailable,
+    this.activeRole,
+    this.serverClientConnected = false,
+    this.serverSubscriptionReady = false,
+    this.transportOutcome = G2cTransportOutcome.none,
+    this.transportOutcomeDetail,
+    this.receivedFrameCount = 0,
+    this.lastReceivedFrame,
   });
 
   final G2cLinkState state;
@@ -79,6 +120,19 @@ class G2cBleStatus {
   final G2cDiscoveryState discoveryState;
   final List<String> discoveredPeerIds;
   final String? discoveryErrorCode;
+  /// Whether this device exposes a BLE advertiser (peripheral role).
+  /// Null when Android withholds the capability, for example without CONNECT permission.
+  final bool? advertiserAvailable;
+  /// Whether this device exposes a BLE scanner (central role).
+  final bool? scannerAvailable;
+  /// `client` (central) or `server` (peripheral) while a TEST-ONLY role is active.
+  final String? activeRole;
+  final bool serverClientConnected;
+  final bool serverSubscriptionReady;
+  final G2cTransportOutcome transportOutcome;
+  final String? transportOutcomeDetail;
+  final int receivedFrameCount;
+  final G2cReceivedFrame? lastReceivedFrame;
 
   factory G2cBleStatus.fromMap(Map<Object?, Object?> map) {
     final stateText = map['state'];
@@ -124,6 +178,60 @@ class G2cBleStatus {
       'permanently_denied' => G2cRuntimePermissionState.permanentlyDenied,
       _ => throw const FormatException('Unknown G2-C permission state.'),
     };
+    final outcome = switch (map['transportOutcome']) {
+      null => G2cTransportOutcome.none,
+      'none' => G2cTransportOutcome.none,
+      'queued' => G2cTransportOutcome.queued,
+      'received' => G2cTransportOutcome.received,
+      'busy' => G2cTransportOutcome.busy,
+      'transport_unavailable' => G2cTransportOutcome.transportUnavailable,
+      'disconnected' => G2cTransportOutcome.disconnected,
+      'malformed_frame' => G2cTransportOutcome.malformedFrame,
+      'timed_out' => G2cTransportOutcome.timedOut,
+      'permission_denied' => G2cTransportOutcome.permissionDenied,
+      'transport_failure' => G2cTransportOutcome.transportFailure,
+      _ => throw const FormatException('Unknown G2-C transport outcome.'),
+    };
+    final activeRole = switch (map['activeRole']) {
+      null => null,
+      'client' => 'client',
+      'server' => 'server',
+      _ => throw const FormatException('Unknown G2-C transport role.'),
+    };
+    final rawReceivedRole = map['lastReceivedFrameRole'];
+    final rawReceivedType = map['lastReceivedFrameType'];
+    final rawReceivedBytes = map['lastReceivedFrameBytes'];
+    final rawReceivedPreview = map['lastReceivedFramePreview'];
+    G2cReceivedFrame? lastReceivedFrame;
+    if (rawReceivedRole != null ||
+        rawReceivedType != null ||
+        rawReceivedBytes != null ||
+        rawReceivedPreview != null) {
+      if (rawReceivedRole is! String ||
+          rawReceivedType is! int ||
+          rawReceivedBytes is! int ||
+          rawReceivedPreview is! String) {
+        throw const FormatException('Invalid G2-C received frame metadata.');
+      }
+      if ((rawReceivedRole != 'server' && rawReceivedRole != 'client') ||
+          rawReceivedType < 1 ||
+          rawReceivedType > 255 ||
+          rawReceivedBytes < 0 ||
+          rawReceivedBytes > 512 ||
+          rawReceivedPreview.length > 96) {
+        throw const FormatException('Invalid G2-C received frame metadata.');
+      }
+      lastReceivedFrame = G2cReceivedFrame(
+        role: rawReceivedRole,
+        type: rawReceivedType,
+        payloadBytes: rawReceivedBytes,
+        payloadPreview: rawReceivedPreview,
+      );
+    }
+    final rawReceivedCount = map['receivedFrameCount'];
+    if (rawReceivedCount != null && (rawReceivedCount is! int || rawReceivedCount < 0)) {
+      throw const FormatException('Invalid G2-C received frame count.');
+    }
     if (rawPermissionNames is! List || rawPermissionNames.any((name) => name is! String)) {
       throw const FormatException('Invalid G2-C permission names.');
     }
@@ -171,6 +279,21 @@ class G2cBleStatus {
       discoveryErrorCode: map['discoveryErrorCode'] is String
           ? map['discoveryErrorCode'] as String
           : null,
+      advertiserAvailable: map['advertiserAvailable'] is bool
+          ? map['advertiserAvailable'] as bool
+          : null,
+      scannerAvailable: map['scannerAvailable'] is bool
+          ? map['scannerAvailable'] as bool
+          : null,
+      activeRole: activeRole,
+      serverClientConnected: map['serverClientConnected'] == true,
+      serverSubscriptionReady: map['serverSubscriptionReady'] == true,
+      transportOutcome: outcome,
+      transportOutcomeDetail: map['transportOutcomeDetail'] is String
+          ? map['transportOutcomeDetail'] as String
+          : null,
+      receivedFrameCount: rawReceivedCount is int ? rawReceivedCount : 0,
+      lastReceivedFrame: lastReceivedFrame,
     );
   }
 
