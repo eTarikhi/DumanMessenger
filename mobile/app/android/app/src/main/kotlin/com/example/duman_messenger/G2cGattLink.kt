@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
+import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.pm.PackageManager
@@ -23,6 +24,8 @@ internal class G2cGattLink(
     context: Context,
     private val onState: (G2cLinkSnapshot) -> Unit,
     private val onMessage: (G2cGattProtocol.Frame) -> Unit = {},
+    /** Bounded, privacy-safe transport diagnostics: no addresses, keys, or payloads. */
+    private val onEvent: (String, String?) -> Unit = { _, _ -> },
 ) {
     companion object {
         private const val CONNECT_TIMEOUT_MS = 15_000L
@@ -55,6 +58,35 @@ internal class G2cGattLink(
 
     val isTransportBusy: Boolean get() = outbound != null
 
+    val isClosed: Boolean get() = closed.get()
+
+    /**
+     * Clears a stale ready state when Android reports the device is no longer connected to
+     * the GATT profile. Unknown profile state is left untouched rather than guessed.
+     */
+    @Synchronized
+    fun revalidate(): G2cLinkSnapshot {
+        val active = gatt ?: return snapshot
+        if (closed.get()) return snapshot
+        if (snapshot.state != G2cLinkState.CONNECTED_UNAUTHENTICATED &&
+            snapshot.state != G2cLinkState.SERVICE_READY
+        ) return snapshot
+        val state = connectionState(active.device) ?: return snapshot
+        if (state == BluetoothProfile.STATE_CONNECTED) return snapshot
+        onEvent("client_link_lost", "profile_state=$state")
+        disconnectFromRemote()
+        return snapshot
+    }
+
+    private fun connectionState(device: BluetoothDevice): Int? = try {
+        (appContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)
+            ?.getConnectionState(device, BluetoothProfile.GATT)
+    } catch (_: SecurityException) {
+        null
+    } catch (_: RuntimeException) {
+        null
+    }
+
     @Synchronized
     fun connect(device: BluetoothDevice): Boolean {
         if (!hasConnectPermission()) {
@@ -73,12 +105,16 @@ internal class G2cGattLink(
         reassembler.clear()
         outbound = null
         outboundIndex = 0
+        onEvent("client_connect_attempt", null)
         publish(G2cLinkSnapshot(G2cLinkState.CONNECTING))
         armTimeout(CONNECT_TIMEOUT_MS, "connection_timeout")
         try {
             // This overload exists on API 27; autoConnect=false avoids background connection scans.
             gatt = device.connectGatt(appContext, false, callback, BluetoothDevice.TRANSPORT_LE)
-            if (gatt == null) fail("gatt_unavailable")
+            if (gatt == null) {
+                onEvent("client_connect_failed", "gatt_unavailable")
+                fail("gatt_unavailable")
+            }
         } catch (_: SecurityException) {
             fail("permission_required")
         } catch (_: RuntimeException) {
@@ -111,17 +147,24 @@ internal class G2cGattLink(
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (closed.get() || this@G2cGattLink.gatt !== gatt) return
+            onEvent("client_connection_callback", "status=$status,state=$newState")
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                fail("gatt_connection_error")
+                fail("gatt_connection_error_$status")
                 return
             }
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     if (snapshot.state != G2cLinkState.CONNECTING) return
+                    // Connected is transport only: the service is not ready until discovery
+                    // succeeds and the notifications descriptor write is acknowledged.
                     publish(G2cLinkSnapshot(G2cLinkState.CONNECTED_UNAUTHENTICATED))
+                    onEvent("client_connected", null)
                     armTimeout(DISCOVERY_TIMEOUT_MS, "service_discovery_timeout")
                     try {
-                        if (!gatt.discoverServices()) fail("service_discovery_failed")
+                        if (!gatt.discoverServices()) {
+                            onEvent("client_service_discovery_start_failed", null)
+                            fail("service_discovery_failed")
+                        } else onEvent("client_service_discovery_started", null)
                     } catch (_: SecurityException) {
                         fail("permission_required")
                     }
@@ -136,6 +179,7 @@ internal class G2cGattLink(
             ) return
             serviceDiscoveryHandled = true
             cancelTimeout()
+            onEvent("client_service_discovery_result", "status=$status")
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 fail("service_discovery_failed")
                 return
@@ -144,14 +188,30 @@ internal class G2cGattLink(
             val characteristic = service?.getCharacteristic(G2cGattProtocol.DATA_CHARACTERISTIC_UUID)
             val required = BluetoothGattCharacteristic.PROPERTY_WRITE or
                 BluetoothGattCharacteristic.PROPERTY_NOTIFY
-            if (service == null || characteristic == null ||
-                characteristic.properties and required != required
-            ) {
+            if (service == null) {
+                onEvent("client_service_missing", null)
                 fail("g2c_service_mismatch")
                 return
             }
+            if (characteristic == null) {
+                onEvent("client_characteristic_missing", null)
+                fail("g2c_service_mismatch")
+                return
+            }
+            if (characteristic.properties and required != required) {
+                onEvent("client_characteristic_invalid", "properties=${characteristic.properties}")
+                fail("g2c_service_mismatch")
+                return
+            }
+            onEvent("client_service_found", null)
             val descriptor = characteristic.getDescriptor(G2cGattProtocol.CLIENT_CONFIGURATION_UUID)
-            if (descriptor == null || !gatt.setCharacteristicNotification(characteristic, true)) {
+            if (descriptor == null) {
+                onEvent("client_cccd_missing", null)
+                fail("notification_setup_failed")
+                return
+            }
+            if (!gatt.setCharacteristicNotification(characteristic, true)) {
+                onEvent("client_cccd_local_enable_failed", null)
                 fail("notification_setup_failed")
                 return
             }
@@ -176,6 +236,7 @@ internal class G2cGattLink(
                 descriptor.uuid != G2cGattProtocol.CLIENT_CONFIGURATION_UUID || !descriptorWritePending
             ) return
             descriptorWritePending = false
+            onEvent("client_cccd_write_result", "status=$status")
             if (status != BluetoothGatt.GATT_SUCCESS) fail("notification_setup_failed")
             else {
                 cancelTimeout()
@@ -265,6 +326,7 @@ internal class G2cGattLink(
 
     private fun disconnectFromRemote() {
         if (closed.getAndSet(true)) return
+        onEvent("client_disconnected", null)
         cancelTimeout()
         reassembler.clear()
         outbound = null
@@ -278,6 +340,7 @@ internal class G2cGattLink(
 
     private fun fail(code: String) {
         if (closed.getAndSet(true)) return
+        onEvent("client_failure", code)
         cancelTimeout()
         reassembler.clear()
         outbound = null

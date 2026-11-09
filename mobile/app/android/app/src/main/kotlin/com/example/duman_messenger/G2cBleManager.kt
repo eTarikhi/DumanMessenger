@@ -22,6 +22,17 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
 
         /** Bounded hex preview only; a received test payload is never forwarded anywhere. */
         private const val RECEIVED_PREVIEW_BYTES = 32
+        private const val MAX_DIAGNOSTICS = 24
+        private const val ROLE_CLIENT = "client"
+        private const val ROLE_SERVER = "server"
+        private val TERMINAL_STATES = setOf(
+            G2cLinkState.DISCONNECTED,
+            G2cLinkState.CONNECTION_FAILED,
+            G2cLinkState.PERMISSION_DENIED,
+            G2cLinkState.TIMED_OUT,
+            G2cLinkState.PROTOCOL_ERROR,
+            G2cLinkState.UNSUPPORTED,
+        )
     }
 
     private val appContext = activity.applicationContext
@@ -55,9 +66,21 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
     private var lastReceivedBytes: Int? = null
     private var lastReceivedPreview: String? = null
 
+    // Bounded, privacy-safe transport event log: codes plus small numeric details only.
+    private data class DiagnosticEvent(val sequence: Int, val code: String, val detail: String?)
+    private val diagnostics = ArrayDeque<DiagnosticEvent>()
+    private var diagnosticSequence = 0
+    private var lastCandidateCount = 0
+    // Each role session invalidates late callbacks from a replaced link or server object.
+    private var clientSession = 0
+    private var serverSession = 0
+
     fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "getStatus" -> {
+                // Never keep reporting a link or peer that Android says is no longer connected.
+                link?.revalidate()
+                server?.revalidate()
                 refreshPermissionSnapshot()
                 result.success(statusMap())
             }
@@ -67,6 +90,7 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
             }
             "stopDiscovery" -> {
                 discovery?.stop()
+                recordEvent("scan_stopped", null)
                 result.success(statusMap())
             }
             "startServer" -> {
@@ -78,6 +102,7 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
                 server = null
                 status = G2cLinkSnapshot(G2cLinkState.DISCONNECTED)
                 recordOutcome("disconnected", "server_stopped")
+                recordEvent("server_stopped", null)
                 result.success(statusMap())
                 sink?.success(statusMap())
             }
@@ -111,6 +136,7 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
                 }
                 if (blocked != null) {
                     recordOutcome(blocked, "send_rejected")
+                    recordEvent("frame_send_blocked", blocked)
                     result.success(statusMap() + ("operationError" to blocked))
                     sink?.success(statusMap())
                     return
@@ -123,6 +149,10 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
                 recordOutcome(
                     if (accepted) "queued" else "transport_failure",
                     if (accepted) "queued_for_transmission" else "write_rejected",
+                )
+                recordEvent(
+                    if (accepted) "frame_queued" else "frame_write_rejected",
+                    "type=$type,bytes=${payload.size}",
                 )
                 val response: Map<String, Any?> = if (accepted) {
                     statusMap()
@@ -150,6 +180,7 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
                 server = null
                 status = G2cLinkSnapshot(G2cLinkState.DISCONNECTED)
                 recordOutcome("disconnected", "explicit_disconnect")
+                recordEvent("disconnect_requested", null)
                 result.success(statusMap())
                 sink?.success(statusMap())
             }
@@ -183,6 +214,9 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
 
     fun onActivityResumed() {
         activityResumed = true
+        // Resume is also a state revalidation point; never trust a stale ready state.
+        link?.revalidate()
+        server?.revalidate()
         val deferred = deferredPermission
         if (deferred != null) {
             deferredPermission = null
@@ -194,6 +228,7 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
         activityResumed = false
         if (pendingPermission != null) return
         discovery?.stop("foreground_required")
+        recordEvent("foreground_teardown", null)
         link?.close()
         link = null
         server?.stop()
@@ -233,9 +268,10 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
             result.success(errorStatus("operation_in_progress")); return
         }
         status = G2cLinkSnapshot(G2cLinkState.DISCONNECTED)
-        val scanner = discovery ?: G2cBleDiscovery(appContext) {
-            sink?.success(statusMap())
-        }.also { discovery = it }
+        lastCandidateCount = 0
+        recordEvent("scan_requested", null)
+        val scanner = discovery ?: G2cBleDiscovery(appContext) { onDiscoveryChanged() }
+            .also { discovery = it }
         scanner.start()
         if (scanner.errorCode != null) {
             status = G2cLinkSnapshot(
@@ -258,11 +294,16 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
         discovery?.stop()
         status = G2cLinkSnapshot(G2cLinkState.DISCONNECTED)
         resetReceiveDiagnostics()
+        recordEvent("server_start_requested", null)
+        val session = ++serverSession
         val g2cServer = G2cGattServer(
             appContext,
-            onState = { next -> publishSnapshot(next) },
+            onState = { next -> if (session == serverSession) publishSnapshot(ROLE_SERVER, next) },
             // TEST-ONLY transport validation; never forwarded to production messaging.
-            onFrame = { frame -> recordReceivedFrame("server", frame) },
+            onFrame = { frame ->
+                if (session == serverSession) recordReceivedFrame(ROLE_SERVER, frame)
+            },
+            onEvent = { code, detail -> if (session == serverSession) recordEvent(code, detail) },
         )
         server = g2cServer
         val started = g2cServer.start()
@@ -286,14 +327,19 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
                 result.success(errorStatus("bluetooth_unavailable")); return
             }
             resetReceiveDiagnostics()
+            recordEvent("connect_requested", null)
+            val session = ++clientSession
             val newLink = G2cGattLink(
                 appContext,
-                onState = { next -> publishSnapshot(next) },
+                onState = { next -> if (session == clientSession) publishSnapshot(ROLE_CLIENT, next) },
                 // TEST-ONLY inbound diagnostics; never forwarded to production messaging.
-                onMessage = { frame -> recordReceivedFrame("client", frame) },
+                onMessage = { frame ->
+                    if (session == clientSession) recordReceivedFrame(ROLE_CLIENT, frame)
+                },
+                onEvent = { code, detail -> if (session == clientSession) recordEvent(code, detail) },
             )
             link = newLink
-            newLink.connect(device)
+            if (!newLink.connect(device)) recordEvent("connect_attempt_rejected", null)
             status = newLink.snapshot()
             result.success(statusMap())
         } catch (_: SecurityException) {
@@ -305,9 +351,47 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
         }
     }
 
-    private fun publishSnapshot(next: G2cLinkSnapshot) {
+    private fun publishSnapshot(role: String, next: G2cLinkSnapshot) {
         status = next
         outcomeForError(next.errorCode)?.let { recordOutcome(it, next.errorCode) }
+        recordEvent(
+            "${role}_state",
+            next.state.name.lowercase() + (next.errorCode?.let { ":$it" } ?: ""),
+        )
+        if (next.state in TERMINAL_STATES) {
+            // Release a finished role object so a fresh session can be started. A later
+            // callback from the same session may still report its final error state, while
+            // a replaced object is ignored by the session guards.
+            if (role == ROLE_CLIENT && link?.isClosed == true) {
+                link = null
+                recordEvent("client_released", null)
+            }
+            if (role == ROLE_SERVER && server?.isRunning != true) {
+                server = null
+                recordEvent("server_released", null)
+            }
+        }
+        sink?.success(statusMap())
+    }
+
+    private fun recordEvent(code: String, detail: String?) {
+        diagnosticSequence += 1
+        if (diagnostics.size >= MAX_DIAGNOSTICS) diagnostics.removeFirst()
+        diagnostics.addLast(
+            DiagnosticEvent(
+                sequence = diagnosticSequence,
+                code = code.take(48),
+                detail = detail?.take(64),
+            ),
+        )
+    }
+
+    private fun onDiscoveryChanged() {
+        val count = discovery?.results()?.size ?: 0
+        if (count != lastCandidateCount) {
+            lastCandidateCount = count
+            recordEvent("scan_candidates", "count=$count")
+        }
         sink?.success(statusMap())
     }
 
@@ -321,23 +405,25 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
      * retained; the payload is zeroed immediately and never forwarded to production messaging.
      */
     private fun recordReceivedFrame(role: String, frame: G2cGattProtocol.Frame) {
-        val valid = frame.type in 1..255 &&
-            frame.payload.size <= G2cGattProtocol.MAX_PAYLOAD_BYTES
+        val size = frame.payload.size
+        val valid = frame.type in 1..255 && size <= G2cGattProtocol.MAX_PAYLOAD_BYTES
         if (!valid) {
             frame.payload.fill(0)
             recordOutcome("malformed_frame", "invalid_test_frame")
+            recordEvent("frame_rejected", "role=$role")
             sink?.success(statusMap())
             return
         }
         lastReceivedRole = role
         lastReceivedType = frame.type
-        lastReceivedBytes = frame.payload.size
+        lastReceivedBytes = size
         lastReceivedPreview =
             frame.payload.take(RECEIVED_PREVIEW_BYTES).joinToString("") { "%02x".format(it) } +
-            if (frame.payload.size > RECEIVED_PREVIEW_BYTES) "…" else ""
+            if (size > RECEIVED_PREVIEW_BYTES) "…" else ""
         frame.payload.fill(0)
         receivedFrameCount = (receivedFrameCount + 1).coerceAtMost(Int.MAX_VALUE - 1)
         recordOutcome("received", null)
+        recordEvent("frame_received", "role=$role,type=${frame.type},bytes=$size")
         sink?.success(statusMap())
     }
 
@@ -577,6 +663,11 @@ internal class G2cBleManager(private val activity: Activity) : EventChannel.Stre
         "lastReceivedFrameType" to lastReceivedType,
         "lastReceivedFrameBytes" to lastReceivedBytes,
         "lastReceivedFramePreview" to lastReceivedPreview,
+        // Bounded event history. Codes and small numeric details only; no addresses,
+        // keys, payload bytes, or scan identifiers are ever included.
+        "diagnostics" to diagnostics.map {
+            mapOf("sequence" to it.sequence, "code" to it.code, "detail" to it.detail)
+        },
         "discoveryState" to (discovery?.state ?: "idle"),
         "discoveryErrorCode" to discovery?.errorCode,
         "discoveredPeerIds" to (discovery?.results() ?: emptyList<String>()),

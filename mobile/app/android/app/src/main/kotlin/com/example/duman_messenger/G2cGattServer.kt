@@ -25,6 +25,8 @@ internal class G2cGattServer(
     context: Context,
     private val onState: (G2cLinkSnapshot) -> Unit,
     private val onFrame: (G2cGattProtocol.Frame) -> Unit,
+    /** Bounded, privacy-safe transport diagnostics: no addresses, keys, or payloads. */
+    private val onEvent: (String, String?) -> Unit = { _, _ -> },
 ) {
     companion object {
         private const val CONNECT_TIMEOUT_MS = 30_000L
@@ -150,27 +152,42 @@ internal class G2cGattServer(
                 fail("service_registration_failed"); return
             }
             serviceAdded = true
+            onEvent("server_service_added", null)
             startAdvertising()
         }
 
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             if (server == null) return
+            onEvent("server_connection_callback", "status=$status,state=$newState")
             if (status != BluetoothGatt.GATT_SUCCESS || newState == BluetoothProfile.STATE_DISCONNECTED) {
-                if (peer == device) resetPeer()
+                if (peer == device) {
+                    onEvent("server_client_disconnected", "status=$status")
+                    resetPeer()
+                }
                 return
             }
             if (newState != BluetoothProfile.STATE_CONNECTED) return
             // Ignore duplicate connected callbacks for the accepted peer; don't reset
             // service readiness or extend its connection deadline.
             if (peer == device) return
-            if (peer != null && peer != device) {
-                try { server?.cancelConnection(device) } catch (_: SecurityException) { /* reject extra peer */ }
-                return
+            val existing = peer
+            if (existing != null) {
+                // Only reject the new device while the previous peer is really still connected.
+                // A stale reference left by a missed disconnect must not block new connections.
+                if (peerConnected(existing) != false) {
+                    onEvent("server_peer_rejected", "connected_peer_present")
+                    try { server?.cancelConnection(device) } catch (_: SecurityException) { /* reject extra peer */ }
+                    return
+                }
+                onEvent("server_stale_peer_cleared", null)
+                resetPeer()
             }
             peer = device
             serviceReady = false
             subscribed = false
+            mtu = 23
             armTimeout(CONNECT_TIMEOUT_MS, "connection_timeout")
+            onEvent("server_client_connected", null)
             publish(null, G2cLinkState.CONNECTED_UNAUTHENTICATED)
         }
 
@@ -198,6 +215,7 @@ internal class G2cGattServer(
             val validValue = value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) ||
                 value.contentEquals(BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)
             val ok = peer == device && expected && !preparedWrite && offset == 0 && validValue
+            onEvent("server_cccd_write_request", "accepted=$ok")
             if (responseNeeded) respond(device, requestId, if (ok) BluetoothGatt.GATT_SUCCESS else BluetoothGatt.GATT_FAILURE, offset)
             if (!ok) { fail("protocol_error"); return }
             descriptor.value = value.copyOf()
@@ -205,7 +223,11 @@ internal class G2cGattServer(
             if (subscribed) {
                 serviceReady = true
                 cancelTimeout()
+                onEvent("server_subscription_ready", null)
                 publish(null, G2cLinkState.SERVICE_READY)
+            } else {
+                serviceReady = false
+                onEvent("server_subscription_disabled", null)
             }
         }
 
@@ -226,9 +248,18 @@ internal class G2cGattServer(
     private val advertiserCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
             cancelTimeout()
-            publish(null, G2cLinkState.DISCONNECTED)
+            onEvent("server_advertising_started", null)
+            // Re-advertising after a disconnect must not clobber a peer that already
+            // connected while the advertiser was starting.
+            if (peer == null) publish(null, G2cLinkState.DISCONNECTED)
         }
         override fun onStartFailure(errorCode: Int) {
+            if (errorCode == AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED && server != null) {
+                // The stack already advertises this callback; keep the server running.
+                cancelTimeout()
+                onEvent("server_advertising_already_active", null)
+                return
+            }
             fail("advertising_failed_$errorCode")
         }
     }
@@ -293,8 +324,47 @@ internal class G2cGattServer(
         subscribed = false
         outbound = null
         outboundIndex = 0
+        pendingNotificationIndex = null
         mtu = 23
         publish(null, G2cLinkState.DISCONNECTED)
+        // Connectable advertising stops when a client connects and is not resumed by the
+        // stack after a disconnect; restart it so the peer can actually reconnect.
+        if (server != null && serviceAdded && advertiser != null) startAdvertising()
+    }
+
+    /** null means Android withheld the profile state (for example, without CONNECT permission). */
+    private fun peerConnected(device: BluetoothDevice): Boolean? = try {
+        when (manager?.getConnectionState(device, BluetoothProfile.GATT)) {
+            BluetoothProfile.STATE_CONNECTED -> true
+            null -> null
+            else -> false
+        }
+    } catch (_: SecurityException) {
+        null
+    } catch (_: RuntimeException) {
+        null
+    }
+
+    /**
+     * Clears the peer record when Android reports it is no longer connected to the
+     * GATT profile. Unknown profile state is left untouched rather than guessed.
+     */
+    @Synchronized
+    fun revalidate() {
+        val activePeer = peer ?: return
+        if (server == null || destroyed) return
+        val state = try {
+            manager?.getConnectionState(activePeer, BluetoothProfile.GATT)
+        } catch (_: SecurityException) {
+            null
+        } catch (_: RuntimeException) {
+            null
+        }
+        if (state == null || state == BluetoothProfile.STATE_CONNECTED ||
+            state == BluetoothProfile.STATE_CONNECTING
+        ) return
+        onEvent("server_peer_lost", "profile_state=$state")
+        resetPeer()
     }
 
     private fun fail(code: String) {
