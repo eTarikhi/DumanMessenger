@@ -27,11 +27,16 @@ import org.junit.runner.RunWith
  *
  * They are the only evidence that AES-GCM, key deletion, tag failure and the
  * write protocol behave as designed — the Dart tests replace the platform with a
- * double and prove nothing about Android. Nothing here is executed in CI, and
- * none of it is a claim about production security.
+ * double and prove nothing about Android. Results land in
+ * `mobile\app\build\outputs\androidTest-results\connected\debug\` (XML) and
+ * `mobile\app\build\reports\androidTests\connected\debug\index.html`.
  *
- * Every test starts from an empty identity directory and no G2-D keys, so tests
- * can run in any order.
+ * **Isolation.** Every test here uses the test-only directory [TEST_DIRECTORY]
+ * and the test-only Keystore aliases [TEST_WRAPPING_ALIAS] and
+ * [TEST_SECOND_ALIAS]. Nothing in this file deletes, reads or overwrites
+ * `files/identity/` or the production alias `g2d.identity.wrap.v1`: an
+ * instrumented run must never be able to destroy a real identity. The probe
+ * aliases are transient by construction and are cleared too.
  */
 @RunWith(AndroidJUnit4::class)
 class G2dIdentityKeystoreInstrumentedTest {
@@ -40,15 +45,21 @@ class G2dIdentityKeystoreInstrumentedTest {
 
     private fun context(): Context = ApplicationProvider.getApplicationContext()
 
-    private fun storage(): G2dIdentityStorage = G2dIdentityStorage(context().filesDir, keyring)
+    private fun storage(): G2dIdentityStorage =
+        G2dIdentityStorage(context().filesDir, keyring, TEST_DIRECTORY, TEST_WRAPPING_ALIAS)
 
-    private fun identityDirectory(): File = File(context().filesDir, "identity")
+    private fun identityDirectory(): File = File(context().filesDir, TEST_DIRECTORY)
 
     private fun slotFile(index: Int): File = File(identityDirectory(), "identity.$index.bin")
 
     @Before
     fun cleanSlate() {
-        for (alias in listOf(G2D_WRAPPING_KEY_ALIAS, G2D_PROBE_KEY_ALIAS, G2D_STRONGBOX_PROBE_ALIAS)) {
+        for (alias in listOf(
+            TEST_WRAPPING_ALIAS,
+            TEST_SECOND_ALIAS,
+            G2D_PROBE_KEY_ALIAS,
+            G2D_STRONGBOX_PROBE_ALIAS,
+        )) {
             try {
                 keyring.deleteKeyIfPresent(alias)
             } catch (ignored: Exception) {
@@ -62,8 +73,8 @@ class G2dIdentityKeystoreInstrumentedTest {
 
     @Test
     fun aesGcmRoundTripReturnsTheOriginalBytes() {
-        keyring.deleteKeyIfPresent(G2D_WRAPPING_KEY_ALIAS)
-        val key = keyring.createKey(G2D_WRAPPING_KEY_ALIAS, strongBox = false)
+        keyring.deleteKeyIfPresent(TEST_WRAPPING_ALIAS)
+        val key = keyring.createKey(TEST_WRAPPING_ALIAS, strongBox = false)
         val plaintext = "the identity record".toByteArray(Charsets.UTF_8)
         val associatedData = buildAssociatedData(G2D_RECORD_DOMAIN, 1L, randomKeyId())
         val sealed = keyring.encrypt(key, plaintext, associatedData)
@@ -73,10 +84,10 @@ class G2dIdentityKeystoreInstrumentedTest {
 
     @Test
     fun aDifferentKeyFailsAuthentication() {
-        keyring.deleteKeyIfPresent(G2D_WRAPPING_KEY_ALIAS)
-        keyring.deleteKeyIfPresent(G2D_PROBE_KEY_ALIAS)
-        val first = keyring.createKey(G2D_WRAPPING_KEY_ALIAS, strongBox = false)
-        val second = keyring.createKey(G2D_PROBE_KEY_ALIAS, strongBox = false)
+        keyring.deleteKeyIfPresent(TEST_WRAPPING_ALIAS)
+        keyring.deleteKeyIfPresent(TEST_SECOND_ALIAS)
+        val first = keyring.createKey(TEST_WRAPPING_ALIAS, strongBox = false)
+        val second = keyring.createKey(TEST_SECOND_ALIAS, strongBox = false)
         val associatedData = buildAssociatedData(G2D_RECORD_DOMAIN, 1L, randomKeyId())
         val sealed = keyring.encrypt(first, "secret".toByteArray(Charsets.UTF_8), associatedData)
         try {
@@ -89,8 +100,8 @@ class G2dIdentityKeystoreInstrumentedTest {
 
     @Test
     fun corruptedCiphertextFailsAuthentication() {
-        keyring.deleteKeyIfPresent(G2D_WRAPPING_KEY_ALIAS)
-        val key = keyring.createKey(G2D_WRAPPING_KEY_ALIAS, strongBox = false)
+        keyring.deleteKeyIfPresent(TEST_WRAPPING_ALIAS)
+        val key = keyring.createKey(TEST_WRAPPING_ALIAS, strongBox = false)
         val associatedData = buildAssociatedData(G2D_RECORD_DOMAIN, 1L, randomKeyId())
         val sealed = keyring.encrypt(key, "secret".toByteArray(Charsets.UTF_8), associatedData)
         val corrupted = sealed.ciphertext.copyOf()
@@ -105,8 +116,8 @@ class G2dIdentityKeystoreInstrumentedTest {
 
     @Test
     fun associatedDataIsBoundToTheGeneration() {
-        keyring.deleteKeyIfPresent(G2D_WRAPPING_KEY_ALIAS)
-        val key = keyring.createKey(G2D_WRAPPING_KEY_ALIAS, strongBox = false)
+        keyring.deleteKeyIfPresent(TEST_WRAPPING_ALIAS)
+        val key = keyring.createKey(TEST_WRAPPING_ALIAS, strongBox = false)
         val keyId = randomKeyId()
         val sealed = keyring.encrypt(
             key,
@@ -141,7 +152,7 @@ class G2dIdentityKeystoreInstrumentedTest {
     fun aStoredRecordSurvivesAReconstructedStorage() {
         storage().saveRecord("{\"recordVersion\":1}")
         // A new instance models the next process start: no shared state, same files.
-        val reopened = G2dIdentityStorage(context().filesDir, G2dIdentityKeyring())
+        val reopened = G2dIdentityStorage(context().filesDir, keyring, TEST_DIRECTORY, TEST_WRAPPING_ALIAS)
         assertEquals("{\"recordVersion\":1}", reopened.loadRecord())
     }
 
@@ -153,7 +164,7 @@ class G2dIdentityKeystoreInstrumentedTest {
     @Test
     fun aMissingWrappingKeyIsReportedAndNeverRecreated() {
         storage().saveRecord("{\"recordVersion\":1}")
-        keyring.deleteKeyIfPresent(G2D_WRAPPING_KEY_ALIAS)
+        keyring.deleteKeyIfPresent(TEST_WRAPPING_ALIAS)
         try {
             storage().loadRecord()
             fail("a missing wrapping key must not decrypt anything")
@@ -162,7 +173,7 @@ class G2dIdentityKeystoreInstrumentedTest {
         }
         assertFalse(
             "the adapter must not regenerate a wrapping key while data exists",
-            keyring.hasKey(G2D_WRAPPING_KEY_ALIAS),
+            keyring.hasKey(TEST_WRAPPING_ALIAS),
         )
     }
 
@@ -202,7 +213,7 @@ class G2dIdentityKeystoreInstrumentedTest {
         storage().saveRecord("{\"recordVersion\":1}")
         storage().deleteRecord()
         assertNull(storage().loadRecord())
-        assertFalse(keyring.hasKey(G2D_WRAPPING_KEY_ALIAS))
+        assertFalse(keyring.hasKey(TEST_WRAPPING_ALIAS))
         storage().deleteRecord()
         assertNull(storage().loadRecord())
     }
@@ -210,7 +221,7 @@ class G2dIdentityKeystoreInstrumentedTest {
     @Test
     fun aRecordWrittenAfterAResetUsesAFreshKey() {
         storage().saveRecord("{\"recordVersion\":1}")
-        keyring.deleteKeyIfPresent(G2D_WRAPPING_KEY_ALIAS)
+        keyring.deleteKeyIfPresent(TEST_WRAPPING_ALIAS)
         // Only an explicit reset may clear the data; a save alone must not.
         try {
             storage().saveRecord("{\"recordVersion\":2}")
@@ -273,6 +284,57 @@ class G2dIdentityKeystoreInstrumentedTest {
         }
     }
 
+    // --- acceptance diagnostic ----------------------------------------------
+
+    /**
+     * Prints the measured capability record and asserts only what was measured.
+     *
+     * The output is non-secret by construction: API level, booleans, key size,
+     * block modes and padding names. No key, iv, ciphertext or plaintext is ever
+     * printed, and nothing here creates, reads or deletes production identity
+     * data. Gradle captures it in the instrumentation XML (`<system-out>`) and
+     * logcat under the `G2D-CAPABILITY` prefix.
+     */
+    @Test
+    fun reportMeasuredCapabilitiesForTheAcceptanceRecord() {
+        val result = G2dCapabilityProbe(keyring).probe(forceRefresh = true)
+        val lines = ArrayList<String>()
+        lines.add("G2D-CAPABILITY-BEGIN")
+        for (field in listOf(
+            "apiLevel",
+            "keystoreProvider",
+            "aesGcmSupported",
+            "probeKeyGenerated",
+            "roundTripVerified",
+            "probeKeyHardwareBacked",
+            "probeKeySizeBits",
+            "probeKeyBlockModes",
+            "probeKeyEncryptionPaddings",
+            "strongBoxRequested",
+            "strongBoxKeyCreated",
+            "wrappingKeyPresent",
+            "wrappingKeyHardwareBacked",
+            "failure",
+        )) {
+            lines.add("G2D-CAPABILITY $field=" + result[field].toString())
+        }
+        val notes = result["notes"]
+        if (notes is List<*>) {
+            for (note in notes) {
+                lines.add("G2D-CAPABILITY note=" + note.toString())
+            }
+        }
+        lines.add("G2D-CAPABILITY-END")
+        for (line in lines) {
+            println(line)
+        }
+
+        // The record may only claim what it measured.
+        assertEquals(true, result["roundTripVerified"])
+        assertEquals(G2D_KEY_SIZE_BITS, result["probeKeySizeBits"])
+        assertFalse("the probe key must not outlive the probe", keyring.hasKey(G2D_PROBE_KEY_ALIAS))
+    }
+
     private fun assertArrayEqualsMessage(expected: ByteArray, actual: ByteArray) {
         assertEquals(expected.size, actual.size)
         for (index in expected.indices) {
@@ -280,3 +342,12 @@ class G2dIdentityKeystoreInstrumentedTest {
         }
     }
 }
+
+/** Test-only storage directory; production uses `identity`. */
+private const val TEST_DIRECTORY = "identity_test"
+
+/** Test-only wrapping alias; production uses `g2d.identity.wrap.v1`. */
+private const val TEST_WRAPPING_ALIAS = "g2d.identity.wrap.test.v1"
+
+/** Second test-only alias, for the wrong-key case. */
+private const val TEST_SECOND_ALIAS = "g2d.identity.wrap.test2.v1"

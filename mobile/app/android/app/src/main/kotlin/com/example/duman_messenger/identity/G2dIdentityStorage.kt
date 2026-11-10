@@ -5,6 +5,9 @@ import java.io.FileOutputStream
 import java.io.IOException
 import org.json.JSONObject
 
+/** Production directory for identity data, relative to the app's files directory. */
+private const val G2D_DEFAULT_DIRECTORY_NAME = "identity"
+
 /**
  * Non-secret storage index: which wrapping key protects the data, and which
  * generation was last committed.
@@ -46,13 +49,21 @@ internal class G2dStorageIndex(val keyId: ByteArray, val generation: Long)
  * [deleteRecord] is the explicit reset: it removes the data, the index and the
  * Keystore key, so the discarded identity can never be decrypted again. It
  * recreates nothing.
+ *
+ * [directoryName] and [wrappingKeyAlias] exist so tests can run against their own
+ * directory and their own Keystore alias. Instrumented tests delete what they
+ * create, and they must never be able to delete a real identity: production uses
+ * the defaults (`identity`, `g2d.identity.wrap.v1`), and nothing else in the app
+ * passes these arguments.
  */
 internal class G2dIdentityStorage(
     baseDir: File,
     private val keyring: G2dIdentityKeyring,
+    directoryName: String = G2D_DEFAULT_DIRECTORY_NAME,
+    private val wrappingKeyAlias: String = G2D_WRAPPING_KEY_ALIAS,
 ) {
 
-    private val directory = File(baseDir, DIRECTORY_NAME)
+    private val directory = File(baseDir, directoryName)
     private val metaFile = File(directory, META_FILE_NAME)
     private val metaTempFile = File(directory, META_FILE_NAME + ".tmp")
 
@@ -95,7 +106,7 @@ internal class G2dIdentityStorage(
 
         val index = readIndex()
         val expectedKeyId = index?.keyId ?: envelopes[0].keyId
-        val key = keyring.ensureKey(G2D_WRAPPING_KEY_ALIAS, allowCreate = false)
+        val key = keyring.ensureKey(wrappingKeyAlias, allowCreate = false)
 
         var authenticationFailure: G2dProtectionException? = null
         var keyIdMismatch = false
@@ -148,7 +159,7 @@ internal class G2dIdentityStorage(
         ensureDirectory()
         val existingIndex = readIndex()
         val keyId = existingIndex?.keyId ?: randomKeyId()
-        val key = keyring.ensureKey(G2D_WRAPPING_KEY_ALIAS, allowCreate = !anySlotExists())
+        val key = keyring.ensureKey(wrappingKeyAlias, allowCreate = !anySlotExists())
         val generation = maxOf(existingIndex?.generation ?: 0L, highestStoredGeneration()) + 1L
 
         val plaintext = payload.toByteArray(Charsets.UTF_8)
@@ -198,7 +209,7 @@ internal class G2dIdentityStorage(
         }
         metaTempFile.delete()
         try {
-            keyring.deleteKeyIfPresent(G2D_WRAPPING_KEY_ALIAS)
+            keyring.deleteKeyIfPresent(wrappingKeyAlias)
         } catch (ignored: G2dProtectionException) {
             // No encrypted data remains, so an unremovable wrapping key protects
             // nothing. Reporting a write failure here would block the reset path.
@@ -316,7 +327,6 @@ internal class G2dIdentityStorage(
     }
 
     private companion object {
-        const val DIRECTORY_NAME = "identity"
         const val RECORD_FILE_PREFIX = "identity."
         const val META_FILE_NAME = "keyring.meta"
         const val INDEX_VERSION = 1

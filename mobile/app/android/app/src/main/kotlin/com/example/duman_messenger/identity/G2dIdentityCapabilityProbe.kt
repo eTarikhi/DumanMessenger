@@ -21,6 +21,10 @@ import javax.crypto.KeyGenerator
  *   with a matching result, under associated data, with a fresh iv.
  * * `probeKeyHardwareBacked` — the platform's own [KeyInfo.isInsideSecureHardware]
  *   answer for that key. This is the *only* source of a hardware claim.
+ * * `probeKeySizeBits`, `probeKeyBlockModes`, `probeKeyEncryptionPaddings` — the
+ *   key's actual parameters as the platform reports them, for the acceptance
+ *   record; they are read back from `KeyInfo`, never assumed from the spec that
+ *   was requested.
  * * `strongBoxKeyCreated` — a separate StrongBox attempt (API 28+ only) actually
  *   produced a StrongBox key. Absence is reported as absence, never as failure
  *   of the platform.
@@ -62,6 +66,8 @@ internal class G2dCapabilityProbe(private val keyring: G2dIdentityKeyring) {
         var roundTripVerified = false
         var probeKeyHardwareBacked = false
         var probeKeySizeBits = 0
+        var probeKeyBlockModes: List<String> = emptyList()
+        var probeKeyEncryptionPaddings: List<String> = emptyList()
 
         if (aesGcmSupported) {
             try {
@@ -73,6 +79,8 @@ internal class G2dCapabilityProbe(private val keyring: G2dIdentityKeyring) {
                 if (facts != null) {
                     probeKeyHardwareBacked = facts.hardwareBacked
                     probeKeySizeBits = facts.keySizeBits
+                    probeKeyBlockModes = facts.blockModes
+                    probeKeyEncryptionPaddings = facts.encryptionPaddings
                     if (facts.keySizeBits != G2D_KEY_SIZE_BITS) {
                         notes.add("The probe key is ${facts.keySizeBits} bits, not $G2D_KEY_SIZE_BITS.")
                     }
@@ -153,6 +161,8 @@ internal class G2dCapabilityProbe(private val keyring: G2dIdentityKeyring) {
         result["roundTripVerified"] = roundTripVerified
         result["probeKeyHardwareBacked"] = probeKeyHardwareBacked
         result["probeKeySizeBits"] = probeKeySizeBits
+        result["probeKeyBlockModes"] = ArrayList(probeKeyBlockModes)
+        result["probeKeyEncryptionPaddings"] = ArrayList(probeKeyEncryptionPaddings)
         result["strongBoxRequested"] = strongBoxRequested
         result["strongBoxKeyCreated"] = strongBoxKeyCreated
         result["wrappingKeyPresent"] = wrappingKeyPresent
