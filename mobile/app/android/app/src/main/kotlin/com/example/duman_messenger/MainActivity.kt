@@ -1,5 +1,8 @@
 package com.example.duman_messenger
 
+import com.example.duman_messenger.identity.G2dCapabilityProbe
+import com.example.duman_messenger.identity.G2dIdentityChannelHandler
+import com.example.duman_messenger.identity.G2dIdentityKeyring
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -17,6 +20,8 @@ class MainActivity : FlutterActivity() {
     private var g2cBleManager: G2cBleManager? = null
     private var g2cMethodChannel: MethodChannel? = null
     private var g2cEventChannel: EventChannel? = null
+
+    private var identityChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -61,6 +66,15 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             G2cBleManager.EVENT_CHANNEL,
         ).also { channel -> channel.setStreamHandler(g2cManager) }
+
+        // G2-D identity: Keystore-backed protection facts, measured on this device.
+        // Only non-secret facts cross this channel; see G2dIdentityChannelHandler.
+        val identityKeyring = G2dIdentityKeyring()
+        val handler = G2dIdentityChannelHandler(G2dCapabilityProbe(identityKeyring))
+        identityChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            G2dIdentityChannelHandler.METHOD_CHANNEL,
+        ).also { channel -> channel.setMethodCallHandler(handler) }
     }
 
     override fun onResume() {
@@ -106,10 +120,12 @@ class MainActivity : FlutterActivity() {
         g2cBleManager?.onDestroy()
         g2cMethodChannel?.setMethodCallHandler(null)
         g2cEventChannel?.setStreamHandler(null)
+        identityChannel?.setMethodCallHandler(null)
 
         g2cBleManager = null
         g2cMethodChannel = null
         g2cEventChannel = null
+        identityChannel = null
         bleDiagnosticManager = null
         bleMethodChannel = null
         bleEventChannel = null
