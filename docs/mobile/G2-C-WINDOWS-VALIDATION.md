@@ -1,6 +1,10 @@
 # G2-C Owner Windows Validation Guide
 
-**Owner-run handover only.** These commands have not been run in this workspace. This guide does not claim compile/runtime correctness, security, authentication, or acceptance. G2-C remains **NOT ACCEPTED**; two-device BLE acceptance is a separate later gate.
+**Owner-run handover only.** The commands below were not run in the agent workspace. Keep this guide as the reproducible procedure.
+
+**Validation outcome (2026-11-09, owner-reported):** `flutter analyze` passed, `flutter test` reported 67/67 passed, `flutter build apk --debug` succeeded, and the BLE workflow works on the owner's two physical phones. Those results are recorded with their provenance limits in [G2-C-ACCEPTANCE-CHECKLIST.md](G2-C-ACCEPTANCE-CHECKLIST.md#3-recorded-results). Transport-scope acceptance is recorded there; **security acceptance is not** — no independent review has occurred, and nothing in this guide establishes authentication, confidentiality, or production readiness.
+
+The steps below remain the way to re-run the evidence on a new SHA or a new machine. Record the commit SHA, toolchain versions and full command output with every run; the 2026-11-09 report did not include them.
 
 ## Target and prerequisites
 
@@ -86,6 +90,8 @@ flutter test
 ```
 
 These cover Dart/static and available Flutter tests only. Passing them does **not** establish Android compilation, BLE behavior, interoperability, authentication, or security. Record test count, failures, and full console output.
+
+Reference point: the 2026-11-09 owner run reported `flutter test` 67/67 passed. The suite in `mobile/app/test/` declares 67 `test(`/`testWidgets(` cases, so a divergent count means the tree is not the one that was validated.
 
 ## 5. Debug APK build
 

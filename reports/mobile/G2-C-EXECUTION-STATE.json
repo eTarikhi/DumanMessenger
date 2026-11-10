@@ -111,9 +111,35 @@
     "source_audit": "performed; source inspection only",
     "handover_archive": "created after docs/source freeze; .git/build/caches/secrets excluded; manifest/inventory checked"
   },
+  "owner_reported_validation_2026_11_09": {
+    "reported_by": "owner, Windows local PC; not reproduced or observed by the agent",
+    "branch": "arena/94329f0d-dumanmessenger",
+    "head_at_record": "93dc6cef811a8deac3944d8d58f4747034a75b29",
+    "flutter_analyze": "passed (owner-reported)",
+    "flutter_test": "67/67 passed (owner-reported)",
+    "flutter_build_apk_debug": "succeeded (owner-reported)",
+    "physical_two_device_ble": "owner reports the current BLE workflow works on both physical phones",
+    "provenance_limits": [
+      "exact validated SHA not attached; recorded at branch level over range 17f5fe2..93dc6ce",
+      "no console output or flutter --version in the report",
+      "device models and API levels not supplied",
+      "role breakdown and states reached not supplied",
+      "no logcat supplied"
+    ],
+    "static_cross_check": "mobile/app/test/ declares 67 test(/testWidgets( cases; consistent with the reported total, but this is a static count, not a run",
+    "independent_security_review": "not performed",
+    "record": "docs/mobile/G2-C-ACCEPTANCE-CHECKLIST.md",
+    "acceptance_scope": "TEST-ONLY transport only; security gates S1-S5 remain open"
+  },
+  "g2d_plan": {
+    "document": "docs/mobile/G2-D-SECURITY-ARCHITECTURE-PLAN.md",
+    "state": "design proposal only; no implementation, no dependency added",
+    "protocol_selection": "BLOCKED pending gates D0-D7; candidates reviewed: Noise r34 (+ XX pattern), X3DH, Double Ratchet, PQXDH, MLS RFC 9420, Tink 1.24.0 (Apache-2.0, primitives only), libsignal (AGPL-3.0), Android Keystore constraints on API 27",
+    "hard_gate": "D4 independent security review of the design; D6 independent review of the implementation"
+  },
   "remote_writes": false,
   "owner_approval_required_before_protocol_implementation": true,
-  "next_action": "Owner-run Windows validation from docs/mobile/G2-C-WINDOWS-VALIDATION.md in a separate clone, then report evidence. Protocol and identity/trust work remain blocked pending exact artifact/API27 evidence and written owner plus independent security approval. G2-C remains NOT ACCEPTED.",
+  "next_action": "Owner-reported validation is recorded (analyze pass, 67/67 tests, debug APK, two-device BLE), so G2-C transport scope is accepted for TEST-ONLY use per docs/mobile/G2-C-ACCEPTANCE-CHECKLIST.md. Security gates S1-S5 remain open and G2-C remains NOT security-accepted. Next: owner decisions on G2-D open items (AGPL/libsignal vs Noise-derived path, binding encoding, unverified-peer policy, PQ timing), then gate D0. No protocol, key, or trust code may be added before D4.",
   "transport_source_review": "Source inspection only. Client guards ignore duplicate connected/service/descriptor callbacks and require a matching pending write index before fragment advancement. Server callback peer checks, notification callback pacing, fragment bounds and teardown were inspected. No runtime/platform callback correctness validated.",
   "source_audit": {
     "scope": "Read-only inspection of all G2-C Kotlin/Dart source, manifest, routing, bridge/event lifecycle, Activity lifecycle/permission wiring, frame/fragment codecs, ADR and reports.",

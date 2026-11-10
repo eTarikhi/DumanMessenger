@@ -1,8 +1,9 @@
 # ADR: G2-C Android test-only secure BLE link
 
-- **Status:** Transport architecture accepted for TEST-ONLY source; authenticated protocol selection BLOCKED pending owner/security review and API-27 identity-key evidence. No secure session is implemented.
+- **Status:** Transport architecture accepted for TEST-ONLY use. Owner-reported validation is recorded in the [G2-C acceptance record](G2-C-ACCEPTANCE-CHECKLIST.md): `flutter analyze` passed, `flutter test` 67/67 passed, the debug APK built, and the BLE workflow works on the owner's two physical phones. Authenticated protocol selection remains BLOCKED pending owner/security review and API-27 identity-key evidence, and **no independent security review has occurred**. No secure session is implemented.
 - **Date:** 2026-11-09
 - **Scope:** Android-only, TEST-ONLY G2-C link foundation. This ADR does not authorize production messaging integration.
+- **Validation record:** [G2-C-ACCEPTANCE-CHECKLIST.md](G2-C-ACCEPTANCE-CHECKLIST.md) (evidence classes, gate ledger, known limitations). **Security work:** [G2-D-SECURITY-ARCHITECTURE-PLAN.md](G2-D-SECURITY-ARCHITECTURE-PLAN.md).
 
 ## Context and inspected boundaries
 
@@ -101,7 +102,9 @@ No code establishes identity, trust, a secure session, replay protection, or a p
 
 ## Consequences and next decisions
 
-Phase 2 source provides G2-C client/server and filtered discovery, foreground cleanup, GATT service/CCCD setup, and bounded bidirectional fragmentation. Phase 3 adds a focused TEST-ONLY Flutter control screen and operation-scoped Android permission requests/settings remediation. Phase 4 records a source-only audit and Windows owner handover guide. These changes have not been compiled or runtime-tested. Protocol selection remains BLOCKED, and the identity/trust lifecycle above is a design only. Authenticated sessions, persistent key/trust, replay protection, secure data plane, negative tests, independent security review, owner Windows validation, and two-device acceptance remain future gates. Never describe this foundation as secure communication.
+Phase 2 source provides G2-C client/server and filtered discovery, foreground cleanup, GATT service/CCCD setup, and bounded bidirectional fragmentation. Phase 3 adds a focused TEST-ONLY Flutter control screen and operation-scoped Android permission requests/settings remediation. Phase 4 records a source-only audit and Windows owner handover guide. Phase 5 adds connection-state revalidation, a bounded privacy-safe diagnostics ring, an explicit status-refresh control, and the test-fixture corrections recorded in [G2-C-ACCEPTANCE-CHECKLIST.md](G2-C-ACCEPTANCE-CHECKLIST.md).
+
+Validation status: the owner has since run `flutter analyze` (passed), `flutter test` (67/67 passed), and `flutter build apk --debug` (succeeded) on Windows, and reports that the BLE workflow works on two physical phones. Those results are owner-reported and are recorded, with their provenance limits, in [G2-C-ACCEPTANCE-CHECKLIST.md](G2-C-ACCEPTANCE-CHECKLIST.md#3-recorded-results); the agent environment cannot compile or run any of it. Protocol selection remains BLOCKED, and the identity/trust lifecycle above is a design only. Authenticated sessions, persistent key/trust, replay protection, secure data plane, negative tests, independent security review, and security-scope acceptance remain future gates. Transport success is not security: never describe this foundation as secure communication.
 
 #### Candidate evidence matrix (review status, not approval)
 

@@ -1,11 +1,30 @@
 # Implementation status — simulator, security, and Flutter workstreams
 
-**Current update:** 2026-11-08 (G1 shared-source implementation)
-**Historical snapshot below:** 2026-11-05; mobile no-source statements are superseded by the G1 update below.
-**Branch:** `arena/be8aa6c3-dumanmessenger` (active)
+**Current update:** 2026-11-09 (G2-C validation recorded; G2-D security plan written)
+**Superseded sections below:** 2026-11-08 (G1 shared source) and 2026-11-05 (no-source baseline). Where an older section says that no Flutter app, Android host, or device evidence exists, the 2026-11-09 update governs.
+**Branch:** `arena/94329f0d-dumanmessenger` (active)
 **Historical G0 snapshot tested/reviewed:** `a1f1916981c2244a2f8664573b66afbd5a2659b4` (empty checkpoint over `bdf719cf88205f944187cb79b8288264a56c13bd`)
 
-## Current G1 update (2026-11-08)
+## Current update (2026-11-09) — G2-C validated at transport scope, G2-D planned
+
+Three workstreams are now complete in source: G1 (shared shell), G2-A/G2-B (diagnostics and discovery), and G2-C (`17f5fe2..93dc6ce`, 13 commits, TEST-ONLY BLE link with both GATT roles, bounded fragmentation, connection-state revalidation and privacy-safe diagnostics).
+
+**Owner-reported validation of G2-C (2026-11-09):** `flutter analyze` passed; `flutter test` 67/67 passed; `flutter build apk --debug` succeeded; the BLE workflow works on two physical phones. These are owner-run results recorded in the [G2-C acceptance record](../../docs/mobile/G2-C-ACCEPTANCE-CHECKLIST.md), not agent observations. The owner did not attach the exact SHA, console output, device models/API levels, or role breakdown; those gaps are listed in that record.
+
+| Evidence | Status | Establishes |
+|---|---|---|
+| Flutter analyze / 67-67 test run (owner) | **Recorded** | Dart source and declared widget/unit tests are green in the owner's environment |
+| Debug APK build (owner) | **Recorded** | Kotlin/manifest/Gradle/Dart compile and package |
+| Two-device physical BLE (owner-reported) | **Recorded** | Transport-level client/server workflow functions between two handsets |
+| Independent security review | **Not performed** | — |
+
+**Status of G2-C:** accepted for TEST-ONLY transport use on the strength of the above. It is **not** security-accepted and **not** production-ready. No authenticated handshake, persistent identity/trust, end-to-end encryption, replay protection, or independent review exists. See the acceptance record's gate ledger (T1–T6 met at transport scope, S1–S5 open).
+
+**G2-D (new, design only):** [G2-D-SECURITY-ARCHITECTURE-PLAN.md](../../docs/mobile/G2-D-SECURITY-ARCHITECTURE-PLAN.md) sets out the security milestone — identity/key lifecycle, authenticated key exchange, peer trust and revocation, replay/downgrade protection, message encryption, forward secrecy and recovery, security test requirements, library research (Noise r34, X3DH, Double Ratchet, PQXDH, MLS RFC 9420, Tink 1.24.0, libsignal AGPL-3.0, Android Keystore constraints) and ten review gates. **Protocol and library selection remain BLOCKED**; nothing was implemented; no dependency was added.
+
+**Unchanged:** no GitHub Actions, remote CI, release, or publication was run. The agent environment still cannot compile or run Flutter/Kotlin/Android.
+
+## Previous G1 update (2026-11-08)
 
 - Added Flutter shared source and widget tests in `mobile/app`: onboarding, true empty conversations, local platform/build-mode diagnostics, named navigation, and an in-memory system/light/dark theme selector. No runtime plugin, network client, contacts, messages, cryptography, keys, persistence, runtime permission flow, or mesh transport was added.
 - The app uses the Flutter 3.47.8 template conventions and owner-reported bundled Dart 3.13.7. This version/environment is reported by the owner, not independently run on this agent.
