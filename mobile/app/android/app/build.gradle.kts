@@ -27,6 +27,9 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // G2-D Keystore/storage instrumented tests (androidTest only; they do not
+        // affect assembleDebug and are run explicitly with connectedDebugAndroidTest).
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -42,6 +45,16 @@ kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
+}
+
+// Instrumented tests only. Using `add(...)` instead of a generated accessor keeps
+// this valid regardless of which configuration accessors the Android plugin
+// generates, and these dependencies are not resolved by assembleDebug or by
+// `flutter build apk`.
+dependencies {
+    add("androidTestImplementation", "androidx.test.ext:junit:1.2.1")
+    add("androidTestImplementation", "androidx.test:runner:1.6.2")
+    add("androidTestImplementation", "androidx.test:core:1.6.1")
 }
 
 flutter {
