@@ -1,9 +1,25 @@
 # Implementation status — simulator, security, and Flutter workstreams
 
-**Current update:** 2026-11-09 (G2-C validation recorded; G2-D security plan written)
+**Current update:** 2026-11-09 (G2-D architecture decision + identity/trust foundation)
+**Previous update:** 2026-11-09 (G2-C validation recorded; G2-D security plan written)
 **Superseded sections below:** 2026-11-08 (G1 shared source) and 2026-11-05 (no-source baseline). Where an older section says that no Flutter app, Android host, or device evidence exists, the 2026-11-09 update governs.
 **Branch:** `arena/94329f0d-dumanmessenger` (active)
 **Historical G0 snapshot tested/reviewed:** `a1f1916981c2244a2f8664573b66afbd5a2659b4` (empty checkpoint over `bdf719cf88205f944187cb79b8288264a56c13bd`)
+
+## Current update (2026-11-09, later) — G2-D architecture recommendation and identity foundation
+
+Scope: recommendation plus a protocol-agnostic foundation. **No dependency was added, no
+key material is generated, no session exists, and no security gate is met.**
+
+- **Architecture:** [G2-D-ARCHITECTURE-DECISION.md](../../docs/mobile/G2-D-ARCHITECTURE-DECISION.md) recommends **Option A — `org.signal:libsignal-android`** (AGPL-3.0, accepted by the owner), with the decision recorded as *recommended, not approved, not integrated*. Evidence inspected from upstream: `minSdkVersion 23`, Java 21 + core-library desugaring required, ABIs `arm64-v8a`/`armeabi-v7a`/`x86_64`/`x86`, Maven Central lagging repository tags (0.86.5 vs `v0.106.2`), and an explicit upstream statement that use outside Signal is unsupported. Option B (Noise) is not selectable: no maintained JVM implementation publishes an artifact, and Noise stops at the handshake. Option C offers nothing better for a 1:1 serverless messenger.
+- **Blocking gates before integration:** D2-a (build with Java 21 + desugaring on Windows), D2-b (JNI + key probe on the SM-G610F API 27 device and one API 31+ device), D2-c (pin version + SHA-256, enumerate transitives), D1 (X3DH vs PQXDH profile).
+- **Identity foundation implemented** in `mobile/app/lib/identity/`: strict identity record codec, create/rotate/revoke/reset lifecycle, storage contract with a fail-closed default store, probe-gated key protection, and the seven-axis peer trust model with fail-closed identity-change handling. 100 new Dart test cases across five files (declared suite total 167).
+- **Deliberately not implemented:** the Android Keystore adapter (designed in [G2-D-IDENTITY-KEY-MANAGEMENT.md](../../docs/mobile/G2-D-IDENTITY-KEY-MANAGEMENT.md) §7), key generation, libsignal integration, peer persistence, and any UI — a trust screen without a handshake would be a misleading placeholder.
+- **License:** [G2-D-LICENSE-AND-DEPENDENCY-REVIEW.md](../../docs/mobile/G2-D-LICENSE-AND-DEPENDENCY-REVIEW.md) records that linking the AAR makes the application AGPL-3.0, requires source availability per distribution, and leaves the App Store question and AGPL §6 applicability to legal review.
+- **Validation:** none executed here — no Dart/Flutter/JDK/Kotlin toolchain in the agent environment. Only tree-sitter parsing, link/JSON checks and `git diff --check` were run. Owner validation is required.
+- **G2-C:** untouched. No G2-C file, test, assertion or timeout was modified; its 67 declared tests remain.
+
+State file: [G2-D-EXECUTION-STATE.json](G2-D-EXECUTION-STATE.json).
 
 ## Current update (2026-11-09) — G2-C validated at transport scope, G2-D planned
 
