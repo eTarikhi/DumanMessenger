@@ -186,32 +186,69 @@ void main() {
       expect(record.isIdentityChanged, isTrue);
       expect(record.isUserVerified, isFalse);
       expect(record.hasAuthenticatedIdentity, isFalse);
-      expect(record.axes, <G2dPeerTrustAxis>{G2dPeerTrustAxis.discovered});
+      // The old pin is not overwritten by an observation, and the user's
+      // verification of that pin no longer counts.
+      expect(record.identityFingerprint, fingerprint('a'));
+      expect(record.observedIdentityFingerprint, fingerprint('b'));
+      expect(record.axes.contains(G2dPeerTrustAxis.userVerified), isFalse);
       expect(record.verifiedAtMillis, isNull);
-      expect(record.previousIdentityFingerprint, fingerprint('a'));
+      expect(record.verificationMethod, isNull);
+      // No re-verification has happened, so the pin has no displaced predecessor
+      // to record yet.
+      expect(record.previousIdentityFingerprint, isNull);
       expect(record.statusLabel, 'Peer identity changed — re-verification required');
     });
 
-    test('a fresh ceremony clears the change and restores verification', () {
+    test('observing the changed key again does not promote it', () {
       final store = connectedPeer();
       store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
       store.authenticateIdentity(peer, fingerprint('b'), atMillis: 200);
 
-      store.markConnected(peer);
-      store.markServiceReady(peer);
-      store.markSessionEstablished(peer);
-      final reauthenticated = store.authenticateIdentity(peer, fingerprint('b'), atMillis: 300);
-      expect(reauthenticated, isA<G2dPeerIdentityUnchanged>());
+      final again = store.authenticateIdentity(peer, fingerprint('b'), atMillis: 250);
+      expect(again, isA<G2dPeerIdentityChanged>());
+      final record = store.recordFor(peer)!;
+      expect(record.identityFingerprint, fingerprint('a'));
+      expect(record.observedIdentityFingerprint, fingerprint('b'));
+      expect(record.identityChangedAtMillis, 200);
+      expect(record.isUserVerified, isFalse);
+    });
 
+    test('a fresh ceremony promotes the observed identity and restores verification', () {
+      final store = connectedPeer();
+      store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+      store.authenticateIdentity(peer, fingerprint('b'), atMillis: 200);
+
+      // Only the explicit ceremony may promote; the record already carries the
+      // authenticated axis for the observed key, but nothing is trusted yet.
       final verified = store.verifyIdentity(
         peerId: peer,
         method: G2dVerificationMethod.outOfBandFingerprint,
         atMillis: 400,
       );
+
       expect(verified.isUserVerified, isTrue);
       expect(verified.isIdentityChanged, isFalse);
       expect(verified.identityFingerprint, fingerprint('b'));
       expect(verified.previousIdentityFingerprint, fingerprint('a'));
+      expect(verified.observedIdentityFingerprint, isNull);
+      expect(verified.statusLabel, 'Verified by you (out-of-band comparison)');
+    });
+
+    test('a ceremony is refused while no authenticated identity exists', () {
+      final store = connectedPeer();
+      store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+      store.disconnect(peer);
+
+      // The disconnect dropped the authenticated axis, so the ceremony has
+      // nothing to promote until the peer is re-authenticated.
+      expect(
+        () => store.verifyIdentity(
+          peerId: peer,
+          method: G2dVerificationMethod.outOfBandFingerprint,
+          atMillis: 400,
+        ),
+        throwsA(isA<G2dPeerTrustError>()),
+      );
     });
   });
 
@@ -262,6 +299,43 @@ void main() {
         ),
         throwsA(isA<G2dPeerTrustError>()),
       );
+    });
+
+    test('a repeated revocation keeps the original evidence and timestamp', () {
+      final store = connectedPeer();
+      store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+      final first = store.revokePeer(
+        peerId: peer,
+        reason: G2dPeerRevocationReason.userRequested,
+        atMillis: 500,
+      );
+
+      final second = store.revokePeer(
+        peerId: peer,
+        reason: G2dPeerRevocationReason.identityChanged,
+        atMillis: 900,
+      );
+
+      expect(second, first);
+      expect(second.revokedAtMillis, 500);
+      expect(second.revocationReason, G2dPeerRevocationReason.userRequested);
+      expect(second.previousIdentityFingerprint, fingerprint('a'));
+    });
+
+    test('revocation of a disputed identity keeps the observed key as evidence', () {
+      final store = connectedPeer();
+      store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+      store.authenticateIdentity(peer, fingerprint('b'), atMillis: 200);
+
+      final revoked = store.revokePeer(
+        peerId: peer,
+        reason: G2dPeerRevocationReason.identityChanged,
+        atMillis: 500,
+      );
+
+      expect(revoked.identityFingerprint, isNull);
+      expect(revoked.observedIdentityFingerprint, isNull);
+      expect(revoked.previousIdentityFingerprint, fingerprint('b'));
     });
 
     test('a revoked peer stays revoked when a disconnect arrives', () {
@@ -400,6 +474,218 @@ void main() {
         () => store.authenticateIdentity(peer, fingerprint('a'), atMillis: 600),
         throwsA(isA<G2dPeerTrustError>()),
       );
+    });
+  });
+  group('record codec', () {
+    test('round-trips a plain transport record', () {
+      final store = G2dPeerTrustStore();
+      store.markDiscovered(peer);
+      final record = store.markConnected(peer);
+
+      final decoded = G2dPeerTrustRecord.fromMap(record.toMap());
+      expect(decoded, record);
+      expect(decoded.identityFingerprint, isNull);
+      expect(decoded.axes, record.axes);
+    });
+
+    test('round-trips a verified record without losing evidence', () {
+      final store = connectedPeer();
+      store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+      final record = store.verifyIdentity(
+        peerId: peer,
+        method: G2dVerificationMethod.scannedQrCode,
+        atMillis: 300,
+      );
+
+      final decoded = G2dPeerTrustRecord.fromMap(record.toMap());
+      expect(decoded, record);
+      expect(decoded.isUserVerified, isTrue);
+      expect(decoded.identityFingerprint, fingerprint('a'));
+      expect(decoded.verificationMethod, G2dVerificationMethod.scannedQrCode);
+      expect(decoded.verifiedAtMillis, 300);
+    });
+
+    test('round-trips a disputed record with pin and observation separated', () {
+      final store = connectedPeer();
+      store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+      store.authenticateIdentity(peer, fingerprint('b'), atMillis: 200);
+      final record = store.recordFor(peer)!;
+
+      final decoded = G2dPeerTrustRecord.fromMap(record.toMap());
+      expect(decoded, record);
+      expect(decoded.identityFingerprint, fingerprint('a'));
+      expect(decoded.observedIdentityFingerprint, fingerprint('b'));
+      expect(decoded.identityChangedAtMillis, 200);
+      expect(decoded.isUserVerified, isFalse);
+      expect(decoded.statusLabel, 'Peer identity changed — re-verification required');
+    });
+
+    test('round-trips a revoked tombstone', () {
+      final store = connectedPeer();
+      store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+      final record = store.revokePeer(
+        peerId: peer,
+        reason: G2dPeerRevocationReason.userRequested,
+        atMillis: 500,
+      );
+
+      final decoded = G2dPeerTrustRecord.fromMap(record.toMap());
+      expect(decoded, record);
+      expect(decoded.isRevoked, isTrue);
+      expect(decoded.previousIdentityFingerprint, fingerprint('a'));
+    });
+
+    test('rejects malformed identifiers, axes and timestamps', () {
+      expect(
+        () => G2dPeerTrustRecord.fromMap('not a record'),
+        throwsFormatException,
+      );
+      expect(
+        () => G2dPeerTrustRecord.fromMap(<String, Object?>{'peerId': '', 'axes': <String>[]}),
+        throwsFormatException,
+      );
+      expect(
+        () => G2dPeerTrustRecord.fromMap(<String, Object?>{
+          'peerId': List<String>.filled(65, 'p').join(),
+          'axes': <String>[],
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => G2dPeerTrustRecord.fromMap(<String, Object?>{
+          'peerId': peer,
+          'axes': <String>['discovered', 'not_an_axis'],
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => G2dPeerTrustRecord.fromMap(<String, Object?>{
+          'peerId': peer,
+          'axes': <String>['discovered', 'discovered'],
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => G2dPeerTrustRecord.fromMap(<String, Object?>{'peerId': peer, 'axes': 'nope'}),
+        throwsFormatException,
+      );
+      expect(
+        () => G2dPeerTrustRecord.fromMap(<String, Object?>{
+          'peerId': peer,
+          'axes': <String>['discovered'],
+          'identityFingerprint': 'short',
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => G2dPeerTrustRecord.fromMap(<String, Object?>{
+          'peerId': peer,
+          'axes': <String>['discovered'],
+          'verifiedAtMillis': 0,
+        }),
+        throwsFormatException,
+      );
+    });
+
+    test('rejects a session axis without its transport axes', () {
+      expect(
+        () => G2dPeerTrustRecord.fromMap(<String, Object?>{
+          'peerId': peer,
+          'axes': <String>['discovered', 'sessionEstablished'],
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => G2dPeerTrustRecord.fromMap(<String, Object?>{
+          'peerId': peer,
+          'axes': <String>['connected'],
+        }),
+        throwsFormatException,
+      );
+    });
+
+    test('rejects verification facts that contradict the verified axis', () {
+      final store = connectedPeer();
+      store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+      final verified = store.verifyIdentity(
+        peerId: peer,
+        method: G2dVerificationMethod.outOfBandFingerprint,
+        atMillis: 300,
+      );
+
+      // Facts without the axis.
+      final factsOnly = verified.toMap()
+        ..['axes'] = <String>['discovered', 'connected', 'serviceReady', 'sessionEstablished', 'identityAuthenticated'];
+      expect(() => G2dPeerTrustRecord.fromMap(factsOnly), throwsFormatException);
+
+      // Axis without facts.
+      final axisOnly = verified.toMap()..remove('verifiedAtMillis');
+      expect(() => G2dPeerTrustRecord.fromMap(axisOnly), throwsFormatException);
+
+      // Axis without a pinned identity.
+      final noPin = verified.toMap()..remove('identityFingerprint');
+      expect(() => G2dPeerTrustRecord.fromMap(noPin), throwsFormatException);
+    });
+
+    test('rejects a contradictory observed identity', () {
+      final store = connectedPeer();
+      store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+      final changed = store.authenticateIdentity(peer, fingerprint('b'), atMillis: 200);
+      final map = (changed as G2dPeerIdentityChanged).record.toMap();
+
+      // Observed equal to the pin.
+      final sameAsPin = Map<String, Object?>.from(map)
+        ..['observedIdentityFingerprint'] = fingerprint('a');
+      expect(() => G2dPeerTrustRecord.fromMap(sameAsPin), throwsFormatException);
+
+      // Observation without a change time.
+      final noTime = Map<String, Object?>.from(map)..remove('identityChangedAtMillis');
+      expect(() => G2dPeerTrustRecord.fromMap(noTime), throwsFormatException);
+
+      // Change time without an observation.
+      final noObservation = Map<String, Object?>.from(map)
+        ..remove('observedIdentityFingerprint');
+      expect(() => G2dPeerTrustRecord.fromMap(noObservation), throwsFormatException);
+
+      // Observation without a pin.
+      final noPin = Map<String, Object?>.from(map)..remove('identityFingerprint');
+      expect(() => G2dPeerTrustRecord.fromMap(noPin), throwsFormatException);
+    });
+
+    test('rejects a revoked record that still carries trust facts', () {
+      final store = connectedPeer();
+      store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+      final revoked = store.revokePeer(
+        peerId: peer,
+        reason: G2dPeerRevocationReason.userRequested,
+        atMillis: 500,
+      );
+      final map = revoked.toMap();
+
+      expect(
+        () => G2dPeerTrustRecord.fromMap(Map<String, Object?>.from(map)..remove('revocationReason')),
+        throwsFormatException,
+      );
+      expect(
+        () => G2dPeerTrustRecord.fromMap(
+          Map<String, Object?>.from(map)..['axes'] = <String>['discovered'],
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => G2dPeerTrustRecord.fromMap(
+          Map<String, Object?>.from(map)..['identityFingerprint'] = fingerprint('a'),
+        ),
+        throwsFormatException,
+      );
+    });
+
+    test('a previous identity may not equal the pin', () {
+      final store = connectedPeer();
+      store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+      final map = store.recordFor(peer)!.toMap()
+        ..['previousIdentityFingerprint'] = fingerprint('a');
+      expect(() => G2dPeerTrustRecord.fromMap(map), throwsFormatException);
     });
   });
 }
