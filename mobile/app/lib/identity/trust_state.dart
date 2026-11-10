@@ -173,10 +173,21 @@ class G2dPeerTrustRecord {
         if (revocationReason != null) 'revocationReason': revocationReason!.wireName,
       };
 
-  G2dPeerTrustRecord _withAxes(Set<G2dPeerTrustAxis> nextAxes) => G2dPeerTrustRecord(
+  /// Copy with a new axis set.
+  ///
+  /// [identityFingerprint] binds the pin when an authenticated identity is being
+  /// recorded. Omitting it keeps the current pin, so transport-axis advances and
+  /// a disconnect can never drop a pinned identity. There is deliberately no way
+  /// to clear the pin through this helper: unpinning is a revocation decision,
+  /// not an axis transition.
+  G2dPeerTrustRecord _withAxes(
+    Set<G2dPeerTrustAxis> nextAxes, {
+    String? identityFingerprint,
+  }) =>
+      G2dPeerTrustRecord(
         peerId: peerId,
         axes: nextAxes,
-        identityFingerprint: identityFingerprint,
+        identityFingerprint: identityFingerprint ?? this.identityFingerprint,
         previousIdentityFingerprint: previousIdentityFingerprint,
         verifiedAtMillis: verifiedAtMillis,
         verificationMethod: verificationMethod,
@@ -311,10 +322,19 @@ class G2dPeerTrustStore {
       );
     }
 
-    final updated = existing._withAxes(<G2dPeerTrustAxis>{
-      ...existing.axes,
-      G2dPeerTrustAxis.identityAuthenticated,
-    });
+    // Reaching here means the observed fingerprint is either the first pin for
+    // this peer or the same value as the existing pin. Binding it is not
+    // optional: without this the record never gains a pin, so a second
+    // observation would look like a first contact forever, an identity change
+    // could never be detected, and verification facts (which require a pin)
+    // would never count.
+    final updated = existing._withAxes(
+      <G2dPeerTrustAxis>{
+        ...existing.axes,
+        G2dPeerTrustAxis.identityAuthenticated,
+      },
+      identityFingerprint: fingerprint,
+    );
     _records[id] = updated;
     return pinned == fingerprint
         ? G2dPeerIdentityUnchanged(updated)

@@ -316,4 +316,90 @@ void main() {
       expect(map['peerId'], peer);
     });
   });
+
+  // Regression tests for the defect where `authenticateIdentity` validated and
+  // compared the observed fingerprint but never bound it to the record: the pin
+  // stayed null, so every later observation looked like first contact, an
+  // identity change could never be detected, and verification facts (which
+  // require a pin) never counted.
+  group('pin persistence', () {
+    test('the first observation stores the pinned fingerprint', () {
+      final store = connectedPeer();
+      final observation = store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+
+      expect(observation, isA<G2dPeerIdentityFirstSeen>());
+      final first = observation as G2dPeerIdentityFirstSeen;
+      expect(first.record.identityFingerprint, fingerprint('a'));
+      expect(store.recordFor(peer)!.identityFingerprint, fingerprint('a'));
+    });
+
+    test('the stored record and the returned record agree after authentication', () {
+      final store = connectedPeer();
+      final observation = store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+      final returned = (observation as G2dPeerIdentityFirstSeen).record;
+      final stored = store.recordFor(peer)!;
+
+      expect(stored.identityFingerprint, isNotNull);
+      expect(stored.identityFingerprint, returned.identityFingerprint);
+      expect(stored.previousIdentityFingerprint, returned.previousIdentityFingerprint);
+      expect(stored.axes, returned.axes);
+      expect(stored.verifiedAtMillis, returned.verifiedAtMillis);
+    });
+
+    test('a first observation invents no previous fingerprint and no verification', () {
+      final store = connectedPeer();
+      final observation = store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+      final record = (observation as G2dPeerIdentityFirstSeen).record;
+
+      expect(record.previousIdentityFingerprint, isNull);
+      expect(record.identityChangedAtMillis, isNull);
+      expect(record.verifiedAtMillis, isNull);
+      expect(record.verificationMethod, isNull);
+      expect(record.isUserVerified, isFalse);
+    });
+
+    test('a repeated observation keeps the pin and reports unchanged', () {
+      final store = connectedPeer();
+      store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+
+      final second = store.authenticateIdentity(peer, fingerprint('a'), atMillis: 200);
+      expect(second, isA<G2dPeerIdentityUnchanged>());
+      final unchanged = second as G2dPeerIdentityUnchanged;
+      expect(unchanged.record.identityFingerprint, fingerprint('a'));
+      expect(store.recordFor(peer)!.identityFingerprint, fingerprint('a'));
+    });
+
+    test('a disconnect keeps the pin and the next observation stays unchanged', () {
+      final store = connectedPeer();
+      store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+      store.disconnect(peer);
+
+      expect(store.recordFor(peer)!.identityFingerprint, fingerprint('a'));
+
+      store.markConnected(peer);
+      store.markServiceReady(peer);
+      store.markSessionEstablished(peer);
+      final again = store.authenticateIdentity(peer, fingerprint('a'), atMillis: 300);
+      expect(again, isA<G2dPeerIdentityUnchanged>());
+      expect(store.recordFor(peer)!.identityFingerprint, fingerprint('a'));
+    });
+
+    test('revocation moves the pin to the revoked fingerprint and refuses the peer', () {
+      final store = connectedPeer();
+      store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+
+      final revoked = store.revokePeer(
+        peerId: peer,
+        reason: G2dPeerRevocationReason.userRequested,
+        atMillis: 500,
+      );
+
+      expect(revoked.identityFingerprint, isNull);
+      expect(revoked.previousIdentityFingerprint, fingerprint('a'));
+      expect(
+        () => store.authenticateIdentity(peer, fingerprint('a'), atMillis: 600),
+        throwsA(isA<G2dPeerTrustError>()),
+      );
+    });
+  });
 }
