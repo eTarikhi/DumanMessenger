@@ -1,7 +1,6 @@
 import 'package:duman_messenger/identity/identity_android_runtime.dart';
 import 'package:duman_messenger/identity/identity_channel.dart';
 import 'package:duman_messenger/identity/identity_models.dart';
-import 'package:duman_messenger/identity/identity_probe_capabilities.dart';
 import 'package:duman_messenger/identity/identity_service.dart';
 import 'package:duman_messenger/identity/identity_store.dart';
 import 'package:flutter_test/flutter_test.dart';

@@ -414,7 +414,16 @@ internal class G2dIdentityKeyring {
         }
         return try {
             val factory = SecretKeyFactory.getInstance(key.algorithm, G2D_KEYSTORE_PROVIDER)
-            val info: KeyInfo = factory.getKeySpec(key, KeyInfo::class.java)
+            // `SecretKeyFactory.getKeySpec` is declared on the generic `KeySpec`
+            // bound, so the platform type is `KeySpec!` and the compiler cannot
+            // prove it returns a `KeyInfo`, even when one is requested. A checked
+            // cast keeps this honest in both directions: a real `KeyInfo` is
+            // measured as before, and anything else is reported as "the platform
+            // would not describe this key" by returning null — never as
+            // hardware-backed, and never as "not hardware-backed" either, which
+            // would be a measurement we did not make.
+            val specs = factory.getKeySpec(key, KeyInfo::class.java)
+            val info = specs as? KeyInfo ?: return null
             G2dKeyFacts(
                 hardwareBacked = info.isInsideSecureHardware,
                 keySizeBits = info.keySize,

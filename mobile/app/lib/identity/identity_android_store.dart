@@ -26,16 +26,25 @@ import 'identity_store.dart';
 /// [G2dIdentityStore] over the `duman/identity` platform channel.
 class G2dKeystoreIdentityStore implements G2dIdentityStore {
   G2dKeystoreIdentityStore({
-    required G2dIdentityChannel channel,
-    required bool protectionVerified,
-  })  : _channel = channel,
-        _protectionVerified = protectionVerified;
+    required this.channel,
+    required this.protectionVerified,
+  });
 
   /// Stable, non-secret description used in diagnostics and tests.
   static const String kind = 'android_keystore_v1';
 
-  final G2dIdentityChannel _channel;
-  final bool _protectionVerified;
+  /// The platform channel this store speaks to.
+  ///
+  /// Public so the constructor can use an initializing formal, exactly as
+  /// `G2dIdentityService` does for its store and platform facts; this is wiring,
+  /// not a secret.
+  final G2dIdentityChannel channel;
+
+  /// Whether the capability probe proved the wrapping key on this device.
+  ///
+  /// Taken from the probe's measured AES-GCM round trip; this is what
+  /// [isSecureAtRest] reports, and it is never a constant.
+  final bool protectionVerified;
 
   @override
   String get storeKind => kind;
@@ -46,11 +55,11 @@ class G2dKeystoreIdentityStore implements G2dIdentityStore {
   /// wrapping key that cannot encrypt and decrypt the same bytes protects
   /// nothing, and claiming otherwise is exactly the failure this flag prevents.
   @override
-  bool get isSecureAtRest => _protectionVerified;
+  bool get isSecureAtRest => protectionVerified;
 
   @override
   Future<G2dIdentityRecord?> load() async {
-    final payload = await _channel.loadRecord();
+    final payload = await channel.loadRecord();
     if (payload == null) {
       return null;
     }
@@ -95,9 +104,9 @@ class G2dKeystoreIdentityStore implements G2dIdentityStore {
         'the identity record is not valid and was not written',
       );
     }
-    await _channel.saveRecord(payload);
+    await channel.saveRecord(payload);
   }
 
   @override
-  Future<void> delete() => _channel.deleteRecord();
+  Future<void> delete() => channel.deleteRecord();
 }
