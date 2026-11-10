@@ -1,11 +1,16 @@
 import 'package:duman_messenger/ble/g2c_ble_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// Baseline native status map. Every field the Kotlin bridge always serializes is
+/// present here with a production value: `G2cBleManager.statusMap()` always emits
+/// `discoveryState` (`G2cBleDiscovery.state`, defaulting to `idle`). Fields the bridge
+/// may omit are left out on purpose so their documented defaults are exercised.
 Map<Object?, Object?> _map([Map<Object?, Object?> extra = const <Object?, Object?>{}]) =>
     <Object?, Object?>{
       'testOnly': true,
       'state': 'service_ready',
       'authenticated': false,
+      'discoveryState': 'idle',
       'permissionState': 'granted',
       'permissionNames': <Object?>[],
       'discoveredPeerIds': <Object?>[],
@@ -59,6 +64,10 @@ void main() {
     expect(status.activeRole, isNull);
     expect(status.advertiserAvailable, isNull);
     expect(status.scannerAvailable, isNull);
+    // The native bridge always serializes the scan state; idle is its no-scan value.
+    expect(status.discoveryState, G2cDiscoveryState.idle);
+    expect(status.diagnostics, isEmpty);
+    expect(status.permissionState, G2cRuntimePermissionState.granted);
   });
 
   test('parses each distinct transport outcome', () {
@@ -209,6 +218,37 @@ void main() {
       () => G2cBleStatus.fromMap(_map(<Object?, Object?>{'diagnostics': tooMany})),
       throwsFormatException,
     );
+  });
+
+  test('accepts every discovery state the native bridge can serialize', () {
+    // G2cBleDiscovery only ever publishes these values; G2cBleManager defaults to idle.
+    const expected = <String, G2cDiscoveryState>{
+      'idle': G2cDiscoveryState.idle,
+      'scanning': G2cDiscoveryState.scanning,
+      'results': G2cDiscoveryState.results,
+      'permission_denied': G2cDiscoveryState.permissionDenied,
+      'timed_out': G2cDiscoveryState.timedOut,
+      'unsupported': G2cDiscoveryState.unsupported,
+      'failed': G2cDiscoveryState.failed,
+    };
+    expected.forEach((wire, state) {
+      final status = G2cBleStatus.fromMap(_map(<Object?, Object?>{
+        'discoveryState': wire,
+      }));
+      expect(status.discoveryState, state, reason: wire);
+    });
+  });
+
+  test('still rejects an unknown discovery state', () {
+    for (final invalid in <Object?>['connected', 'service_ready', '', 7, true]) {
+      expect(
+        () => G2cBleStatus.fromMap(_map(<Object?, Object?>{
+          'discoveryState': invalid,
+        })),
+        throwsFormatException,
+        reason: '$invalid',
+      );
+    }
   });
 
   test('still rejects any authentication claim', () {

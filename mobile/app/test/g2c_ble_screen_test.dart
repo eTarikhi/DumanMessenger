@@ -502,15 +502,27 @@ void main() {
       _status(state: G2cLinkState.serviceReady, activeRole: 'client'),
     );
     addTearDown(api.close);
+    // The G2-C form is much taller than the default 800x600 test surface, so the
+    // revalidation control sits below the fold and a tap would land outside the
+    // viewport clip. A taller surface lays the whole form out; `ensureVisible` plus
+    // explicit pumps below then guarantee a real, hit-testable tap target.
+    await tester.binding.setSurfaceSize(const Size(1000, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(MaterialApp(home: G2cBleScreen(bridge: api)));
     await tester.pumpAndSettle();
     expect(api.refreshCount, 1);
 
     api.publish(_status(transportOutcome: G2cTransportOutcome.disconnected));
-    await tester.ensureVisible(find.byKey(const Key('g2c-refresh-status')));
+    // Apply the pushed status before measuring or scrolling the form.
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('g2c-refresh-status')));
+
+    final refresh = find.byKey(const Key('g2c-refresh-status'));
+    await tester.ensureVisible(refresh);
+    await tester.pumpAndSettle();
+    expect(refresh.hitTestable(), findsOneWidget);
+
+    await tester.tap(refresh);
     await tester.pumpAndSettle();
 
     expect(api.refreshCount, 2);
