@@ -1,6 +1,7 @@
 import 'package:duman_messenger/identity/identity_models.dart';
 import 'package:duman_messenger/identity/identity_service.dart';
 import 'package:duman_messenger/identity/identity_store.dart';
+import 'package:duman_messenger/identity/platform_key_capabilities.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 String fingerprint(String nibble) => List<String>.filled(64, nibble).join();
@@ -18,6 +19,15 @@ const G2dKeyHandle unprobedHandle = G2dKeyHandle(
   protection: G2dKeyProtection.softwareKeystoreWrapped,
 );
 
+/// A handle that claims secure hardware. Whether that claim is *possible* is a
+/// platform question, which the service asks the injected capabilities.
+const G2dKeyHandle hardwareHandle = G2dKeyHandle(
+  provider: 'android_keystore',
+  alias: 'g2d.identity.hardware',
+  protection: G2dKeyProtection.hardwareBound,
+  probeVerified: true,
+);
+
 const G2dKeyHandle unknownProtectionHandle = G2dKeyHandle(
   provider: 'android_keystore',
   alias: 'g2d.identity.v1',
@@ -25,9 +35,13 @@ const G2dKeyHandle unknownProtectionHandle = G2dKeyHandle(
 );
 
 class Harness {
-  Harness({G2dIdentityStore? store}) : store = store ?? G2dInMemoryIdentityStore() {
+  Harness({G2dIdentityStore? store, int apiLevel = 27})
+      : store = store ?? G2dInMemoryIdentityStore() {
     service = G2dIdentityService(
       store: this.store,
+      platform: G2dAndroidKeyCapabilities(apiLevel),
+      // The double persists nothing and protects nothing; tests must say so.
+      allowInsecureStore: true,
       nowMillis: () => now,
       newIdentityId: () => 'identity-${++_ids}',
     );
@@ -271,6 +285,154 @@ void main() {
       expect(second.isSuccess, isTrue);
       expect(second.record!.identityId, 'identity-2');
       expect(second.record!.keyVersion, 1);
+    });
+  });
+
+  group('store construction', () {
+    test('refuses an insecure store unless the caller opts in', () {
+      expect(
+        () => G2dIdentityService(
+          store: G2dInMemoryIdentityStore(),
+          platform: const G2dAndroidKeyCapabilities(27),
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('refuses the fail-closed placeholder unless the caller opts in', () {
+      expect(
+        () => G2dIdentityService(
+          store: const G2dUnavailableIdentityStore(),
+          platform: const G2dAndroidKeyCapabilities(27),
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('accepts an insecure store only with an explicit acknowledgement', () {
+      final service = G2dIdentityService(
+        store: G2dInMemoryIdentityStore(),
+        platform: const G2dAndroidKeyCapabilities(27),
+        allowInsecureStore: true,
+      );
+
+      expect(service.isSecureAtRest, isFalse);
+      expect(service.storeKind, 'in_memory_test_only');
+      expect(service.apiLevel, 27);
+    });
+  });
+
+  group('platform capabilities', () {
+    test('refuses a hardware-bound Ed25519 claim at the API 27 floor', () async {
+      final harness = Harness();
+      final result = await harness.service.createIdentity(
+        algorithm: G2dIdentityAlgorithm.ed25519,
+        publicKeyFingerprint: fingerprint('a'),
+        keyHandle: hardwareHandle,
+      );
+
+      expect(result.failure, G2dIdentityFailure.unverifiedProtection);
+      expect(result.detail, contains('cannot hold'));
+      expect(await harness.store.load(), isNull);
+    });
+
+    test('accepts a hardware-bound Ed25519 claim on API 33', () async {
+      final harness = Harness(apiLevel: 33);
+      final result = await harness.service.createIdentity(
+        algorithm: G2dIdentityAlgorithm.ed25519,
+        publicKeyFingerprint: fingerprint('a'),
+        keyHandle: hardwareHandle,
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(await harness.service.load(), isA<G2dIdentityActive>());
+    });
+
+    test('refuses a hardware-bound Curve25519 claim on any API level', () async {
+      final harness = Harness(apiLevel: 34);
+      final result = await harness.service.createIdentity(
+        algorithm: G2dIdentityAlgorithm.curve25519Xeddsa,
+        publicKeyFingerprint: fingerprint('a'),
+        keyHandle: hardwareHandle,
+      );
+
+      expect(result.failure, G2dIdentityFailure.unverifiedProtection);
+      expect(result.detail, contains('cannot hold'));
+    });
+
+    test('accepts a software-wrapped identity at the floor', () async {
+      final harness = Harness();
+      final result = await harness.create();
+      expect(result.isSuccess, isTrue);
+      expect(result.record!.keyHandle.protection,
+          G2dKeyProtection.softwareKeystoreWrapped);
+    });
+
+    test('refuses an impossible hardware claim when rotating', () async {
+      final harness = Harness();
+      await harness.create();
+
+      final result = await harness.service.beginRotation(
+        algorithm: G2dIdentityAlgorithm.ed25519,
+        newPublicKeyFingerprint: fingerprint('b'),
+        newKeyHandle: hardwareHandle,
+      );
+
+      expect(result.failure, G2dIdentityFailure.unverifiedProtection);
+      expect((await harness.store.load())!.keyVersion, 1);
+      expect(await harness.service.load(), isA<G2dIdentityActive>());
+    });
+
+    test('a stored claim this platform cannot satisfy is rejected on load', () async {
+      final harness = Harness();
+      // Model a record restored from a stronger device: an Ed25519 identity that
+      // claims secure hardware, now running at the API 27 floor.
+      await harness.store.save(G2dIdentityRecord(
+        identityId: 'identity-0',
+        keyVersion: 1,
+        algorithm: G2dIdentityAlgorithm.ed25519,
+        publicKeyFingerprint: fingerprint('b'),
+        keyHandle: hardwareHandle,
+        state: G2dIdentityState.active,
+        createdAtMillis: 1000,
+      ));
+
+      expect(await harness.service.load(), isA<G2dIdentityCorrupt>());
+      expect(
+        (await harness.create()).failure,
+        G2dIdentityFailure.protectionInvalid,
+      );
+
+      expect((await harness.service.resetCorruptIdentity()).isSuccess, isTrue);
+      expect(await harness.service.load(), isA<G2dIdentityAbsent>());
+    });
+
+    test('a platform limit and missing evidence are reported differently', () {
+      const api27 = G2dAndroidKeyCapabilities(27);
+
+      expect(
+        api27.describeProtectionFor(
+          G2dIdentityAlgorithm.x25519,
+          G2dKeyProtection.hardwareBound,
+        ),
+        contains('cannot hold'),
+      );
+      expect(
+        api27.describeProtectionFor(
+          G2dIdentityAlgorithm.ed25519,
+          G2dKeyProtection.unknown,
+        ),
+        contains('unknown'),
+      );
+      expect(
+        api27.describeProtectionFor(
+          G2dIdentityAlgorithm.ed25519,
+          G2dKeyProtection.softwareKeystoreWrapped,
+        ),
+        isNull,
+      );
+      expect(api27.isHardwarePossible(G2dIdentityAlgorithm.ed25519), isFalse);
+      expect(api27.isHardwarePossible(G2dIdentityAlgorithm.x25519), isFalse);
     });
   });
 

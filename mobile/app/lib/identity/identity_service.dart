@@ -13,6 +13,7 @@ import 'dart:math';
 
 import 'identity_models.dart';
 import 'identity_store.dart';
+import 'platform_key_capabilities.dart';
 
 /// State of the local identity as observed by the app.
 sealed class G2dIdentitySnapshot {
@@ -87,6 +88,10 @@ enum G2dIdentityFailure {
   /// The requested identity id belongs to an identity this installation already
   /// removed. A new identity must use a fresh id.
   identityIdRetired,
+
+  /// The stored record claims a key protection this platform cannot provide.
+  /// Treated as untrustworthy, and recoverable only through an explicit reset.
+  protectionInvalid,
 }
 
 /// Result of a lifecycle operation.
@@ -116,14 +121,37 @@ class G2dIdentityActionResult {
 
 /// Orchestrates identity records over a [G2dIdentityStore].
 class G2dIdentityService {
+  /// Builds the service over [store] and the device's platform facts.
+  ///
+  /// [allowInsecureStore] exists because the only stores that exist today are a
+  /// fail-closed placeholder and a test double, and neither protects anything at
+  /// rest. Production construction therefore refuses them by default: passing
+  /// `true` is an explicit acknowledgement that this wiring cannot persist a
+  /// protected identity, and no UI may present it as persistent or secure.
   G2dIdentityService({
     required this.store,
+    required G2dPlatformKeyCapabilities platform,
+    bool allowInsecureStore = false,
     int Function()? nowMillis,
     String Function()? newIdentityId,
-  })  : _nowMillis = nowMillis ?? _systemMillis,
-        _newIdentityId = newIdentityId ?? _randomIdentityId;
+  })  : _platform = platform,
+        _nowMillis = nowMillis ?? _systemMillis,
+        _newIdentityId = newIdentityId ?? _randomIdentityId {
+    if (!store.isSecureAtRest && !allowInsecureStore) {
+      throw ArgumentError.value(
+        store.storeKind,
+        'store',
+        'store does not protect the record at rest; pass allowInsecureStore: true '
+            'only for tests or an explicitly non-persistent build',
+      );
+    }
+  }
 
   final G2dIdentityStore store;
+  final G2dPlatformKeyCapabilities _platform;
+
+  /// API level the injected platform facts describe, for diagnostics only.
+  int get apiLevel => _platform.apiLevel;
   final int Function() _nowMillis;
   final String Function() _newIdentityId;
 
@@ -187,6 +215,17 @@ class G2dIdentityService {
       );
     }
 
+    final capabilityRefusal =
+        _platform.describeProtectionFor(algorithm, keyHandle.protection);
+    if (capabilityRefusal != null) {
+      // The caller may assert that a probe succeeded; this only checks that the
+      // claim is possible on this platform at all.
+      return G2dIdentityActionResult.failure(
+        G2dIdentityFailure.unverifiedProtection,
+        capabilityRefusal,
+      );
+    }
+
     final loaded = await _load();
     if (loaded.failure != null) {
       return loaded.failure!;
@@ -243,6 +282,15 @@ class G2dIdentityService {
         'key protection must be probed before rotating',
       );
     }
+    final capabilityRefusal =
+        _platform.describeProtectionFor(algorithm, newKeyHandle.protection);
+    if (capabilityRefusal != null) {
+      return G2dIdentityActionResult.failure(
+        G2dIdentityFailure.unverifiedProtection,
+        capabilityRefusal,
+      );
+    }
+
     final loaded = await _load();
     if (loaded.failure != null) {
       return loaded.failure!;
@@ -366,8 +414,12 @@ class G2dIdentityService {
     return deleted ?? const G2dIdentityActionResult.successEmpty();
   }
 
+  /// Failures after which the record cannot be trusted and an explicit reset is
+  /// the only safe recovery. Kept narrow on purpose: storageUnavailable is not
+  /// here, because an IO error is not evidence that the record is bad.
   static bool _isCorruptClass(G2dIdentityFailure? failure) =>
-      failure == G2dIdentityFailure.storageCorrupt;
+      failure == G2dIdentityFailure.storageCorrupt ||
+      failure == G2dIdentityFailure.protectionInvalid;
 
   /// Runs the store's delete and maps its failures to typed results.
   ///
@@ -402,7 +454,19 @@ class G2dIdentityService {
 
   Future<_Loaded> _load() async {
     try {
-      return _Loaded.record(await store.load());
+      final record = await store.load();
+      if (record != null) {
+        // A record restored from another device, edited, or created when the
+        // platform could do more than it can now must not be treated as usable.
+        final mismatch = _platform.describeProtectionMismatch(record);
+        if (mismatch != null) {
+          return _Loaded.failure(G2dIdentityActionResult.failure(
+            G2dIdentityFailure.protectionInvalid,
+            mismatch,
+          ));
+        }
+      }
+      return _Loaded.record(record);
     } on G2dIdentityStoreUnavailable catch (error) {
       return _Loaded.failure(G2dIdentityActionResult.failure(
         G2dIdentityFailure.storageUnavailable,

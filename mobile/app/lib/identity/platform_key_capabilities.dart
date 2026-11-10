@@ -16,8 +16,33 @@ library;
 
 import 'identity_models.dart';
 
+/// The platform facts the identity service depends on.
+///
+/// This is the seam that keeps capability checks testable and keeps Android out
+/// of the service: a caller supplies verified platform facts, and the service
+/// refuses claims those facts cannot support. It is also the reason a
+/// caller-provided "the probe succeeded" boolean is not enough on its own: the
+/// platform still has to be able to hold the key at all.
+abstract interface class G2dPlatformKeyCapabilities {
+  /// API level of the device the service is running on.
+  int get apiLevel;
+
+  /// Whether a key for [algorithm] could ever be held by secure hardware here.
+  bool isHardwarePossible(G2dIdentityAlgorithm algorithm);
+
+  /// Non-null when [protection] cannot be honoured for [algorithm] on this
+  /// platform. Used for claims that are about to be recorded.
+  String? describeProtectionFor(
+    G2dIdentityAlgorithm algorithm,
+    G2dKeyProtection protection,
+  );
+
+  /// Non-null when [record] claims protection this platform cannot provide.
+  String? describeProtectionMismatch(G2dIdentityRecord record);
+}
+
 /// What a record may claim about key protection on a given Android API level.
-class G2dAndroidKeyCapabilities {
+class G2dAndroidKeyCapabilities implements G2dPlatformKeyCapabilities {
   const G2dAndroidKeyCapabilities(this.apiLevel);
 
   /// Lowest API level this project supports for G2-D (Android 8.1).
@@ -38,6 +63,7 @@ class G2dAndroidKeyCapabilities {
     return G2dAndroidKeyCapabilities(apiLevel);
   }
 
+  @override
   final int apiLevel;
 
   /// Whether a non-exportable AES wrapping key can be created. Always true at or
@@ -53,6 +79,7 @@ class G2dAndroidKeyCapabilities {
 
   /// Whether the algorithm *could* be hardware-bound on this API level, ignoring
   /// what a specific device reports.
+  @override
   bool isHardwarePossible(G2dIdentityAlgorithm algorithm) => switch (algorithm) {
         G2dIdentityAlgorithm.ed25519 => ed25519HardwareKeyPossible,
         G2dIdentityAlgorithm.curve25519Xeddsa => false,
@@ -80,19 +107,35 @@ class G2dAndroidKeyCapabilities {
     return G2dKeyProtection.unknown;
   }
 
-  /// Returns a non-null reason when [record] claims protection this API level
-  /// cannot provide. Used as a fail-closed check after loading a record, so a
-  /// hand-edited, migrated or restored record cannot inflate its protection.
-  String? describeProtectionMismatch(G2dIdentityRecord record) {
-    final claimsHardware = record.keyHandle.protection == G2dKeyProtection.hardwareBound;
-    if (claimsHardware && !isHardwarePossible(record.algorithm)) {
-      return 'hardware-bound claim for an algorithm this API level cannot hold';
-    }
-    if (record.keyHandle.protection == G2dKeyProtection.unknown) {
+  /// Returns a non-null reason when [protection] cannot be honoured for
+  /// [algorithm] on this API level.
+  ///
+  /// Two different failures are deliberately worded differently:
+  ///
+  /// - "cannot hold" means the API level can never offer this key in hardware, so
+  ///   the claim is impossible regardless of the device;
+  /// - "unknown" means no protection was established, which is a probe/evidence
+  ///   problem rather than a platform limit.
+  @override
+  String? describeProtectionFor(
+    G2dIdentityAlgorithm algorithm,
+    G2dKeyProtection protection,
+  ) {
+    if (protection == G2dKeyProtection.unknown) {
       return 'unknown key protection is not usable';
+    }
+    if (protection == G2dKeyProtection.hardwareBound && !isHardwarePossible(algorithm)) {
+      return 'hardware-bound claim for an algorithm this API level cannot hold';
     }
     return null;
   }
+
+  /// Returns a non-null reason when [record] claims protection this API level
+  /// cannot provide. Used as a fail-closed check after loading a record, so a
+  /// hand-edited, migrated or restored record cannot inflate its protection.
+  @override
+  String? describeProtectionMismatch(G2dIdentityRecord record) =>
+      describeProtectionFor(record.algorithm, record.keyHandle.protection);
 }
 
 /// Human-readable description of what is and is not protected, for diagnostics.
