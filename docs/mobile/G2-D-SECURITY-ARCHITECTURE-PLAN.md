@@ -1,6 +1,6 @@
 # G2-D — Security architecture and implementation plan
 
-**Status: DESIGN PROPOSAL. Nothing in this document is implemented, approved, or claimed to be secure. No protocol, key, storage, or trust code exists in the app. Protocol and library selection remain BLOCKED pending the evidence and review gates in §10.**
+**Status: DESIGN PROPOSAL, partially superseded. The candidate comparison and recommendation in §4 are now maintained in [G2-D-ARCHITECTURE-DECISION.md](G2-D-ARCHITECTURE-DECISION.md), which recommends Option A (`org.signal:libsignal-android`) subject to gates D1/D2-a/D2-b/D2-c. No protocol or session code exists in the app and no security gate in §10 is met.** The protocol-agnostic identity, key-lifecycle and peer-trust foundation *is* implemented: see [G2-D-IDENTITY-KEY-MANAGEMENT.md](G2-D-IDENTITY-KEY-MANAGEMENT.md) and [G2-D-TRUST-AND-VERIFICATION.md](G2-D-TRUST-AND-VERIFICATION.md). Library selection remains BLOCKED pending §10 and the gates above.
 
 - **Date:** 2026-11-09
 - **Predecessor:** [G2-C acceptance record](G2-C-ACCEPTANCE-CHECKLIST.md) — owner-validated TEST-ONLY BLE transport, no security properties.
@@ -122,7 +122,7 @@ Three coherent end states, each with what must be true before it is chosen. **No
 
 - **Pro:** the protocol is the most heavily deployed and studied messaging construction available; the ratchet, prekey handling, and state machine are somebody else's reviewed code; least new cryptographic surface in Duman.
 - **Con / gates:** AGPL-3.0 must be accepted in writing by the owner; the Android artifact and its Java API must be pinned, SBOM'd, and exercised on API 27; first contact must be adapted to an in-person exchange instead of a server-hosted prekey bundle, which is a protocol-usage decision requiring review.
-- **Verdict:** strongest security posture; licensing is a product decision, not a technical one.
+- **Verdict:** strongest security posture; licensing is a product decision, not a technical one. **Owner accepted AGPL-3.0 on 2026-11-09**, so the licensing blocker is resolved and this option is the ADR's recommendation; the *technical* gates (D2-a build, D2-b device, D2-c provenance) are now the blockers. Licence obligations are recorded in [G2-D-LICENSE-AND-DEPENDENCY-REVIEW.md](G2-D-LICENSE-AND-DEPENDENCY-REVIEW.md).
 
 ### Option B — Noise for the link, ratchet for the message
 
@@ -130,13 +130,13 @@ Three coherent end states, each with what must be true before it is chosen. **No
 
 - **Pro:** maps naturally onto "both devices are here right now"; XX gives mutual authentication and identity binding in 3 messages; the L1 handshake and L2 ratchet are separable for audit.
 - **Con / gates:** this is a **composition**, and composition is where protocols go wrong. It requires a Noise implementation with provenance (none currently qualifies) *and* a ratchet implementation, *plus* a review of the KDF hand-off between them. It also needs a defined identity binding inside the prologue and a defined rekey policy.
-- **Verdict:** the architecture most likely to fit the mesh long-term, and the most review-dependent.
+- **Verdict:** the architecture most likely to fit the mesh long-term, and the most review-dependent. **Not selectable on current evidence**: no maintained JVM Noise implementation publishes an artifact, the one available candidate self-declares as unaudited, and Noise provides no message ratchet — so choosing it today means writing both a handshake and a ratchet by hand, which §1 forbids.
 
 ### Option C — primitives only (Tink + hand-built session)
 
 - **Verdict: rejected.** It is the custom-handshake path this milestone explicitly forbids. Tink remains useful for storage and record encryption under one of the other options, never as the session protocol's composer.
 
-**Recommendation to the owner (not a decision made here):** run the review on **Option A vs Option B** and treat the AGPL question as the deciding input. If AGPL is unacceptable, Option B becomes the path, and the ratchet implementation's provenance becomes the top dependency risk. In both cases §6.1 (identity and keys) and §6.4 (replay and downgrade) are shared work and can start first.
+**Recommendation history (superseded, kept for audit):** *run the review on Option A vs Option B and treat the AGPL question as the deciding input.* The owner answered the licensing question in favour of AGPL-3.0 on 2026-11-09, and the implementation-provenance question for Option B turned out to be worse than assumed, so the ADR recommends Option A pending build and device gates. §6.1 (identity and keys) and §6.4 (replay and downgrade) remain shared work; §6.1's protocol-agnostic part is implemented, §6.4 is not.
 
 ## 5. Threat model for G2-D
 
@@ -320,17 +320,22 @@ No phase is authorized by this document. Each begins only when its gate evidence
 
 ## 12. Risks and open decisions
 
-| # | Open decision | Owner or reviewer | Why it matters |
-|---|---|---|---|
-| 1 | Accept AGPL-3.0 (libsignal) or not | Owner | Determines Option A vs B, and therefore the whole protocol path |
-| 2 | Accept the Noise-Java provenance risk, or fund a pinned/audited implementation | Owner + reviewer | Option B has no shippable Noise implementation today |
-| 3 | Frozen identity binding encoding (COSE/CBOR vs a minimal fixed layout) | Reviewer | Must satisfy §6.1 *and* the 448-byte handshake payload budget |
-| 4 | Product policy for unverified peers (block, or warn-and-permit) | Owner | Security expectations must match the UI's claims |
-| 5 | PQ hybrid in v1 or v2 (PQXDH-style) | Owner + reviewer | Design it in now, or version-bump later; adding it late is a breaking identity change |
-| 6 | Group messaging timeline (MLS) | Owner | If groups are near, L2 should be chosen with that in mind |
-| 7 | Session resumption across reconnects | Reviewer | v1 refuses it; convenience pressure will arrive quickly |
+Owner answers received on 2026-11-09 are recorded inline. A row is only closed when the answer is settled *and* the consequence has been written down somewhere durable.
 
-Standing risks, unchanged by this plan: the mesh cannot guarantee delivery; a relay can always drop traffic; endpoint compromise defeats message protection; radio metadata is observable; there is no independent review of anything yet.
+| # | Decision | Status | Answer / next step |
+|---|---|---|---|
+| 1 | Accept AGPL-3.0 (libsignal) | **ANSWERED — accepted** | Obligations enumerated in [G2-D-LICENSE-AND-DEPENDENCY-REVIEW.md](G2-D-LICENSE-AND-DEPENDENCY-REVIEW.md): application becomes AGPL-3.0, source availability + notices per distribution, App Store question deferred to counsel |
+| 2 | Noise provenance risk | **ANSWERED — option not selectable** | No maintained JVM implementation publishes an artifact; adopting Noise now means a hand-written handshake and ratchet, which the non-goals forbid. Revisit only if a reviewed implementation with an artifact appears |
+| 3 | Frozen identity binding encoding | **OPEN — reviewer** | Must satisfy §6.1 and the handshake payload budget; the ADR's in-band bundle flow (§5 of the ADR) is the input |
+| 4 | Unverified-peer product policy | **OPEN — owner** | Options and their UI consequences are listed in [G2-D-TRUST-AND-VERIFICATION.md](G2-D-TRUST-AND-VERIFICATION.md) §6; "permit silently" is rejected as a design option |
+| 5 | PQ hybrid in v1 or v2 | **OPEN — owner + reviewer** | Recorded as gate D1 in the ADR; a Kyber prekey (~1.5 KB) would force multi-fragment exchange, which constrains the answer toward v2 |
+| 6 | Group messaging timeline (MLS) | **OPEN — owner** | No change to §4's conclusion: MLS assumes a delivery service and is a group protocol |
+| 7 | Session resumption across reconnects | **OPEN — reviewer** | v1 refuses resumption; note that the adopted session layer may offer its own session semantics, which must then be constrained rather than reinvented |
+| 8 | Identity storage adapter timing | **NEW — owner** | Whether the Keystore adapter is built before or after provider integration; see the identity document §9 |
+| 9 | User-authentication binding for identity keys | **NEW — owner** | Interaction cost versus the protection gained on a shared/unlocked device |
+| 10 | Identity algorithm per device class | **NEW — owner** | Uniform software-wrapped path everywhere, or hardware-bound Ed25519 on API 33+ where available |
+
+Standing risks, unchanged: the mesh cannot guarantee delivery; a relay can always drop traffic; endpoint compromise defeats message protection; radio metadata is observable; there is no independent review of anything yet.
 
 ## 13. What must never be claimed
 
