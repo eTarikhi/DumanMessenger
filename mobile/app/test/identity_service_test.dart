@@ -6,14 +6,14 @@ import 'package:flutter_test/flutter_test.dart';
 
 String fingerprint(String nibble) => List<String>.filled(64, nibble).join();
 
-const G2dKeyHandle probedHandle = G2dKeyHandle(
+final G2dKeyHandle probedHandle = G2dKeyHandle(
   provider: 'android_keystore',
   alias: 'g2d.identity.v1',
   protection: G2dKeyProtection.softwareKeystoreWrapped,
   probeVerified: true,
 );
 
-const G2dKeyHandle unprobedHandle = G2dKeyHandle(
+final G2dKeyHandle unprobedHandle = G2dKeyHandle(
   provider: 'android_keystore',
   alias: 'g2d.identity.v1',
   protection: G2dKeyProtection.softwareKeystoreWrapped,
@@ -21,18 +21,53 @@ const G2dKeyHandle unprobedHandle = G2dKeyHandle(
 
 /// A handle that claims secure hardware. Whether that claim is *possible* is a
 /// platform question, which the service asks the injected capabilities.
-const G2dKeyHandle hardwareHandle = G2dKeyHandle(
+final G2dKeyHandle hardwareHandle = G2dKeyHandle(
   provider: 'android_keystore',
   alias: 'g2d.identity.hardware',
   protection: G2dKeyProtection.hardwareBound,
   probeVerified: true,
 );
 
-const G2dKeyHandle unknownProtectionHandle = G2dKeyHandle(
+final G2dKeyHandle unknownProtectionHandle = G2dKeyHandle(
   provider: 'android_keystore',
   alias: 'g2d.identity.v1',
   protection: G2dKeyProtection.unknown,
 );
+
+/// A store that fails the way a platform channel adapter does: with its own
+/// exception type, not one of the store contract's.
+class PlatformFailureStore implements G2dIdentityStore {
+  PlatformFailureStore({this.failLoad = false, this.failSave = false});
+
+  final bool failLoad;
+  final bool failSave;
+
+  @override
+  String get storeKind => 'platform_failure_test_only';
+
+  @override
+  bool get isSecureAtRest => false;
+
+  @override
+  Future<G2dIdentityRecord?> load() async {
+    if (failLoad) {
+      throw Exception('platform channel unavailable');
+    }
+    return null;
+  }
+
+  @override
+  Future<void> save(G2dIdentityRecord record) async {
+    if (failSave) {
+      throw Exception('platform channel unavailable');
+    }
+  }
+
+  @override
+  Future<void> delete() async {
+    throw Exception('platform channel unavailable');
+  }
+}
 
 class Harness {
   Harness({G2dIdentityStore? store, int apiLevel = 27})
@@ -522,6 +557,70 @@ void main() {
     });
   });
 
+  group('adapter failures', () {
+    test('a platform exception while reading is reported as unavailable storage', () async {
+      final harness = Harness(store: PlatformFailureStore(failLoad: true));
+
+      expect(await harness.service.load(), isA<G2dIdentityStorageUnavailable>());
+      expect(
+        (await harness.create()).failure,
+        G2dIdentityFailure.storageUnavailable,
+      );
+    });
+
+    test('a platform exception while writing is reported as a write failure', () async {
+      final harness = Harness(store: PlatformFailureStore(failSave: true));
+
+      final result = await harness.create();
+      expect(result.isSuccess, isFalse);
+      expect(result.failure, G2dIdentityFailure.storageWriteFailed);
+    });
+  });
+
+  group('concurrency', () {
+    test('two concurrent creations cannot both succeed', () async {
+      final harness = Harness();
+
+      final results = await Future.wait(<Future<G2dIdentityActionResult>>[
+        harness.create(fp: 'a'),
+        harness.create(fp: 'b'),
+      ]);
+
+      expect(results.where((result) => result.isSuccess).length, 1);
+      expect(
+        results
+            .where((result) => result.failure == G2dIdentityFailure.identityExists)
+            .length,
+        1,
+      );
+      expect((await harness.store.load())!.keyVersion, 1);
+    });
+
+    test('two concurrent revocations settle on one revoked record', () async {
+      final harness = Harness();
+      await harness.create();
+      final store = harness.store as G2dInMemoryIdentityStore;
+      final writesAfterCreate = store.committedWrites;
+
+      final results = await Future.wait(<Future<G2dIdentityActionResult>>[
+        harness.service.revoke(G2dRevocationReason.userRequested),
+        harness.service.revoke(G2dRevocationReason.compromised),
+      ]);
+
+      // Both calls are answered successfully (revocation is idempotent), but only
+      // one record is written: the second observes the already-revoked record and
+      // returns it unchanged instead of overwriting the evidence.
+      expect(results.every((result) => result.isSuccess), isTrue);
+      expect(store.committedWrites, writesAfterCreate + 1);
+
+      final snapshot = await harness.service.load();
+      expect(snapshot, isA<G2dIdentityRevoked>());
+      final revoked = (snapshot as G2dIdentityRevoked).record;
+      expect(revoked.revokedAtMillis, 5000);
+      expect(revoked.revocationReason, G2dRevocationReason.userRequested);
+    });
+  });
+
   group('commit validation', () {
     test('a rotation that would produce an inconsistent record is refused', () async {
       final harness = Harness();
@@ -571,7 +670,7 @@ void main() {
         keyVersion: 2,
         algorithm: G2dIdentityAlgorithm.curve25519Xeddsa,
         publicKeyFingerprint: fingerprint('b'),
-        keyHandle: const G2dKeyHandle(
+        keyHandle: G2dKeyHandle(
           provider: 'android_keystore',
           alias: 'g2d.identity.v1',
           protection: G2dKeyProtection.unknown,

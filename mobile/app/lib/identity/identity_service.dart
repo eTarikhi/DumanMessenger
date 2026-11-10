@@ -9,6 +9,7 @@
 /// success, and a corrupt record is never repaired or replaced implicitly.
 library;
 
+import 'dart:async';
 import 'dart:math';
 
 import 'identity_models.dart';
@@ -152,6 +153,67 @@ class G2dIdentityService {
 
   /// API level the injected platform facts describe, for diagnostics only.
   int get apiLevel => _platform.apiLevel;
+
+  /// Mutations are serialized: a read-modify-write that interleaves with another
+  /// mutation could otherwise commit a record derived from a state that no
+  /// longer exists (two concurrent creations both observing "absent", for
+  /// example). Reads are not serialized; a store that honours the interface
+  /// contract returns a whole record per read.
+  Future<void> _tail = Future<void>.value();
+
+  Future<T> _serialize<T>(Future<T> Function() action) async {
+    final previous = _tail;
+    final gate = Completer<void>();
+    _tail = gate.future;
+    await previous;
+    try {
+      return await action();
+    } finally {
+      gate.complete();
+    }
+  }
+
+  /// Creates the first identity for this installation (serialized).
+  Future<G2dIdentityActionResult> createIdentity({
+    required G2dIdentityAlgorithm algorithm,
+    required String publicKeyFingerprint,
+    required G2dKeyHandle keyHandle,
+    String? identityId,
+  }) =>
+      _serialize(() => _createIdentityImpl(
+            algorithm: algorithm,
+            publicKeyFingerprint: publicKeyFingerprint,
+            keyHandle: keyHandle,
+            identityId: identityId,
+          ));
+
+  /// Starts a key rotation (serialized).
+  Future<G2dIdentityActionResult> beginRotation({
+    required G2dIdentityAlgorithm algorithm,
+    required String newPublicKeyFingerprint,
+    required G2dKeyHandle newKeyHandle,
+  }) =>
+      _serialize(() => _beginRotationImpl(
+            algorithm: algorithm,
+            newPublicKeyFingerprint: newPublicKeyFingerprint,
+            newKeyHandle: newKeyHandle,
+          ));
+
+  /// Promotes a pending rotation to active (serialized).
+  Future<G2dIdentityActionResult> completeRotation() =>
+      _serialize(_completeRotationImpl);
+
+  /// Revokes the identity (serialized).
+  Future<G2dIdentityActionResult> revoke(G2dRevocationReason reason) =>
+      _serialize(() => _revokeImpl(reason));
+
+  /// Deletes a readable revoked record (serialized).
+  Future<G2dIdentityActionResult> resetRevokedIdentity() =>
+      _serialize(_resetRevokedIdentityImpl);
+
+  /// Deletes an untrustworthy record (serialized).
+  Future<G2dIdentityActionResult> resetCorruptIdentity() =>
+      _serialize(_resetCorruptIdentityImpl);
   final int Function() _nowMillis;
   final String Function() _newIdentityId;
 
@@ -196,7 +258,7 @@ class G2dIdentityService {
   /// revoked identity is terminal for that identity, not for the installation:
   /// [resetRevokedIdentity] must run first so that a revocation is never
   /// silently replaced by a fresh key.
-  Future<G2dIdentityActionResult> createIdentity({
+  Future<G2dIdentityActionResult> _createIdentityImpl({
     required G2dIdentityAlgorithm algorithm,
     required String publicKeyFingerprint,
     required G2dKeyHandle keyHandle,
@@ -268,7 +330,7 @@ class G2dIdentityService {
   /// There is intentionally no "abort": once the provider may have replaced the
   /// old key, reverting would mean claiming an identity the device may no longer
   /// hold. Complete the rotation or revoke.
-  Future<G2dIdentityActionResult> beginRotation({
+  Future<G2dIdentityActionResult> _beginRotationImpl({
     required G2dIdentityAlgorithm algorithm,
     required String newPublicKeyFingerprint,
     required G2dKeyHandle newKeyHandle,
@@ -319,7 +381,7 @@ class G2dIdentityService {
   }
 
   /// Promotes a pending rotation to active.
-  Future<G2dIdentityActionResult> completeRotation() async {
+  Future<G2dIdentityActionResult> _completeRotationImpl() async {
     final loaded = await _load();
     if (loaded.failure != null) {
       return loaded.failure!;
@@ -335,7 +397,7 @@ class G2dIdentityService {
   }
 
   /// Revokes the identity. Terminal: no operation can revive it.
-  Future<G2dIdentityActionResult> revoke(G2dRevocationReason reason) async {
+  Future<G2dIdentityActionResult> _revokeImpl(G2dRevocationReason reason) async {
     final loaded = await _load();
     if (loaded.failure != null) {
       return loaded.failure!;
@@ -362,7 +424,7 @@ class G2dIdentityService {
   ///
   /// Only valid for revoked identities: deleting an active record would let a
   /// restart look like a fresh install and silently discard a live identity.
-  Future<G2dIdentityActionResult> resetRevokedIdentity() async {
+  Future<G2dIdentityActionResult> _resetRevokedIdentityImpl() async {
     final loaded = await _load();
     if (loaded.failure != null) {
       return loaded.failure!;
@@ -394,7 +456,7 @@ class G2dIdentityService {
   ///
   /// A protection claim that this device cannot satisfy is treated the same way:
   /// the record cannot be trusted here, and the same explicit recovery applies.
-  Future<G2dIdentityActionResult> resetCorruptIdentity() async {
+  Future<G2dIdentityActionResult> _resetCorruptIdentityImpl() async {
     final loaded = await _load();
     if (loaded.failure == null) {
       return G2dIdentityActionResult.failure(

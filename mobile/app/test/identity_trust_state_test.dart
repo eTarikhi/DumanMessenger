@@ -688,4 +688,64 @@ void main() {
       expect(() => G2dPeerTrustRecord.fromMap(map), throwsFormatException);
     });
   });
+  group('verification labels', () {
+    test('a record carrying only the verified axis is never labelled verified', () {
+      final record = G2dPeerTrustRecord(
+        peerId: peer,
+        axes: <G2dPeerTrustAxis>{
+          G2dPeerTrustAxis.discovered,
+          G2dPeerTrustAxis.connected,
+          G2dPeerTrustAxis.userVerified,
+        },
+        identityFingerprint: fingerprint('a'),
+      );
+
+      expect(record.isUserVerified, isFalse);
+      expect(record.statusLabel, 'Verification evidence incomplete — not verified');
+      expect(record.statusLabel.contains('Verified by you'), isFalse);
+    });
+
+    test('a disconnected record with partial evidence is not labelled verified', () {
+      final record = G2dPeerTrustRecord(
+        peerId: peer,
+        axes: <G2dPeerTrustAxis>{
+          G2dPeerTrustAxis.discovered,
+          G2dPeerTrustAxis.userVerified,
+        },
+        identityFingerprint: fingerprint('a'),
+        verifiedAtMillis: 300,
+      );
+
+      expect(record.isUserVerified, isFalse);
+      expect(record.statusLabel, 'Verification evidence incomplete — not verified');
+      expect(record.statusLabel.contains('Verified by you'), isFalse);
+    });
+
+    test('a fully evidenced record uses the verified labels', () {
+      final store = connectedPeer();
+      store.authenticateIdentity(peer, fingerprint('a'), atMillis: 100);
+      final verified = store.verifyIdentity(
+        peerId: peer,
+        method: G2dVerificationMethod.outOfBandFingerprint,
+        atMillis: 300,
+      );
+
+      expect(verified.statusLabel, 'Verified by you (out-of-band comparison)');
+      expect(
+        store.disconnect(peer).statusLabel,
+        'Verified by you — not currently connected',
+      );
+    });
+
+    test('the codec refuses verification facts without the invariant', () {
+      expect(
+        () => G2dPeerTrustRecord.fromMap(<String, Object?>{
+          'peerId': peer,
+          'axes': <String>['discovered', 'connected', 'userVerified'],
+          'identityFingerprint': fingerprint('a'),
+        }),
+        throwsFormatException,
+      );
+    });
+  });
 }

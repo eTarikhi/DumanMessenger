@@ -137,6 +137,61 @@ void main() {
         throwsFormatException,
       );
     });
+
+    test('rejects an alias that is not a plain lookup name', () {
+      for (final alias in <String>[
+        '',
+        'a b',
+        'alias/with/slash',
+        'line\nbreak',
+        List<String>.filled(129, 'a').join(),
+      ]) {
+        expect(
+          () => G2dKeyHandle(
+            provider: 'android_keystore',
+            alias: alias,
+            protection: G2dKeyProtection.unknown,
+          ),
+          throwsFormatException,
+        );
+      }
+    });
+
+    test('rejects a provider that is not a plain identifier', () {
+      for (final provider in <String>[
+        '',
+        'Android_Keystore',
+        'provider with space',
+        List<String>.filled(33, 'p').join(),
+      ]) {
+        expect(
+          () => G2dKeyHandle(
+            provider: provider,
+            alias: 'g2d.identity.v1',
+            protection: G2dKeyProtection.unknown,
+          ),
+          throwsFormatException,
+        );
+      }
+    });
+
+    test('rejects an alias that carries the identity fingerprint', () {
+      final exact = testRecord(keyHandle: testHandle(alias: fingerprint('a')));
+      expect(() => G2dIdentityRecord.fromMap(exact.toMap()), throwsFormatException);
+
+      final prefix = testRecord(keyHandle: testHandle(alias: 'aaaa'));
+      expect(() => G2dIdentityRecord.fromMap(prefix.toMap()), throwsFormatException);
+    });
+
+    test('diagnostic strings never contain the alias or the fingerprint', () {
+      final handle = testHandle(alias: 'g2d.identity.v1');
+      expect(handle.toString().contains('g2d.identity.v1'), isFalse);
+      expect(handle.toString(), contains('android_keystore'));
+
+      final record = testRecord();
+      expect(record.toString().contains(fingerprint('a')), isFalse);
+      expect(record.toString().contains('g2d.identity.v1'), isFalse);
+    });
   });
 
   group('identity record', () {
@@ -279,6 +334,31 @@ void main() {
         revokedAtMillis: 500,
         revocationReason: G2dRevocationReason.userRequested,
       );
+      expect(() => G2dIdentityRecord.fromMap(record.toMap()), throwsFormatException);
+    });
+
+    test('hasVerifiedProtection requires both a stated level and a probe', () {
+      expect(testRecord().hasVerifiedProtection, isTrue);
+
+      final claimedHardware = testRecord(
+        keyHandle: testHandle(
+          protection: G2dKeyProtection.hardwareBound,
+          probeVerified: false,
+        ),
+      );
+      expect(claimedHardware.hasVerifiedProtection, isFalse);
+
+      final unknown = testRecord(
+        keyHandle: testHandle(
+          protection: G2dKeyProtection.unknown,
+          probeVerified: false,
+        ),
+      );
+      expect(unknown.hasVerifiedProtection, isFalse);
+    });
+
+    test('rejects a rotated identity that does not say what it replaced', () {
+      final record = testRecord(keyVersion: 2, rotatedAtMillis: 2000);
       expect(() => G2dIdentityRecord.fromMap(record.toMap()), throwsFormatException);
     });
 

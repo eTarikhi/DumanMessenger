@@ -89,12 +89,20 @@ enum G2dRevocationReason {
 /// A reference to provider-held key material. Deliberately opaque: it carries a
 /// provider name and a local alias, never key bytes, and never a fingerprint.
 class G2dKeyHandle {
-  const G2dKeyHandle({
+  /// Creates a handle and validates its identifiers.
+  ///
+  /// The constructor is deliberately not `const`: a handle is only meaningful if
+  /// its provider and alias are safe lookup names, and that is checked here as
+  /// well as on decode. An alias is data that gets persisted, so it may never be
+  /// used to smuggle key material, a fingerprint, or free-form text.
+  G2dKeyHandle({
     required this.provider,
     required this.alias,
     required this.protection,
     this.probeVerified = false,
-  });
+  }) {
+    _validateIdentifiers();
+  }
 
   /// Provider that owns the key, e.g. `android_keystore` or `libsignal`.
   final String provider;
@@ -112,6 +120,34 @@ class G2dKeyHandle {
 
   static const int _maxProviderLength = 32;
   static const int _maxAliasLength = 128;
+
+  /// Providers are short lowercase identifiers, e.g. `android_keystore`.
+  static final RegExp _providerPattern = RegExp(r'^[a-z0-9][a-z0-9_.-]*$');
+
+  /// Aliases are lookup names: no whitespace, no separators that suggest a
+  /// path or an encoding, and no room for opaque key material.
+  static final RegExp _aliasPattern = RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.-]*$');
+
+  void _validateIdentifiers() {
+    if (provider.isEmpty ||
+        provider.length > _maxProviderLength ||
+        !_providerPattern.hasMatch(provider)) {
+      throw const FormatException('Invalid G2-D key handle provider.');
+    }
+    if (alias.isEmpty ||
+        alias.length > _maxAliasLength ||
+        !_aliasPattern.hasMatch(alias)) {
+      throw const FormatException(
+        'Invalid G2-D key handle alias: an alias is a lookup name, never key '
+        'material or a fingerprint.',
+      );
+    }
+  }
+
+  /// Diagnostic form. Omits the alias on purpose: it identifies local key
+  /// material and has no business in a log line.
+  @override
+  String toString() => 'G2dKeyHandle($provider, protection=${protection.wireName})';
 
   static G2dKeyHandle fromMap(Object? value) {
     if (value is! Map) {
@@ -149,6 +185,13 @@ class G2dKeyHandle {
 
   /// A stated protection level is a claim about this device. Without a probe the
   /// claim is unevidenced, so it is rejected instead of stored.
+  ///
+  /// This runs on decode only. The constructor cannot call it: a probe result is
+  /// not derivable from the handle's own fields, and refusing here would make it
+  /// impossible to build the deliberately-invalid handles that the service and
+  /// codec tests need in order to prove they are rejected. Persistence paths are
+  /// covered by [G2dIdentityRecord._validateConsistency] on every decode and by
+  /// the service's commit-time round-trip.
   void _validateProtectionClaim() {
     if (protection == G2dKeyProtection.unknown && probeVerified) {
       throw const FormatException('Unknown G2-D key protection cannot be probe-verified.');
@@ -171,8 +214,6 @@ class G2dKeyHandle {
   @override
   int get hashCode => Object.hash(provider, alias, protection, probeVerified);
 
-  @override
-  String toString() => 'G2dKeyHandle($provider, protection=${protection.wireName})';
 }
 
 /// A local device identity record.
@@ -265,8 +306,13 @@ class G2dIdentityRecord {
   /// Whether this identity may be used to open a session.
   bool get isUsable => state == G2dIdentityState.active;
 
-  /// Whether the key handle's protection is acceptable for an active identity.
-  bool get hasVerifiedProtection => keyHandle.protection != G2dKeyProtection.unknown;
+  /// Whether the key handle's protection is both stated and evidenced.
+  ///
+  /// This is the getter the lifecycle relies on, so it checks the probe flag as
+  /// well as the protection level: a handle that merely *claims* secure hardware
+  /// without a successful device probe is not verified protection.
+  bool get hasVerifiedProtection =>
+      keyHandle.protection != G2dKeyProtection.unknown && keyHandle.probeVerified;
 
   /// Strict decoder. Rejects unknown versions, unknown enum values, malformed
   /// fingerprints and internally inconsistent records rather than guessing.
@@ -340,11 +386,24 @@ class G2dIdentityRecord {
     if (isRotationPending && previousKeyFingerprint == null) {
       throw const FormatException('Pending G2-D rotation requires a previous fingerprint.');
     }
+    final alias = keyHandle.alias;
+    if (alias.contains(publicKeyFingerprint) || publicKeyFingerprint.contains(alias)) {
+      throw const FormatException(
+        'G2-D key alias must not carry the identity fingerprint.',
+      );
+    }
     if (previousKeyFingerprint != null && previousKeyFingerprint == publicKeyFingerprint) {
       throw const FormatException('G2-D rotation must change the fingerprint.');
     }
     if (previousKeyFingerprint != null && keyVersion < 2) {
       throw const FormatException('G2-D rotated identity requires key version 2 or later.');
+    }
+    // The other direction matters just as much: a rotated generation must say
+    // what it replaced, otherwise the rotation history silently disappears.
+    if (keyVersion >= 2 && previousKeyFingerprint == null) {
+      throw const FormatException(
+        'A rotated G2-D identity requires the previous fingerprint.',
+      );
     }
     if (keyVersion >= 2 && rotatedAtMillis == null) {
       throw const FormatException('G2-D rotated identity requires a rotation time.');

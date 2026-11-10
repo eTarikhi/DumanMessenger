@@ -9,7 +9,7 @@ G2dIdentityRecord record({String identityId = 'identity-1'}) => G2dIdentityRecor
       keyVersion: 1,
       algorithm: G2dIdentityAlgorithm.curve25519Xeddsa,
       publicKeyFingerprint: fingerprint('a'),
-      keyHandle: const G2dKeyHandle(
+      keyHandle: G2dKeyHandle(
         provider: 'android_keystore',
         alias: 'g2d.identity',
         protection: G2dKeyProtection.softwareKeystoreWrapped,
