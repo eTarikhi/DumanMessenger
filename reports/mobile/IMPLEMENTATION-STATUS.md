@@ -1,12 +1,47 @@
 # Implementation status — simulator, security, and Flutter workstreams
 
-**Current update:** 2026-11-09 (G2-D Android Keystore adapter and encrypted identity storage)
-**Previous updates:** 2026-11-09 (G2-D security hardening and trust remediation), 2026-11-09 (G2-D architecture + identity/trust foundation), 2026-11-09 (G2-C validation), 2026-11-09 (G2-D security plan)
+**Current update:** 2026-11-09 (G2-D device evidence audit and test isolation)
+**Previous updates:** 2026-11-09 (G2-D Android Keystore adapter and encrypted identity storage), 2026-11-09 (G2-D security hardening and trust remediation), 2026-11-09 (G2-D architecture + identity/trust foundation), 2026-11-09 (G2-C validation), 2026-11-09 (G2-D security plan)
 **Superseded sections below:** 2026-11-08 (G1 shared source) and 2026-11-05 (no-source baseline). Where an older section says that no Flutter app, Android host, or device evidence exists, the 2026-11-09 update governs.
 **Branch:** `arena/94329f0d-dumanmessenger` (active)
 **Historical G0 snapshot tested/reviewed:** `a1f1916981c2244a2f8664573b66afbd5a2659b4` (empty checkpoint over `bdf719cf88205f944187cb79b8288264a56c13bd`)
 
-## Current update (2026-11-09, latest) — G2-D Android Keystore adapter and encrypted identity storage
+## Current update (2026-11-09, latest) — G2-D device evidence audit and test isolation
+
+Scope: audit the runtime evidence behind the Keystore adapter, isolate the device suite from real
+identity data, and make the device measurements retrievable. **No feature, no G2-C, routing or UI
+change, no gate passed, no PR.** Reference document:
+[docs/mobile/G2-D-DEVICE-EVIDENCE-AUDIT.md](../../docs/mobile/G2-D-DEVICE-EVIDENCE-AUDIT.md).
+
+- **Recommendation: CONDITIONAL PASS.** The owner's run on Windows 11 + SM-G610F reported
+  `flutter pub get`, `flutter analyze` (no issues), `flutter test` 294/294,
+  `flutter build apk --debug` and `connectedDebugAndroidTest` 16 tests all green at `d154c3d`.
+- **What this environment could not see.** No build outputs and no device: the Gradle
+  instrumentation XML/HTML that would confirm per-test outcomes are absent, and no device
+  measurement exists anywhere in the workspace. Every runtime result in the audit is therefore
+  attributed to the owner's report, and every capability value is recorded as UNKNOWN rather than
+  inferred.
+- **Defect found and fixed (`2eabbc8`).** The instrumented suite deleted `files/identity/` and the
+  production wrapping alias `g2d.identity.wrap.v1` in `@Before`. Nothing creates a production
+  identity yet, so the owner's run destroyed nothing real — but the suite could have destroyed the
+  only copy of one. `G2dIdentityStorage` now takes `directoryName` and `wrappingKeyAlias` with the
+  previous values as defaults (production wiring unchanged), and the instrumentation runs against
+  `identity_test/` and `g2d.identity.wrap.test[2].v1`. All 16 tests keep their names and assertions;
+  the only edit inside them is the alias.
+- **Measurement path (`2eabbc8`).** The probe also reports `probeKeyBlockModes` and
+  `probeKeyEncryptionPaddings` from the `KeyInfo` it already reads. One new instrumented test,
+  `reportMeasuredCapabilitiesForTheAcceptanceRecord`, prints a `G2D-CAPABILITY key=value` block
+  (API level, AES-GCM support, generation and round trip, hardware backing of the probe key and of
+  the wrapping key, key size, modes, paddings, StrongBox request and outcome, failure code) and
+  asserts only what it measured. It prints no key, iv, ciphertext or plaintext and reads no identity
+  data. Instrumented tests are now 17.
+- **Recovery evidence.** Twelve persistence and recovery behaviours are exercised on the device by
+  the instrumented suite; key invalidation is the one path with no executed test, and power-loss
+  durability is an argument from the `fsync`+`rename` protocol, not a measurement.
+- **Not claimed.** Not hardware-backed (unmeasured), not E2EE, not a security certification; gates
+  D0–D7 remain open and are not satisfied by a self-review.
+
+## Previous update (2026-11-09) — G2-D Android Keystore adapter and encrypted identity storage
 
 Scope: replace designed-but-absent Android protection with real Keystore code and real encrypted
 storage. **No provider integration, no Signal dependency, no G2-C, routing or UI change, no gate
