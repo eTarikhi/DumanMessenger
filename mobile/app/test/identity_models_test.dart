@@ -256,6 +256,32 @@ void main() {
       expect(() => G2dIdentityRecord.fromMap(record.toMap()), throwsFormatException);
     });
 
+    test('rejects a pending rotation whose protection was never probed', () {
+      // A pending rotation is one step from active, so it may not rest on an
+      // unverified protection claim.
+      final record = testRecord(
+        state: G2dIdentityState.rotationPending,
+        keyVersion: 2,
+        publicKeyFingerprint: fingerprint('b'),
+        previousKeyFingerprint: fingerprint('a'),
+        rotatedAtMillis: 2000,
+        keyHandle: testHandle(
+          protection: G2dKeyProtection.unknown,
+          probeVerified: false,
+        ),
+      );
+      expect(() => G2dIdentityRecord.fromMap(record.toMap()), throwsFormatException);
+    });
+
+    test('rejects a revocation time before creation', () {
+      final record = testRecord(
+        state: G2dIdentityState.revoked,
+        revokedAtMillis: 500,
+        revocationReason: G2dRevocationReason.userRequested,
+      );
+      expect(() => G2dIdentityRecord.fromMap(record.toMap()), throwsFormatException);
+    });
+
     test('copyWith changes only the named fields', () {
       final record = testRecord();
       final rotated = record.copyWith(keyVersion: 2, rotatedAtMillis: 2000);

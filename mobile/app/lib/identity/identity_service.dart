@@ -76,6 +76,17 @@ enum G2dIdentityFailure {
   storageUnavailable,
   storageCorrupt,
   storageWriteFailed,
+
+  /// The record failed validation before it could be written. Nothing was
+  /// persisted and the previous state is unchanged.
+  invalidRecord,
+
+  /// An explicit reset was requested for a record that is not corrupt.
+  notCorrupt,
+
+  /// The requested identity id belongs to an identity this installation already
+  /// removed. A new identity must use a fresh id.
+  identityIdRetired,
 }
 
 /// Result of a lifecycle operation.
@@ -86,6 +97,15 @@ class G2dIdentityActionResult {
 
   const G2dIdentityActionResult.failure(G2dIdentityFailure this.failure, [this.detail])
       : record = null;
+
+  /// Success for an operation that removed the record (an explicit reset).
+  ///
+  /// It deliberately carries no record: reporting the deleted identity as the
+  /// current one invites a caller to keep using it.
+  const G2dIdentityActionResult.successEmpty()
+      : record = null,
+        failure = null,
+        detail = null;
 
   final G2dIdentityRecord? record;
   final G2dIdentityFailure? failure;
@@ -106,6 +126,12 @@ class G2dIdentityService {
   final G2dIdentityStore store;
   final int Function() _nowMillis;
   final String Function() _newIdentityId;
+
+  /// Identity ids that this service instance retired. A new identity may not
+  /// reuse one: a peer keyed on the id would otherwise see the revoked identity
+  /// "return" with a different key. In-memory only for now; a durable tombstone
+  /// is part of the deferred peer/identity store work.
+  final Set<String> _retiredIdentityIds = <String>{};
 
   /// Description of the backing store, for diagnostics. Not a security claim.
   String get storeKind => store.storeKind;
@@ -177,8 +203,16 @@ class G2dIdentityService {
       );
     }
 
+    final id = identityId ?? _newIdentityId();
+    if (_retiredIdentityIds.contains(id)) {
+      return G2dIdentityActionResult.failure(
+        G2dIdentityFailure.identityIdRetired,
+        'a removed identity already used this id',
+      );
+    }
+
     final record = G2dIdentityRecord(
-      identityId: identityId ?? _newIdentityId(),
+      identityId: id,
       keyVersion: 1,
       algorithm: algorithm,
       publicKeyFingerprint: publicKeyFingerprint,
@@ -265,11 +299,15 @@ class G2dIdentityService {
     if (existing.state == G2dIdentityState.revoked) {
       return G2dIdentityActionResult.success(existing);
     }
-    return _commit(existing.copyWith(
+    final result = await _commit(existing.copyWith(
       state: G2dIdentityState.revoked,
       revokedAtMillis: _nowMillis(),
       revocationReason: reason,
     ));
+    if (result.isSuccess) {
+      _retiredIdentityIds.add(existing.identityId);
+    }
+    return result;
   }
 
   /// Deletes a revoked record so that a new identity can be created.
@@ -288,6 +326,54 @@ class G2dIdentityService {
     if (existing.state != G2dIdentityState.revoked) {
       return const G2dIdentityActionResult.failure(G2dIdentityFailure.notRevoked);
     }
+    final deleted = await _deleteRecord();
+    if (deleted != null) {
+      return deleted;
+    }
+    _retiredIdentityIds.add(existing.identityId);
+    return const G2dIdentityActionResult.successEmpty();
+  }
+
+  /// Deletes a record that is positively classified as untrustworthy.
+  ///
+  /// This is the only recovery path from corruption. It is deliberately narrow:
+  ///
+  /// - a readable record is refused ([G2dIdentityFailure.notCorrupt]), so a valid
+  ///   active or revoked identity can never be discarded here;
+  /// - unavailable storage is **not** corruption and is reported as unavailable;
+  /// - nothing is recreated: the caller must perform an explicit
+  ///   [createIdentity] afterwards, which is where a new key is generated.
+  ///
+  /// A protection claim that this device cannot satisfy is treated the same way:
+  /// the record cannot be trusted here, and the same explicit recovery applies.
+  Future<G2dIdentityActionResult> resetCorruptIdentity() async {
+    final loaded = await _load();
+    if (loaded.failure == null) {
+      return G2dIdentityActionResult.failure(
+        loaded.record == null ? G2dIdentityFailure.noIdentity : G2dIdentityFailure.notCorrupt,
+        loaded.record == null
+            ? 'there is no identity record to reset'
+            : 'the stored identity is readable and must not be discarded here',
+      );
+    }
+    final failure = loaded.failure!.failure;
+    if (!_isCorruptClass(failure)) {
+      // storageUnavailable in particular must never delete anything: an IO error
+      // is not evidence that the record is bad.
+      return loaded.failure!;
+    }
+    final deleted = await _deleteRecord();
+    return deleted ?? const G2dIdentityActionResult.successEmpty();
+  }
+
+  static bool _isCorruptClass(G2dIdentityFailure? failure) =>
+      failure == G2dIdentityFailure.storageCorrupt;
+
+  /// Runs the store's delete and maps its failures to typed results.
+  ///
+  /// Returns `null` on success, so callers can distinguish "deleted" from
+  /// "refused" without treating a failure object as success.
+  Future<G2dIdentityActionResult?> _deleteRecord() async {
     try {
       await store.delete();
     } on G2dIdentityStoreUnavailable catch (error) {
@@ -295,13 +381,23 @@ class G2dIdentityService {
         G2dIdentityFailure.storageUnavailable,
         error.reason,
       );
+    } on G2dIdentityStoreCorrupt catch (error) {
+      return G2dIdentityActionResult.failure(
+        G2dIdentityFailure.storageCorrupt,
+        error.reason,
+      );
     } on G2dIdentityStoreWriteFailed catch (error) {
       return G2dIdentityActionResult.failure(
         G2dIdentityFailure.storageWriteFailed,
         error.reason,
       );
+    } on Exception catch (error) {
+      return G2dIdentityActionResult.failure(
+        G2dIdentityFailure.storageWriteFailed,
+        error.toString(),
+      );
     }
-    return G2dIdentityActionResult.success(existing);
+    return null;
   }
 
   Future<_Loaded> _load() async {
@@ -317,12 +413,32 @@ class G2dIdentityService {
         G2dIdentityFailure.storageCorrupt,
         error.reason,
       ));
+    } on Exception catch (error) {
+      return _Loaded.failure(G2dIdentityActionResult.failure(
+        G2dIdentityFailure.storageUnavailable,
+        error.toString(),
+      ));
     }
   }
 
+  /// Validates and persists [record].
+  ///
+  /// The record is round-tripped through the wire format before the write: the
+  /// bytes that get stored must be exactly the bytes a later [load] will accept,
+  /// so an inconsistent record can never be written successfully and then be
+  /// reported as corruption on the next read. Validation failure writes nothing.
   Future<G2dIdentityActionResult> _commit(G2dIdentityRecord record) async {
+    final G2dIdentityRecord validated;
     try {
-      await store.save(record);
+      validated = G2dIdentityRecord.fromMap(record.toMap());
+    } on FormatException catch (error) {
+      return G2dIdentityActionResult.failure(
+        G2dIdentityFailure.invalidRecord,
+        error.message,
+      );
+    }
+    try {
+      await store.save(validated);
     } on G2dIdentityStoreUnavailable catch (error) {
       return G2dIdentityActionResult.failure(
         G2dIdentityFailure.storageUnavailable,
@@ -338,8 +454,16 @@ class G2dIdentityService {
         G2dIdentityFailure.storageWriteFailed,
         error.reason,
       );
+    } on Exception catch (error) {
+      // A future MethodChannel adapter reports platform failures as their own
+      // exception types. They must surface as a typed storage failure rather
+      // than escaping as an unhandled error.
+      return G2dIdentityActionResult.failure(
+        G2dIdentityFailure.storageWriteFailed,
+        error.toString(),
+      );
     }
-    return G2dIdentityActionResult.success(record);
+    return G2dIdentityActionResult.success(validated);
   }
 
   static int _systemMillis() => DateTime.now().toUtc().millisecondsSinceEpoch;

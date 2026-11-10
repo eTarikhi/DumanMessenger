@@ -28,7 +28,7 @@ class Harness {
   Harness({G2dIdentityStore? store}) : store = store ?? G2dInMemoryIdentityStore() {
     service = G2dIdentityService(
       store: this.store,
-      nowMillis: () => 5000,
+      nowMillis: () => now,
       newIdentityId: () => 'identity-${++_ids}',
     );
   }
@@ -36,6 +36,9 @@ class Harness {
   final G2dIdentityStore store;
   late final G2dIdentityService service;
   int _ids = 0;
+
+  /// Clock the service reads. Tests move it to model a clock rollback.
+  int now = 5000;
 
   Future<G2dIdentityActionResult> create({
     String fp = 'a',
@@ -268,6 +271,162 @@ void main() {
       expect(second.isSuccess, isTrue);
       expect(second.record!.identityId, 'identity-2');
       expect(second.record!.keyVersion, 1);
+    });
+  });
+
+  group('corruption recovery', () {
+    test('resetCorruptIdentity deletes an unreadable record and recreates nothing', () async {
+      final harness = Harness();
+      (harness.store as G2dInMemoryIdentityStore).corruptStoredValue();
+      expect(await harness.service.load(), isA<G2dIdentityCorrupt>());
+
+      final reset = await harness.service.resetCorruptIdentity();
+      expect(reset.isSuccess, isTrue);
+      expect(reset.record, isNull);
+      expect(await harness.store.load(), isNull);
+
+      // Recovery is deletion only: the next read must be absence, not a silently
+      // regenerated identity.
+      expect(await harness.service.load(), isA<G2dIdentityAbsent>());
+
+      final created = await harness.create(fp: 'c');
+      expect(created.isSuccess, isTrue);
+      expect(created.record!.state, G2dIdentityState.active);
+    });
+
+    test('resetCorruptIdentity refuses a readable identity and keeps it', () async {
+      final harness = Harness();
+      await harness.create();
+
+      final reset = await harness.service.resetCorruptIdentity();
+      expect(reset.failure, G2dIdentityFailure.notCorrupt);
+      expect((await harness.store.load())!.publicKeyFingerprint, fingerprint('a'));
+      expect(await harness.service.load(), isA<G2dIdentityActive>());
+    });
+
+    test('resetCorruptIdentity refuses a revoked identity', () async {
+      final harness = Harness();
+      await harness.create();
+      await harness.service.revoke(G2dRevocationReason.userRequested);
+
+      // A revoked record is readable evidence; discarding it is a different
+      // decision (resetRevokedIdentity), not corruption recovery.
+      expect(
+        (await harness.service.resetCorruptIdentity()).failure,
+        G2dIdentityFailure.notCorrupt,
+      );
+    });
+
+    test('resetCorruptIdentity never treats unavailable storage as corruption', () async {
+      final harness = Harness(store: const G2dUnavailableIdentityStore());
+
+      final reset = await harness.service.resetCorruptIdentity();
+      expect(reset.failure, G2dIdentityFailure.storageUnavailable);
+    });
+
+    test('resetCorruptIdentity reports absence when there is no record', () async {
+      final harness = Harness();
+      expect(
+        (await harness.service.resetCorruptIdentity()).failure,
+        G2dIdentityFailure.noIdentity,
+      );
+    });
+
+    test('a reset never reports the removed identity as the current one', () async {
+      final harness = Harness();
+      await harness.create();
+      await harness.service.revoke(G2dRevocationReason.userRequested);
+
+      final reset = await harness.service.resetRevokedIdentity();
+      expect(reset.isSuccess, isTrue);
+      expect(reset.record, isNull);
+      expect(await harness.service.load(), isA<G2dIdentityAbsent>());
+    });
+
+    test('a removed identity id cannot be reused by a new identity', () async {
+      final harness = Harness();
+      await harness.create();
+      await harness.service.revoke(G2dRevocationReason.userRequested);
+      await harness.service.resetRevokedIdentity();
+
+      final reuse = await harness.service.createIdentity(
+        algorithm: G2dIdentityAlgorithm.curve25519Xeddsa,
+        publicKeyFingerprint: fingerprint('c'),
+        keyHandle: probedHandle,
+        identityId: 'identity-1',
+      );
+      expect(reuse.failure, G2dIdentityFailure.identityIdRetired);
+      expect(await harness.store.load(), isNull);
+    });
+  });
+
+  group('commit validation', () {
+    test('a rotation that would produce an inconsistent record is refused', () async {
+      final harness = Harness();
+      await harness.create();
+
+      // Clock rollback: the rotation would be stamped before the creation time,
+      // which the record invariants forbid.
+      harness.now = 4000;
+      final result = await harness.rotate();
+
+      expect(result.failure, G2dIdentityFailure.invalidRecord);
+      expect((await harness.store.load())!.keyVersion, 1);
+      expect(await harness.service.load(), isA<G2dIdentityActive>());
+    });
+
+    test('nothing is written when validation fails', () async {
+      final harness = Harness();
+      await harness.create();
+      final store = harness.store as G2dInMemoryIdentityStore;
+      final writesBefore = store.committedWrites;
+
+      harness.now = 1;
+      await harness.rotate();
+
+      expect(store.committedWrites, writesBefore);
+    });
+
+    test('a failed write during rotation leaves the previous identity usable', () async {
+      final harness = Harness();
+      await harness.create();
+      (harness.store as G2dInMemoryIdentityStore).failNextWrite = true;
+
+      final result = await harness.rotate();
+
+      expect(result.failure, G2dIdentityFailure.storageWriteFailed);
+      final snapshot = await harness.service.load();
+      expect(snapshot, isA<G2dIdentityActive>());
+      expect((snapshot as G2dIdentityActive).record.keyVersion, 1);
+    });
+
+    test('an unverified pending rotation is rejected at load and needs recovery', () async {
+      final harness = Harness();
+      // Model an adapter that accepted a record the service would have refused:
+      // a pending rotation whose key protection was never probed.
+      await harness.store.save(G2dIdentityRecord(
+        identityId: 'identity-0',
+        keyVersion: 2,
+        algorithm: G2dIdentityAlgorithm.curve25519Xeddsa,
+        publicKeyFingerprint: fingerprint('b'),
+        keyHandle: const G2dKeyHandle(
+          provider: 'android_keystore',
+          alias: 'g2d.identity.v1',
+          protection: G2dKeyProtection.unknown,
+        ),
+        state: G2dIdentityState.rotationPending,
+        createdAtMillis: 1000,
+        rotatedAtMillis: 2000,
+        previousKeyFingerprint: fingerprint('a'),
+      ));
+
+      expect(await harness.service.load(), isA<G2dIdentityCorrupt>());
+      expect(
+        (await harness.service.completeRotation()).failure,
+        G2dIdentityFailure.storageCorrupt,
+      );
+      expect((await harness.service.resetCorruptIdentity()).isSuccess, isTrue);
+      expect(await harness.service.load(), isA<G2dIdentityAbsent>());
     });
   });
 

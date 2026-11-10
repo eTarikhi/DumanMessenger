@@ -352,11 +352,21 @@ class G2dIdentityRecord {
     if (rotatedAtMillis != null && rotatedAtMillis! < createdAtMillis) {
       throw const FormatException('G2-D rotation time precedes creation time.');
     }
-    if (state == G2dIdentityState.active && !hasVerifiedProtection) {
-      throw const FormatException('Active G2-D identity requires verified key protection.');
+    if (revokedAtMillis != null && revokedAtMillis! < createdAtMillis) {
+      throw const FormatException('G2-D revocation time precedes creation time.');
     }
-    if (state == G2dIdentityState.active && !keyHandle.probeVerified) {
-      throw const FormatException('Active G2-D identity requires a probed key protection.');
+    // A pending rotation is one step away from being promoted to active, so it
+    // must satisfy the same protection requirement as an active identity. Without
+    // this, completeRotation could promote an unverified key into an active one.
+    if (state != G2dIdentityState.revoked && !hasVerifiedProtection) {
+      throw const FormatException(
+        'Active or pending G2-D identity requires verified key protection.',
+      );
+    }
+    if (state != G2dIdentityState.revoked && !keyHandle.probeVerified) {
+      throw const FormatException(
+        'Active or pending G2-D identity requires a probed key protection.',
+      );
     }
   }
 
