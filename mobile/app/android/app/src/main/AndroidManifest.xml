@@ -29,10 +29,17 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
+    <!-- G2-D identity data is encrypted with a key that lives in the Android
+         Keystore and is never exported, so it cannot survive a restore onto
+         another device or a reinstall. Backing the ciphertext up would only
+         produce an undecryptable record that looks like corruption, so the
+         identity directory is excluded from cloud backup and device transfer. -->
     <application
         android:label="duman_messenger"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:fullBackupContent="@xml/g2d_backup_rules"
+        android:dataExtractionRules="@xml/g2d_data_extraction_rules">
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -91,6 +91,21 @@ class G2dIdentityChannel {
     return Map<String, Object?>.unmodifiable(response);
   }
 
+  /// Reads the stored record payload, or `null` when no identity is stored.
+  ///
+  /// The payload is decrypted on the platform side: the Keystore key never
+  /// leaves it, and neither does an iv or ciphertext.
+  Future<String?> loadRecord() => _guard(() => _channel.invokeMethod<String>('load'));
+
+  /// Commits [payload]. The platform encrypts, writes durably and only then
+  /// reports success.
+  Future<void> saveRecord(String payload) => _guard(
+        () => _channel.invokeMethod<void>('save', <String, Object?>{'payload': payload}),
+      );
+
+  /// Removes the record, its index and the wrapping key. Idempotent.
+  Future<void> deleteRecord() => _guard(() => _channel.invokeMethod<void>('delete'));
+
   Future<T> _guard<T>(Future<T> Function() action) async {
     try {
       return await action();

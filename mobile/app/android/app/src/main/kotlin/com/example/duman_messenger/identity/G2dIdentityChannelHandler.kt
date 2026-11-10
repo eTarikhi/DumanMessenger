@@ -11,6 +11,9 @@ import io.flutter.plugin.common.MethodChannel
  * | Method | Arguments | Response |
  * |---|---|---|
  * | `capabilities` | `{refresh: bool}` | measured capability evidence |
+ * | `load` | — | decrypted record JSON, or null when absent |
+ * | `save` | `{payload: String}` | null |
+ * | `delete` | — | null |
  *
  * The contract is deliberately narrow. Dart owns the identity state machine
  * (creation, rotation, revocation); this side owns the Keystore and the files.
@@ -25,6 +28,7 @@ import io.flutter.plugin.common.MethodChannel
  */
 internal class G2dIdentityChannelHandler(
     private val probe: G2dCapabilityProbe,
+    private val storage: G2dIdentityStorage,
 ) : MethodChannel.MethodCallHandler {
 
     companion object {
@@ -34,6 +38,9 @@ internal class G2dIdentityChannelHandler(
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "capabilities" -> handleCapabilities(call, result)
+            "load" -> handleLoad(result)
+            "save" -> handleSave(call, result)
+            "delete" -> handleDelete(result)
             else -> result.notImplemented()
         }
     }
@@ -42,6 +49,41 @@ internal class G2dIdentityChannelHandler(
         try {
             val refresh = call.argument<Boolean>("refresh") ?: false
             result.success(probe.probe(refresh))
+        } catch (error: Exception) {
+            fail(result, error)
+        }
+    }
+
+    private fun handleLoad(result: MethodChannel.Result) {
+        try {
+            result.success(storage.loadRecord())
+        } catch (error: Exception) {
+            fail(result, error)
+        }
+    }
+
+    private fun handleSave(call: MethodCall, result: MethodChannel.Result) {
+        val payload = call.argument<String>("payload")
+        if (payload == null) {
+            result.error(
+                G2dProtectionException.WRITE_FAILED,
+                "the identity record payload is missing",
+                null,
+            )
+            return
+        }
+        try {
+            storage.saveRecord(payload)
+            result.success(null)
+        } catch (error: Exception) {
+            fail(result, error)
+        }
+    }
+
+    private fun handleDelete(result: MethodChannel.Result) {
+        try {
+            storage.deleteRecord()
+            result.success(null)
         } catch (error: Exception) {
             fail(result, error)
         }

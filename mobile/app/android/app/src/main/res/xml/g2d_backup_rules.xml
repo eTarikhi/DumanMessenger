@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    G2-D identity storage backup exclusion (Android 11 and older).
+
+    The identity record is AES-GCM encrypted under a key held in the Android
+    Keystore. Keystore keys are never included in a backup and are destroyed on
+    uninstall, so a restored copy of the ciphertext is permanently undecryptable.
+    Restoring it would turn "this device has no identity" into "this device has a
+    corrupt identity", which is a worse failure to explain and one that invites a
+    destructive reset. Excluded instead.
+-->
+<full-backup-content>
+    <exclude
+        domain="file"
+        path="identity/" />
+</full-backup-content>

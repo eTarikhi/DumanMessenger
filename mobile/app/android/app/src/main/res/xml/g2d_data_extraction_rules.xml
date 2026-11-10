@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    G2-D identity storage backup exclusion (Android 12 / API 31 and newer).
+
+    Same reasoning as res/xml/g2d_backup_rules.xml: the wrapping key stays in the
+    Keystore of the device that created it, so the encrypted record is not
+    portable. Cloud backup and device-to-device transfer both exclude it.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude
+            domain="file"
+            path="identity/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude
+            domain="file"
+            path="identity/" />
+    </device-transfer>
+</data-extraction-rules>

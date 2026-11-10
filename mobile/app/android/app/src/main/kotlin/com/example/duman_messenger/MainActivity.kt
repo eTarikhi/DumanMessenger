@@ -3,6 +3,7 @@ package com.example.duman_messenger
 import com.example.duman_messenger.identity.G2dCapabilityProbe
 import com.example.duman_messenger.identity.G2dIdentityChannelHandler
 import com.example.duman_messenger.identity.G2dIdentityKeyring
+import com.example.duman_messenger.identity.G2dIdentityStorage
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -67,10 +68,15 @@ class MainActivity : FlutterActivity() {
             G2cBleManager.EVENT_CHANNEL,
         ).also { channel -> channel.setStreamHandler(g2cManager) }
 
-        // G2-D identity: Keystore-backed protection facts, measured on this device.
-        // Only non-secret facts cross this channel; see G2dIdentityChannelHandler.
+        // G2-D identity: Keystore-backed protection facts and encrypted storage.
+        // Only the record payload and non-secret facts cross this channel; see
+        // G2dIdentityChannelHandler and G2dIdentityStorage.
         val identityKeyring = G2dIdentityKeyring()
-        val handler = G2dIdentityChannelHandler(G2dCapabilityProbe(identityKeyring))
+        val identityStorage = G2dIdentityStorage(applicationContext.filesDir, identityKeyring)
+        val handler = G2dIdentityChannelHandler(
+            G2dCapabilityProbe(identityKeyring),
+            identityStorage,
+        )
         identityChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             G2dIdentityChannelHandler.METHOD_CHANNEL,
