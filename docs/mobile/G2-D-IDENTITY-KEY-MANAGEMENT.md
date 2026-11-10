@@ -1,8 +1,10 @@
 # G2-D identity and key management
 
 **Status: the protocol-agnostic identity foundation is implemented in Dart and covered by
-tests. The Android Keystore storage adapter is designed but NOT implemented. No key material
-is generated anywhere in this milestone.**
+tests. The Android Keystore adapter and encrypted identity storage are now implemented in
+Kotlin and Dart, but have not been compiled or executed yet and are not device-verified — see
+[G2-D-ANDROID-KEYSTORE-AND-STORAGE.md](G2-D-ANDROID-KEYSTORE-AND-STORAGE.md). No identity key
+material is generated anywhere in this milestone.**
 
 - **Date:** 2026-11-09
 - **Code:** `mobile/app/lib/identity/` — `identity_models.dart`, `identity_store.dart`,
@@ -25,7 +27,8 @@ is generated anywhere in this milestone.**
 | Serialized mutations; retired identity ids | **Implemented** | `_serialize`, `_retiredIdentityIds` |
 | Store construction guard (no silent insecure wiring) | **Implemented** | `allowInsecureStore` (§1.1) |
 | Test double with fault injection | **Implemented (test-only)** | `G2dInMemoryIdentityStore` |
-| Android Keystore adapter (real persistence, real wrapping) | **Designed, not implemented** | §7 |
+| Android Keystore wrapping key, envelope and encrypted storage | **Implemented, not device-verified** | §7, [G2-D-ANDROID-KEYSTORE-AND-STORAGE.md](G2-D-ANDROID-KEYSTORE-AND-STORAGE.md) |
+| Device capability probe (measured, not inferred) | **Implemented, not device-verified** | same |
 | Key generation, fingerprint computation | **Deferred to the crypto provider** | §3 |
 | Session establishment, encryption, replay protection | **Out of scope** | security plan |
 
@@ -35,14 +38,18 @@ fallback, and no "temporary" key store.
 
 ### 1.1 Storage abstraction is not secure persistence
 
-`G2dIdentityStore` is an *interface*. Nothing in this milestone implements it with real
-protection: the shipped placeholder fails closed and persists nothing, and the in-memory
-double persists nothing either. Because of that, `G2dIdentityService` **refuses to
-construct** over a store whose `isSecureAtRest` is `false` unless the caller passes
-`allowInsecureStore: true` — an explicit acknowledgement, used by tests and by any
-deliberately non-persistent build. A production adapter must report `isSecureAtRest == true`;
-until one exists, there is no production wiring that can honestly present an identity as
-persisted.
+`G2dIdentityStore` is an *interface*. Two implementations persist nothing — the fail-closed
+placeholder and the in-memory test double — and one now does: `G2dKeystoreIdentityStore`,
+whose `isSecureAtRest` is not a constant but the result of a measured AES-GCM round trip on
+that device. Because an unproven store must never be wired silently, `G2dIdentityService`
+**refuses to construct** over a store whose `isSecureAtRest` is `false` unless the caller
+passes `allowInsecureStore: true` — an explicit acknowledgement, used by tests and by any
+deliberately non-persistent build.
+
+The shipped app still wires no identity store at all: `G2dAndroidIdentityRuntime` is the
+composition root for Android, it refuses to assemble when the probe did not verify the wrap,
+and nothing calls it from the UI yet because no identity screen exists and no crypto provider
+has been chosen.
 
 ## 2. Identity versus key material
 
@@ -241,11 +248,16 @@ exceptions. Exceptions are reserved for programming errors.
   adapter reports `G2dIdentityStoreUnavailable`/corruption → user-driven reset. No silent
   regeneration.
 
-## 7. Android storage adapter (designed, not implemented)
+## 7. Android storage adapter (implemented, not device-verified)
 
-Not implemented because it cannot be compiled, built or exercised in this environment, and
-because writing a storage format before the provider is chosen risks re-doing it. The
-following is the contract it must meet.
+This section was written as a contract before any Android code existed. It is now implemented —
+see [G2-D-ANDROID-KEYSTORE-AND-STORAGE.md](G2-D-ANDROID-KEYSTORE-AND-STORAGE.md) for the code,
+the envelope, the error matrix and the limits. The subsections below are kept because they are
+the reasons for the shape that was built, with the two deviations recorded inline.
+
+Nothing here has been compiled or executed yet: there is no Flutter, Dart, Java or Android
+toolchain in the implementation environment and no device attached to it. §7.1–§7.3 describe
+what the Kotlin now does; §7.4 records what was deliberately *not* built.
 
 ### 7.1 Wrapping
 
@@ -301,8 +313,23 @@ older than the highest generation seen on this installation → refuse (rollback
 | `reset` | — | same shape |
 | `capabilities` | `{apiLevel}` | probe results: `{wrappingKey: bool, ed25519Keystore: bool, strongBox: bool}` |
 
-Dart never sees private key bytes, IVs or ciphertext: only the record map and the probe
-booleans. The channel must refuse to operate if the probe did not run.
+**Not built this way, deliberately.** Putting `create`/`rotate`/`revoke` on the platform side
+would duplicate the identity state machine — 224 owner-verified Dart tests' worth of invariants — in
+Kotlin that no test in this repository exercises, and would give two sources of truth for the
+current state. The channel that was built exposes storage only:
+
+| Method | Request | Response |
+|---|---|---|
+| `capabilities` | `{refresh: bool}` | measured probe facts (see §7 of the Keystore document) |
+| `load` | — | the decrypted record JSON, or `null` |
+| `save` | `{payload: String}` | `null` |
+| `delete` | — | `null` |
+
+Failures are `error(code, message, null)` with the codes in
+[G2-D-ANDROID-KEYSTORE-AND-STORAGE.md](G2-D-ANDROID-KEYSTORE-AND-STORAGE.md) §6. Dart never
+sees private key bytes, IVs or ciphertext: only the record payload and the probe facts. The
+Dart runtime refuses to assemble the stack unless the probe verified an encrypt/decrypt round
+trip.
 
 ## 8. Test coverage of the implemented foundation
 
@@ -329,8 +356,15 @@ booleans. The channel must refuse to operate if the probe did not run.
 | Serialized mutations (concurrent create/revoke) | `identity_service_test.dart` |
 | Retired identity id cannot be reused | `identity_service_test.dart` |
 | API-level protection rules and mismatch detection | `identity_platform_capabilities_test.dart` |
+| Measured evidence decoding; hardware claim requires a measurement | `identity_probe_capabilities_test.dart` |
+| Store adapter: payload shape, error-code mapping, unknown code ≠ corrupt | `identity_android_store_test.dart` |
+| Persistence across service reconstruction; rotation across restart | `identity_android_store_test.dart` |
+| Composition root refuses an unverified wrapping key | `identity_android_runtime_test.dart` |
+| AES-GCM, tag failure, missing key, interrupted write, stale generation | `G2dIdentityKeystoreInstrumentedTest.kt` (device only) |
 
-Tests are Dart-level. They do not exercise Android, the Keystore, JNI, or any provider.
+The Dart tests do not exercise Android, the Keystore, JNI, or any provider; they replace the
+platform with a double. The instrumented Kotlin tests do exercise Android, but require the
+device and have not been run from this environment.
 
 ## 9. Open decisions
 
@@ -339,10 +373,18 @@ Tests are Dart-level. They do not exercise Android, the Keystore, JNI, or any pr
 3. `PURPOSE_SIGN`-bound Ed25519 identity on API 33+ (hardware) versus one uniform
    software-wrapped path on all devices — uniformity is simpler, per-device capability is
    stronger.
-4. Whether the Keystore adapter ships before or after the provider integration (before is
-   cheaper; after risks designing the format twice).
+4. ~~Whether the Keystore adapter ships before or after the provider integration.~~ Settled:
+   the adapter and the encrypted store ship first, so the provider inherits a working envelope
+   instead of designing one.
 5. Whether a retired identity id needs a durable tombstone, rather than the in-memory
    retirement this milestone provides.
 6. Whether a protection claim that the current device cannot satisfy should be recoverable by
    anything other than the explicit corrupt reset (device-capability drift, e.g. restoring
-   data from a stronger phone).
+   data from a stronger phone). Still open, and now cheaper to answer because the mismatch is
+   detected at load against measured facts rather than assumed ones.
+7. Whether the wrapping key should ever be user-authentication bound. Not now: identity use is
+   not an interactive ceremony, and gating the key would block background rotation. The cost —
+   a compromised unlocked device can use it — is accepted for this milestone.
+8. Whether rollback detection needs an anchor outside the app sandbox. The index in §5 stops
+   nothing against an attacker who can write app-private files; it only catches an accidental
+   or naive rollback.

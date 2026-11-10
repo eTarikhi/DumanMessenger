@@ -15,28 +15,68 @@
   "increments": [
     {
       "commit": "7f667fe",
-      "findings": ["F1", "F2", "F9 (partial)", "F13 (partial)", "F15 (partial)"],
+      "findings": [
+        "F1",
+        "F2",
+        "F9 (partial)",
+        "F13 (partial)",
+        "F15 (partial)"
+      ],
       "summary": "explicit corruption recovery, commit-time validation, typed reset results, retired id guard, adapter exception translation"
     },
     {
       "commit": "2fe1d59",
-      "findings": ["F4", "F8", "F6", "F7 (production)"],
+      "findings": [
+        "F4",
+        "F8",
+        "F6",
+        "F7 (production)"
+      ],
       "summary": "pin/observed/previous separation, strict trust record codec with invariants, terminal idempotent peer revocation, evidence-based labels"
     },
     {
       "commit": "9b98015",
-      "findings": ["F3", "F5"],
+      "findings": [
+        "F3",
+        "F5"
+      ],
       "summary": "G2dPlatformKeyCapabilities injected into the service, capability checks at create/rotate/load, insecure-store construction guard"
     },
     {
       "commit": "680c1c2",
-      "findings": ["F14", "F17", "F12", "F11", "F10", "F9 (tests)"],
+      "findings": [
+        "F14",
+        "F17",
+        "F12",
+        "F11",
+        "F10",
+        "F9 (tests)"
+      ],
       "summary": "serialized mutations, rotation-history invariant, hasVerifiedProtection semantics, documented probe-claim boundary, alias/provider validation, adapter failure tests"
     }
   ],
   "findings": {
-    "fixed": ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F12", "F13", "F14", "F15", "F16", "F17"],
-    "resolved_by_documentation": ["F11"],
+    "fixed": [
+      "F1",
+      "F2",
+      "F3",
+      "F4",
+      "F5",
+      "F6",
+      "F7",
+      "F8",
+      "F9",
+      "F10",
+      "F12",
+      "F13",
+      "F14",
+      "F15",
+      "F16",
+      "F17"
+    ],
+    "resolved_by_documentation": [
+      "F11"
+    ],
     "notes": {
       "F11": "The key handle constructor cannot verify a probe result, and tests need to construct invalid handles to prove rejection. The boundary is now documented, and the claim is enforced at decode, lifecycle and platform layers.",
       "F16": "Closed by the same commit-time round-trip introduced for F2; the double's unvalidated save is now harmless because nothing reaches it without validation.",
@@ -123,7 +163,18 @@
   },
   "security_gates": {
     "met": [],
-    "open": ["D0", "D1", "D2-a", "D2-b", "D2-c", "D3", "D4 design review", "D5", "D6 code review", "D7"],
+    "open": [
+      "D0",
+      "D1",
+      "D2-a",
+      "D2-b",
+      "D2-c",
+      "D3",
+      "D4 design review",
+      "D5",
+      "D6 code review",
+      "D7"
+    ],
     "note": "Hardening code and unit tests do not satisfy any gate. Independent design and code review remain mandatory, and no Keystore adapter, provider integration or device probe exists."
   },
   "unresolved_limitations": [
@@ -134,5 +185,94 @@
     "peer trust records are in-memory only and have no store",
     "no independent review, no device evidence, no cryptographic provider"
   ],
-  "next_action": "Owner runs flutter analyze / flutter test / flutter build apk --debug at the pushed head. No G2-D integration work until D2-a/D2-b gates are answered."
+  "next_action": "Owner runs flutter analyze / flutter test / flutter build apk --debug at the pushed head. No G2-D integration work until D2-a/D2-b gates are answered.",
+  "keystore_milestone": {
+    "milestone": "G2-D Android Keystore adapter and persistent identity storage",
+    "date": "2026-11-09",
+    "starting_commit": "92bffdac6aa5d5b748d56d8b4ca60c3144acafb2",
+    "note": "Supersedes the 'no Keystore adapter, no secure persistence' limitation recorded in this file by the previous milestone. Identity key generation, a crypto provider, peer trust persistence and every security gate remain open.",
+    "increments": [
+      {
+        "commit": "a4db820",
+        "summary": "Android Keystore wrapping key, AES-GCM envelope, typed failures, measured capability probe, channel client and evidence model"
+      },
+      {
+        "commit": "203414f",
+        "summary": "crash-safe encrypted slot storage, Dart store adapter, composition root, backup exclusion"
+      },
+      {
+        "commit": "21d076a",
+        "summary": "70 Dart cases and 16 instrumented Kotlin tests"
+      },
+      {
+        "commit": "docs",
+        "summary": "G2-D-ANDROID-KEYSTORE-AND-STORAGE.md, key-management doc updates, this state"
+      }
+    ],
+    "android_apis": [
+      "KeyStore.getInstance(\"AndroidKeyStore\") (API 1/18)",
+      "KeyGenParameterSpec / KeyGenerator AES (API 23)",
+      "KeyProperties AES/GCM/NoPadding, randomized encryption, no user-auth binding",
+      "KeyInfo.isInsideSecureHardware / getKeySize (API 23)",
+      "KeyInfo via SecretKeyFactory(\"AndroidKeyStore\")",
+      "GCMParameterSpec (API 19)",
+      "setIsStrongBoxBacked (API 28, guarded)",
+      "fullBackupContent (API 23) and dataExtractionRules (API 31, guarded by compileSdk)"
+    ],
+    "protection": {
+      "wrapping_key": "AES-256-GCM, non-exportable, Keystore-chosen iv, no user-authentication binding",
+      "envelope": "G2DID1 | version | generation | keyId | iv | ciphertext+tag, with version+generation+keyId bound as GCM associated data",
+      "atomicity": "temporary file, fsync, rename onto one of two alternating slots; the previous generation stays readable",
+      "rollback_detection": "non-secret keyring.meta index; an authenticating record older than the last committed generation is stale_record",
+      "hardware_claim": "only from KeyInfo.isInsideSecureHardware of a key this process created; never from the API level"
+    },
+    "dart": {
+      "store_kind": "android_keystore_v1",
+      "is_secure_at_rest": "measured AES-GCM round trip, not a constant",
+      "error_mapping": "auth_failed/key_missing/key_invalidated/key_id_mismatch/ciphertext_malformed/stale_record -> corrupt; keystore_unavailable/key_generation_failed/io_unavailable/key_unusable and any unknown code -> unavailable (unknown must never enable a destructive reset)",
+      "wiring": "G2dAndroidIdentityRuntime refuses to assemble the stack when the wrap did not verify; nothing creates an identity at startup"
+    },
+    "tests": {
+      "dart_added": {
+        "identity_probe_capabilities_test.dart": 25,
+        "identity_android_store_test.dart": 34,
+        "identity_android_runtime_test.dart": 11
+      },
+      "dart_total_declared": 294,
+      "instrumented_kotlin": 16,
+      "executed_in_this_environment": [],
+      "note": "No Flutter, Dart, Java or Android toolchain and no device exist here. Nothing in this milestone was executed."
+    },
+    "validation": {
+      "agent_run": {
+        "dart_syntax_parse": "tree-sitter-dart parse of all lib and test Dart files: 0 errors",
+        "kotlin_brace_balance": "all Kotlin sources balanced after comment/string stripping",
+        "doc_checks": "python3 tool/ci/check-docs.py: 12/12 passed",
+        "git_diff_check": "clean"
+      },
+      "not_run": [
+        "flutter analyze",
+        "flutter test",
+        "flutter build apk --debug",
+        "gradlew",
+        "connectedDebugAndroidTest",
+        "any device test"
+      ]
+    },
+    "unresolved_limitations": [
+      "identity data is unrecoverable when the wrapping key is lost, invalidated or a backup restores the ciphertext alone; the only recovery is the explicit corrupt reset",
+      "rollback detection has no anchor outside the app sandbox: an attacker who can write app-private files can delete the index",
+      "a rooted device with the app unlocked can use the wrapping key",
+      "no identity key is generated, so no record claims hardware_bound; the SM-G610F hardware backing of the wrapping key is unmeasured",
+      "retired identity ids are still in-memory only",
+      "peer trust has no store",
+      "no independent design or code review; gates D0-D7 remain open"
+    ],
+    "owner_actions": [
+      "flutter analyze",
+      "flutter test (294 declared)",
+      "flutter build apk --debug",
+      "cd mobile\\app\\android; .\\gradlew connectedDebugAndroidTest (requires the API 27 device)"
+    ]
+  }
 }

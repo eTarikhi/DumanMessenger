@@ -1,12 +1,62 @@
 # Implementation status — simulator, security, and Flutter workstreams
 
-**Current update:** 2026-11-09 (G2-D security hardening and trust remediation)
-**Previous updates:** 2026-11-09 (G2-D architecture + identity/trust foundation), 2026-11-09 (G2-C validation), 2026-11-09 (G2-D security plan)
+**Current update:** 2026-11-09 (G2-D Android Keystore adapter and encrypted identity storage)
+**Previous updates:** 2026-11-09 (G2-D security hardening and trust remediation), 2026-11-09 (G2-D architecture + identity/trust foundation), 2026-11-09 (G2-C validation), 2026-11-09 (G2-D security plan)
 **Superseded sections below:** 2026-11-08 (G1 shared source) and 2026-11-05 (no-source baseline). Where an older section says that no Flutter app, Android host, or device evidence exists, the 2026-11-09 update governs.
 **Branch:** `arena/94329f0d-dumanmessenger` (active)
 **Historical G0 snapshot tested/reviewed:** `a1f1916981c2244a2f8664573b66afbd5a2659b4` (empty checkpoint over `bdf719cf88205f944187cb79b8288264a56c13bd`)
 
-## Current update (2026-11-09, latest) — G2-D security hardening and trust remediation
+## Current update (2026-11-09, latest) — G2-D Android Keystore adapter and encrypted identity storage
+
+Scope: replace designed-but-absent Android protection with real Keystore code and real encrypted
+storage. **No provider integration, no Signal dependency, no G2-C, routing or UI change, no gate
+passed.** Reference document:
+[docs/mobile/G2-D-ANDROID-KEYSTORE-AND-STORAGE.md](../../docs/mobile/G2-D-ANDROID-KEYSTORE-AND-STORAGE.md).
+
+- **Commits.** `a4db820` (Keystore adapter + measured probe), `203414f` (encrypted slot storage,
+  Dart store and composition root), `21d076a` (tests), plus the documentation commit. Branch
+  `arena/94329f0d-dumanmessenger`, every increment pushed.
+- **Wrapping key.** AES-256-GCM in the Android Keystore (`KeyGenParameterSpec`,
+  `setRandomizedEncryptionRequired(true)`, not exportable, no user-auth binding). API 23+, so it
+  exists at the API 27 floor.
+- **Envelope.** `G2DID1 | version | generation | keyId | iv | ciphertext+tag`, with the version,
+  generation and key id bound into the GCM associated data, so an edited or replayed blob fails
+  the tag instead of decrypting to something plausible.
+- **Storage.** Two alternating slots; write to `.tmp`, `fsync`, `rename`; the previous slot stays
+  readable. Load takes the highest generation that authenticates. A non-secret index adds
+  rollback detection (`stale_record`). Typed failures: `key_missing` (never regenerated),
+  `key_invalidated`, `key_id_mismatch`, `auth_failed`, `ciphertext_malformed`, `stale_record`,
+  `io_unavailable`, `write_failed`, `keystore_unavailable`, `key_generation_failed`.
+- **Recovery.** Only `resetCorruptIdentity` deletes: slots, index and the Keystore key, nothing
+  recreated. Dart maps only codes that prove the bytes unusable to `corrupt`; an unknown code
+  maps to `unavailable`, because `corrupt` is the only state that enables deletion.
+- **Capability probe.** API level, AES-GCM availability, key generation, a real encrypt/decrypt
+  round trip, `KeyInfo.isInsideSecureHardware`, key size, and a separate StrongBox attempt on
+  API 28+. Availability is never reported as protection; hardware backing is never inferred from
+  the API level. `G2dProbedKeyCapabilities` lets the measurement narrow a documented rule and
+  never widen it.
+- **Backup.** `files/identity/` excluded from cloud backup and device transfer
+  (`fullBackupContent` + `dataExtractionRules`). Keystore keys are never backed up, so a restored
+  ciphertext would only ever be an undecryptable record.
+- **Design deviation, recorded.** The old §7.4 sketch put `create`/`rotate`/`revoke` on the
+  platform side; that would duplicate the tested Dart state machine in untested Kotlin. The
+  channel exposes storage only (`capabilities`, `load`, `save`, `delete`).
+- **Counted cases.** 70 new Dart cases (25 probe, 34 store, 11 runtime) → **294 declared** in
+  `flutter test` (224 previously verified by the owner). 16 instrumented Kotlin tests, not run.
+- **Validation actually performed here.** tree-sitter-dart parse of all Dart sources (0 errors),
+  brace-balance check on every Kotlin source, `tool/ci/check-docs.py` 12/12, `git diff --check`
+  clean. **Not run:** `flutter analyze`, `flutter test`, `flutter build apk --debug`, Gradle,
+  `connectedDebugAndroidTest`, and anything on a device — no Flutter, Dart, Java or Android
+  toolchain and no device exist in this environment.
+- **Open limitations.** Identity data is unrecoverable if the wrapping key is lost or invalidated
+  (by design, with one explicit recovery path); rollback detection has no anchor outside the app
+  sandbox; a rooted, unlocked device can use the wrapping key; no identity key is generated, so
+  no record claims `hardware_bound`; retired identity ids remain in-memory; hardware backing of
+  the wrapping key on the SM-G610F is unmeasured until the owner runs it.
+- **Owner validation required before this is accepted.** `flutter analyze`, `flutter test`,
+  `flutter build apk --debug`, then `connectedDebugAndroidTest` on the API 27 device.
+
+## Previous update (2026-11-09) — G2-D security hardening and trust remediation
 
 Scope: remediate the read-only audit's findings F1–F17 and keep the seven owner-observed
 trust failures fixed. **No dependency, Gradle, Android, G2-C or UI change. No gate passed.**
@@ -46,7 +96,7 @@ trust failures fixed. **No dependency, Gradle, Android, G2-C or UI change. No ga
 
 State file: [G2-D-EXECUTION-STATE.json](G2-D-EXECUTION-STATE.json).
 
-## Current update (2026-11-09, later) — G2-D architecture recommendation and identity foundation
+## Earlier update (2026-11-09) — G2-D architecture recommendation and identity foundation
 
 Scope: recommendation plus a protocol-agnostic foundation. **No dependency was added, no
 key material is generated, no session exists, and no security gate is met.**
