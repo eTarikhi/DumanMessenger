@@ -19,7 +19,11 @@ is generated anywhere in this milestone.**
 | Identity record model, strict codec, invariants | **Implemented** | `identity_models.dart` |
 | Lifecycle: create, rotate, revoke, reset | **Implemented** (over an injected store) | `identity_service.dart` |
 | Storage contract, fail-closed default store, corruption semantics | **Implemented** | `identity_store.dart` |
-| Platform capability rules (what may be claimed per API level) | **Implemented** | `platform_key_capabilities.dart` |
+| Platform capability rules (what may be claimed per API level) | **Implemented, and injected into the service** | `platform_key_capabilities.dart`, `G2dPlatformKeyCapabilities` |
+| Commit-time validation of the serialized record | **Implemented** | `_commit` round-trips through `fromMap` |
+| Explicit recovery from an untrustworthy record | **Implemented** | `resetCorruptIdentity` (§6.1) |
+| Serialized mutations; retired identity ids | **Implemented** | `_serialize`, `_retiredIdentityIds` |
+| Store construction guard (no silent insecure wiring) | **Implemented** | `allowInsecureStore` (§1.1) |
 | Test double with fault injection | **Implemented (test-only)** | `G2dInMemoryIdentityStore` |
 | Android Keystore adapter (real persistence, real wrapping) | **Designed, not implemented** | §7 |
 | Key generation, fingerprint computation | **Deferred to the crypto provider** | §3 |
@@ -28,6 +32,17 @@ is generated anywhere in this milestone.**
 The app ships with `G2dUnavailableIdentityStore`: every identity operation fails closed with
 `G2dIdentityStoreUnavailable`. There is no plaintext persistence path, no preferences
 fallback, and no "temporary" key store.
+
+### 1.1 Storage abstraction is not secure persistence
+
+`G2dIdentityStore` is an *interface*. Nothing in this milestone implements it with real
+protection: the shipped placeholder fails closed and persists nothing, and the in-memory
+double persists nothing either. Because of that, `G2dIdentityService` **refuses to
+construct** over a store whose `isSecureAtRest` is `false` unless the caller passes
+`allowInsecureStore: true` — an explicit acknowledgement, used by tests and by any
+deliberately non-persistent build. A production adapter must report `isSecureAtRest == true`;
+until one exists, there is no production wiring that can honestly present an identity as
+persisted.
 
 ## 2. Identity versus key material
 
@@ -91,6 +106,30 @@ claim:
 > Presence of Android Keystore, the Android version, or the algorithm name never justifies
 > "hardware-backed". Only a probe result does.
 
+The claim is enforced at three independent points, because one is not enough:
+
+1. **Decode** — a handle that states a level without a probe (or `unknown` with one) cannot be
+   parsed into a record at all.
+2. **Lifecycle** — `createIdentity` and `beginRotation` refuse an unknown or unprobed
+   protection, and `hasVerifiedProtection` (the getter the invariants use) requires both the
+   stated level *and* the probe flag.
+3. **Platform** — the service asks the injected `G2dPlatformKeyCapabilities` whether the claim
+   is possible at all, and re-checks every loaded record. A hardware-bound Ed25519 claim below
+   API 33, or any hardware-bound Curve25519/X25519 claim, is refused. A platform limit is
+   worded differently from missing evidence, because the operator's next step differs.
+
+A caller-provided boolean is never treated as proof. It is the caller's attestation; the
+platform gate can only deny a claim, never grant one, and android-side truth still requires a
+real probe (deferred, §7).
+
+### 4.0 Key handle identifiers
+
+Provider and alias are validated at construction and on decode: the provider is a short
+lowercase identifier, and the alias is a plain lookup name (`A-Za-z0-9._-`, ≤128 characters)
+that may not contain or overlap the identity fingerprint. An alias is persisted data, so it
+must have no room for key material, free-form text or a second copy of the fingerprint.
+Diagnostic `toString()` output omits the alias and all fingerprints.
+
 ### 4.1 What is actually true on Android (evidence, not aspiration)
 
 | Fact | Consequence for Duman |
@@ -149,21 +188,47 @@ Deliberate omissions:
 | `G2dIdentityRotationPending` | unfinished rotation | block session use; offer complete or revoke |
 | `G2dIdentityRevoked` | revoked record | block use; offer reset only |
 | `G2dIdentityStorageUnavailable` | no verified store / read failed | block everything; explain; **never** create a plaintext store |
-| `G2dIdentityCorrupt` | unparsable or inconsistent record | block everything; require an explicit user-driven reset |
+| `G2dIdentityCorrupt` | unparsable record, failed an invariant, or claims protection this platform cannot provide | block everything; offer only `resetCorruptIdentity` |
 
 Every operation returns a typed `G2dIdentityActionResult`; expected failures are values, not
 exceptions. Exceptions are reserved for programming errors.
 
-### 6.1 Corruption and partial writes
+### 6.1 Corruption, partial writes and explicit recovery
 
-- A record that fails parsing or an invariant is **corruption**, distinct from absence. The
-  service never re-creates an identity on top of corruption.
+- A record that fails parsing, an invariant, or the platform capability check is
+  **corruption**, distinct from absence. The service never re-creates an identity on top of
+  corruption.
 - A failed write is reported as `storageWriteFailed` and the caller must not treat the new
   record as current. The test double models both a clean failure (previous record intact) and
   a destructive failure (previous record destroyed → subsequent read reports corruption),
   so both behaviours are exercised before a real adapter exists.
 - The real adapter must be atomic (§7.3); the destructive case exists to prove the layer
   above it fails visibly rather than silently.
+- **Validation happens before the write.** `_commit` round-trips the record through the wire
+  format, so only bytes a later `load` will accept are ever stored. A clock rollback, a
+  contradictory lifecycle, an unverified protection claim or a rotated generation without its
+  predecessor is refused with `invalidRecord` and nothing is written. Without this, a record
+  could be saved "successfully" and be reported as corruption on the very next read.
+- **Recovery is explicit and narrow.** `resetCorruptIdentity()` deletes the record only when
+  the current state is positively classified as untrustworthy (`storageCorrupt` or
+  `protectionInvalid`). It:
+  - refuses a readable record with `notCorrupt`, so a valid active or revoked identity cannot
+    be discarded through it;
+  - refuses when storage is merely unavailable — an IO error is not evidence of corruption;
+  - never recreates anything, and returns a result that carries no record, so a caller cannot
+    mistake the deletion for a current identity. A subsequent explicit `createIdentity` is
+    required.
+- **Mutations are serialized.** Each lifecycle operation runs under a small gate, so two
+  concurrent creations cannot both observe "absent" and both commit, and a concurrent
+  revoke/rotate pair cannot interleave a load-modify-write.
+- **Removed ids are retired** for the lifetime of the service instance: a new identity may
+  not reuse the id of one that was revoked or reset, so a peer keyed on the id cannot see a
+  revoked identity "return" with a different key. This is in-memory only; a durable
+  tombstone belongs with the deferred peer/identity store work.
+- **Protection claims are checked against the platform.** The service requires
+  `G2dPlatformKeyCapabilities` and refuses a claim the platform cannot honour at creation,
+  rotation and every load. `hasVerifiedProtection` requires both a stated level and the probe
+  flag, so an unevidenced hardware claim never reads as verified.
 
 ### 6.2 Restore and recovery
 
@@ -245,12 +310,24 @@ booleans. The channel must refuse to operate if the probe did not run.
 |---|---|
 | Fingerprint validation and display formatting | `identity_models_test.dart` |
 | Handle round-trip; unprobed claim rejected; unknown protection rejected | `identity_models_test.dart` |
+| Alias/provider validation at construction; alias may not carry the fingerprint | `identity_models_test.dart` |
 | Record round-trip; version rejection; malformed fields; every invariant | `identity_models_test.dart` |
+| Pending rotation requires probed protection; revocation after creation | `identity_models_test.dart` |
+| Rotated generation must name its predecessor (`keyVersion ≥ 2`) | `identity_models_test.dart` |
+| `hasVerifiedProtection` requires the probe flag | `identity_models_test.dart` |
 | Store unavailable / corrupt / partial / failed write semantics | `identity_store_test.dart` |
 | Creation, refusal paths, app-default fail-closed | `identity_service_test.dart` |
 | Rotation transitions and refusals | `identity_service_test.dart` |
 | Revocation, idempotence, reset-and-recreate | `identity_service_test.dart` |
 | Storage failure surfacing (no phantom identity) | `identity_service_test.dart` |
+| Corruption recovery: delete only, refusals, absence, explicit recreation | `identity_service_test.dart` |
+| Commit-time validation: clock rollback, no write on rejection, failed rotation write | `identity_service_test.dart` |
+| Insecure-store construction guard (both stores) and explicit opt-in | `identity_service_test.dart` |
+| Capability injection: impossible claims at creation/rotation, load-time rejection, recovery | `identity_service_test.dart` |
+| Platform-limit versus missing-evidence wording | `identity_service_test.dart` |
+| Adapter exception translation on read and write | `identity_service_test.dart` |
+| Serialized mutations (concurrent create/revoke) | `identity_service_test.dart` |
+| Retired identity id cannot be reused | `identity_service_test.dart` |
 | API-level protection rules and mismatch detection | `identity_platform_capabilities_test.dart` |
 
 Tests are Dart-level. They do not exercise Android, the Keystore, JNI, or any provider.
@@ -264,3 +341,8 @@ Tests are Dart-level. They do not exercise Android, the Keystore, JNI, or any pr
    stronger.
 4. Whether the Keystore adapter ships before or after the provider integration (before is
    cheaper; after risks designing the format twice).
+5. Whether a retired identity id needs a durable tombstone, rather than the in-memory
+   retirement this milestone provides.
+6. Whether a protection claim that the current device cannot satisfy should be recoverable by
+   anything other than the explicit corrupt reset (device-capability drift, e.g. restoring
+   data from a stronger phone).

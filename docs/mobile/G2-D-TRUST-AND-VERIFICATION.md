@@ -49,7 +49,13 @@ truthful wording:
 | user verified, connected | `Verified by you (out-of-band comparison)` |
 | user verified, not connected | `Verified by you — not currently connected` |
 | identity changed | `Peer identity changed — re-verification required` |
+| verified axis without full evidence | `Verification evidence incomplete — not verified` |
 | revoked | `Revoked — do not communicate` |
+
+Every verified label is derived from `isUserVerified`, never from the `userVerified` axis
+alone. A record that carries the axis without a method, a timestamp or a pin is labelled as
+incomplete — that combination is also rejected outright by the codec, so the label is a
+second line of defence rather than the only one.
 
 None of these say "secure", "encrypted", "trusted" or "safe". A test asserts that the
 connected state does not contain the word "secure"; that test exists to catch a future
@@ -80,33 +86,64 @@ be added as a second, fresher check. Two different questions must not be conflat
 The current milestone implements neither computation; it implements the state machine and
 the labels those computations will feed.
 
-## 4. Changed identity: fail closed
+## 4. Changed identity: the pin is never overwritten
 
-The only entry point that writes a pinned fingerprint is `authenticateIdentity`. If a pin
-already exists and a **different** fingerprint arrives:
+A peer record holds three distinct fingerprints, and confusing them is how messaging apps
+get identity changes wrong:
+
+| Field | Meaning | Who writes it |
+|---|---|---|
+| `identityFingerprint` | the **pin** — the identity the user was shown and, if verified, compared | only authentication of a matching key, or a completed ceremony |
+| `observedIdentityFingerprint` | a different key seen on the wire | authentication of a different key |
+| `previousIdentityFingerprint` | historical evidence — the key a pin replaced, or the key a revoked record refers to | a ceremony, or revocation |
+
+If a pin already exists and a **different** fingerprint arrives:
 
 1. the observation is returned as `G2dPeerIdentityChanged` with both values, so the UI can
    show them side by side;
-2. all session-bound and human-supplied evidence is dropped — the record falls back to
-   `discovered` only, `verifiedAtMillis`/`verificationMethod` are cleared, and
-   `identityChangedAtMillis` is set;
-3. `statusLabel` becomes `Peer identity changed — re-verification required`;
-4. the peer cannot be used until the user completes a fresh ceremony, which is the only
-   action that clears the change marker.
+2. `identityFingerprint` is **not** changed. The observed value is stored separately as
+   `observedIdentityFingerprint`, and `previousIdentityFingerprint` is left untouched, so a
+   second sighting cannot destroy history;
+3. the user's verification stops counting: the `userVerified` axis, `verifiedAtMillis` and
+   `verificationMethod` are cleared, because they refer to the pinned key;
+4. `identityChangedAtMillis` is set once and preserved on later sightings;
+5. `statusLabel` becomes `Peer identity changed — re-verification required`, and both
+   `isUserVerified` and `hasAuthenticatedIdentity` are false while the change is unresolved;
+6. seeing the disputed key again does **not** promote it — it stays an observation;
+7. only an explicit ceremony (`verifyIdentity`) promotes the observation into the pin, and
+   only that ceremony clears the change marker. On promotion the displaced pin becomes
+   `previousIdentityFingerprint`.
 
-The old fingerprint is retained in `previousIdentityFingerprint` for display and audit.
-Nothing overwrites a pin silently, and there is no "accept new key automatically after N
-days" behaviour.
+A re-authentication of a *different* key still records the session-level
+`identityAuthenticated` axis for that observed key, because the session really is bound to
+it. That grants nothing: `hasAuthenticatedIdentity` refuses while a change is unresolved, and
+the axis exists only so the ceremony has a subject.
+
+### 4.1 Record format and migration
+
+The trust record is now a versioned-by-shape map with a strict decoder; there is no
+migration from an earlier peer format because **no peer store has ever been written**. When
+one is added, old records must be decoded through `fromMap`, which rejects rather than
+repairs: a record whose observation contradicts its pin, whose verification facts have no
+axis, or whose revoked tombstone still carries trust facts is refused outright. Nothing in
+this milestone silently trusts a legacy peer record, and no durability claim is made.
 
 ## 5. Revocation and disconnection
 
 | | `disconnect` | `revokePeer` |
 |---|---|---|
 | Clears transport axes (connected/service/session) | yes | yes (record emptied) |
-| Clears the pinned fingerprint | no | moves to `previousIdentityFingerprint` |
+| Clears the pinned fingerprint | no | yes — the most recent evidence moves to `previousIdentityFingerprint` |
+| Clears an observed identity / change marker | no | yes |
 | Keeps user verification | yes — a pin is not a link property | no |
 | Terminal | no — the peer may reconnect | **yes** — every later transition throws |
+| Repeat call | idempotent | idempotent — returns the existing record, original time and reason preserved |
 | Reason recorded | — | `user_requested`, `identity_changed`, `replaced_by_identity_rotation` |
+
+Revocation preserves the most recent identity evidence — including a key that was observed
+but never promoted — in `previousIdentityFingerprint`. Calling `revokePeer` again returns the
+record unchanged: a second revocation cannot rewrite the timestamp, the reason or the
+evidence.
 
 A revoked peer cannot be rediscovered, re-authenticated or re-verified by any code path; the
 store throws. Re-enabling a revoked peer requires a new pairing decision and, in a later

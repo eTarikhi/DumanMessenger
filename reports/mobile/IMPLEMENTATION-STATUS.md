@@ -1,10 +1,50 @@
 # Implementation status — simulator, security, and Flutter workstreams
 
-**Current update:** 2026-11-09 (G2-D architecture decision + identity/trust foundation)
-**Previous update:** 2026-11-09 (G2-C validation recorded; G2-D security plan written)
+**Current update:** 2026-11-09 (G2-D security hardening and trust remediation)
+**Previous updates:** 2026-11-09 (G2-D architecture + identity/trust foundation), 2026-11-09 (G2-C validation), 2026-11-09 (G2-D security plan)
 **Superseded sections below:** 2026-11-08 (G1 shared source) and 2026-11-05 (no-source baseline). Where an older section says that no Flutter app, Android host, or device evidence exists, the 2026-11-09 update governs.
 **Branch:** `arena/94329f0d-dumanmessenger` (active)
 **Historical G0 snapshot tested/reviewed:** `a1f1916981c2244a2f8664573b66afbd5a2659b4` (empty checkpoint over `bdf719cf88205f944187cb79b8288264a56c13bd`)
+
+## Current update (2026-11-09, latest) — G2-D security hardening and trust remediation
+
+Scope: remediate the read-only audit's findings F1–F17 and keep the seven owner-observed
+trust failures fixed. **No dependency, Gradle, Android, G2-C or UI change. No gate passed.**
+
+- **Trust regression root cause (already fixed in `590f67a`).** `authenticateIdentity`
+  validated and compared the observed fingerprint but never bound it, so the pin stayed null:
+  every later observation looked like first contact, a change could never be detected, and
+  verification facts never counted. The fix stands; this milestone re-expresses the
+  changed-identity semantics under the approved design instead of weakening them.
+- **F4 (approved).** The record now separates the **pin** (`identityFingerprint`), the
+  **observation** (`observedIdentityFingerprint`) and **history**
+  (`previousIdentityFingerprint`). An observation never moves the pin; only a completed
+  ceremony promotes it, records the displaced pin as history and clears the change marker.
+- **F1.** `resetCorruptIdentity()` deletes only a positively-corrupt record, refuses a
+  readable one, never treats unavailable storage as corruption, and recreates nothing.
+- **F2.** `_commit` round-trips the record through the wire format before `store.save`, so
+  clock rollback, contradictory lifecycle or unverified protection returns `invalidRecord`
+  and writes nothing. Pending rotations are held to the active protection requirement.
+- **F3.** `G2dPlatformKeyCapabilities` is injected; creation, rotation and every load are
+  checked against the platform. A hardware-bound Ed25519 claim below API 33, or any
+  hardware-bound Curve25519/X25519 claim, is refused; a platform limit is worded differently
+  from missing probe evidence.
+- **F5.** Construction over a store that reports `isSecureAtRest == false` throws unless the
+  caller passes `allowInsecureStore: true`. Storage abstraction is not secure persistence and
+  no UI may imply otherwise.
+- **F6–F8.** Peer revocation is terminal and idempotent (original time, reason and evidence
+  preserved); verified labels derive from `isUserVerified`; `G2dPeerTrustRecord.fromMap` is a
+  strict decoder that rejects contradictory records.
+- **F9–F17.** Adapter exceptions become typed storage failures; `hasVerifiedProtection`
+  requires the probe flag; resets return a record-less success; mutations are serialized;
+  retired identity ids cannot be reused; a rotated generation must name its predecessor;
+  aliases/providers are validated and may not carry the fingerprint.
+- **Tests declared:** 224 total (157 identity, 67 pre-existing) versus 167 before this
+  milestone. **None executed here** — no Dart/Flutter toolchain. The owner's baseline remains
+  the only executed evidence (`flutter analyze` clean, `flutter build apk --debug` clean,
+  `160 passed / 7 failed`), and the post-remediation numbers are **not** claimed.
+
+State file: [G2-D-EXECUTION-STATE.json](G2-D-EXECUTION-STATE.json).
 
 ## Current update (2026-11-09, later) — G2-D architecture recommendation and identity foundation
 

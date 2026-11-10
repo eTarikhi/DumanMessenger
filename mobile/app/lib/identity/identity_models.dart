@@ -398,15 +398,15 @@ class G2dIdentityRecord {
     if (previousKeyFingerprint != null && keyVersion < 2) {
       throw const FormatException('G2-D rotated identity requires key version 2 or later.');
     }
+    if (keyVersion >= 2 && rotatedAtMillis == null) {
+      throw const FormatException('G2-D rotated identity requires a rotation time.');
+    }
     // The other direction matters just as much: a rotated generation must say
     // what it replaced, otherwise the rotation history silently disappears.
     if (keyVersion >= 2 && previousKeyFingerprint == null) {
       throw const FormatException(
         'A rotated G2-D identity requires the previous fingerprint.',
       );
-    }
-    if (keyVersion >= 2 && rotatedAtMillis == null) {
-      throw const FormatException('G2-D rotated identity requires a rotation time.');
     }
     if (rotatedAtMillis != null && rotatedAtMillis! < createdAtMillis) {
       throw const FormatException('G2-D rotation time precedes creation time.');

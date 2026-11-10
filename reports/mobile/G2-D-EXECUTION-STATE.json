@@ -1,80 +1,52 @@
 {
-  "milestone": "G2-D architecture selection and identity foundation",
+  "milestone": "G2-D security hardening and trust regression remediation",
   "date": "2026-11-09",
   "repository": "eTarikhi/DumanMessenger",
   "branch": "arena/94329f0d-dumanmessenger",
-  "starting_commit": "f2076616a8d6ac859d4310ba7d954a53eab1e6c1",
-  "starting_state_verified": {
-    "expected_head_matched": true,
-    "f207661_is_ancestor_of_head": true,
-    "commits_since_documented_head": 0,
+  "starting_commit": "590f67ac34a4468f190cbc03aa98429dfe8e54ba",
+  "audited_baseline": "db23c5372422ebaf2dc86f8d8174931d7d6d2d6a",
+  "branch_state_at_start": {
+    "head_matched_remote": true,
+    "audited_baseline_is_ancestor": true,
+    "owner_commits_since_baseline": 0,
     "worktree_clean": true,
-    "remote_fetched": true,
-    "upstream": "origin/arena/94329f0d-dumanmessenger"
+    "note": "The seven owner-observed trust failures were already fixed in 590f67a (pin binding). This milestone keeps that fix, re-expresses changed-identity semantics under the approved F4 design, and hardens the rest of the foundation."
   },
-  "owner_inputs_recorded": {
-    "agpl_accepted": true,
-    "security_priority": "balanced",
-    "targets": ["android", "ios"],
-    "development_environment": "windows",
-    "mac_or_xcode_available": false,
-    "android_api27_constraint": "important",
-    "preserve_g2c": true
-  },
-  "architecture_decision": {
-    "document": "docs/mobile/G2-D-ARCHITECTURE-DECISION.md",
-    "status": "RECOMMENDATION, NOT APPROVED AND NOT INTEGRATED",
-    "recommended_option": "A - Signal protocol via org.signal:libsignal-android (X3DH/PQXDH initial agreement + Double Ratchet)",
-    "option_b_noise": "not selectable on current evidence: no maintained JVM implementation publishes an artifact; one candidate self-declares as unaudited; Noise stops at the handshake and would require a self-written ratchet",
-    "option_c_other": "MLS (RFC 9420) is a group protocol with a delivery-service assumption; Tink 1.24.0 is primitives only and composes to a custom protocol; neither improves on A for a 1:1 serverless BLE messenger",
-    "blocking_gates": [
-      "D2-a: build the AAR at a pinned version with Java 21 + core library desugaring on the owner's Windows machine",
-      "D2-b: install on SM-G610F (API 27, 32-bit) and one API 31+ device and self-check JNI load, key generation, sign and verify",
-      "D2-c: pin artifact version and SHA-256, enumerate transitive dependencies and licenses",
-      "D1: choose X3DH vs PQXDH for v1 and the bundle framing on G2-C"
-    ]
-  },
-  "evidence_inspected": {
-    "libsignal": {
-      "license": "AGPL-3.0",
-      "latest_release_tag": "v0.106.2 (2026-11-05)",
-      "android_artifact": "org.signal:libsignal-android (aar) on Maven Central",
-      "version_surfaced_by_central": "0.86.5 (~11 months old at review; publication lags repository tags)",
-      "min_sdk": 23,
-      "compile_sdk": 34,
-      "target_sdk": 33,
-      "java_level": 21,
-      "core_library_desugaring": true,
-      "android_abis": ["arm64-v8a", "armeabi-v7a", "x86_64", "x86"],
-      "declared_dependencies": [
-        "org.signal:libsignal-client (same version)",
-        "org.jetbrains.kotlin:kotlin-stdlib:2.1.0",
-        "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"
-      ],
-      "upstream_support_statement": "Use outside of Signal is unsupported; all APIs and implementations are subject to change without notice",
-      "not_verified": [
-        "actual ABI contents of the published aar",
-        "JNI load on any device",
-        "Java API surface of the pinned version",
-        "desugaring sufficiency at the app's unpinned compileSdk"
-      ]
+  "increments": [
+    {
+      "commit": "7f667fe",
+      "findings": ["F1", "F2", "F9 (partial)", "F13 (partial)", "F15 (partial)"],
+      "summary": "explicit corruption recovery, commit-time validation, typed reset results, retired id guard, adapter exception translation"
     },
-    "noise": {
-      "specification": "Noise Protocol Framework revision 34 (2018-07-11)",
-      "jvm_implementations_assessed": ["rweather/noise-java (no release artifact)", "jchambers/java-noise (unpublished, self-declared unaudited)"]
+    {
+      "commit": "2fe1d59",
+      "findings": ["F4", "F8", "F6", "F7 (production)"],
+      "summary": "pin/observed/previous separation, strict trust record codec with invariants, terminal idempotent peer revocation, evidence-based labels"
     },
-    "tink": {
-      "artifact": "com.google.crypto.tink:tink-android",
-      "version": "1.24.0 (2026-10-17)",
-      "license": "Apache-2.0",
-      "role": "primitives and storage encryption only, not a session protocol"
+    {
+      "commit": "9b98015",
+      "findings": ["F3", "F5"],
+      "summary": "G2dPlatformKeyCapabilities injected into the service, capability checks at create/rotate/load, insecure-store construction guard"
     },
-    "android_keystore": {
-      "ed25519_keystore_algorithm_from_api": 33,
-      "x25519_keystore_algorithm_supported": false,
-      "wrapping_key_available_at_api27": true,
-      "source": "Android Keystore documentation plus the platform key algorithm set; to be probed per device"
+    {
+      "commit": "680c1c2",
+      "findings": ["F14", "F17", "F12", "F11", "F10", "F9 (tests)"],
+      "summary": "serialized mutations, rotation-history invariant, hasVerifiedProtection semantics, documented probe-claim boundary, alias/provider validation, adapter failure tests"
     }
+  ],
+  "findings": {
+    "fixed": ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F12", "F13", "F14", "F15", "F16", "F17"],
+    "resolved_by_documentation": ["F11"],
+    "notes": {
+      "F11": "The key handle constructor cannot verify a probe result, and tests need to construct invalid handles to prove rejection. The boundary is now documented, and the claim is enforced at decode, lifecycle and platform layers.",
+      "F16": "Closed by the same commit-time round-trip introduced for F2; the double's unvalidated save is now harmless because nothing reaches it without validation.",
+      "F4_remaining": "The record shape changed (observed identity). No peer store exists, so there is no legacy format to migrate; a future store must decode through the strict fromMap, which rejects rather than repairs."
+    }
+  },
+  "schema_changes": {
+    "identity_record": "unchanged, recordVersion 1; new invariants only (pending rotation protection, revocation time ordering, rotated generation must name its predecessor, alias/fingerprint separation)",
+    "peer_trust_record": "adds observedIdentityFingerprint; strict fromMap/toMap, equality and hashCode; revoked tombstones may not carry axes, a pin, a pending change or verification facts",
+    "migration": "none implemented and none claimed; no peer record has ever been persisted"
   },
   "implemented": {
     "dart_identity_foundation": [
@@ -85,87 +57,82 @@
       "mobile/app/lib/identity/platform_key_capabilities.dart"
     ],
     "capabilities": [
-      "strict identity record codec with version, enum, fingerprint and consistency validation",
-      "lifecycle: create, beginRotation, completeRotation, revoke, resetRevokedIdentity",
-      "typed failure results; no exceptions for expected failure paths",
-      "storage contract with atomicity, no-fallback and no-repair requirements",
-      "fail-closed default store (G2dUnavailableIdentityStore): nothing is persisted without a verified adapter",
-      "test double with write-failure, non-atomic-write and corruption injection",
-      "key protection requires a probe result before it can be recorded or parsed",
-      "seven-axis peer trust model with mandatory ordering and terminal revocation",
-      "identity change detection that fails closed and requires a fresh ceremony",
-      "honest status labels that never say secure/encrypted/trusted"
-    ],
-    "dart_tests_authored": {
-      "files": [
-        "mobile/app/test/identity_models_test.dart",
-        "mobile/app/test/identity_store_test.dart",
-        "mobile/app/test/identity_service_test.dart",
-        "mobile/app/test/identity_trust_state_test.dart",
-        "mobile/app/test/identity_platform_capabilities_test.dart"
-      ],
-      "new_test_cases": 100,
-      "suite_total_declared_cases": 167,
-      "executed": false,
-      "reason_not_executed": "no Dart/Flutter/JDK/Kotlin toolchain in the agent environment"
-    }
+      "explicit resetCorruptIdentity with corrupt-class-only deletion",
+      "commit-time round-trip validation before store.save",
+      "platform capability interface injected into the service",
+      "pin/observed/previous identity separation with ceremony-only promotion",
+      "strict peer trust codec with contradiction rejection",
+      "terminal idempotent peer revocation",
+      "verification labels derived from isUserVerified",
+      "alias/provider validation and fingerprint separation",
+      "serialized mutations and retired identity ids",
+      "typed translation of adapter exceptions",
+      "insecure-store construction guard"
+    ]
   },
   "not_implemented": [
-    "any dependency addition (no pubspec, Gradle or lockfile change)",
-    "Android Keystore identity store adapter",
-    "key generation and fingerprint computation (provider-owned)",
-    "libsignal integration, session establishment, encryption, replay protection",
-    "peer record persistence",
-    "any UI for identity or trust"
+    "Android Keystore adapter (still designed only)",
+    "real device probe and key generation",
+    "libsignal integration, session establishment, encryption",
+    "durable peer or identity store; durable retired-id tombstone",
+    "any UI for identity or trust",
+    "dependency, Gradle, Android or G2-C changes"
   ],
   "g2c_preservation": {
     "status": "unchanged",
-    "files_touched_by_this_milestone": [],
+    "files_touched": [],
     "existing_tests_modified": false
   },
-  "license_review": {
-    "document": "docs/mobile/G2-D-LICENSE-AND-DEPENDENCY-REVIEW.md",
-    "dependencies_added": 0,
-    "current_inventory": ["Flutter SDK (BSD-3-Clause)", "flutter_lints ^6.0.0 (BSD-3-Clause, dev)"],
-    "agpl_obligations_documented": true,
-    "open_legal_questions": [
-      "App Store distribution of an AGPL-3.0 application",
-      "AGPL section 6 Installation Information applicability to Play-distributed apps",
-      "repository LICENSE reconciliation before AGPL code is combined"
-    ]
-  },
-  "security_gates": {
-    "met": [],
-    "open": [
-      "D0 threat model and scope approval",
-      "D1 protocol profile selection",
-      "D2-a build gate (Java 21 + desugaring)",
-      "D2-b device gate (API 27 JNI/probe)",
-      "D2-c provenance gate",
-      "D3 identity and key lifecycle on real storage",
-      "D4 independent design review",
-      "D5 implementation evidence",
-      "D6 independent code review",
-      "D7 owner acceptance"
-    ],
-    "note": "Documentation and unit tests do not satisfy any security gate. Independent design and code review remain mandatory blockers."
+  "tests": {
+    "declared_full_suite": 224,
+    "declared_identity": 157,
+    "declared_pre_existing": 67,
+    "baseline_declared_full_suite": 167,
+    "new_in_this_milestone": 57,
+    "per_file": {
+      "identity_models_test.dart": 31,
+      "identity_store_test.dart": 11,
+      "identity_service_test.dart": 51,
+      "identity_trust_state_test.dart": 46,
+      "identity_platform_capabilities_test.dart": 18
+    },
+    "executed_here": 0,
+    "reason": "no Dart/Flutter/JDK toolchain in the agent environment",
+    "owner_baseline_results": {
+      "flutter_pub_get": "passed",
+      "flutter_analyze": "passed",
+      "flutter_build_apk_debug": "passed",
+      "flutter_test": "160 passed, 7 failed (all in identity_trust_state_test.dart)"
+    },
+    "expected_after_remediation": "not claimed; owner validation required"
   },
   "validation": {
     "agent_run": {
-      "dart_syntax_parse": "tree-sitter-dart parse of all ten new Dart files: no errors",
-      "markdown_link_check": "relative links in the four new documents resolve",
-      "json_validation": "this file parses",
-      "git_diff_check": "clean"
+      "dart_syntax_parse": "tree-sitter-dart parse of all ten identity files after every increment: no errors",
+      "doc_checks": "python3 tool/ci/check-docs.py: 12/12 passed",
+      "git_diff_check": "clean",
+      "invisible_char_sweep": "none"
     },
     "not_run": [
       "flutter analyze",
       "flutter test",
       "flutter build apk --debug",
-      "kotlin compilation",
       "gradle",
-      "device or two-device tests"
-    ],
-    "owner_run_required": true
+      "any device or two-device test"
+    ]
   },
-  "next_action": "Owner runs flutter analyze / flutter test / flutter build apk --debug on the pushed branch and reports results. Architecture work stays blocked on D2-a and D2-b; identity storage stays blocked on an owner decision about the Keystore adapter (see the identity document, section 9)."
+  "security_gates": {
+    "met": [],
+    "open": ["D0", "D1", "D2-a", "D2-b", "D2-c", "D3", "D4 design review", "D5", "D6 code review", "D7"],
+    "note": "Hardening code and unit tests do not satisfy any gate. Independent design and code review remain mandatory, and no Keystore adapter, provider integration or device probe exists."
+  },
+  "unresolved_limitations": [
+    "no secure persistence: the shipped store fails closed and persists nothing",
+    "retired identity ids are remembered only in memory",
+    "protection claims rely on the caller's probe attestation, gated but not proven",
+    "device-capability drift is recoverable only through the explicit corrupt reset",
+    "peer trust records are in-memory only and have no store",
+    "no independent review, no device evidence, no cryptographic provider"
+  ],
+  "next_action": "Owner runs flutter analyze / flutter test / flutter build apk --debug at the pushed head. No G2-D integration work until D2-a/D2-b gates are answered."
 }
