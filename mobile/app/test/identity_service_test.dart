@@ -89,21 +89,29 @@ class Harness {
   /// Clock the service reads. Tests move it to model a clock rollback.
   int now = 5000;
 
+  // `probedHandle` is a runtime value (G2dKeyHandle is not const-constructible,
+  // because its identifiers are validated), so it cannot be an optional
+  // parameter default. A nullable parameter with a resolved local keeps the
+  // default behaviour identical for callers that omit it, and still honours an
+  // explicit handle when one is supplied.
   Future<G2dIdentityActionResult> create({
     String fp = 'a',
-    G2dKeyHandle handle = probedHandle,
+    G2dKeyHandle? handle,
   }) =>
       service.createIdentity(
         algorithm: G2dIdentityAlgorithm.curve25519Xeddsa,
         publicKeyFingerprint: fingerprint(fp),
-        keyHandle: handle,
+        keyHandle: handle ?? probedHandle,
       );
 
-  Future<G2dIdentityActionResult> rotate({String fp = 'b', G2dKeyHandle handle = probedHandle}) =>
+  Future<G2dIdentityActionResult> rotate({
+    String fp = 'b',
+    G2dKeyHandle? handle,
+  }) =>
       service.beginRotation(
         algorithm: G2dIdentityAlgorithm.curve25519Xeddsa,
         newPublicKeyFingerprint: fingerprint(fp),
-        newKeyHandle: handle,
+        newKeyHandle: handle ?? probedHandle,
       );
 }
 

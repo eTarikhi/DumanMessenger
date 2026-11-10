@@ -131,12 +131,11 @@ class G2dIdentityService {
   /// protected identity, and no UI may present it as persistent or secure.
   G2dIdentityService({
     required this.store,
-    required G2dPlatformKeyCapabilities platform,
+    required this.platform,
     bool allowInsecureStore = false,
     int Function()? nowMillis,
     String Function()? newIdentityId,
-  })  : _platform = platform,
-        _nowMillis = nowMillis ?? _systemMillis,
+  })  : _nowMillis = nowMillis ?? _systemMillis,
         _newIdentityId = newIdentityId ?? _randomIdentityId {
     if (!store.isSecureAtRest && !allowInsecureStore) {
       throw ArgumentError.value(
@@ -149,10 +148,12 @@ class G2dIdentityService {
   }
 
   final G2dIdentityStore store;
-  final G2dPlatformKeyCapabilities _platform;
+
+  /// Verified platform facts this service checks protection claims against.
+  final G2dPlatformKeyCapabilities platform;
 
   /// API level the injected platform facts describe, for diagnostics only.
-  int get apiLevel => _platform.apiLevel;
+  int get apiLevel => platform.apiLevel;
 
   /// Mutations are serialized: a read-modify-write that interleaves with another
   /// mutation could otherwise commit a record derived from a state that no
@@ -278,7 +279,7 @@ class G2dIdentityService {
     }
 
     final capabilityRefusal =
-        _platform.describeProtectionFor(algorithm, keyHandle.protection);
+        platform.describeProtectionFor(algorithm, keyHandle.protection);
     if (capabilityRefusal != null) {
       // The caller may assert that a probe succeeded; this only checks that the
       // claim is possible on this platform at all.
@@ -345,7 +346,7 @@ class G2dIdentityService {
       );
     }
     final capabilityRefusal =
-        _platform.describeProtectionFor(algorithm, newKeyHandle.protection);
+        platform.describeProtectionFor(algorithm, newKeyHandle.protection);
     if (capabilityRefusal != null) {
       return G2dIdentityActionResult.failure(
         G2dIdentityFailure.unverifiedProtection,
@@ -520,7 +521,7 @@ class G2dIdentityService {
       if (record != null) {
         // A record restored from another device, edited, or created when the
         // platform could do more than it can now must not be treated as usable.
-        final mismatch = _platform.describeProtectionMismatch(record);
+        final mismatch = platform.describeProtectionMismatch(record);
         if (mismatch != null) {
           return _Loaded.failure(G2dIdentityActionResult.failure(
             G2dIdentityFailure.protectionInvalid,
