@@ -173,18 +173,46 @@ class G2dAndroidCapabilityEvidence {
   /// True only when a StrongBox key was actually created on this device.
   bool get strongBoxVerified => strongBoxRequested && strongBoxKeyCreated;
 
-  /// Whether the AES key that protects identity data is measured hardware-backed.
+  /// Whether the AES key that protects identity data is hardware-backed.
   ///
-  /// Uses the wrapping key's own measurement when it exists, and falls back to
-  /// the probe key's measurement (same provider, same path) when no identity has
-  /// been stored yet. Both are measurements; neither is an inference from the OS
-  /// version.
+  /// **Read the source of this value before it is quoted.** When a wrapping key
+  /// exists, the answer is that key's own `KeyInfo.isInsideSecureHardware`. When
+  /// no identity has been stored yet there is no wrapping key to read, and this
+  /// falls back to the *probe* key's measurement — a different key, created
+  /// moments earlier with the same provider and the same spec, then deleted.
+  ///
+  /// That fallback is a **proxy, not a measurement of the production wrapping
+  /// key**. [wrappingKeyBackingMeasuredDirectly] distinguishes the two, and
+  /// [describeWrappingKeyBackingEvidence] names which one is in force. Neither
+  /// path infers anything from the OS version, and neither permits a claim about
+  /// a key this process never read.
   bool get wrapKeyHardwareBacked {
     final measured = wrappingKeyHardwareBacked;
     if (measured != null) {
       return measured;
     }
     return probeKeyHardwareBacked;
+  }
+
+  /// Whether [wrapKeyHardwareBacked] comes from the stored wrapping key itself.
+  ///
+  /// False means the value is the probe key's measurement: a proxy, because no
+  /// wrapping key existed to measure. This is deliberately a separate question
+  /// from the value, so "the probe says software" cannot be read as "the stored
+  /// key was measured as software".
+  bool get wrappingKeyBackingMeasuredDirectly => wrappingKeyHardwareBacked != null;
+
+  /// Label naming the source of [wrapKeyHardwareBacked], for diagnostics and records.
+  ///
+  /// Exists so that a caller cannot describe a proxy as though the production
+  /// wrapping key had been read. It carries no key material.
+  String describeWrappingKeyBackingEvidence() {
+    if (wrappingKeyBackingMeasuredDirectly) {
+      return 'measured directly on the stored wrapping key '
+          '(KeyInfo.isInsideSecureHardware = $wrappingKeyHardwareBacked)';
+    }
+    return 'proxy: measured on a transient probe key, because no wrapping key '
+        'exists yet; the production wrapping key has not been measured';
   }
 
   /// Human-readable, deliberately narrow description of at-rest protection.

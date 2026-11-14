@@ -273,20 +273,77 @@ session exists.
 | Persistence across service reconstruction; pending rotation across restart | same | no |
 | Corruption reported, never repaired; reset then deliberate recreate | same | no |
 | Runtime assembly, refusal when the wrap did not verify | `identity_android_runtime_test.dart` (11) | no |
-| AES-GCM round trip on the real Keystore | `G2dIdentityKeystoreInstrumentedTest` (16) | no — needs the device |
-| Wrong-key and corrupted-ciphertext tag failure | same | no — needs the device |
-| Missing key reported and not regenerated | same | no — needs the device |
-| Interrupted write, stale generation, plaintext absence, reconstructed storage | same | no — needs the device |
-| Probe reports real API level, real round trip, measured hardware backing | same | no — needs the device |
+| AES-GCM round trip on the real Keystore | `G2dIdentityKeystoreInstrumentedTest` (18) | owner-reported on the SM-G610F (§12.1); not observed here |
+| Wrong-key and corrupted-ciphertext tag failure | same | owner-reported on the SM-G610F (§12.1); not observed here |
+| Missing key reported and not regenerated | same | owner-reported on the SM-G610F (§12.1); not observed here |
+| Interrupted write, stale generation, plaintext absence, reconstructed storage | same | owner-reported on the SM-G610F (§12.1); not observed here |
+| Probe reports real API level, real round trip, measured hardware backing | same | owner-reported on the SM-G610F (§12.1); not observed here |
 
 The Dart tests replace the platform with a double. They prove the adapter's behaviour; they are
 **not** evidence about Android, and this document does not treat them as such.
 
+### 12.1 Owner-reported device evidence (SM-G610F, Android 8.1, API 27)
+
+**Status: OWNER-REPORTED.** The owner ran the instrumentation suite on the SM-G610F and supplied the
+output below. No agent or CI runner in this repository has a device, and nothing in this section was
+observed here. It is recorded because it is the only device evidence that exists, and it is labelled
+wherever it is used.
+
+Owner-reported run: `.\gradlew connectedDebugAndroidTest` — *Starting 17 tests*, *Finished 17
+tests*, `BUILD SUCCESSFUL`, 2m 12s. The suite has since gained one test, so the current count is
+**18**.
+
+Owner-reported capability block (trimmed of its `G2D-CAPABILITY-BEGIN/END` delimiters and of the
+API 27 `note=` line when it was pasted):
+
+```text
+apiLevel=27
+keystoreProvider=AndroidKeyStore
+aesGcmSupported=true
+probeKeyGenerated=true
+roundTripVerified=true
+probeKeyHardwareBacked=false
+probeKeySizeBits=256
+probeKeyBlockModes=[GCM]
+probeKeyEncryptionPaddings=[NoPadding]
+strongBoxRequested=false
+strongBoxKeyCreated=false
+wrappingKeyPresent=false
+wrappingKeyHardwareBacked=null
+failure=null
+```
+
+What it establishes, and what it does not:
+
+| Reading | Value |
+|---|---|
+| AES-256-GCM in the Keystore round-tripped on this device | measured (owner-reported) |
+| Probe key parameters | 256-bit, GCM, NoPadding — read from `KeyInfo` |
+| Probe key inside secure hardware | **false** — this device does not hold that key in a TEE |
+| StrongBox | not attempted below API 28; says nothing about API 28+ |
+| Production wrapping key present | **false** — no identity has ever been saved, so none was created |
+| Production wrapping key's own backing | **unmeasured**; the probe key's `false` is a *proxy*, labelled as one in `identity_probe_capabilities.dart` |
+
+`wrappingKeyPresent=false` is the correct answer, not a failure: the probe deliberately inspects the
+production alias, and the production key is created lazily by the first `saveRecord`. The test
+`reportMeasuredWrappingKeyCapabilitiesForTheAcceptanceRecord` closes the remaining gap by saving a
+record through the real storage implementation under `identity_test/` and
+`g2d.identity.wrap.test.v1`, then reading that test key's own `KeyInfo`. It prints a
+`G2D-WRAPPING-KEY-CAPABILITY` block and never creates, inspects or deletes the production key,
+directory or record.
+
+The honest at-rest claim for this device is therefore: *AES-256-GCM at rest under a non-exportable
+Keystore key that this device reports as **software-backed**.* Not hardware-backed, not StrongBox,
+not end-to-end encryption.
+
 ## 13. Not claimed
 
-- Not device-verified: nothing in §2–§7 has been executed on the SM-G610F.
-- Not hardware-backed: the wrapping key's backing is whatever the probe measures; no claim is
-  made in advance of that measurement.
+- Not agent-verified: §12.1 records an **owner-reported** run on the SM-G610F (API 27). No agent
+  or CI runner here has a device, and no instrumentation report is stored in this repository.
+- Not hardware-backed: the probe key is reported as software-backed on the SM-G610F, and the storage
+  layer describes at-rest protection as *software-backed* accordingly. The **production** wrapping
+  key's own backing is unmeasured until §12.1's test runs; the probe-key value is a proxy, and the
+  code labels it as one.
 - Not end-to-end encryption, not a session, not attestation, not "production security".
 - Not a migration path: identity data does not move between devices.
 - Not a defence against root while the app is running and unlocked.

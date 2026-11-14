@@ -2,11 +2,13 @@ package com.example.duman_messenger.identity
 
 import android.content.Context
 import android.os.Build
+import android.security.keystore.KeyProperties
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -333,6 +335,69 @@ class G2dIdentityKeystoreInstrumentedTest {
         assertEquals(true, result["roundTripVerified"])
         assertEquals(G2D_KEY_SIZE_BITS, result["probeKeySizeBits"])
         assertFalse("the probe key must not outlive the probe", keyring.hasKey(G2D_PROBE_KEY_ALIAS))
+    }
+
+    // --- wrapping-key measurement --------------------------------------------
+
+    /*
+     * The capability probe reports `wrappingKeyPresent=false` on a device where no
+     * identity has been stored, because it deliberately inspects the *production*
+     * alias and nothing creates that key until the first save. That leaves the
+     * backing of the key that actually protects data unmeasured. This test closes
+     * that gap without touching production state: it saves one record through the
+     * real storage implementation, pointed at [TEST_DIRECTORY] and
+     * [TEST_WRAPPING_ALIAS], and reads the platform's own KeyInfo for the test
+     * wrapping key that save created.
+     *
+     * Nothing here creates, inspects or deletes the production key: the guard
+     * below is a comparison of two constants and never opens the Keystore.
+     */
+
+    @Test
+    fun reportMeasuredWrappingKeyCapabilitiesForTheAcceptanceRecord() {
+        assertNotEquals(
+            "the test alias must differ from the production wrapping alias",
+            G2D_WRAPPING_KEY_ALIAS,
+            TEST_WRAPPING_ALIAS,
+        )
+
+        val payload = "{\"recordVersion\":1,\"purpose\":\"wrapping-key-measurement\"}"
+        storage().saveRecord(payload)
+
+        assertTrue(
+            "saving a record must have created the test wrapping key",
+            keyring.hasKey(TEST_WRAPPING_ALIAS),
+        )
+        val facts = keyring.inspectKey(TEST_WRAPPING_ALIAS)
+        assertNotNull("the platform must describe the test wrapping key", facts)
+        // The key being measured is the one protecting the record, not a bystander.
+        assertEquals(payload, storage().loadRecord())
+        val described = facts!!
+
+        println("G2D-WRAPPING-KEY-CAPABILITY-BEGIN")
+        println("G2D-WRAPPING-KEY-CAPABILITY alias=" + TEST_WRAPPING_ALIAS)
+        println("G2D-WRAPPING-KEY-CAPABILITY apiLevel=" + Build.VERSION.SDK_INT)
+        println("G2D-WRAPPING-KEY-CAPABILITY hardwareBacked=" + described.hardwareBacked)
+        println("G2D-WRAPPING-KEY-CAPABILITY keySizeBits=" + described.keySizeBits)
+        println("G2D-WRAPPING-KEY-CAPABILITY blockModes=" + described.blockModes)
+        println("G2D-WRAPPING-KEY-CAPABILITY encryptionPaddings=" + described.encryptionPaddings)
+        println("G2D-WRAPPING-KEY-CAPABILITY recordRoundTripVerified=true")
+        println("G2D-WRAPPING-KEY-CAPABILITY-END")
+
+        assertEquals(G2D_KEY_SIZE_BITS, described.keySizeBits)
+        assertTrue(
+            "the wrapping key must offer GCM",
+            described.blockModes.contains(KeyProperties.BLOCK_MODE_GCM),
+        )
+        assertTrue(
+            "the wrapping key must use NoPadding",
+            described.encryptionPaddings.contains(KeyProperties.ENCRYPTION_PADDING_NONE),
+        )
+
+        // Cleanup confined to the test alias and the test directory.
+        storage().deleteRecord()
+        assertFalse(keyring.hasKey(TEST_WRAPPING_ALIAS))
+        assertNull(storage().loadRecord())
     }
 
     private fun assertArrayEqualsMessage(expected: ByteArray, actual: ByteArray) {
