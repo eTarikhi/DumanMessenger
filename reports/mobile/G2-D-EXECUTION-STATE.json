@@ -175,7 +175,7 @@
       "D6 code review",
       "D7"
     ],
-    "note": "Hardening code and unit tests do not satisfy any gate. Independent design and code review remain mandatory, and no Keystore adapter, provider integration or device probe exists."
+    "note": "Hardening code, unit tests and owner-reported device runs do not satisfy any gate. No gate is marked met: D1 profile, D2-a/b/c, D4, D6 and D7 have no evidence or approval, and D0/D3/D5 are partial (one device class measured, independent review absent). A Keystore adapter and a device probe now exist, which the previous note said they did not; the gates are unchanged by that."
   },
   "unresolved_limitations": [
     "no secure persistence: the shipped store fails closed and persists nothing",
@@ -185,7 +185,7 @@
     "peer trust records are in-memory only and have no store",
     "no independent review, no device evidence, no cryptographic provider"
   ],
-  "next_action": "Owner runs flutter analyze / flutter test / flutter build apk --debug at the pushed head. No G2-D integration work until D2-a/D2-b gates are answered.",
+  "next_action": "Owner runs the 18-test instrumentation suite, attaches the XML and both capability blocks, and records the tested SHA. D1 (protocol profile), D2 (provider artifact) and D4 (independent design review) remain the blocking gates before any integration work.",
   "keystore_milestone": {
     "milestone": "G2-D Android Keystore adapter and persistent identity storage",
     "date": "2026-11-09",
@@ -239,9 +239,9 @@
         "identity_android_runtime_test.dart": 11
       },
       "dart_total_declared": 294,
-      "instrumented_kotlin": 16,
+      "instrumented_kotlin": 18,
       "executed_in_this_environment": [],
-      "note": "No Flutter, Dart, Java or Android toolchain and no device exist here. Nothing in this milestone was executed."
+      "note": "No Flutter, Dart, Java or Android toolchain and no device exist in the agent environment, so nothing in this milestone was executed there. The owner executed the analyzer, the Dart suite, the debug build and the instrumentation suite on their own machine; those results are recorded under owner_reported_device_evidence and are not agent observations."
     },
     "validation": {
       "agent_run": {
@@ -257,22 +257,77 @@
         "gradlew",
         "connectedDebugAndroidTest",
         "any device test"
-      ]
+      ],
+      "note": "applies to the agent environment only; it records static checks, not compilation or test execution"
     },
     "unresolved_limitations": [
       "identity data is unrecoverable when the wrapping key is lost, invalidated or a backup restores the ciphertext alone; the only recovery is the explicit corrupt reset",
       "rollback detection has no anchor outside the app sandbox: an attacker who can write app-private files can delete the index",
       "a rooted device with the app unlocked can use the wrapping key",
-      "no identity key is generated, so no record claims hardware_bound; the SM-G610F hardware backing of the wrapping key is unmeasured",
+      "no identity key is generated, so no record claims hardware_bound; on the SM-G610F the probe key is owner-reported software-backed, and the production wrapping key's own backing stays unmeasured until reportMeasuredWrappingKeyCapabilitiesForTheAcceptanceRecord runs",
       "retired identity ids are still in-memory only",
       "peer trust has no store",
       "no independent design or code review; gates D0-D7 remain open"
     ],
     "owner_actions": [
-      "flutter analyze",
-      "flutter test (294 declared)",
-      "flutter build apk --debug",
-      "cd mobile\\app\\android; .\\gradlew connectedDebugAndroidTest (requires the API 27 device)"
-    ]
+      "attach mobile\\app\\build\\outputs\\androidTest-results\\connected\\debug\\*.xml from the 18-test run",
+      "paste the raw G2D-CAPABILITY block including G2D-CAPABILITY-BEGIN/END and the API 27 note= line",
+      "paste the G2D-WRAPPING-KEY-CAPABILITY block (production wrapping key backing on this device)",
+      "git rev-parse HEAD next to the report so the tested tree is identified",
+      "decide whether an independent reviewer is commissioned (D4/D6) before any security language ships"
+    ],
+    "owner_reported_device_evidence": {
+      "status": "OWNER-REPORTED — supplied by the owner; not observed by any agent or CI runner here",
+      "device": "Samsung SM-G610F, Android 8.1, API 27",
+      "date": "2026-11-09",
+      "validated_code": "2eabbc8 (instrumentation suite and capability report); bdb620c carries the same code",
+      "commands": [
+        "flutter pub get",
+        "flutter analyze",
+        "flutter test",
+        "flutter build apk --debug",
+        "cd mobile\\app\\android; .\\gradlew connectedDebugAndroidTest"
+      ],
+      "results": {
+        "flutter_pub_get": "pass (owner-reported)",
+        "flutter_analyze": "no issues (owner-reported)",
+        "flutter_test": "294 tests, all passed (owner-reported)",
+        "flutter_build_apk_debug": "pass (owner-reported)",
+        "connectedDebugAndroidTest": "Starting 17 tests / Finished 17 tests / BUILD SUCCESSFUL, 2m 12s (owner-reported; the suite is now 18)"
+      },
+      "capability_block": {
+        "apiLevel": 27,
+        "keystoreProvider": "AndroidKeyStore",
+        "aesGcmSupported": true,
+        "probeKeyGenerated": true,
+        "roundTripVerified": true,
+        "probeKeyHardwareBacked": false,
+        "probeKeySizeBits": 256,
+        "probeKeyBlockModes": [
+          "GCM"
+        ],
+        "probeKeyEncryptionPaddings": [
+          "NoPadding"
+        ],
+        "strongBoxRequested": false,
+        "strongBoxKeyCreated": false,
+        "wrappingKeyPresent": false,
+        "wrappingKeyHardwareBacked": null,
+        "failure": null
+      },
+      "interpretation": {
+        "probe_key": "measured 256-bit AES-GCM, round trip verified, isInsideSecureHardware = false",
+        "strongbox": "not attempted below API 28; this result says nothing about API 28 or newer",
+        "wrapping_key_present": "false is correct: the probe inspects the production alias, and that key is created lazily by the first saveRecord",
+        "production_wrapping_key_backing": "UNMEASURED — the probe key's false is a proxy for it, not a measurement of it",
+        "at_rest_claim": "AES-256-GCM at rest under a non-exportable Keystore key that this device reports as software-backed"
+      },
+      "not_established": [
+        "the production wrapping key's own hardware backing",
+        "any hardware-backed or StrongBox claim on this device",
+        "a second device or any Android 9+ behaviour",
+        "per-test outcomes as machine-readable evidence (no instrumentation XML is stored in the repository)"
+      ]
+    }
   }
 }

@@ -98,6 +98,12 @@ the `G2D-CAPABILITY` block. A run that reports 16 tests is the pre-`2eabbc8` sui
 itself has no UI or Dart caller for the probe (`G2dAndroidIdentityRuntime` is never instantiated by
 the shipping UI), so before `2eabbc8` there was no way to read these numbers at all.
 
+**Update received after this audit was written.** The owner ran the suite on the SM-G610F and supplied
+the measurements. They are recorded as *owner-reported* in §3.1 and in
+[G2-D-ANDROID-KEYSTORE-AND-STORAGE.md](G2-D-ANDROID-KEYSTORE-AND-STORAGE.md) §12.1. The table below
+is unchanged on purpose: this audit did not observe those values, and a value someone else read is
+not the same artefact as a value an auditor read.
+
 | Measurement | Value | Source |
 |---|---|---|
 | API level | UNKNOWN (device is reported as Android 8.1; the probe asserts equality with `Build.VERSION.SDK_INT`, not with a literal) | not measured here |
@@ -126,6 +132,24 @@ adb logcat -s System.out | Select-String "G2D-CAPABILITY"
 
 Until that output is pasted into a report, the answer to "is the SM-G610F's wrapping key inside the
 TEE?" is *unknown*, and no document in this repository may say otherwise.
+
+### 3.1 Owner-reported measurements (post-baseline)
+
+| Measurement | Owner-reported value |
+|---|---|
+| API level / provider | 27 / `AndroidKeyStore` |
+| AES-GCM available, probe key generated, round trip verified | true / true / true |
+| Probe key hardware backing | **false** |
+| Key size, block modes, paddings | 256, `[GCM]`, `[NoPadding]` |
+| StrongBox requested / created | false / false (correct below API 28) |
+| Wrapping key present / hardware backing | false / null (correct: no identity has been saved) |
+| Failure | null |
+
+Reading: this device does not hold the Keystore key inside a TEE, so the honest description of the
+at-rest protection is *software-backed Keystore key*, not *hardware-backed*. The production wrapping
+key's own backing remains unmeasured until
+`reportMeasuredWrappingKeyCapabilitiesForTheAcceptanceRecord` runs; the probe-key value is a proxy and
+is labelled as one in `identity_probe_capabilities.dart`.
 
 ## 4. Persistence and recovery evidence
 
@@ -237,9 +261,10 @@ Conditions, in order of weight:
 
 1. **Attach the instrumentation XML** (or the HTML report) from the `2eabbc8` run so the 17 outcomes
    are confirmed rather than reported, and so the `G2D-CAPABILITY` block is on the record.
-2. **Record the device measurements.** Until `probeKeyHardwareBacked` and
-   `wrappingKeyHardwareBacked` are read off the device, no document may describe the wrapping key
-   as hardware-backed and no UI may imply it.
+2. **Record the device measurements.** Partly met: the probe key is owner-reported
+   `isInsideSecureHardware = false`, so no document may describe this device's key as
+   hardware-backed. Still open: the production wrapping key's own `KeyInfo`, which the added
+   instrumentation test now measures.
 3. **Independent design and code review** (gates D0–D7) remains open and is not satisfied by this
    audit; it is a self-review.
 4. **A second device or a modern Android version** is still untested; the adapter is written to be

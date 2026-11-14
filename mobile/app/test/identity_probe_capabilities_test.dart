@@ -179,6 +179,29 @@ void main() {
       expect(evidence.wrappingKeyPresent, isFalse);
       expect(evidence.wrapKeyHardwareBacked, isTrue);
     });
+
+    test('labels the probe key measurement as a proxy when no wrapping key exists', () {
+      final evidence = G2dAndroidCapabilityEvidence.fromMap(
+        measuredEvidence(hardwareBacked: true),
+      );
+      expect(evidence.wrappingKeyBackingMeasuredDirectly, isFalse);
+      final label = evidence.describeWrappingKeyBackingEvidence();
+      expect(label, contains('proxy'));
+      expect(label, contains('has not been measured'));
+      expect(label, isNot(contains('measured directly')));
+    });
+
+    test('reports a direct measurement once the wrapping key exists', () {
+      final evidence = G2dAndroidCapabilityEvidence.fromMap(
+        measuredEvidence(
+          wrappingKeyPresent: true,
+          wrappingKeyHardwareBacked: false,
+        ),
+      );
+      expect(evidence.wrappingKeyBackingMeasuredDirectly, isTrue);
+      expect(evidence.describeWrappingKeyBackingEvidence(), contains('measured directly'));
+      expect(evidence.wrapKeyHardwareBacked, isFalse);
+    });
   });
 
   group('probed capability rules', () {
