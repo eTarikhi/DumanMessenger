@@ -135,22 +135,73 @@ class DiagnosticsScreen extends StatelessWidget {
 }
 
 class _DiagnosticRow extends StatelessWidget {
-  const _DiagnosticRow({required this.label, required this.value});
+  const _DiagnosticRow({required this.label, required this.value, this.valueKey});
 
   final String label;
   final String value;
 
+  /// Key placed on the value [Text].
+  ///
+  /// Diagnostics legitimately repeat values (`no`, for example, is both "not
+  /// hardware-backed" and "no StrongBox key"), so a test that matches on the
+  /// string alone cannot tell which row it read. The key makes the row's value
+  /// addressable without changing what is displayed.
+  final Key? valueKey;
+
+  /// Width below which the row stacks instead of using two columns.
+  ///
+  /// At 320 logical pixels the card is ~272 wide after page padding, and two
+  /// columns of that leave too little for a failure description to read well.
+  static const double _stackBelow = 360;
+
+  static const EdgeInsets _padding =
+      EdgeInsets.symmetric(horizontal: 16, vertical: 14);
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(
-        children: [
-          Expanded(child: Text(label)),
-          const SizedBox(width: 12),
-          Text(value, style: Theme.of(context).textTheme.labelLarge),
-        ],
-      ),
+    final TextStyle? valueStyle = Theme.of(context).textTheme.labelLarge;
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final bool stacked = constraints.maxWidth < _stackBelow;
+        final Widget labelText = Text(label, softWrap: true);
+        final Widget valueText = Text(
+          value,
+          key: valueKey,
+          style: valueStyle,
+          softWrap: true,
+          textAlign: stacked ? TextAlign.start : TextAlign.end,
+        );
+
+        if (stacked) {
+          return Padding(
+            padding: _padding,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                labelText,
+                const SizedBox(height: 4),
+                valueText,
+              ],
+            ),
+          );
+        }
+
+        // Two columns, both constrained: a long value wraps inside its own
+        // share instead of pushing the row past the right edge. Nothing is
+        // ellipsised, so a failure reason is never shortened.
+        return Padding(
+          padding: _padding,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(flex: 2, child: labelText),
+              const SizedBox(width: 12),
+              Expanded(flex: 3, child: valueText),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -169,7 +220,11 @@ class _IdentityCard extends StatelessWidget {
     final runtime = controller;
     if (runtime == null) {
       return const Card(
-        child: _DiagnosticRow(label: 'Identity runtime', value: 'not wired'),
+        child: _DiagnosticRow(
+          label: 'Identity runtime',
+          value: 'not wired',
+          valueKey: Key('diagnostics-identity-status'),
+        ),
       );
     }
     return AnimatedBuilder(
@@ -181,32 +236,38 @@ class _IdentityCard extends StatelessWidget {
               _DiagnosticRow(
                 label: 'Identity runtime',
                 value: _statusLabel(runtime.status),
+                valueKey: const Key('diagnostics-identity-status'),
               ),
               const Divider(height: 1),
               _DiagnosticRow(
                 label: 'At-rest protection',
                 value: runtime.protectionSummary ?? 'not measured',
+                valueKey: const Key('diagnostics-identity-protection'),
               ),
               const Divider(height: 1),
               _DiagnosticRow(
                 label: 'Wrapping key hardware-backed',
                 value: _boolLabel(runtime.wrapKeyHardwareBacked),
+                valueKey: const Key('diagnostics-identity-hardware-backed'),
               ),
               const Divider(height: 1),
               _DiagnosticRow(
                 label: 'StrongBox key created',
                 value: _boolLabel(runtime.strongBoxVerified),
+                valueKey: const Key('diagnostics-identity-strongbox'),
               ),
               const Divider(height: 1),
               _DiagnosticRow(
                 label: 'Identity',
                 value: _snapshotLabel(runtime.snapshot),
+                valueKey: const Key('diagnostics-identity-state'),
               ),
               if (runtime.failureReason != null) ...<Widget>[
                 const Divider(height: 1),
                 _DiagnosticRow(
                   label: 'Unavailable because',
                   value: runtime.failureReason!,
+                  valueKey: const Key('diagnostics-identity-failure-reason'),
                 ),
               ],
               if (runtime.operationError != null) ...<Widget>[
@@ -214,6 +275,7 @@ class _IdentityCard extends StatelessWidget {
                 _DiagnosticRow(
                   label: 'Last operation error',
                   value: runtime.operationError!,
+                  valueKey: const Key('diagnostics-identity-operation-error'),
                 ),
               ],
               Padding(
