@@ -5,6 +5,7 @@ import 'app_routes.dart';
 import 'ble/ble_diagnostic_bridge.dart';
 import 'ble/ble_discovery_bridge.dart';
 import 'ble/g2c_ble_bridge.dart';
+import 'identity/identity_runtime_controller.dart';
 import 'screens/ble_diagnostic_screen.dart';
 import 'screens/ble_discovery_screen.dart';
 import 'screens/g2c_ble_screen.dart';
@@ -19,11 +20,19 @@ class DumanMessengerApp extends StatefulWidget {
     this.bleDiagnosticApi,
     this.bleDiscoveryApi,
     this.g2cBleApi,
+    this.identityRuntime,
   });
 
   final BleDiagnosticApi? bleDiagnosticApi;
   final BleDiscoveryApi? bleDiscoveryApi;
   final G2cBleApi? g2cBleApi;
+
+  /// The application's single identity runtime, created in `main`.
+  ///
+  /// Optional so tests and secondary entry points can build the app without a
+  /// platform behind them; the diagnostics screen then reports the runtime as
+  /// not wired rather than inventing a state.
+  final G2dIdentityRuntimeController? identityRuntime;
 
   @override
   State<DumanMessengerApp> createState() => _DumanMessengerAppState();
@@ -57,7 +66,9 @@ class _DumanMessengerAppState extends State<DumanMessengerApp> {
               themeMode: _themeMode,
               onThemeModeChanged: (mode) => _themeMode.value = mode,
             ),
-            AppRoutes.diagnostics: (_) => const DiagnosticsScreen(),
+            AppRoutes.diagnostics: (_) => DiagnosticsScreen(
+              identityRuntime: widget.identityRuntime,
+            ),
             AppRoutes.bleDiagnostics: (_) => BleDiagnosticScreen(
               bridge: widget.bleDiagnosticApi,
             ),

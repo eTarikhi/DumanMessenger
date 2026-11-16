@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../app_routes.dart';
+import '../identity/identity_runtime_controller.dart';
+import '../identity/identity_service.dart';
 import '../widgets/app_page_body.dart';
 
 class DiagnosticsSnapshot {
@@ -46,9 +50,12 @@ class DiagnosticsSnapshot {
 }
 
 class DiagnosticsScreen extends StatelessWidget {
-  const DiagnosticsScreen({super.key, this.snapshot});
+  const DiagnosticsScreen({super.key, this.snapshot, this.identityRuntime});
 
   final DiagnosticsSnapshot? snapshot;
+
+  /// The application's identity runtime. Reported as measured, never assumed.
+  final G2dIdentityRuntimeController? identityRuntime;
 
   @override
   Widget build(BuildContext context) {
@@ -81,6 +88,8 @@ class DiagnosticsScreen extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            _IdentityCard(controller: identityRuntime),
             const SizedBox(height: 16),
             Align(
               alignment: Alignment.centerLeft,
@@ -143,5 +152,118 @@ class _DiagnosticRow extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Identity state as the application can honestly report it.
+///
+/// Nothing here displays key material, a fingerprint or an identity id: the card
+/// shows *states* and *measurements*, so a screenshot cannot leak an identity.
+class _IdentityCard extends StatelessWidget {
+  const _IdentityCard({this.controller});
+
+  final G2dIdentityRuntimeController? controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final runtime = controller;
+    if (runtime == null) {
+      return const Card(
+        child: _DiagnosticRow(label: 'Identity runtime', value: 'not wired'),
+      );
+    }
+    return AnimatedBuilder(
+      animation: runtime,
+      builder: (BuildContext context, Widget? _) {
+        return Card(
+          child: Column(
+            children: <Widget>[
+              _DiagnosticRow(
+                label: 'Identity runtime',
+                value: _statusLabel(runtime.status),
+              ),
+              const Divider(height: 1),
+              _DiagnosticRow(
+                label: 'At-rest protection',
+                value: runtime.protectionSummary ?? 'not measured',
+              ),
+              const Divider(height: 1),
+              _DiagnosticRow(
+                label: 'Wrapping key hardware-backed',
+                value: _boolLabel(runtime.wrapKeyHardwareBacked),
+              ),
+              const Divider(height: 1),
+              _DiagnosticRow(
+                label: 'StrongBox key created',
+                value: _boolLabel(runtime.strongBoxVerified),
+              ),
+              const Divider(height: 1),
+              _DiagnosticRow(
+                label: 'Identity',
+                value: _snapshotLabel(runtime.snapshot),
+              ),
+              if (runtime.failureReason != null) ...<Widget>[
+                const Divider(height: 1),
+                _DiagnosticRow(
+                  label: 'Unavailable because',
+                  value: runtime.failureReason!,
+                ),
+              ],
+              if (runtime.operationError != null) ...<Widget>[
+                const Divider(height: 1),
+                _DiagnosticRow(
+                  label: 'Last operation error',
+                  value: runtime.operationError!,
+                ),
+              ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    key: const Key('diagnostics-read-identity'),
+                    onPressed: runtime.isReady && !runtime.busy
+                        ? () => unawaited(runtime.reload())
+                        : null,
+                    icon: const Icon(Icons.badge_outlined),
+                    label: const Text('Read identity from this device'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  static String _statusLabel(G2dIdentityRuntimeStatus status) =>
+      switch (status) {
+        G2dIdentityRuntimeStatus.unsupportedPlatform =>
+          'not supported on this platform',
+        G2dIdentityRuntimeStatus.initializing => 'initializing',
+        G2dIdentityRuntimeStatus.ready => 'ready',
+        G2dIdentityRuntimeStatus.unavailable => 'unavailable',
+      };
+
+  static String _boolLabel(bool? value) {
+    if (value == null) {
+      return 'not measured';
+    }
+    return value ? 'yes' : 'no';
+  }
+
+  static String _snapshotLabel(G2dIdentitySnapshot? snapshot) {
+    if (snapshot == null) {
+      return 'not read yet';
+    }
+    return switch (snapshot) {
+      G2dIdentityAbsent() => 'none stored',
+      G2dIdentityActive() => 'active',
+      G2dIdentityRotationPending() => 'rotation pending',
+      G2dIdentityRevoked() => 'revoked',
+      G2dIdentityStorageUnavailable() => 'storage unavailable',
+      G2dIdentityCorrupt() => 'unreadable (reset required)',
+    };
   }
 }
