@@ -16,9 +16,17 @@ narrower than it appears to.
 The second is that **CI on this repository has been unavailable**. GitHub Actions refuses to
 start jobs here with *"The job was not started because recent account payments have failed or
 your spending limit needs to be increased."* That is an account problem, not a code problem, and
-it is not fixable from a branch. Until it is resolved under **Settings → Billing & plans**, the
-local pipeline in `tool/ci/` is the only way to verify a change — which is exactly the situation
-this document and those scripts were written for.
+it is not fixable from a branch. While it was unresolved, the local pipeline in `tool/ci/` was the
+only way to verify a change — which is exactly the situation this document and those scripts were
+written for.
+
+The workflow itself has since been **removed from the repository**, together with the pre-push
+hook, so there is nothing left that can be unavailable: CI here is **local-only**, by choice, and
+`tool/ci/run-pipeline.sh` is the whole gate. `tool/ci/check-docs.py` reads that state instead of
+assuming a workflow — its `ci-jobs` check runs in a second mode, comparing the job catalog against
+itself and failing if a document starts describing the removed workflow as something that runs.
+That is how this paragraph came to exist: four documents still made the old claim after the file
+was deleted, and the check that used to compare two job lists could not see it.
 
 ---
 
@@ -168,8 +176,9 @@ make probes
 
 ### It is a runner, not a reimplementation
 
-Every command in `tool/ci/run-pipeline.sh` is the command `.github/workflows/ci.yml` runs, in the
-order it runs it — including three behaviours that are easy to drop and expensive to lose:
+Every command in `tool/ci/run-pipeline.sh` was copied from the removed workflow
+`.github/workflows/ci.yml` (removed — see §1), in the order it ran it, and it is now the only copy
+of the gate, including three behaviours that are easy to drop and expensive to lose:
 
 1. **The `dart` job runs all three of its checks unconditionally and gates afterwards**, so a
    single red build reports the analyzer output, the test failures *and* the CLI metrics together
@@ -316,11 +325,13 @@ their self-tests, which is not a sixth check so much as evidence the other five 
    documented that `tool/media-probe.ts` does not have, and four real Dart CLI flags were missing
    from the cheat sheet. `make check-docs` runs it alone. Every check has a fault injected into a
    copy of the tree by `--self-test`, which prints its own case count, and two of them were added
-   the same day as the thing they guard. **`ci-jobs`** asks whether `.github/workflows/ci.yml` and
-   `run-pipeline.sh`'s `JOBS_ALL` still name the same jobs. They are maintained in two places by hand, and the local
-   pipeline's whole claim to be evidence about the remote one rests on them agreeing — a job in the
-   workflow the pipeline does not run means a green local run says nothing about it, and a job the
-   pipeline runs that the workflow does not means CI is laxer than the local gate.
+   the same day as the thing they guard. **`ci-jobs`** asks whether the job catalog is
+   self-consistent — every job in `JOBS_ALL` described by `--list` and named in `--job`'s help —
+   and, while a workflow exists, whether `.github/workflows/ci.yml` (removed) and `JOBS_ALL` still
+   name the same jobs, because the local pipeline's claim to be evidence about the remote one
+   rested on them agreeing. The workflow has been removed from this repository, so the check now
+   runs the second mode described above: the catalog must agree with itself, and no document may
+   still describe the removed workflow as something that runs.
    **`section-counts`** asks whether a documented *number* of probe sections equals the number the
    probe has, and it was written for a defect found by accident: the README said `npm run media`
    had 17 sections for as long as the probe had eighteen, and every check passed, because a count

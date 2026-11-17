@@ -8,8 +8,9 @@ Conventions:
   the same *verdict*, but not always the same exit code: `make` reports `2` for any failure because
   that is GNU make's own code, while `make.ps1` runs the underlying script directly and so passes
   `1` through. See the note in `docs/10` §5 and `docs/11-windows-11-workflow.md`.
-- The **runs** column is the real command. `make` targets are thin front ends onto `tool/ci/`, which
-  copies its commands from `.github/workflows/ci.yml`. Nothing here is a paraphrase.
+- The **runs** column is the real command. `make` targets are thin front ends onto `tool/ci/`,
+  which was written by copying the removed workflow `.github/workflows/ci.yml` and is now the only
+  copy of the gate. Nothing here is a paraphrase.
 - Exit codes across the pipeline: `0` verified · `1` failed or could not run · `2` partial · `64` bad
   usage. Those are the *scripts'* codes; through `make`, `1` and `2` both arrive as `2`.
 
@@ -184,7 +185,7 @@ Unit testing, linting, debugging tools, and error logging.
 | --- | --- | --- |
 | `make typecheck` | `tsc --noEmit` | TypeScript. |
 | `make dart-analyze` | `dart analyze` | Governed by `sim/mesh_sim/analysis_options.yaml`: `strict-casts`, `strict-raw-types`, `unused_import: error`, `dead_code: warning`, lint `avoid_print`. |
-| `make check-docs` | `python3 tool/ci/check-docs.py` | Asks whether every command in `docs/` exists: CLI flags both directions, probe section names, `make` targets, `make.ps1`'s script table, the flags passed to `tool/ci/*.sh`, whether `.github/workflows/ci.yml` and `run-pipeline.sh`'s `JOBS_ALL` still name the same jobs, and whether a documented *number* of probe sections equals the number the probe has. `--self-test` injects one fault per check into a temporary copy and proves each is caught *and named*, because a drift checker that always passes is indistinguishable from one that is broken; it prints the case count, so this table does not have to. |
+| `make check-docs` | `python3 tool/ci/check-docs.py` | Asks whether every command in `docs/` exists: CLI flags both directions, probe section names, `make` targets, `make.ps1`'s script table, the flags passed to `tool/ci/*.sh`, whether the job catalog is self-consistent, whether `.github/workflows/ci.yml` — while a workflow exists — and `run-pipeline.sh`'s `JOBS_ALL` still name the same jobs, whether any document still describes the removed workflow as if it ran, and whether a documented *number* of probe sections equals the number the probe has. `--self-test` injects one fault per check into a temporary copy and proves each is caught *and named*, because a drift checker that always passes is indistinguishable from one that is broken; it prints the case count, so this table does not have to. |
 | `make dart-balance` | `python3 tool/ci/check-dart-balance.py` | Delimiter balance across all 22 `sim/mesh_sim` Dart sources, **with no Dart SDK present**. Not a substitute for `dart analyze` — it answers one question (does every `(`, `[`, `{` and string opened outside a comment get closed, in order?) so a brace mistake costs one line here instead of a hundred unrelated analyzer errors on the first machine that can build. A state machine, not a parser: it strips comments, tracks '''-quoted blocks, and follows `${…}` interpolations including the strings nested inside them. |
 | `python3 tool/ci/check-dart-balance.py --self-test` | same, on 19 built-in snippets | 12 clean snippets that must **not** alarm (a delimiter in a comment, in a string, in a raw string, inside an interpolation) and 7 broken ones that must. The negative cases are the point: this class of checker fails in practice by alarming on `mesh_sim.dart`'s usage text, and a false alarm on a 12 000-line engine is how a check gets deleted. The first version did exactly that — it held the string delimiter beside the stack instead of in the frame, so a `' | '` nested in `${…}` inside a ''' block was read as the end of the block. |
 | `python3 tool/ci/check-dart-balance.py <file…>` | same, on named files | Defaults to every `.dart` file in the repository. Exit `0` balanced, `1` not, with `file:line:col` for the innermost unclosed frame. |

@@ -21,6 +21,8 @@ media-sections    `tool/media-probe.ts` section registry   <-   section names in
 make-targets      `Makefile` targets                       <-   `make X` in code spans and blocks
 ps1-targets       `make.ps1` $ScriptTargets keys           ->   must be real Makefile targets
 ci-script-flags   each `tool/ci/*.sh` argument parser      <-   flags used next to it in the docs
+ci-jobs           `JOBS_ALL` <-> `--list` <-> `--job` help  and, while a workflow exists, its jobs
+ci-checkers       the check-*.py each surviving entry point actually runs
 
 Deliberately not checked: prose that paraphrases a command without naming it, and the reverse
 direction for media sections and Makefile targets, where "undocumented" is a judgement about what a
@@ -524,6 +526,38 @@ def check_ci_script_flags(repo: Repo) -> Result:
                   f"{len(impl)} scripts, {seen} flag uses checked", problems)
 
 
+WORKFLOW_REL = ".github/workflows/ci.yml"
+
+# A line in the docs may name the workflow only while saying it is gone. The workflow was
+# removed from this repository on purpose, so prose that still describes it as something that
+# runs is the drift this mode exists to catch — and the excuse list is deliberately short so a
+# vague sentence cannot pass by accident.
+ABSENCE_WORDS = ("removed", "no longer", "absent", "deleted", "local-only", "local only",
+                 "not present", "does not exist", "gone", "nothing to run")
+
+
+def workflow_present(repo: Repo) -> bool:
+    """Whether a GitHub Actions workflow exists. False is a supported repository state."""
+    return (repo.root / ".github" / "workflows" / "ci.yml").exists()
+
+
+def workflow_claims(repo: Repo) -> List[str]:
+    """Document lines that name the workflow without also saying it is gone."""
+    problems: List[str] = []
+    for d in repo.docs:
+        text = d.read_text(encoding="utf-8")
+        for n, line in enumerate(text.splitlines(), 1):
+            if WORKFLOW_REL not in line:
+                continue
+            if any(w in line.lower() for w in ABSENCE_WORDS):
+                continue
+            problems.append(
+                f"{d.name}:{n} names {WORKFLOW_REL} as if it were still present; the workflow "
+                f"has been removed from this repository, so either drop the claim or say on that "
+                f"line that it is gone")
+    return problems
+
+
 def workflow_jobs(repo: Repo) -> List[str]:
     """Job names in `.github/workflows/ci.yml`, read without a YAML dependency.
 
@@ -563,8 +597,9 @@ def check_ci_jobs(repo: Repo) -> Result:
     """
     wf = workflow_jobs(repo)
     pipe = pipeline_jobs(repo)
+    present = workflow_present(repo)
     problems: List[str] = []
-    if not wf:
+    if present and not wf:
         problems.append("no jobs could be read out of .github/workflows/ci.yml")
     if not pipe:
         problems.append("no JOBS_ALL could be read out of tool/ci/run-pipeline.sh")
@@ -591,18 +626,29 @@ def check_ci_jobs(repo: Repo) -> Result:
             problems.append(
                 f"run-pipeline.sh runs a job `{j}` that the --job LIST help line does not name, so "
                 f"`--job {j}` reads as a typo instead of a supported selection")
-    for j in wf:
-        if j not in pipe:
-            problems.append(
-                f"ci.yml defines a job `{j}` that run-pipeline.sh does not mirror, so a green "
-                f"local run says nothing about it")
-    for j in pipe:
-        if j not in wf:
-            problems.append(
-                f"run-pipeline.sh runs a job `{j}` that ci.yml does not define, so the local "
-                f"pipeline is stricter than CI and a merge can still land red")
+    if present:
+        for j in wf:
+            if j not in pipe:
+                problems.append(
+                    f"ci.yml defines a job `{j}` that run-pipeline.sh does not mirror, so a green "
+                    f"local run says nothing about it")
+        for j in pipe:
+            if j not in wf:
+                problems.append(
+                    f"run-pipeline.sh runs a job `{j}` that ci.yml does not define, so the local "
+                    f"pipeline is stricter than CI and a merge can still land red")
+        return Result("ci-jobs", not problems,
+                      f"{len(wf)} workflow jobs, {len(pipe)} mirrored", problems)
+
+    # Local-only mode. The workflow was removed from the repository, so there is no second
+    # job list to drift from — but the *claim* can drift instead, and it did: four documents
+    # still described the removed file as something that runs. That is the same defect one
+    # direction further out, so the check keeps its name and asks the question that is still
+    # answerable: is the job catalog self-consistent, and does anything still promise a
+    # workflow that is not there?
+    problems.extend(workflow_claims(repo))
     return Result("ci-jobs", not problems,
-                  f"{len(wf)} workflow jobs, {len(pipe)} mirrored", problems)
+                  f"local-only: {len(pipe)} jobs, all described and advertised", problems)
 
 
 def _checker_invocations(text: str) -> Set[str]:
@@ -651,16 +697,26 @@ def check_ci_checkers(repo: Repo) -> Result:
     wf = repo.root / ".github" / "workflows" / "ci.yml"
     pipe = repo.root / "tool" / "ci" / "run-pipeline.sh"
     coll = repo.root / "tool" / "ci" / "collect-checks.sh"
-    blocks = {
-        "ci.yml's checks job": _between(repo.read(".github/workflows/ci.yml"), "  checks:",
-                                        r"^  [a-z][a-z0-9-]*:$") if wf.exists() else "",
-        "run-pipeline.sh's job_checks": _between(pipe.read_text(encoding="utf-8"),
-                                                 "job_checks() {", r"^}$") if pipe.exists() else "",
-        "collect-checks.sh's docs group": _between(coll.read_text(encoding="utf-8"),
-                                                   "if selected docs; then", r"^fi$")
-                                          if coll.exists() else "",
-    }
+    # Only entry points that exist are compared. The workflow is one of three when it is
+    # present and none of them when it is not: an entry point that was removed on purpose
+    # cannot be a list that drifted, and demanding it back is how a repair turns into a
+    # restoration of a file the owner deleted.
+    blocks: Dict[str, str] = {}
+    if wf.exists():
+        blocks["ci.yml's checks job"] = _between(repo.read(".github/workflows/ci.yml"),
+                                                 "  checks:", r"^  [a-z][a-z0-9-]*:$")
+    if pipe.exists():
+        blocks["run-pipeline.sh's job_checks"] = _between(
+            pipe.read_text(encoding="utf-8"), "job_checks() {", r"^}$")
+    if coll.exists():
+        blocks["collect-checks.sh's docs group"] = _between(
+            coll.read_text(encoding="utf-8"), "if selected docs; then", r"^fi$")
     problems: List[str] = []
+    if len(blocks) < 2:
+        problems.append(
+            f"only {len(blocks)} entry point(s) exist, so there is no agreement between entry "
+            f"points left to check — run-pipeline.sh and collect-checks.sh are the two that must "
+            f"stay")
     sets = {name: _checker_invocations(text) for name, text in blocks.items()}
     for name, found in sets.items():
         if not found:
@@ -679,8 +735,8 @@ def check_ci_checkers(repo: Repo) -> Result:
             f"tool/ci/{c} exists but no entry point runs it — the check-ps1.py case: a checker "
             f"with a make target and no automation, which is indistinguishable from no checker")
     return Result("ci-checkers", not problems,
-                  f"{len(union & on_disk) if on_disk else len(union)} checkers run by all three "
-                  f"entry points", problems)
+                  f"{len(union & on_disk) if on_disk else len(union)} checkers run by all "
+                  f"{len(blocks)} entry points", problems)
 
 
 CHECKS = [
@@ -733,6 +789,14 @@ FAULTS = [
     # the real regression: a job that ran and was gated on, but that --list and --job both forgot
     ("ci-jobs", "tool/ci/run-pipeline.sh", "checks     Toolchain-free static checks",
      lambda s: re.sub(r"^checks\s+Toolchain-free.*\n", "", s, count=1, flags=re.M), "checks"),
+    # the drift the local-only mode exists to catch: a document resuming the claim that the
+    # removed workflow runs the pipeline — the exact sentence four docs carried after removal
+    ("ci-jobs", "docs/10-local-development-and-ci.md",
+     "### It is a runner, not a reimplementation",
+     lambda s: s.replace(
+         "### It is a runner, not a reimplementation",
+         "### It is a runner, not a reimplementation\n\nEvery command in `tool/ci/run-pipeline.sh` "
+         "is the command `.github/workflows/ci.yml` runs.", 1), "ci.yml"),
     # the real regression: a checker with a make target that no pipeline called, so the
     # Windows entry point was validated only when a human remembered to type the command
     ("ci-checkers", "tool/ci/run-pipeline.sh", '"$ROOT" python3 tool/ci/check-ps1.py make.ps1',

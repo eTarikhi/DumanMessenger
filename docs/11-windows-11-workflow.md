@@ -5,8 +5,10 @@ first for what the pipeline does; this document is about getting it to run on th
 
 ## 0. The one thing to understand first
 
-`.github/workflows/ci.yml` runs on **`ubuntu-latest`**. The local pipeline in `tool/ci/` is POSIX
-shell, deliberately, so that a green local run means the same thing as a green CI run.
+``.github/workflows/ci.yml` (removed), while it existed, ran on **`ubuntu-latest`**, and the local
+pipeline in `tool/ci/` is POSIX shell, deliberately, so that a green local run meant the same thing
+as a green CI run. That workflow has since been removed from this repository, so the local pipeline
+— and this document's Windows instructions for running it — is the whole gate rather than a mirror.
 
 That leaves Windows with a choice, and it is worth being honest about the trade-off rather than
 pretending it does not exist:
