@@ -163,6 +163,22 @@ class G2dIdentityChannel {
   Future<void> deleteMessages() =>
       _guard(() => _channel.invokeMethod<void>('deleteMessages'));
 
+  /// Reads the stored key binding payload, or `null` when none is stored.
+  Future<String?> loadBindings() =>
+      _guard(() => _channel.invokeMethod<String>('loadBindings'));
+
+  /// Commits the key binding payload.
+  Future<void> saveBindings(String payload) => _guard(
+        () => _channel.invokeMethod<void>(
+          'saveBindings',
+          <String, Object?>{'payload': payload},
+        ),
+      );
+
+  /// Removes the key binding payload and its own wrapping key. Idempotent.
+  Future<void> deleteBindings() =>
+      _guard(() => _channel.invokeMethod<void>('deleteBindings'));
+
   Future<T> _guard<T>(Future<T> Function() action) async {
     try {
       return await action();

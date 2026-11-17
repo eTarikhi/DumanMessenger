@@ -4,6 +4,7 @@ import 'identity_android_runtime.dart';
 import 'identity_models.dart';
 import 'identity_service.dart';
 import 'identity_store.dart';
+import 'key_binding.dart';
 
 /// What the application is allowed to say about the identity runtime.
 ///
@@ -164,6 +165,31 @@ class G2dIdentityRuntimeController extends ChangeNotifier {
       return snapshot;
     });
   }
+
+  /// Issues or re-checks this installation's signed key binding.
+  ///
+  /// Returns `null` on an unsupported platform, with no runtime, or with no identity yet.
+  /// A binding failure is recorded in [lastBindingError] rather than thrown: it must not
+  /// take the application down, and it must not be mistaken for a missing identity.
+  Future<G2dKeyBinding?> ensureKeyBinding() async {
+    final runtime = _runtime;
+    if (runtime == null) {
+      return null;
+    }
+    try {
+      final binding = await runtime.ensureKeyBinding();
+      lastBindingError = binding == null ? runtime.lastKeyBindingError : null;
+      notifyListeners();
+      return binding;
+    } catch (error) {
+      lastBindingError = error.toString();
+      notifyListeners();
+      return null;
+    }
+  }
+
+  /// Why the key binding could not be issued, if it could not.
+  String? lastBindingError;
 
   /// Discards an identity this device cannot decrypt. The only destructive path,
   /// and it exists because the service says the stored bytes are unusable.

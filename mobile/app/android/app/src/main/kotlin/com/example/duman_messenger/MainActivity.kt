@@ -96,12 +96,22 @@ class MainActivity : FlutterActivity() {
             directoryName = "messages",
             wrappingKeyAlias = "g2d.messages.v1",
         )
+        // The signed Ed25519 -> X25519 binding gets its own slot and alias as well:
+        // it is public material, but it is the one record that must survive even if a
+        // future rotation loses the message or conversation slots.
+        val bindingStorage = G2dIdentityStorage(
+            applicationContext.filesDir,
+            identityKeyring,
+            directoryName = "bindings",
+            wrappingKeyAlias = "g2d.bindings.v1",
+        )
         val handler = G2dIdentityChannelHandler(
             G2dCapabilityProbe(identityKeyring),
             identityStorage,
             identityKeyMaterialStorage,
             conversationStorage,
             messageStorage,
+            bindingStorage,
         )
         identityChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

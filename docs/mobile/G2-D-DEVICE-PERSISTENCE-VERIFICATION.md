@@ -20,6 +20,7 @@ none of which exist yet.
 | Deleting a conversation removes its messages and only its messages | V5 |
 | Stored bytes are not readable plaintext | V2 evidence step |
 | A read failure is surfaced, not shown as an empty conversation | automated tests (§8) |
+| The identity's signed key binding survives a restart | §11 |
 
 ## 2. What a pass does not prove
 
@@ -96,7 +97,15 @@ files/conversations/keyring.meta
 files/conversations/identity.0.bin
 files/messages/keyring.meta
 files/messages/identity.0.bin
+files/bindings/keyring.meta
+files/bindings/identity.0.bin
 ```
+
+`bindings/` holds one small document: this installation's signed Ed25519 -> X25519
+binding. It appears after the app has started once with an identity present. It is
+public-key material, but it is still encrypted at rest like everything else, because a
+stable device fingerprint is worth something to an attacker too. It is not a contact
+list and not a peer record — only this device's statement about its own two keys.
 
 The record file name is `identity.N.bin` in every slot — the directory, not the
 file name, is what separates them. If `messages/` is missing after V2, the message
@@ -254,3 +263,22 @@ against the handset.
 
 A run is only complete when the restart steps were actually performed. A screenshot
 before the force-stop proves nothing about persistence.
+
+## 11. The signed key binding
+
+After the app has started once with an identity, `files/bindings/` holds the binding.
+To check it without decrypting anything:
+
+```powershell
+adb shell run-as com.example.duman_messenger ls -la files/bindings
+```
+
+Two alternating slot files plus `keyring.meta` is the expected shape. The binding is
+issued once: force-stop and relaunch, then confirm the slot's file count and
+modification time did not change — a binding that is re-signed on every start would
+mean the store never read back what it wrote.
+
+There is no screen for it yet, so the UI cannot be used as evidence here. The
+automated tests are the witness: `flutter test test\key_binding_persistence_test.dart`
+proves one document in that slot, a read-back re-verification, and a refusal to
+overwrite a stored binding that does not match the keys.

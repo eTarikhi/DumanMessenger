@@ -31,6 +31,9 @@ void main() {
       await identityRuntime.ensureInitialized();
       try {
         await identityRuntime.reload();
+        // The identity's signed key binding is issued (or re-checked) here, not in a
+        // widget: it needs the private keys, which never leave the identity layer.
+        await identityRuntime.ensureKeyBinding();
       } catch (_) {
         // The controller records this; nothing to add here.
       }

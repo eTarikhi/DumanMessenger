@@ -52,6 +52,12 @@ class FakeIdentityPlatform {
   /// When set, `loadMessages` returns this instead of [storedMessages].
   String? messagesLoadOverride;
 
+  /// Payload written through `saveBindings`, if any.
+  String? storedBindings;
+
+  /// When set, `loadBindings` returns this instead of [storedBindings].
+  String? bindingsLoadOverride;
+
   /// Every call the adapter made, in order.
   final List<MethodCall> calls = <MethodCall>[];
 
@@ -90,6 +96,10 @@ class FakeIdentityPlatform {
   /// Number of `saveMessages` calls that reached the platform.
   int get messageSaveCount =>
       calls.where((MethodCall call) => call.method == 'saveMessages').length;
+
+  /// Number of `saveBindings` calls that reached the platform.
+  int get bindingSaveCount =>
+      calls.where((MethodCall call) => call.method == 'saveBindings').length;
 
   /// Payloads sent to `save`, decoded for assertions.
   List<Map<String, Object?>> get savedPayloads => calls
@@ -157,6 +167,16 @@ class FakeIdentityPlatform {
       case 'deleteMessages':
         storedMessages = null;
         messagesLoadOverride = null;
+        return null;
+      case 'loadBindings':
+        return bindingsLoadOverride ?? storedBindings;
+      case 'saveBindings':
+        final arguments = call.arguments as Map<Object?, Object?>;
+        storedBindings = arguments['payload']! as String;
+        return null;
+      case 'deleteBindings':
+        storedBindings = null;
+        bindingsLoadOverride = null;
         return null;
     }
     throw MissingPluginException('unknown identity method ${call.method}');

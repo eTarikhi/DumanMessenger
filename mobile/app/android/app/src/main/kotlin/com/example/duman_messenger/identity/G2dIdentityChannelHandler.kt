@@ -47,6 +47,7 @@ internal class G2dIdentityChannelHandler(
     private val keyMaterialStorage: G2dIdentityStorage? = null,
     private val conversationStorage: G2dIdentityStorage? = null,
     private val messageStorage: G2dIdentityStorage? = null,
+    private val bindingStorage: G2dIdentityStorage? = null,
 ) : MethodChannel.MethodCallHandler {
 
     companion object {
@@ -68,6 +69,9 @@ internal class G2dIdentityChannelHandler(
             "loadMessages" -> handleMessageLoad(result)
             "saveMessages" -> handleMessageSave(call, result)
             "deleteMessages" -> handleMessageDelete(result)
+            "loadBindings" -> handleBindingLoad(result)
+            "saveBindings" -> handleBindingSave(call, result)
+            "deleteBindings" -> handleBindingDelete(result)
             else -> result.notImplemented()
         }
     }
@@ -273,6 +277,64 @@ internal class G2dIdentityChannelHandler(
 
     private fun handleMessageDelete(result: MethodChannel.Result) {
         val slot = messageStorage
+        if (slot == null) {
+            slotNotConfigured(result)
+            return
+        }
+        try {
+            slot.deleteRecord()
+            result.success(null)
+        } catch (error: Exception) {
+            fail(result, error)
+        }
+    }
+
+    /**
+     * Key bindings live in a fifth slot with their own directory and Keystore alias.
+     *
+     * Same envelope as the other four — AES-256-GCM, fresh iv per write, generation in
+     * the associated data, two alternating slots, highest authenticating generation
+     * wins. The payload is a signed statement over two public keys; no private key is
+     * involved after the signature is made, and nothing here logs or parses it.
+     */
+    private fun handleBindingLoad(result: MethodChannel.Result) {
+        val slot = bindingStorage
+        if (slot == null) {
+            slotNotConfigured(result)
+            return
+        }
+        try {
+            result.success(slot.loadRecord())
+        } catch (error: Exception) {
+            fail(result, error)
+        }
+    }
+
+    private fun handleBindingSave(call: MethodCall, result: MethodChannel.Result) {
+        val slot = bindingStorage
+        if (slot == null) {
+            slotNotConfigured(result)
+            return
+        }
+        val payload = call.argument<String>("payload")
+        if (payload == null) {
+            result.error(
+                G2dProtectionException.WRITE_FAILED,
+                "the key binding payload is missing",
+                null,
+            )
+            return
+        }
+        try {
+            slot.saveRecord(payload)
+            result.success(null)
+        } catch (error: Exception) {
+            fail(result, error)
+        }
+    }
+
+    private fun handleBindingDelete(result: MethodChannel.Result) {
+        val slot = bindingStorage
         if (slot == null) {
             slotNotConfigured(result)
             return

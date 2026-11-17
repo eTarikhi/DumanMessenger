@@ -19,6 +19,9 @@ import 'identity_key_provider.dart';
 import 'identity_models.dart';
 import 'identity_probe_capabilities.dart';
 import 'identity_service.dart';
+import 'key_binding.dart';
+import 'key_binding_service.dart';
+import 'key_binding_store.dart';
 import 'identity_store.dart';
 
 /// The Android identity stack, assembled from measured facts.
@@ -30,6 +33,7 @@ class G2dAndroidIdentityRuntime {
     required this.service,
     required this.keyProvider,
     required this.keyMaterialStore,
+    this.bindings,
   });
 
   /// Probes the device and assembles the stack.
@@ -56,13 +60,21 @@ class G2dAndroidIdentityRuntime {
       channel: resolved,
       protectionVerified: evidence.verifiedWrapRoundTrip,
     );
+    final keyProvider = G2dIdentityKeyProvider();
+    // The signed binding lives in its own slot, under its own alias, and is issued with
+    // the same provider that generated the keys.
+    final bindings = G2dIdentityBindingService(
+      store: G2dKeystoreKeyBindingStore(channel: resolved),
+      provider: keyProvider,
+    );
     return G2dAndroidIdentityRuntime._(
       evidence: evidence,
       capabilities: capabilities,
       store: store,
       service: G2dIdentityService(store: store, platform: capabilities),
-      keyProvider: G2dIdentityKeyProvider(),
+      keyProvider: keyProvider,
       keyMaterialStore: keyMaterialStore,
+      bindings: bindings,
     );
   }
 
@@ -98,6 +110,22 @@ class G2dAndroidIdentityRuntime {
 
   /// The wrapped slot the private identity keys live in, when they exist.
   final G2dKeystoreKeyMaterialStore keyMaterialStore;
+
+  /// Issues and re-checks the Ed25519 -> X25519 binding for this installation.
+  final G2dIdentityBindingService? bindings;
+
+  /// The binding that verified during this session, if one did.
+  ///
+  /// Public keys and a signature only — nothing here is private, and nothing here has
+  /// been shown to another device, because no transport exists.
+  G2dKeyBinding? lastKeyBinding;
+
+  /// Why the binding could not be issued, when it could not.
+  ///
+  /// A binding failure never fails identity creation: the keys are already generated and
+  /// the record already points at them, so failing at that point would invite a rollback
+  /// that deletes keys. It is recorded here instead of being swallowed.
+  String? lastKeyBindingError;
 
   /// Creates this installation's first identity.
   ///
@@ -164,11 +192,55 @@ class G2dAndroidIdentityRuntime {
       );
       if (!result.isSuccess) {
         await _discardKeyMaterial();
+        return result;
       }
+      // The identity exists and its keys are stored; now say which exchange key belongs
+      // to it, in a signed record of its own.
+      await _issueKeyBinding(material);
       return result;
     } catch (error) {
       await _discardKeyMaterialIfNoRecord();
       rethrow;
+    }
+  }
+
+  /// Issues or re-checks the binding for the active identity, if one exists.
+  ///
+  /// Returns `null` when there is no binding service, no active identity, or no stored
+  /// key material. Throws only for a failure the caller has to see; a binding that does
+  /// not match is recorded in [lastKeyBindingError] and reported as `null`.
+  Future<G2dKeyBinding?> ensureKeyBinding() async {
+    final bindingService = bindings;
+    if (bindingService == null) {
+      return null;
+    }
+    final snapshot = await this.service.load();
+    if (snapshot is! G2dIdentityActive) {
+      return null;
+    }
+    final material = await keyMaterialStore.load();
+    if (material == null) {
+      lastKeyBindingError = 'no stored key material to bind';
+      return null;
+    }
+    await _issueKeyBinding(material);
+    return lastKeyBinding;
+  }
+
+  Future<void> _issueKeyBinding(G2dIdentityKeyMaterial material) async {
+    final bindingService = bindings;
+    if (bindingService == null) {
+      return;
+    }
+    try {
+      lastKeyBinding = await bindingService.ensureBound(material);
+      lastKeyBindingError = null;
+    } on G2dIdentityBindingException catch (error) {
+      lastKeyBinding = null;
+      lastKeyBindingError = error.message;
+    } catch (error) {
+      lastKeyBinding = null;
+      lastKeyBindingError = error.toString();
     }
   }
 
