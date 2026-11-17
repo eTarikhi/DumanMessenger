@@ -119,6 +119,20 @@ class G2dConversationRepository {
     });
   }
 
+  /// Returns the conversation with [id], or `null` when it is not stored here.
+  ///
+  /// A missing conversation is a normal answer, not an error: the detail screen has
+  /// to be able to say "this is not on this device".
+  Future<G2dConversation?> findById(String id) async {
+    final List<G2dConversation> all = await store.load();
+    for (final G2dConversation conversation in all) {
+      if (conversation.id == id) {
+        return conversation;
+      }
+    }
+    return null;
+  }
+
   /// Renames a conversation.
   ///
   /// Throws [G2dConversationException] for an unusable title or an unknown id, and

@@ -20,6 +20,9 @@ import io.flutter.plugin.common.MethodChannel
  * | `loadConversations` | — | decrypted conversation JSON, or null |
  * | `saveConversations` | `{payload: String}` | null |
  * | `deleteConversations` | — | null |
+ * | `loadMessages` | — | decrypted message JSON, or null |
+ * | `saveMessages` | `{payload: String}` | null |
+ * | `deleteMessages` | — | null |
  *
  * The three key-material methods use a **second** storage slot: its own directory
  * and its own non-exportable Keystore alias. Private identity keys live there, so
@@ -43,6 +46,7 @@ internal class G2dIdentityChannelHandler(
     private val storage: G2dIdentityStorage,
     private val keyMaterialStorage: G2dIdentityStorage? = null,
     private val conversationStorage: G2dIdentityStorage? = null,
+    private val messageStorage: G2dIdentityStorage? = null,
 ) : MethodChannel.MethodCallHandler {
 
     companion object {
@@ -61,6 +65,9 @@ internal class G2dIdentityChannelHandler(
             "loadConversations" -> handleConversationLoad(result)
             "saveConversations" -> handleConversationSave(call, result)
             "deleteConversations" -> handleConversationDelete(result)
+            "loadMessages" -> handleMessageLoad(result)
+            "saveMessages" -> handleMessageSave(call, result)
+            "deleteMessages" -> handleMessageDelete(result)
             else -> result.notImplemented()
         }
     }
@@ -209,6 +216,63 @@ internal class G2dIdentityChannelHandler(
 
     private fun handleConversationDelete(result: MethodChannel.Result) {
         val slot = conversationStorage
+        if (slot == null) {
+            slotNotConfigured(result)
+            return
+        }
+        try {
+            slot.deleteRecord()
+            result.success(null)
+        } catch (error: Exception) {
+            fail(result, error)
+        }
+    }
+
+    /**
+     * Messages live in a fourth slot with their own directory and Keystore alias.
+     * The envelope is the same proven one: AES-256-GCM, a fresh iv per write,
+     * generation binding in the associated data, two alternating slots, and the
+     * highest authenticating generation wins on load. Nothing here parses or logs
+     * a message body.
+     */
+    private fun handleMessageLoad(result: MethodChannel.Result) {
+        val slot = messageStorage
+        if (slot == null) {
+            slotNotConfigured(result)
+            return
+        }
+        try {
+            result.success(slot.loadRecord())
+        } catch (error: Exception) {
+            fail(result, error)
+        }
+    }
+
+    private fun handleMessageSave(call: MethodCall, result: MethodChannel.Result) {
+        val slot = messageStorage
+        if (slot == null) {
+            slotNotConfigured(result)
+            return
+        }
+        val payload = call.argument<String>("payload")
+        if (payload == null) {
+            result.error(
+                G2dProtectionException.WRITE_FAILED,
+                "the message payload is missing",
+                null,
+            )
+            return
+        }
+        try {
+            slot.saveRecord(payload)
+            result.success(null)
+        } catch (error: Exception) {
+            fail(result, error)
+        }
+    }
+
+    private fun handleMessageDelete(result: MethodChannel.Result) {
+        val slot = messageStorage
         if (slot == null) {
             slotNotConfigured(result)
             return

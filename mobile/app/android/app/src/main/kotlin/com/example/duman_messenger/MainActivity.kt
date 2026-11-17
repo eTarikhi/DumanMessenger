@@ -90,11 +90,18 @@ class MainActivity : FlutterActivity() {
             directoryName = "conversations",
             wrappingKeyAlias = "g2d.conversations.v1",
         )
+        val messageStorage = G2dIdentityStorage(
+            applicationContext.filesDir,
+            identityKeyring,
+            directoryName = "messages",
+            wrappingKeyAlias = "g2d.messages.v1",
+        )
         val handler = G2dIdentityChannelHandler(
             G2dCapabilityProbe(identityKeyring),
             identityStorage,
             identityKeyMaterialStorage,
             conversationStorage,
+            messageStorage,
         )
         identityChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

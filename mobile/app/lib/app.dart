@@ -6,6 +6,8 @@ import 'ble/ble_diagnostic_bridge.dart';
 import 'ble/ble_discovery_bridge.dart';
 import 'ble/g2c_ble_bridge.dart';
 import 'conversations/conversation_repository.dart';
+import 'messages/message_repository.dart';
+import 'screens/conversation_detail_screen.dart';
 import 'identity/identity_runtime_controller.dart';
 import 'screens/ble_diagnostic_screen.dart';
 import 'screens/ble_discovery_screen.dart';
@@ -24,6 +26,7 @@ class DumanMessengerApp extends StatefulWidget {
     this.g2cBleApi,
     this.identityRuntime,
     this.conversationRepository,
+    this.messageRepository,
   });
 
   final BleDiagnosticApi? bleDiagnosticApi;
@@ -42,6 +45,10 @@ class DumanMessengerApp extends StatefulWidget {
   /// Optional so tests can build the app without one; the conversations screen
   /// then keeps its own in-memory repository and says it persists nothing.
   final G2dConversationRepository? conversationRepository;
+
+  /// The application's message repository, created in `main`. Optional for the
+  /// same reason as the conversation repository.
+  final G2dMessageRepository? messageRepository;
 
   @override
   State<DumanMessengerApp> createState() => _DumanMessengerAppState();
@@ -68,10 +75,25 @@ class _DumanMessengerAppState extends State<DumanMessengerApp> {
           darkTheme: _themeFor(Brightness.dark),
           themeMode: themeMode,
           initialRoute: AppRoutes.onboarding,
+          onGenerateRoute: (RouteSettings settings) {
+            if (settings.name == AppRoutes.conversationDetail) {
+              final Object? arguments = settings.arguments;
+              return MaterialPageRoute<void>(
+                settings: settings,
+                builder: (BuildContext context) => ConversationDetailScreen(
+                  conversationId: arguments is String ? arguments : null,
+                  conversationRepository: widget.conversationRepository,
+                  messageRepository: widget.messageRepository,
+                ),
+              );
+            }
+            return null;
+          },
           routes: {
             AppRoutes.onboarding: (_) => const OnboardingScreen(),
             AppRoutes.conversations: (_) => ConversationListScreen(
               repository: widget.conversationRepository,
+              messageRepository: widget.messageRepository,
             ),
             AppRoutes.identity: (_) => MyIdentityScreen(
               identityRuntime: widget.identityRuntime,

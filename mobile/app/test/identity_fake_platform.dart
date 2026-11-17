@@ -46,6 +46,12 @@ class FakeIdentityPlatform {
   /// When set, `loadConversations` returns this instead of [storedConversations].
   String? conversationsLoadOverride;
 
+  /// Stands in for the message slot.
+  String? storedMessages;
+
+  /// When set, `loadMessages` returns this instead of [storedMessages].
+  String? messagesLoadOverride;
+
   /// Every call the adapter made, in order.
   final List<MethodCall> calls = <MethodCall>[];
 
@@ -80,6 +86,10 @@ class FakeIdentityPlatform {
   /// Number of `saveConversations` calls that reached the platform.
   int get conversationSaveCount =>
       calls.where((MethodCall call) => call.method == 'saveConversations').length;
+
+  /// Number of `saveMessages` calls that reached the platform.
+  int get messageSaveCount =>
+      calls.where((MethodCall call) => call.method == 'saveMessages').length;
 
   /// Payloads sent to `save`, decoded for assertions.
   List<Map<String, Object?>> get savedPayloads => calls
@@ -137,6 +147,16 @@ class FakeIdentityPlatform {
       case 'deleteConversations':
         storedConversations = null;
         conversationsLoadOverride = null;
+        return null;
+      case 'loadMessages':
+        return messagesLoadOverride ?? storedMessages;
+      case 'saveMessages':
+        final arguments = call.arguments as Map<Object?, Object?>;
+        storedMessages = arguments['payload']! as String;
+        return null;
+      case 'deleteMessages':
+        storedMessages = null;
+        messagesLoadOverride = null;
         return null;
     }
     throw MissingPluginException('unknown identity method ${call.method}');

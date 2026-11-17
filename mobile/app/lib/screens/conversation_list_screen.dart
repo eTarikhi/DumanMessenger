@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../app_routes.dart';
 import '../conversations/conversation.dart';
 import '../conversations/conversation_repository.dart';
+import '../messages/message_repository.dart';
 import '../widgets/foundation_notice.dart';
 
 /// The application's home surface: the user's own conversations.
@@ -16,12 +17,19 @@ import '../widgets/foundation_notice.dart';
 /// There is no message, delivery, encryption or peer anywhere on this screen,
 /// because none of it exists.
 class ConversationListScreen extends StatefulWidget {
-  const ConversationListScreen({super.key, this.repository});
+  const ConversationListScreen({super.key, this.repository, this.messageRepository});
 
   /// The application's repository, created in `main` so the list survives
   /// navigating away and back. Optional so tests can inject their own; a screen
   /// built without one keeps its conversations for its own lifetime only.
   final G2dConversationRepository? repository;
+
+  /// Messages belonging to a deleted conversation are removed with it.
+  ///
+  /// Optional so list-only tests need not supply it; when it is absent, deleting a
+  /// conversation leaves its messages stored and the screen says nothing about
+  /// them rather than claiming a cleanup it did not perform.
+  final G2dMessageRepository? messageRepository;
 
   @override
   State<ConversationListScreen> createState() => _ConversationListScreenState();
@@ -191,6 +199,23 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
     String message;
     try {
       await _repository.delete(conversation.id);
+      // Messages belong to the conversation: purge them, and never report the
+      // deletion as clean if the purge failed.
+      final G2dMessageRepository? messages = widget.messageRepository;
+      if (messages != null) {
+        try {
+          await messages.deleteFor(conversation.id);
+        } catch (error) {
+          message = 'Conversation deleted, but its messages remain: $error';
+          await _load();
+          if (!mounted) {
+            return;
+          }
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(message)));
+          return;
+        }
+      }
       await _load();
       message = 'Conversation deleted.';
     } on G2dConversationException catch (error) {
@@ -271,6 +296,10 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
             leading: const Icon(Icons.chat_bubble_outline),
             title: Text(conversation.title),
             subtitle: const Text('No messages yet'),
+            onTap: () => Navigator.of(context).pushNamed(
+              AppRoutes.conversationDetail,
+              arguments: conversation.id,
+            ),
             trailing: PopupMenuButton<String>(
               key: Key('conversation-menu-${conversation.id}'),
               tooltip: 'Conversation actions',
