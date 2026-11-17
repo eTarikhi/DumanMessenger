@@ -249,4 +249,62 @@ void main() {
     expect(find.byType(ConversationDetailScreen), findsOneWidget);
     expect(find.byKey(const Key('conversation-detail-empty')), findsOneWidget);
   });
+
+  test('delete removes one stored message and refuses an unknown id', () async {
+    final repository = memoryRepository();
+    final G2dMessage first =
+        await repository.append(conversationId: 'conv01', body: 'keep');
+    final G2dMessage second =
+        await repository.append(conversationId: 'conv01', body: 'remove');
+
+    await repository.delete(second.id);
+
+    expect(await repository.listFor('conv01'), <G2dMessage>[first]);
+    await expectLater(
+      repository.delete(second.id),
+      throwsA(isA<G2dMessageException>()),
+    );
+    expect(await repository.listFor('conv01'), hasLength(1));
+  });
+
+  testWidgets('deleting a message needs confirmation and updates the list',
+      (WidgetTester tester) async {
+    final conversationRepository = conversationRepositoryWith(conversation());
+    final messageRepository = memoryRepository();
+    final G2dMessage stored = await messageRepository.append(
+      conversationId: 'conv01',
+      body: 'Delete me',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ConversationDetailScreen(
+          conversationId: 'conv01',
+          conversationRepository: conversationRepository,
+          messageRepository: messageRepository,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Delete me'), findsOneWidget);
+
+    // Cancelling keeps the message.
+    await tester.tap(find.byKey(Key('message-delete-${stored.id}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('message-delete-cancel')));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete me'), findsOneWidget);
+    expect(await messageRepository.listFor('conv01'), hasLength(1));
+
+    await tester.tap(find.byKey(Key('message-delete-${stored.id}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('message-delete-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Delete me'), findsNothing);
+    expect(find.byKey(const Key('conversation-detail-empty')), findsOneWidget);
+    expect(await messageRepository.listFor('conv01'), isEmpty);
+    expect(tester.takeException(), isNull);
+  });
 }

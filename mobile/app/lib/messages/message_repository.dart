@@ -75,6 +75,24 @@ class G2dMessageRepository {
     });
   }
 
+  /// Removes one stored message by id.
+  ///
+  /// Throws [G2dMessageException] when the id is unknown, so a repeated tap cannot
+  /// report success for a message that was already gone.
+  Future<void> delete(String messageId) {
+    return _serialize(() async {
+      final List<G2dMessage> all = List<G2dMessage>.of(await store.load());
+      final int before = all.length;
+      all.removeWhere((G2dMessage message) => message.id == messageId);
+      if (all.length == before) {
+        throw const G2dMessageException(
+          'No message with that identifier exists.',
+        );
+      }
+      await store.save(all);
+    });
+  }
+
   /// Removes every stored message belonging to [conversationId].
   ///
   /// Used when a conversation is deleted. Absent conversations are not an error:

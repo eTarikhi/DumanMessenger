@@ -132,6 +132,53 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _deleteMessage(G2dMessage message) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: const Text('Delete message?'),
+        content: const Text(
+          'The stored copy on this device is removed. Nothing was sent, so there '
+          'is no other copy to recall.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            key: const Key('message-delete-cancel'),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('message-delete-confirm'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    final G2dMessageRepository? messages = widget.messageRepository;
+    if (messages == null) {
+      return;
+    }
+    String outcome;
+    try {
+      await messages.delete(message.id);
+      await _load();
+      outcome = 'Message deleted.';
+    } on G2dMessageException catch (error) {
+      outcome = error.message;
+    } catch (error) {
+      outcome = 'Message was not deleted: $error';
+    }
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(outcome)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final G2dConversation? conversation = _conversation;
@@ -180,7 +227,13 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       itemCount: _messages!.length,
       itemBuilder: (BuildContext context, int index) {
-        return _MessageTile(message: _messages![index]);
+        final G2dMessage message = _messages![index];
+        return _MessageTile(
+          message: message,
+          onDelete: _busy
+              ? null
+              : () => unawaited(_deleteMessage(message)),
+        );
       },
     );
   }
@@ -312,9 +365,12 @@ class _MissingConversation extends StatelessWidget {
 }
 
 class _MessageTile extends StatelessWidget {
-  const _MessageTile({required this.message});
+  const _MessageTile({required this.message, this.onDelete});
 
   final G2dMessage message;
+
+  /// Null while an operation is running, so a second delete cannot be queued.
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -329,12 +385,23 @@ class _MessageTile extends StatelessWidget {
     return Card(
       key: Key('message-${message.id}'),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(message.body),
-            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Expanded(child: Text(message.body)),
+                IconButton(
+                  key: Key('message-delete-${message.id}'),
+                  tooltip: 'Delete message',
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
             // Only states that are true: this says where the text is, and stops
             // there. No "sent", "delivered" or "read" label exists.
             Text(
