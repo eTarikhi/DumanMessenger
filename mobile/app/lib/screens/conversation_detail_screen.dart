@@ -6,6 +6,10 @@ import '../conversations/conversation.dart';
 import '../conversations/conversation_repository.dart';
 import '../messages/message.dart';
 import '../messages/message_repository.dart';
+// G2dMessageException is declared alongside the store contract; the composer
+// distinguishes an expected storage/validation failure from a programming error,
+// so the type has to be imported here rather than caught broadly.
+import '../messages/message_store.dart';
 
 /// One conversation, opened by its stable id.
 ///
