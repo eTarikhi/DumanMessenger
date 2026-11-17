@@ -65,8 +65,12 @@ enum G2dBindingVerdict {
 /// ```
 ///
 /// The signature is `Ed25519(signingBytes)` under the identity root and is appended
-/// to produce [toBytes]. The domain string is what stops these bytes from being a
-/// valid signature over anything else this app signs.
+/// to produce [toBytes], preceded by a one-byte signature length (`64`). That length
+/// byte is inside the wire form and outside the signed bytes, so a decoder can reject
+/// a malformed signature before verifying anything; it is length-prefixed like every
+/// other variable field rather than being the one field the encoder leaves out. The
+/// domain string is what stops these bytes from being a valid signature over anything
+/// else this app signs.
 ///
 /// ### What this proves, and what it does not
 ///
@@ -162,9 +166,11 @@ class G2dKeyBinding {
   /// The binding as one byte string: [signingBytes] followed by the signature.
   Uint8List toBytes() {
     final Uint8List header = signingBytes;
-    final Uint8List out = Uint8List(header.length + signatureLength)
+    final Uint8List out = Uint8List(header.length + 1 + signatureLength)
       ..setRange(0, header.length, header)
-      ..setRange(header.length, header.length + signatureLength, signature);
+      ..setRange(header.length + 1, header.length + 1 + signatureLength, signature);
+    // Encoder and decoder share one layout: header, one length byte, signature.
+    out[header.length] = signatureLength;
     return out;
   }
 
