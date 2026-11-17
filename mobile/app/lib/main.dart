@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app.dart';
+import 'conversations/conversation_repository.dart';
 import 'identity/identity_runtime_controller.dart';
 
 void main() {
@@ -29,5 +30,17 @@ void main() {
     }
   }());
 
-  runApp(DumanMessengerApp(identityRuntime: identityRuntime));
+  // One conversation repository for the process. It holds conversations in
+  // memory only; the screen reads `isPersistent` and tells the user that, rather
+  // than letting the list imply storage that does not exist.
+  final conversationRepository = G2dConversationRepository(
+    store: G2dInMemoryConversationStore(),
+  );
+
+  runApp(
+    DumanMessengerApp(
+      identityRuntime: identityRuntime,
+      conversationRepository: conversationRepository,
+    ),
+  );
 }

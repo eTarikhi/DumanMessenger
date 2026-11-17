@@ -5,6 +5,7 @@ import 'app_routes.dart';
 import 'ble/ble_diagnostic_bridge.dart';
 import 'ble/ble_discovery_bridge.dart';
 import 'ble/g2c_ble_bridge.dart';
+import 'conversations/conversation_repository.dart';
 import 'identity/identity_runtime_controller.dart';
 import 'screens/ble_diagnostic_screen.dart';
 import 'screens/ble_discovery_screen.dart';
@@ -22,6 +23,7 @@ class DumanMessengerApp extends StatefulWidget {
     this.bleDiscoveryApi,
     this.g2cBleApi,
     this.identityRuntime,
+    this.conversationRepository,
   });
 
   final BleDiagnosticApi? bleDiagnosticApi;
@@ -34,6 +36,12 @@ class DumanMessengerApp extends StatefulWidget {
   /// platform behind them; the diagnostics screen then reports the runtime as
   /// not wired rather than inventing a state.
   final G2dIdentityRuntimeController? identityRuntime;
+
+  /// The application's conversation repository, created in `main`.
+  ///
+  /// Optional so tests can build the app without one; the conversations screen
+  /// then keeps its own in-memory repository and says it persists nothing.
+  final G2dConversationRepository? conversationRepository;
 
   @override
   State<DumanMessengerApp> createState() => _DumanMessengerAppState();
@@ -62,7 +70,9 @@ class _DumanMessengerAppState extends State<DumanMessengerApp> {
           initialRoute: AppRoutes.onboarding,
           routes: {
             AppRoutes.onboarding: (_) => const OnboardingScreen(),
-            AppRoutes.conversations: (_) => const ConversationListScreen(),
+            AppRoutes.conversations: (_) => ConversationListScreen(
+              repository: widget.conversationRepository,
+            ),
             AppRoutes.identity: (_) => MyIdentityScreen(
               identityRuntime: widget.identityRuntime,
             ),
