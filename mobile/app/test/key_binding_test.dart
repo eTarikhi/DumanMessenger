@@ -6,6 +6,45 @@ import 'package:duman_messenger/identity/identity_key_provider.dart';
 import 'package:duman_messenger/identity/key_binding.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// Known-answer vector computed by an independent implementation (PyNaCl / libsodium),
+/// from the documented layout alone: Ed25519 seed `00..1f`, X25519 seed `20..3f`,
+/// generation 1, no predecessor. Ed25519 is deterministic per RFC 8032, so a second
+/// implementation must reproduce these bytes exactly — which is what makes "the
+/// encoding is cross-platform" a testable statement rather than a hope.
+const String kVectorEd25519PublicKey =
+    '03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8';
+const String kVectorX25519PublicKey =
+    '358072d6365880d1aeea329adf9121383851ed21a28e3b75e965d0d2cd166254';
+const String kVectorSignedBytes =
+    '01011244756d616e4b657942696e64696e672f76312003a107bff3ce10be1d70dd18e74bc099'
+    '67e4d6309ba50d5f1ddc8664125531b820358072d6365880d1aeea329adf9121383851ed21a2'
+    '8e3b75e965d0d2cd1662540000000100';
+const String kVectorSignature =
+    '2117c7b247f00ef502ee52512ac8235331a26d779721c4fc1449f91bd1d1c09996cbcb2ec9'
+    '0aa8538b363e453d55c5ac5ada6425494dc2a8086ad389aacab600';
+const String kVectorWire =
+    '01011244756d616e4b657942696e64696e672f76312003a107bff3ce10be1d70dd18e74bc099'
+    '67e4d6309ba50d5f1ddc8664125531b820358072d6365880d1aeea329adf9121383851ed21a2'
+    '8e3b75e965d0d2cd1662540000000100402117c7b247f00ef502ee52512ac8235331a26d7797'
+    '21c4fc1449f91bd1d1c09996cbcb2ec90aa8538b363e453d55c5ac5ada6425494dc2a8086ad3'
+    '89aacab600';
+const String kVectorDigest =
+    '4ef5e069b3b7804cd6193f4bcf6fd9adb56dd38cb11382763447d04b47f65c72';
+const String kVectorExchangeFingerprint =
+    '7e7cebb049b04e750981fabb6779afdfcfeaa955367a4333cf1a1d064fdbeae7';
+const String kVectorBase64Url =
+    'AQESRHVtYW5LZXlCaW5kaW5nL3YxIAOhB7_zzhC-HXDdGOdLwJln5NYwm6UNXx3chmQSVTG4IDWActY2'
+    'WIDRruoymt-RITg4Ue0hoo47dell0NLNFmJUAAAAAQBAIRfHskfwDvUC7lJRKsgjUzGibXeXIcT8FEn5'
+    'G9HRwJmWy8suyQqoU4s2PkU9VcWsWtpkJUlNwqgIatOJqsq2AA==';
+
+String _hex(List<int> bytes) =>
+    bytes.map((int byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+
+List<int> _hexToBytes(String value) => <int>[
+      for (var i = 0; i < value.length; i += 2)
+        int.parse(value.substring(i, i + 2), radix: 16),
+    ];
+
 /// Focused tests for the provisional Ed25519 -> X25519 binding.
 ///
 /// Real keys and real signatures: `package:cryptography` is pure Dart, so a test that
@@ -134,6 +173,60 @@ void main() {
         ),
         throwsA(isA<G2dKeyBindingFormatException>()),
       );
+    });
+
+    test('the encoding reproduces an independent implementation byte for byte',
+        () async {
+      final List<int> edSeed = List<int>.generate(32, (int i) => i);
+      final List<int> xSeed = List<int>.generate(32, (int i) => 0x20 + i);
+      final SimplePublicKey xPublic =
+          await (await X25519().newKeyPairFromSeed(xSeed)).extractPublicKey();
+      // Same RFC 7748 clamping as libsodium's crypto_scalarmult_base.
+      expect(_hex(xPublic.bytes), kVectorX25519PublicKey);
+
+      final G2dKeyBinding binding = await G2dKeyBinding.sign(
+        ed25519Seed: edSeed,
+        x25519PublicKey: xPublic.bytes,
+      );
+
+      expect(_hex(binding.ed25519PublicKey), kVectorEd25519PublicKey);
+      expect(_hex(binding.signingBytes), kVectorSignedBytes);
+      expect(_hex(binding.signature), kVectorSignature);
+      expect(_hex(binding.toBytes()), kVectorWire);
+      expect(_hex(await binding.digest()), kVectorDigest);
+      expect(await binding.exchangeKeyFingerprint(), kVectorExchangeFingerprint);
+      expect(binding.toBase64Url(), kVectorBase64Url);
+      expect(
+        await binding.verify(
+          expectedEd25519PublicKey: _hexToBytes(kVectorEd25519PublicKey),
+        ),
+        G2dBindingVerdict.valid,
+      );
+
+      // The decoder must accept the other implementation's bytes, not only ours.
+      final G2dKeyBinding decoded =
+          G2dKeyBinding.fromBytes(_hexToBytes(kVectorWire));
+      expect(_hex(decoded.toBytes()), kVectorWire);
+      expect(G2dKeyBinding.fromBase64Url(kVectorBase64Url).toBase64Url(), kVectorBase64Url);
+
+      // And a single flipped byte anywhere in the wire form is refused or fails
+      // verification — never silently accepted.
+      final List<int> wire = _hexToBytes(kVectorWire);
+      for (final int index in <int>[0, 1, 2, 30, 60, 100, wire.length - 1]) {
+        final List<int> mutated = List<int>.of(wire);
+        mutated[index] = mutated[index] ^ 0x01;
+        G2dKeyBinding? parsed;
+        try {
+          parsed = G2dKeyBinding.fromBytes(mutated);
+        } on G2dKeyBindingFormatException {
+          continue;
+        }
+        expect(
+          await parsed.verify(),
+          isNot(G2dBindingVerdict.valid),
+          reason: 'byte $index accepted after being flipped',
+        );
+      }
     });
 
     test('malformed bytes are refused, never repaired', () async {
