@@ -215,6 +215,117 @@ void main() {
     expect(find.byKey(const Key('message-field')), findsNothing);
   });
 
+  testWidgets('deleting a conversation removes its messages and leaves the rest',
+      (WidgetTester tester) async {
+    final store = G2dInMemoryConversationStore(initial: <G2dConversation>[
+      conversation(id: 'conv01', title: 'First'),
+      conversation(id: 'conv02', title: 'Second'),
+    ]);
+    final conversationRepository = G2dConversationRepository(store: store);
+    final messageRepository = memoryRepository();
+    await messageRepository.append(conversationId: 'conv01', body: 'belongs to first');
+    await messageRepository.append(conversationId: 'conv02', body: 'belongs to second');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ConversationListScreen(
+          repository: conversationRepository,
+          messageRepository: messageRepository,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('conversation-menu-conv01')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('conversation-delete-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('First'), findsNothing);
+    expect(find.text('Second'), findsOneWidget);
+    // The cascade is scoped: the other conversation keeps every message it had.
+    expect(await messageRepository.listFor('conv01'), isEmpty);
+    expect(await messageRepository.listFor('conv02'), hasLength(1));
+    expect(find.text('Conversation deleted.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a failed message purge is reported instead of a clean delete',
+      (WidgetTester tester) async {
+    final store = G2dInMemoryConversationStore(initial: <G2dConversation>[
+      conversation(id: 'conv01', title: 'First'),
+    ]);
+    final conversationRepository = G2dConversationRepository(store: store);
+    // A message store that refuses every write: exactly the case where the
+    // conversation is gone but its messages are still there.
+    final messageRepository = G2dMessageRepository(
+      store: _RefusingMessageStore(<G2dMessage>[
+        G2dMessage(
+          id: 'm0001',
+          conversationId: 'conv01',
+          body: 'still here',
+          createdAtMillis: 10,
+          localStatus: G2dMessageLocalStatus.storedLocally,
+        ),
+      ]),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ConversationListScreen(
+          repository: conversationRepository,
+          messageRepository: messageRepository,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('conversation-menu-conv01')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('conversation-delete-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('First'), findsNothing);
+    expect(find.textContaining('its messages remain'), findsOneWidget);
+    expect(find.text('Conversation deleted.'), findsNothing);
+    // The messages really are still stored, and the app said so rather than
+    // claiming a cleanup it did not perform.
+    expect(await messageRepository.listFor('conv01'), hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a storage failure opening a conversation is not an empty conversation',
+      (WidgetTester tester) async {
+    final conversationRepository = conversationRepositoryWith(conversation());
+    final messageRepository = G2dMessageRepository(
+      store: G2dKeystoreMessageStore(channel: G2dIdentityChannel()),
+    );
+    // The encrypted slot answers with something that is not a message document.
+    platform.messagesLoadOverride = 'not a message document';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ConversationDetailScreen(
+          conversationId: 'conv01',
+          conversationRepository: conversationRepository,
+          messageRepository: messageRepository,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('conversation-detail-load-error')), findsOneWidget);
+    expect(find.byKey(const Key('conversation-detail-empty')), findsNothing);
+    // Nothing can be written into a slot that could not be read.
+    expect(find.byKey(const Key('message-field')), findsNothing);
+    expect(find.textContaining('could not be read'), findsOneWidget);
+    expect(platform.messageSaveCount, 0);
+  });
+
   testWidgets('tapping a conversation opens its detail screen',
       (WidgetTester tester) async {
     final conversationRepository = conversationRepositoryWith(conversation());
@@ -307,4 +418,26 @@ void main() {
     expect(await messageRepository.listFor('conv01'), isEmpty);
     expect(tester.takeException(), isNull);
   });
+}
+
+/// A message store that authenticates reads and refuses every write, so the purge
+/// path can be observed without pretending the store is healthy.
+class _RefusingMessageStore implements G2dMessageStore {
+  _RefusingMessageStore(this._messages);
+
+  final List<G2dMessage> _messages;
+
+  @override
+  String get storeKind => 'refusing';
+
+  @override
+  bool get isPersistent => true;
+
+  @override
+  Future<List<G2dMessage>> load() async => List<G2dMessage>.unmodifiable(_messages);
+
+  @override
+  Future<void> save(List<G2dMessage> messages) async {
+    throw const G2dMessageException('the message store refused the write');
+  }
 }
