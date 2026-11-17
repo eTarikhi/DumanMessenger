@@ -141,4 +141,64 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('renames a conversation without changing its identity', () async {
+    final repository = repositoryOver(G2dInMemoryConversationStore());
+    final G2dConversation created = await repository.create('Old name');
+
+    final G2dConversation renamed =
+        await repository.rename(created.id, '  New name  ');
+
+    expect(renamed.id, created.id);
+    expect(renamed.createdAtMillis, created.createdAtMillis);
+    expect(renamed.title, 'New name');
+    expect(
+      renamed.lastActivityMillis,
+      greaterThanOrEqualTo(created.lastActivityMillis),
+    );
+    expect(await repository.list(), <G2dConversation>[renamed]);
+  });
+
+  test('refuses to rename or delete an unknown conversation', () async {
+    final repository = repositoryOver(G2dInMemoryConversationStore());
+    await repository.create('Present');
+
+    await expectLater(
+      repository.rename('missing', 'anything'),
+      throwsA(isA<G2dConversationException>()),
+    );
+    await expectLater(
+      repository.delete('missing'),
+      throwsA(isA<G2dConversationException>()),
+    );
+    expect((await repository.list()).single.title, 'Present');
+  });
+
+  test('refuses an unusable rename title and writes nothing', () async {
+    final repository = repositoryOver(G2dInMemoryConversationStore());
+    final G2dConversation created = await repository.create('Keep me');
+
+    await expectLater(
+      repository.rename(created.id, '   '),
+      throwsA(isA<G2dConversationException>()),
+    );
+    await expectLater(
+      repository.rename(
+        created.id,
+        'x' * (G2dConversation.maxTitleLength + 1),
+      ),
+      throwsA(isA<G2dConversationException>()),
+    );
+    expect((await repository.list()).single.title, 'Keep me');
+  });
+
+  test('deletes only the requested conversation', () async {
+    final repository = repositoryOver(G2dInMemoryConversationStore());
+    final G2dConversation first = await repository.create('A');
+    final G2dConversation second = await repository.create('B');
+
+    await repository.delete(first.id);
+
+    expect(await repository.list(), <G2dConversation>[second]);
+  });
 }

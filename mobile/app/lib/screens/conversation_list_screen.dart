@@ -112,6 +112,99 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _renameConversation(G2dConversation conversation) async {
+    String draft = conversation.title;
+    final String? title = await showDialog<String>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: const Text('Rename conversation'),
+        content: TextFormField(
+          key: const Key('conversation-rename-field'),
+          initialValue: conversation.title,
+          autofocus: true,
+          maxLength: G2dConversation.maxTitleLength,
+          decoration: const InputDecoration(labelText: 'Title'),
+          onChanged: (String value) => draft = value,
+          onFieldSubmitted: (String value) =>
+              Navigator.of(dialogContext).pop(value),
+        ),
+        actions: <Widget>[
+          TextButton(
+            key: const Key('conversation-rename-cancel'),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('conversation-rename-confirm'),
+            onPressed: () => Navigator.of(dialogContext).pop(draft),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (title == null || !mounted) {
+      return;
+    }
+    String message;
+    try {
+      await _repository.rename(conversation.id, title);
+      await _load();
+      message = 'Conversation renamed.';
+    } on G2dConversationException catch (error) {
+      message = error.message;
+    } catch (error) {
+      message = 'Conversation was not renamed: $error';
+    }
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _deleteConversation(G2dConversation conversation) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: const Text('Delete conversation?'),
+        content: Text(
+          '"${conversation.title}" and its stored entry are removed. This '
+          'cannot be undone, and nothing else is affected.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            key: const Key('conversation-delete-cancel'),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('conversation-delete-confirm'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    String message;
+    try {
+      await _repository.delete(conversation.id);
+      await _load();
+      message = 'Conversation deleted.';
+    } on G2dConversationException catch (error) {
+      message = error.message;
+    } catch (error) {
+      message = 'Conversation was not deleted: $error';
+    }
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -178,6 +271,27 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
             leading: const Icon(Icons.chat_bubble_outline),
             title: Text(conversation.title),
             subtitle: const Text('No messages yet'),
+            trailing: PopupMenuButton<String>(
+              key: Key('conversation-menu-${conversation.id}'),
+              tooltip: 'Conversation actions',
+              onSelected: (String action) {
+                if (action == 'rename') {
+                  unawaited(_renameConversation(conversation));
+                } else if (action == 'delete') {
+                  unawaited(_deleteConversation(conversation));
+                }
+              },
+              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                const PopupMenuItem<String>(
+                  value: 'rename',
+                  child: Text('Rename'),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'delete',
+                  child: Text('Delete'),
+                ),
+              ],
+            ),
           ),
         );
       },

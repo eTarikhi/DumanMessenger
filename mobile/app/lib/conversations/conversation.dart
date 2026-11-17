@@ -65,6 +65,17 @@ class G2dConversation {
   /// Last time anything happened *locally*: creation today, nothing else yet.
   final int lastActivityMillis;
 
+  /// A copy with a new title and a new activity time.
+  ///
+  /// The id and the creation time are immutable: a rename is not a new thread.
+  G2dConversation renamed(String newTitle, int atMillis) => G2dConversation(
+        id: id,
+        title: newTitle,
+        createdAtMillis: createdAtMillis,
+        lastActivityMillis:
+            atMillis < createdAtMillis ? createdAtMillis : atMillis,
+      );
+
   G2dConversation touched(int atMillis) => G2dConversation(
         id: id,
         title: title,

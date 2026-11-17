@@ -1,3 +1,4 @@
+import 'package:duman_messenger/conversations/conversation.dart';
 import 'package:duman_messenger/conversations/conversation_repository.dart';
 import 'package:duman_messenger/screens/conversation_list_screen.dart';
 import 'package:flutter/material.dart';
@@ -120,6 +121,57 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('A conversation needs a title.'), findsOneWidget);
+    expect(find.text('No conversations yet'), findsOneWidget);
+    expect(await repository.list(), isEmpty);
+  });
+
+  testWidgets('renames a conversation from the row menu',
+      (WidgetTester tester) async {
+    final repository = buildRepository();
+    final G2dConversation created = await repository.create('Before');
+    await pumpScreen(tester, repository);
+
+    await tester.tap(find.byKey(Key('conversation-menu-${created.id}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rename'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('conversation-rename-field')),
+      'After',
+    );
+    await tester.tap(find.byKey(const Key('conversation-rename-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('After'), findsOneWidget);
+    expect(find.text('Before'), findsNothing);
+    expect((await repository.list()).single.title, 'After');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('deletes a conversation only after confirmation',
+      (WidgetTester tester) async {
+    final repository = buildRepository();
+    final G2dConversation created = await repository.create('Remove me');
+    await pumpScreen(tester, repository);
+
+    await tester.tap(find.byKey(Key('conversation-menu-${created.id}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('conversation-delete-cancel')));
+    await tester.pumpAndSettle();
+    expect(find.text('Remove me'), findsOneWidget);
+    expect(await repository.list(), hasLength(1));
+
+    await tester.tap(find.byKey(Key('conversation-menu-${created.id}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('conversation-delete-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Remove me'), findsNothing);
     expect(find.text('No conversations yet'), findsOneWidget);
     expect(await repository.list(), isEmpty);
   });

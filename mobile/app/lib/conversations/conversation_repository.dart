@@ -98,17 +98,7 @@ class G2dConversationRepository {
   /// written in that case, and the existing list is unchanged.
   Future<G2dConversation> create(String title) {
     return _serialize(() async {
-      final String trimmed = title.trim();
-      if (trimmed.isEmpty) {
-        throw const G2dConversationException('A conversation needs a title.');
-      }
-      if (trimmed.length > G2dConversation.maxTitleLength) {
-        throw G2dConversationException(
-          'A conversation title must be at most '
-          '${G2dConversation.maxTitleLength} characters.',
-        );
-      }
-
+      final String trimmed = _validTitle(title);
       final List<G2dConversation> existing =
           List<G2dConversation>.of(await store.load());
       final int now = _nowMillis();
@@ -127,6 +117,63 @@ class G2dConversationRepository {
       await store.save(existing);
       return conversation;
     });
+  }
+
+  /// Renames a conversation.
+  ///
+  /// Throws [G2dConversationException] for an unusable title or an unknown id, and
+  /// writes nothing in either case. The id and creation time are preserved.
+  Future<G2dConversation> rename(String id, String title) {
+    return _serialize(() async {
+      final String trimmed = _validTitle(title);
+      final List<G2dConversation> existing =
+          List<G2dConversation>.of(await store.load());
+      final int index =
+          existing.indexWhere((G2dConversation conversation) => conversation.id == id);
+      if (index < 0) {
+        throw const G2dConversationException(
+          'No conversation with that identifier exists.',
+        );
+      }
+      final G2dConversation updated =
+          existing[index].renamed(trimmed, _nowMillis());
+      existing[index] = updated;
+      await store.save(existing);
+      return updated;
+    });
+  }
+
+  /// Deletes a conversation by id.
+  ///
+  /// Throws [G2dConversationException] when the id is unknown, so a double tap
+  /// cannot silently report success for something that was never there.
+  Future<void> delete(String id) {
+    return _serialize(() async {
+      final List<G2dConversation> existing =
+          List<G2dConversation>.of(await store.load());
+      final int before = existing.length;
+      existing.removeWhere((G2dConversation conversation) => conversation.id == id);
+      if (existing.length == before) {
+        throw const G2dConversationException(
+          'No conversation with that identifier exists.',
+        );
+      }
+      await store.save(existing);
+    });
+  }
+
+  String _validTitle(String title) {
+    final String trimmed = title.trim();
+    if (trimmed.isEmpty) {
+      throw const G2dConversationException('A conversation needs a title.');
+    }
+    if (trimmed.length > G2dConversation.maxTitleLength) {
+      throw G2dConversationException(
+        'A conversation title must be at most '
+        '${G2dConversation.maxTitleLength} characters.',
+      );
+    }
+    return trimmed;
   }
 
   Future<T> _serialize<T>(Future<T> Function() action) async {
