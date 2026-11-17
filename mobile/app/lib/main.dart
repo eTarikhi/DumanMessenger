@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import 'app.dart';
 import 'conversations/conversation_repository.dart';
+import 'conversations/conversation_store_android.dart';
+import 'identity/identity_channel.dart';
 import 'identity/identity_runtime_controller.dart';
 
 void main() {
@@ -30,11 +32,13 @@ void main() {
     }
   }());
 
-  // One conversation repository for the process. It holds conversations in
-  // memory only; the screen reads `isPersistent` and tells the user that, rather
-  // than letting the list imply storage that does not exist.
+  // One conversation repository for the process. Conversations are stored in the
+  // encrypted conversation slot, under its own Keystore alias, so a title never
+  // reaches disk in the clear. If the platform has no such slot (iOS today, or a
+  // device whose Keystore wrap failed), reads and writes fail loudly and the
+  // screen says so — it never falls back to plaintext storage.
   final conversationRepository = G2dConversationRepository(
-    store: G2dInMemoryConversationStore(),
+    store: G2dKeystoreConversationStore(channel: G2dIdentityChannel()),
   );
 
   runApp(

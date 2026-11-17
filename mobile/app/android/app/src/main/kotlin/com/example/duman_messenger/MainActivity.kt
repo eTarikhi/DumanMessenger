@@ -82,10 +82,19 @@ class MainActivity : FlutterActivity() {
             directoryName = "identity_keys",
             wrappingKeyAlias = "g2d.identity.keys.v1",
         )
+        // Conversations get their own slot and alias too: deleting them must not
+        // be able to touch identity keys, and vice versa.
+        val conversationStorage = G2dIdentityStorage(
+            applicationContext.filesDir,
+            identityKeyring,
+            directoryName = "conversations",
+            wrappingKeyAlias = "g2d.conversations.v1",
+        )
         val handler = G2dIdentityChannelHandler(
             G2dCapabilityProbe(identityKeyring),
             identityStorage,
             identityKeyMaterialStorage,
+            conversationStorage,
         )
         identityChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

@@ -128,6 +128,25 @@ class G2dIdentityChannel {
   Future<void> deleteKeyMaterial() =>
       _guard(() => _channel.invokeMethod<void>('deleteKeyMaterial'));
 
+  /// Reads the stored conversation payload, or `null` when none is stored.
+  ///
+  /// Conversations live in their own encrypted slot; this client sees the
+  /// decrypted JSON string and nothing about the envelope that protected it.
+  Future<String?> loadConversations() =>
+      _guard(() => _channel.invokeMethod<String>('loadConversations'));
+
+  /// Commits the conversation payload.
+  Future<void> saveConversations(String payload) => _guard(
+        () => _channel.invokeMethod<void>(
+          'saveConversations',
+          <String, Object?>{'payload': payload},
+        ),
+      );
+
+  /// Removes the conversation payload and its own wrapping key. Idempotent.
+  Future<void> deleteConversations() =>
+      _guard(() => _channel.invokeMethod<void>('deleteConversations'));
+
   Future<T> _guard<T>(Future<T> Function() action) async {
     try {
       return await action();

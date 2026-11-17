@@ -17,6 +17,9 @@ import io.flutter.plugin.common.MethodChannel
  * | `loadKeyMaterial` | — | decrypted key-material JSON, or null |
  * | `saveKeyMaterial` | `{payload: String}` | null |
  * | `deleteKeyMaterial` | — | null |
+ * | `loadConversations` | — | decrypted conversation JSON, or null |
+ * | `saveConversations` | `{payload: String}` | null |
+ * | `deleteConversations` | — | null |
  *
  * The three key-material methods use a **second** storage slot: its own directory
  * and its own non-exportable Keystore alias. Private identity keys live there, so
@@ -39,6 +42,7 @@ internal class G2dIdentityChannelHandler(
     private val probe: G2dCapabilityProbe,
     private val storage: G2dIdentityStorage,
     private val keyMaterialStorage: G2dIdentityStorage? = null,
+    private val conversationStorage: G2dIdentityStorage? = null,
 ) : MethodChannel.MethodCallHandler {
 
     companion object {
@@ -54,6 +58,9 @@ internal class G2dIdentityChannelHandler(
             "loadKeyMaterial" -> handleKeyMaterialLoad(result)
             "saveKeyMaterial" -> handleKeyMaterialSave(call, result)
             "deleteKeyMaterial" -> handleKeyMaterialDelete(result)
+            "loadConversations" -> handleConversationLoad(result)
+            "saveConversations" -> handleConversationSave(call, result)
+            "deleteConversations" -> handleConversationDelete(result)
             else -> result.notImplemented()
         }
     }
@@ -145,6 +152,63 @@ internal class G2dIdentityChannelHandler(
 
     private fun handleKeyMaterialDelete(result: MethodChannel.Result) {
         val slot = keyMaterialStorage
+        if (slot == null) {
+            slotNotConfigured(result)
+            return
+        }
+        try {
+            slot.deleteRecord()
+            result.success(null)
+        } catch (error: Exception) {
+            fail(result, error)
+        }
+    }
+
+    /**
+     * Conversations live in a third slot with its own directory and its own
+     * Keystore alias, so deleting them cannot affect the identity record or its
+     * key material. The payload is conversation metadata authored by the user;
+     * it is encrypted at rest by the same non-exportable envelope and is never
+     * parsed on this side.
+     */
+    private fun handleConversationLoad(result: MethodChannel.Result) {
+        val slot = conversationStorage
+        if (slot == null) {
+            slotNotConfigured(result)
+            return
+        }
+        try {
+            result.success(slot.loadRecord())
+        } catch (error: Exception) {
+            fail(result, error)
+        }
+    }
+
+    private fun handleConversationSave(call: MethodCall, result: MethodChannel.Result) {
+        val slot = conversationStorage
+        if (slot == null) {
+            slotNotConfigured(result)
+            return
+        }
+        val payload = call.argument<String>("payload")
+        if (payload == null) {
+            result.error(
+                G2dProtectionException.WRITE_FAILED,
+                "the conversation payload is missing",
+                null,
+            )
+            return
+        }
+        try {
+            slot.saveRecord(payload)
+            result.success(null)
+        } catch (error: Exception) {
+            fail(result, error)
+        }
+    }
+
+    private fun handleConversationDelete(result: MethodChannel.Result) {
+        val slot = conversationStorage
         if (slot == null) {
             slotNotConfigured(result)
             return
