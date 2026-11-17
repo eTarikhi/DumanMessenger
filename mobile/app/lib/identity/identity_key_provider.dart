@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 
 import 'identity_key_material.dart';
+import 'key_binding.dart';
 
 /// Raised when real key generation or its self-check fails.
 ///
@@ -149,6 +150,36 @@ class G2dIdentityKeyProvider {
           ),
         ),
       );
+
+  /// Issues a signed binding between this identity root and its exchange static.
+  ///
+  /// The binding is verified with the identity's own public key before it is returned: a
+  /// signature this installation cannot check is a failure, not a value with a caveat, and
+  /// it would be dishonest to hand one to a caller that will show it to a person.
+  ///
+  /// Nothing private leaves this method. The caller receives public keys, a generation and
+  /// a signature — no seed, no scalar, and nothing to log.
+  Future<G2dKeyBinding> signKeyBinding(
+    G2dIdentityKeyMaterial material, {
+    int generation = 1,
+    List<int>? previousBindingDigest,
+  }) async {
+    final G2dKeyBinding binding = await G2dKeyBinding.sign(
+      ed25519Seed: material.ed25519Seed,
+      x25519PublicKey: material.x25519PublicKey,
+      generation: generation,
+      previousBindingDigest: previousBindingDigest,
+    );
+    final G2dBindingVerdict verdict = await binding.verify(
+      expectedEd25519PublicKey: material.ed25519PublicKey,
+    );
+    if (!verdict.isValid) {
+      throw G2dIdentityKeyProviderException(
+        'the signed key binding does not verify (${verdict.name})',
+      );
+    }
+    return binding;
+  }
 
   /// X25519 key agreement with a peer's 32-byte exchange public key.
   ///
