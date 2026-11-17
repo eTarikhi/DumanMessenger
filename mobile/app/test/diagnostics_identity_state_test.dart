@@ -82,9 +82,31 @@ void main() {
     expect(find.text('Wrapping key hardware-backed'), findsOneWidget);
     expect(find.text('StrongBox key created'), findsOneWidget);
 
+    // Nothing has been read yet: the read below must be what changes this.
+    expect(valueOf(tester, 'diagnostics-identity-state'), 'not read yet');
+
     final Finder readButton = find.byKey(const Key('diagnostics-read-identity'));
     expect(readButton, findsOneWidget);
     expect(tester.widget<OutlinedButton>(readButton).onPressed, isNotNull);
+
+    // The card lives inside AppPageBody's SingleChildScrollView, and at the
+    // default 800x600 test surface the button sits below the fold: its centre
+    // was reported at (380.5, 837.0), outside the view, so the tap was silently
+    // dropped and the state stayed "not read yet". Scroll the real widget into
+    // view first, then assert the tap point is inside the viewport, so the tap
+    // below is a genuine hit-tested interaction rather than a no-op.
+    await tester.ensureVisible(readButton);
+    await tester.pumpAndSettle();
+
+    final Rect viewport =
+        Offset.zero & (tester.view.physicalSize / tester.view.devicePixelRatio);
+    final Offset tapPoint = tester.getCenter(readButton);
+    expect(
+      viewport.contains(tapPoint),
+      isTrue,
+      reason: 'the read button must be reachable before it is tapped; '
+          'button centre $tapPoint, viewport $viewport',
+    );
 
     await tester.tap(readButton);
     await tester.pumpAndSettle();
