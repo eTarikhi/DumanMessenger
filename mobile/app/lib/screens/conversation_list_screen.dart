@@ -15,6 +15,13 @@ class ConversationListScreen extends StatelessWidget {
         title: const Text('Conversations'),
         actions: [
           IconButton(
+            key: const Key('open-identity'),
+            tooltip: 'My identity',
+            onPressed: () =>
+                Navigator.of(context).pushNamed(AppRoutes.identity),
+            icon: const Icon(Icons.badge_outlined),
+          ),
+          IconButton(
             key: const Key('open-diagnostics'),
             tooltip: 'Diagnostics',
             onPressed: () =>

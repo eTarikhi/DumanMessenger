@@ -60,6 +60,12 @@ class G2dKeystoreKeyMaterialStore {
   /// Writes [material] and reads it back, proving the bytes survived the
   /// Keystore envelope before any record is allowed to point at them.
   Future<bool> writeAndVerify(G2dIdentityKeyMaterial material) async {
+    if (!protectionVerified) {
+      // The device never proved its wrap, so a round trip here would prove
+      // nothing about at-rest protection. Refuse instead of returning a value
+      // that the caller would turn into a protection claim.
+      return false;
+    }
     await save(material);
     final G2dIdentityKeyMaterial? readBack = await load();
     return readBack != null && readBack == material;

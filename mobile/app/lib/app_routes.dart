@@ -1,6 +1,7 @@
 abstract final class AppRoutes {
   static const onboarding = '/';
   static const conversations = '/conversations';
+  static const identity = '/identity';
   static const settings = '/settings';
   static const diagnostics = '/diagnostics';
   static const bleDiagnostics = '/diagnostics/ble';

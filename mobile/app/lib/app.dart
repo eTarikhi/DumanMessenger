@@ -9,6 +9,7 @@ import 'identity/identity_runtime_controller.dart';
 import 'screens/ble_diagnostic_screen.dart';
 import 'screens/ble_discovery_screen.dart';
 import 'screens/g2c_ble_screen.dart';
+import 'screens/my_identity_screen.dart';
 import 'screens/conversation_list_screen.dart';
 import 'screens/diagnostics_screen.dart';
 import 'screens/onboarding_screen.dart';
@@ -62,6 +63,9 @@ class _DumanMessengerAppState extends State<DumanMessengerApp> {
           routes: {
             AppRoutes.onboarding: (_) => const OnboardingScreen(),
             AppRoutes.conversations: (_) => const ConversationListScreen(),
+            AppRoutes.identity: (_) => MyIdentityScreen(
+              identityRuntime: widget.identityRuntime,
+            ),
             AppRoutes.settings: (_) => SettingsScreen(
               themeMode: _themeMode,
               onThemeModeChanged: (mode) => _themeMode.value = mode,

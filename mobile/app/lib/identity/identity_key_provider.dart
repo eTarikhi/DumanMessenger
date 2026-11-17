@@ -85,9 +85,9 @@ class G2dIdentityKeyProvider {
     final G2dIdentityKeyMaterial material;
     try {
       final SimpleKeyPair ed25519Pair =
-          await _ed25519.newKeyPairFromSeed(_randomSeed()) as SimpleKeyPair;
+          await _ed25519.newKeyPairFromSeed(_randomSeed());
       final SimpleKeyPair x25519Pair =
-          await _x25519.newKeyPairFromSeed(_randomSeed()) as SimpleKeyPair;
+          await _x25519.newKeyPairFromSeed(_randomSeed());
 
       material = G2dIdentityKeyMaterial(
         ed25519Seed: await ed25519Pair.extractPrivateKeyBytes(),
@@ -189,8 +189,7 @@ class G2dIdentityKeyProvider {
       );
     }
 
-    final SimpleKeyPair peer =
-        await _x25519.newKeyPairFromSeed(_randomSeed()) as SimpleKeyPair;
+    final SimpleKeyPair peer = await _x25519.newKeyPairFromSeed(_randomSeed());
     final List<int> peerPublic = (await peer.extractPublicKey()).bytes;
     final List<int> secret = await sharedSecret(material, peerPublic);
     if (secret.length != G2dIdentityKeyMaterial.keyLength) {
