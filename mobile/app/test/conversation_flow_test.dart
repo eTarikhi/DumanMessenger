@@ -58,7 +58,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('conversation-create')));
     await tester.pumpAndSettle();
-    expect(find.text('New conversation'), findsOneWidget);
+    // The FAB is also labelled "New conversation", so the title must be
+    // matched inside the dialog rather than anywhere on screen.
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('New conversation'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byType(AlertDialog), findsOneWidget);
 
     await tester.enterText(
       find.byKey(const Key('conversation-title-field')),

@@ -21,16 +21,20 @@ import 'identity_store.dart';
 /// and gets one back, exactly like [G2dKeystoreIdentityStore].
 class G2dKeystoreKeyMaterialStore {
   G2dKeystoreKeyMaterialStore({
-    required G2dIdentityChannel channel,
+    required this.channel,
     required this.protectionVerified,
-  }) : _channel = channel;
+  });
 
   /// Whether the device proved its Keystore wrap with a real encrypt/decrypt
   /// round trip. When this is false the store must not be used to justify a
   /// protection claim.
   final bool protectionVerified;
 
-  final G2dIdentityChannel _channel;
+  /// The platform channel the wrapped material travels over.
+  ///
+  /// Public and final so the constructor can use an initializing formal; the
+  /// parameter name callers already use is unchanged.
+  final G2dIdentityChannel channel;
 
   /// Reads the stored material, or `null` when this installation has none.
   ///
@@ -38,7 +42,7 @@ class G2dKeystoreKeyMaterialStore {
   /// material exists and cannot be trusted, which is exactly the condition that
   /// must not be repaired implicitly.
   Future<G2dIdentityKeyMaterial?> load() async {
-    final String? payload = await _channel.loadKeyMaterial();
+    final String? payload = await channel.loadKeyMaterial();
     if (payload == null) {
       return null;
     }
@@ -51,11 +55,11 @@ class G2dKeystoreKeyMaterialStore {
 
   /// Writes [material] through the Keystore envelope.
   Future<void> save(G2dIdentityKeyMaterial material) =>
-      _channel.saveKeyMaterial(material.toJson());
+      channel.saveKeyMaterial(material.toJson());
 
   /// Deletes the key material and its wrapping key. Used by the creation
   /// rollback and by an explicit identity reset.
-  Future<void> delete() => _channel.deleteKeyMaterial();
+  Future<void> delete() => channel.deleteKeyMaterial();
 
   /// Writes [material] and reads it back, proving the bytes survived the
   /// Keystore envelope before any record is allowed to point at them.
