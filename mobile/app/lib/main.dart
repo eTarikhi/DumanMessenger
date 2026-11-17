@@ -16,7 +16,18 @@ void main() {
   final identityRuntime = G2dIdentityRuntimeController(
     supportedPlatform: !kIsWeb && defaultTargetPlatform == TargetPlatform.android,
   );
-  unawaited(identityRuntime.ensureInitialized());
+  // One read follows the assembly, so the diagnostics card shows what is stored
+  // instead of "not read yet" and the create action is evaluated against real
+  // state. Both steps stay off the first frame; failures surface through the
+  // controller's status and last-operation error rather than into the zone.
+  unawaited(() async {
+    await identityRuntime.ensureInitialized();
+    try {
+      await identityRuntime.reload();
+    } catch (_) {
+      // The controller records this; nothing to add here.
+    }
+  }());
 
   runApp(DumanMessengerApp(identityRuntime: identityRuntime));
 }

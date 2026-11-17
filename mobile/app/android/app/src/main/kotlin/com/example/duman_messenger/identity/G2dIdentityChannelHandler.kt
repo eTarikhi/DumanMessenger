@@ -14,6 +14,15 @@ import io.flutter.plugin.common.MethodChannel
  * | `load` | — | decrypted record JSON, or null when absent |
  * | `save` | `{payload: String}` | null |
  * | `delete` | — | null |
+ * | `loadKeyMaterial` | — | decrypted key-material JSON, or null |
+ * | `saveKeyMaterial` | `{payload: String}` | null |
+ * | `deleteKeyMaterial` | — | null |
+ *
+ * The three key-material methods use a **second** storage slot: its own directory
+ * and its own non-exportable Keystore alias. Private identity keys live there, so
+ * deleting them cannot delete the wrapping key that protects the record, and the
+ * record payload stays public metadata. The Kotlin side still never parses the
+ * key material and never exports a Keystore key: it encrypts and returns a string.
  *
  * The contract is deliberately narrow. Dart owns the identity state machine
  * (creation, rotation, revocation); this side owns the Keystore and the files.
@@ -29,6 +38,7 @@ import io.flutter.plugin.common.MethodChannel
 internal class G2dIdentityChannelHandler(
     private val probe: G2dCapabilityProbe,
     private val storage: G2dIdentityStorage,
+    private val keyMaterialStorage: G2dIdentityStorage? = null,
 ) : MethodChannel.MethodCallHandler {
 
     companion object {
@@ -41,6 +51,9 @@ internal class G2dIdentityChannelHandler(
             "load" -> handleLoad(result)
             "save" -> handleSave(call, result)
             "delete" -> handleDelete(result)
+            "loadKeyMaterial" -> handleKeyMaterialLoad(result)
+            "saveKeyMaterial" -> handleKeyMaterialSave(call, result)
+            "deleteKeyMaterial" -> handleKeyMaterialDelete(result)
             else -> result.notImplemented()
         }
     }
@@ -87,6 +100,69 @@ internal class G2dIdentityChannelHandler(
         } catch (error: Exception) {
             fail(result, error)
         }
+    }
+
+    /**
+     * The optional slot is deliberately nullable: the instrumented tests and any
+     * build that has not wired key material keep working unchanged, and a missing
+     * slot is reported as an explicit failure rather than silently succeeding.
+     */
+    private fun handleKeyMaterialLoad(result: MethodChannel.Result) {
+        val slot = keyMaterialStorage
+        if (slot == null) {
+            slotNotConfigured(result)
+            return
+        }
+        try {
+            result.success(slot.loadRecord())
+        } catch (error: Exception) {
+            fail(result, error)
+        }
+    }
+
+    private fun handleKeyMaterialSave(call: MethodCall, result: MethodChannel.Result) {
+        val slot = keyMaterialStorage
+        if (slot == null) {
+            slotNotConfigured(result)
+            return
+        }
+        val payload = call.argument<String>("payload")
+        if (payload == null) {
+            result.error(
+                G2dProtectionException.WRITE_FAILED,
+                "the identity key material payload is missing",
+                null,
+            )
+            return
+        }
+        try {
+            slot.saveRecord(payload)
+            result.success(null)
+        } catch (error: Exception) {
+            fail(result, error)
+        }
+    }
+
+    private fun handleKeyMaterialDelete(result: MethodChannel.Result) {
+        val slot = keyMaterialStorage
+        if (slot == null) {
+            slotNotConfigured(result)
+            return
+        }
+        try {
+            slot.deleteRecord()
+            result.success(null)
+        } catch (error: Exception) {
+            fail(result, error)
+        }
+    }
+
+    private fun slotNotConfigured(result: MethodChannel.Result) {
+        result.error(
+            G2dProtectionException.INTERNAL_ERROR,
+            "identity key material storage is not configured in this build",
+            null,
+        )
     }
 
     private fun fail(result: MethodChannel.Result, error: Exception) {

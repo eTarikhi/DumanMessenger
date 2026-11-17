@@ -3,8 +3,10 @@
 **Status: the protocol-agnostic identity foundation is implemented in Dart and covered by
 tests. The Android Keystore adapter and encrypted identity storage are now implemented in
 Kotlin and Dart, but have not been compiled or executed yet and are not device-verified — see
-[G2-D-ANDROID-KEYSTORE-AND-STORAGE.md](G2-D-ANDROID-KEYSTORE-AND-STORAGE.md). No identity key
-material is generated anywhere in this milestone.**
+[G2-D-ANDROID-KEYSTORE-AND-STORAGE.md](G2-D-ANDROID-KEYSTORE-AND-STORAGE.md). Identity key
+generation now exists (§10): real Ed25519 and X25519 keys, generated in software and wrapped at
+rest by the Keystore. They are software keys, not hardware-backed keys, and none of it has been
+device-verified yet.**
 
 - **Date:** 2026-11-09
 - **Code:** `mobile/app/lib/identity/` — `identity_models.dart`, `identity_store.dart`,
@@ -29,7 +31,7 @@ material is generated anywhere in this milestone.**
 | Test double with fault injection | **Implemented (test-only)** | `G2dInMemoryIdentityStore` |
 | Android Keystore wrapping key, envelope and encrypted storage | **Implemented, not device-verified** | §7, [G2-D-ANDROID-KEYSTORE-AND-STORAGE.md](G2-D-ANDROID-KEYSTORE-AND-STORAGE.md) |
 | Device capability probe (measured, not inferred) | **Implemented, not device-verified** | same |
-| Key generation, fingerprint computation | **Deferred to the crypto provider** | §3 |
+| Key generation, fingerprint computation | **Implemented** — software Ed25519/X25519 provider, §10 | `identity_key_provider.dart` |
 | Session establishment, encryption, replay protection | **Out of scope** | security plan |
 
 The app ships with `G2dUnavailableIdentityStore`: every identity operation fails closed with
@@ -388,3 +390,92 @@ device and have not been run from this environment.
 8. Whether rollback detection needs an anchor outside the app sandbox. The index in §5 stops
    nothing against an attacker who can write app-private files; it only catches an accidental
    or naive rollback.
+
+## 10. Identity creation (implemented, not device-verified)
+
+The record layer never needed a provider to be testable; it needs one to be *useful*. This
+section records the provider that now exists, and is deliberately blunt about what it does not
+buy.
+
+### 10.1 What is generated
+
+| Item | Value |
+|---|---|
+| Signing root | Ed25519, RFC 8032, 32-byte seed + 32-byte public key |
+| Exchange static | X25519, RFC 7748, 32-byte scalar + 32-byte public key, generated independently |
+| Binding between them | **None.** No signature ties the exchange key to the root; `IDENTITY-AND-KEYS.md` forbids pretending otherwise |
+| Fingerprint | `SHA-256("DumanDevice/v1" \|\| ed25519_public_key)`, 64 lowercase hex |
+| Library | `package:cryptography` 2.x (pure Dart Ed25519/X25519/SHA-256) |
+| Self-check | every generated key signs and verifies a fixed challenge, and derives a non-zero shared secret against a fresh ephemeral peer before it is returned |
+
+The fingerprint is the domain-separated identifier `IDENTITY-AND-KEYS.md` describes. The domain
+prefix is what keeps it from being a bare key hash that could be confused with any other
+SHA-256 of the same key in the system.
+
+### 10.2 Where the private keys live
+
+Android Keystore cannot generate Ed25519 keys below API 33 and has no X25519 generation API at
+all, so a hardware-bound identity key is not available on this project's API 27 floor. The
+honest architecture is therefore `software_keystore_wrapped`:
+
+```text
+  identity record slot            key material slot
+  ----------------------          ---------------------------------
+  identity/ (AES-256-GCM,         identity_keys/ (AES-256-GCM,
+    alias g2d.identity.wrap.v1)     alias g2d.identity.keys.v1)
+  public metadata only:           ed25519 seed + public key,
+  fingerprint, handle, state        x25519 scalar + public key
+```
+
+Two slots, two non-exportable Keystore aliases, for three reasons: the record payload stays
+public metadata exactly as §3 and §7.2 specify; deleting key material cannot delete the wrapping
+key that protects the record; and a record can outlive its key material so a missing key is
+*reported* rather than silently re-keyed.
+
+The protection claim written into the handle is `software_keystore_wrapped` with
+`probeVerified: true`, and the probe is this milestone's own round trip: the exact material
+bytes are written through the Keystore envelope and read back before any record is allowed to
+reference them. It is never `hardware_bound`, because no Keystore generation path for these
+algorithms exists on this device and the record codec refuses an unprobed protection claim.
+
+### 10.3 Creation order
+
+```text
+1. read the record  →  absent?            no  → typed failure (identityExists / storageCorrupt /
+                                              storageUnavailable), nothing written
+2. generate + self-check the keys
+3. write the material to its slot, read it back, compare byte for byte
+     mismatch → delete the material, failure storageWriteFailed, no record
+4. write the record that points at the material
+     failure  → delete the material, return the service's typed failure
+```
+
+Step 1 is what prevents replacement and duplication; step 3 is what prevents a record from
+pointing at material the device cannot actually decrypt.
+
+### 10.4 Limits, stated rather than implied
+
+1. **Software keys.** The private keys are ordinary Dart memory while in use. They are
+   protected at rest, not in use, and never by hardware on this device.
+2. **No zeroization claim.** Dart cannot reliably scrub a `Uint8List` the collector may have
+   copied; the class hides both seeds from `toString` instead of promising they are erased.
+3. **No binding, no session, no messaging.** A fingerprint identifies a key. It is not a
+   certificate, not a verified contact, and not proof of possession to anyone.
+4. **No backup or export.** Losing the Keystore key loses the identity; the honest recovery is
+   an explicit reset and a new identity, with every future peer re-verified.
+5. **Not device-verified.** Everything in this section is covered by host tests only. The two
+   new slots and the second Keystore alias need one physical run on the SM-G610F before any of
+   it is called verified.
+
+### 10.5 Verification for this milestone
+
+```powershell
+cd mobile\app
+flutter pub get                       # resolves cryptography 2.x
+flutter analyze
+flutter test test\identity_key_provider_test.dart test\identity_creation_test.dart
+```
+
+The first file exercises the real primitives on the host. The second exercises creation through
+the real Dart stack against a platform double, which proves wiring and ordering — not
+encryption. Encryption at rest remains the instrumentation suite's and the device's business.

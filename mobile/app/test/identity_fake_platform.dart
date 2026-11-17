@@ -30,6 +30,16 @@ class FakeIdentityPlatform {
   /// Stands in for the encrypted slot files: the payload the platform holds.
   String? storedPayload;
 
+  /// Stands in for the key-material slot: the payload the platform holds there.
+  ///
+  /// Like [storedPayload] this is stored in the clear by the double. The real
+  /// adapter encrypts both slots; this double proves wiring, not encryption.
+  String? storedKeyMaterial;
+
+  /// When set, `loadKeyMaterial` returns this instead of [storedKeyMaterial],
+  /// standing in for a wrap that does not give the bytes back unchanged.
+  String? keyMaterialLoadOverride;
+
   /// Every call the adapter made, in order.
   final List<MethodCall> calls = <MethodCall>[];
 
@@ -56,6 +66,10 @@ class FakeIdentityPlatform {
 
   /// Number of `save` calls that reached the platform.
   int get saveCount => calls.where((MethodCall call) => call.method == 'save').length;
+
+  /// Number of `saveKeyMaterial` calls that reached the platform.
+  int get keyMaterialSaveCount =>
+      calls.where((MethodCall call) => call.method == 'saveKeyMaterial').length;
 
   /// Payloads sent to `save`, decoded for assertions.
   List<Map<String, Object?>> get savedPayloads => calls
@@ -93,6 +107,16 @@ class FakeIdentityPlatform {
         return null;
       case 'delete':
         storedPayload = null;
+        return null;
+      case 'loadKeyMaterial':
+        return keyMaterialLoadOverride ?? storedKeyMaterial;
+      case 'saveKeyMaterial':
+        final arguments = call.arguments as Map<Object?, Object?>;
+        storedKeyMaterial = arguments['payload']! as String;
+        return null;
+      case 'deleteKeyMaterial':
+        storedKeyMaterial = null;
+        keyMaterialLoadOverride = null;
         return null;
     }
     throw MissingPluginException('unknown identity method ${call.method}');

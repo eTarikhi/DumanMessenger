@@ -206,6 +206,49 @@ class _DiagnosticRow extends StatelessWidget {
   }
 }
 
+/// Asks before creating an identity, then creates it.
+///
+/// The confirmation states what is generated and how it is protected — a software
+/// Ed25519/X25519 keypair wrapped at rest by the Keystore — because the honest
+/// description of this device is not "hardware-backed" and the button must not
+/// imply otherwise.
+Future<void> _confirmCreateIdentity(
+  BuildContext context,
+  G2dIdentityRuntimeController runtime,
+) async {
+  final bool? confirmed = await showDialog<bool>(
+    context: context,
+    builder: (BuildContext dialogContext) => AlertDialog(
+      title: const Text('Create identity?'),
+      content: const Text(
+        'This generates a Curve25519 identity keypair on this device. The private '
+        'keys are stored only inside the Keystore-encrypted slot. They are '
+        'software-generated and protected at rest, not hardware-backed, and there '
+        'is no messaging or session capability yet.',
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const Key('diagnostics-create-identity-confirm'),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Create'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) {
+    return;
+  }
+  try {
+    await runtime.createIdentity();
+  } catch (_) {
+    // Surfaced through the card's "Last operation error" row.
+  }
+}
+
 /// Identity state as the application can honestly report it.
 ///
 /// Nothing here displays key material, a fingerprint or an identity id: the card
@@ -262,6 +305,12 @@ class _IdentityCard extends StatelessWidget {
                 value: _snapshotLabel(runtime.snapshot),
                 valueKey: const Key('diagnostics-identity-state'),
               ),
+              const Divider(height: 1),
+              _DiagnosticRow(
+                label: 'Identity key protection',
+                value: runtime.keyProtection ?? 'not created',
+                valueKey: const Key('diagnostics-identity-key-protection'),
+              ),
               if (runtime.failureReason != null) ...<Widget>[
                 const Divider(height: 1),
                 _DiagnosticRow(
@@ -292,6 +341,21 @@ class _IdentityCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (runtime.snapshot is G2dIdentityAbsent)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      key: const Key('diagnostics-create-identity'),
+                      onPressed: runtime.canCreateIdentity
+                          ? () => unawaited(_confirmCreateIdentity(context, runtime))
+                          : null,
+                      icon: const Icon(Icons.key_outlined),
+                      label: const Text('Create identity on this device'),
+                    ),
+                  ),
+                ),
             ],
           ),
         );

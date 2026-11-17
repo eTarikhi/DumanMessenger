@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'identity_android_runtime.dart';
+import 'identity_models.dart';
 import 'identity_service.dart';
 import 'identity_store.dart';
 
@@ -189,6 +190,52 @@ class G2dIdentityRuntimeController extends ChangeNotifier {
       await _refreshSnapshot(runtime);
       return result;
     });
+  }
+
+  /// Whether a first identity can be created right now.
+  ///
+  /// False while the runtime is unavailable, while an operation is running, and
+  /// whenever anything is already stored — including a corrupt or revoked
+  /// record, which must be resolved explicitly rather than overwritten.
+  bool get canCreateIdentity =>
+      isReady && !busy && _snapshot is G2dIdentityAbsent;
+
+  /// The protection level the stored record claims for the identity key, if a
+  /// record exists. Reported as stored, never upgraded here.
+  String? get keyProtection => switch (_snapshot) {
+        G2dIdentityActive(record: final G2dIdentityRecord record) =>
+          record.keyHandle.protection.wireName,
+        G2dIdentityRotationPending(record: final G2dIdentityRecord record) =>
+          record.keyHandle.protection.wireName,
+        G2dIdentityRevoked(record: final G2dIdentityRecord record) =>
+          record.keyHandle.protection.wireName,
+        _ => null,
+      };
+
+  /// Creates this installation's first identity, or returns a typed refusal.
+  ///
+  /// Returns `null` when there is no runtime to talk to. A refusal (for example
+  /// [G2dIdentityFailure.identityExists]) is surfaced through [operationError] as
+  /// well as through the returned result, so the diagnostics card can show why.
+  Future<G2dIdentityActionResult?> createIdentity() async {
+    final runtime = _runtime;
+    if (runtime == null) {
+      return null;
+    }
+    final result = await _run(() async {
+      final G2dIdentityActionResult created = await runtime.createIdentity();
+      await _refreshSnapshot(runtime);
+      return created;
+    });
+    final failure = result.failure;
+    if (failure != null) {
+      final detail = result.detail;
+      _operationError = detail == null
+          ? 'identity creation refused: ${failure.name}'
+          : 'identity creation refused: ${failure.name} ($detail)';
+      notifyListeners();
+    }
+    return result;
   }
 
   /// Re-reads the identity after a mutating operation, ignoring read failures:

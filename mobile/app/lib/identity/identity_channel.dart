@@ -106,6 +106,28 @@ class G2dIdentityChannel {
   /// Removes the record, its index and the wrapping key. Idempotent.
   Future<void> deleteRecord() => _guard(() => _channel.invokeMethod<void>('delete'));
 
+  /// Reads the stored identity key material, or `null` when there is none.
+  ///
+  /// This payload contains private key bytes. It is decrypted on the platform
+  /// side, in its own slot under its own Keystore alias, and may only travel into
+  /// `G2dIdentityKeyMaterial.fromJson`. It must never be logged.
+  Future<String?> loadKeyMaterial() =>
+      _guard(() => _channel.invokeMethod<String>('loadKeyMaterial'));
+
+  /// Commits the wrapped identity key material.
+  Future<void> saveKeyMaterial(String payload) => _guard(
+        () => _channel.invokeMethod<void>(
+          'saveKeyMaterial',
+          <String, Object?>{'payload': payload},
+        ),
+      );
+
+  /// Removes the key material, its index and its own wrapping key. Idempotent.
+  ///
+  /// It cannot touch the record slot: that slot uses a different Keystore alias.
+  Future<void> deleteKeyMaterial() =>
+      _guard(() => _channel.invokeMethod<void>('deleteKeyMaterial'));
+
   Future<T> _guard<T>(Future<T> Function() action) async {
     try {
       return await action();

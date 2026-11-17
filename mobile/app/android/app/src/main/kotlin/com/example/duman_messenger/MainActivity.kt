@@ -73,9 +73,19 @@ class MainActivity : FlutterActivity() {
         // G2dIdentityChannelHandler and G2dIdentityStorage.
         val identityKeyring = G2dIdentityKeyring()
         val identityStorage = G2dIdentityStorage(applicationContext.filesDir, identityKeyring)
+        // Private identity keys live in their own slot, under their own Keystore
+        // alias, so the two can be deleted independently and neither key protects
+        // the other's compromise.
+        val identityKeyMaterialStorage = G2dIdentityStorage(
+            applicationContext.filesDir,
+            identityKeyring,
+            directoryName = "identity_keys",
+            wrappingKeyAlias = "g2d.identity.keys.v1",
+        )
         val handler = G2dIdentityChannelHandler(
             G2dCapabilityProbe(identityKeyring),
             identityStorage,
+            identityKeyMaterialStorage,
         )
         identityChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

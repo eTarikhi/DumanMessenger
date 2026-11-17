@@ -10,6 +10,13 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Pure-Dart Ed25519 (RFC 8032) and X25519 (RFC 7748) for the identity keys.
+  # Chosen because Android Keystore cannot generate either algorithm on this
+  # project's API 27 floor, and because it runs on Windows too, so the key and
+  # fingerprint tests execute without a device. Pinned to a 2.x range whose
+  # Ed25519/X25519/SHA-256 API is stable across the series.
+  cryptography: ^2.7.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
